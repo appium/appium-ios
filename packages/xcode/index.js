@@ -1,3 +1,3 @@
-import {default as sample} from './lib/sample';
+import * as xcode from './lib/xcode';
 
-export {sample};
+export {xcode};
