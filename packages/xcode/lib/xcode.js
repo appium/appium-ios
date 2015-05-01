@@ -170,8 +170,6 @@ const getAutomationTraceTemplatePath = _.memoize(
   }
 );
 
-// TODO remove this function. should really just be using 'getVersion()' everywhere.
-// This was added for tech-debt backwards compatibility
 async function getMaxIOSSDKWithoutRetry () {
 
   const version = await getVersion();
