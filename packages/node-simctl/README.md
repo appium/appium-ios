@@ -14,6 +14,7 @@ Exported methods:
 - installApp
 - removeApp
 - launch
+- shutdown
 - createDevice
 - deleteDevice
 - eraseDevice
