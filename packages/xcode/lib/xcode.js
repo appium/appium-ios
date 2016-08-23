@@ -10,7 +10,7 @@ let parsePlistData = parse;
 
 const env = process.env;
 
-const XCODE_SELECT_TIMEOUT = 3000;
+const XCRUN_TIMEOUT = 15000;
 const XCODE_SUBDIR = "/Contents/Developer";
 const DEFAULT_NUMBER_OF_RETRIES = 3;
 
@@ -69,8 +69,8 @@ async function getPathFromSymlink (failMessage) {
 
 }
 
-async function getPathFromXcodeSelect () {
-  let {stdout} = await exec('xcode-select', ['--print-path'], {timeout: XCODE_SELECT_TIMEOUT});
+async function getPathFromXcodeSelect (timeout = XCRUN_TIMEOUT) {
+  let {stdout} = await exec('xcode-select', ['--print-path'], {timeout});
 
   // trim and remove trailing slash
   const xcodeFolderPath = stdout.replace(/\/$/, '').trim();
@@ -88,18 +88,16 @@ async function getPathFromXcodeSelect () {
   }
 }
 
-const getPath = _.memoize(function () {
-
+const getPath = _.memoize(function (timeout = XCRUN_TIMEOUT) {
   // first we try using xcode-select to find the path
   // then we try using the symlinks that Apple has by default
-
-  return getPathFromXcodeSelect().catch(getPathFromSymlink);
+  return getPathFromXcodeSelect(timeout).catch(getPathFromSymlink);
 });
 
 
 
-async function getVersionWithoutRetry () {
-  let xcodePath = await getPath();
+async function getVersionWithoutRetry (timeout = XCRUN_TIMEOUT) {
+  let xcodePath = await getPath(timeout);
 
   // we want to read the CFBundleShortVersionString from Xcode's plist.
   // It should be in /[root]/XCode.app/Contents/
@@ -123,13 +121,13 @@ async function getVersionWithoutRetry () {
 }
 
 const getVersionMemoized = _.memoize(
-  function (retries = DEFAULT_NUMBER_OF_RETRIES) {
-    return retry(retries, getVersionWithoutRetry);
+  function (retries = DEFAULT_NUMBER_OF_RETRIES, timeout = XCRUN_TIMEOUT) {
+    return retry(retries, getVersionWithoutRetry, timeout);
   }
 );
 
-async function getVersion (parse = false, retries = DEFAULT_NUMBER_OF_RETRIES) {
-  let version = await getVersionMemoized(retries);
+async function getVersion (parse = false, retries = DEFAULT_NUMBER_OF_RETRIES, timeout = XCRUN_TIMEOUT) {
+  let version = await getVersionMemoized(retries, timeout);
   if (!parse) {
     return version;
   }
@@ -146,9 +144,8 @@ async function getVersion (parse = false, retries = DEFAULT_NUMBER_OF_RETRIES) {
   };
 }
 
-async function getAutomationTraceTemplatePathWithoutRetry () {
-
-  const xcodePath = await getPath();
+async function getAutomationTraceTemplatePathWithoutRetry (timeout = XCRUN_TIMEOUT) {
+  const xcodePath = await getPath(timeout);
 
   // for ios 8 and up, the file extension for AutiomationInstrument changed.
   // rather than waste time getting the iOSSDKVersion, just get both paths and see which one exists
@@ -176,21 +173,20 @@ async function getAutomationTraceTemplatePathWithoutRetry () {
 }
 
 const getAutomationTraceTemplatePath = _.memoize(
-  function (retries = DEFAULT_NUMBER_OF_RETRIES) {
-    return retry(retries, getAutomationTraceTemplatePathWithoutRetry);
+  function (retries = DEFAULT_NUMBER_OF_RETRIES, timeout = XCRUN_TIMEOUT) {
+    return retry(retries, getAutomationTraceTemplatePathWithoutRetry, timeout);
   }
 );
 
-async function getMaxIOSSDKWithoutRetry () {
-
-  const version = await getVersion();
+async function getMaxIOSSDKWithoutRetry (timeout = XCRUN_TIMEOUT) {
+  const version = await getVersion(false, DEFAULT_NUMBER_OF_RETRIES, timeout);
   if (version[0] === '4') {
     return '6.1';
   }
 
   const cmd = `xcrun`;
   const args = ['--sdk',  'iphonesimulator',  '--show-sdk-version'];
-  const {stdout} = await exec(cmd, args, {timeout: XCODE_SELECT_TIMEOUT});
+  const {stdout} = await exec(cmd, args, {timeout});
 
   const sdkVersion = stdout.trim();
   const match = /\d.\d/.exec(stdout);
@@ -203,16 +199,15 @@ async function getMaxIOSSDKWithoutRetry () {
 }
 
 const getMaxIOSSDK = _.memoize(
-  function (retries = DEFAULT_NUMBER_OF_RETRIES) {
-    return retry(retries, getMaxIOSSDKWithoutRetry);
+  function (retries = DEFAULT_NUMBER_OF_RETRIES, timeout = XCRUN_TIMEOUT) {
+    return retry(retries, getMaxIOSSDKWithoutRetry, timeout);
   }
 );
 
-async function getConnectedDevices () {
-
+async function getConnectedDevices (timeout = XCRUN_TIMEOUT) {
   const cmd = '/usr/sbin/system_profiler';
   const args = ['-xml', 'SPUSBDataType'];
-  let {stdout} = await exec(cmd, args, {timeout: XCODE_SELECT_TIMEOUT});
+  let {stdout} = await exec(cmd, args, {timeout});
   let plistContent = parsePlistData(stdout);
 
   let devicesFound = [];
@@ -239,11 +234,10 @@ async function getConnectedDevices () {
   return devicesFound;
 }
 
-async function getInstrumentsPathWithoutRetry () {
-
+async function getInstrumentsPathWithoutRetry (timeout = XCRUN_TIMEOUT) {
   const cmd = 'xcrun';
   const args = ['-find', 'instruments'];
-  let {stdout} = await exec(cmd, args, {timeout: XCODE_SELECT_TIMEOUT});
+  let {stdout} = await exec(cmd, args, {timeout});
 
   if (!stdout) {
     stdout = "";
@@ -259,8 +253,8 @@ async function getInstrumentsPathWithoutRetry () {
 }
 
 const getInstrumentsPath = _.memoize(
-  function (retries = DEFAULT_NUMBER_OF_RETRIES) {
-    return retry(retries, getInstrumentsPathWithoutRetry);
+  function (retries = DEFAULT_NUMBER_OF_RETRIES, timeout = XCRUN_TIMEOUT) {
+    return retry(retries, getInstrumentsPathWithoutRetry, timeout);
   }
 );
 
