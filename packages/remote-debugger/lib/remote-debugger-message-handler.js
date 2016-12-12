@@ -111,15 +111,19 @@ export default class RpcMessageHandler {
     } else if (dataKey.method === 'Page.frameNavigated') {
       if (!this.willNavigateWithoutReload && !this.pageLoading) {
         log.debug('Frame navigated, unloading page');
-        this.specialHandlers['Page.frameNavigated']('remote-debugger');
-        this.specialHandlers['Page.frameNavigated'] = null;
+        if (_.isFunction(this.specialHandlers['Page.frameNavigated'])) {
+          this.specialHandlers['Page.frameNavigated']('remote-debugger');
+          this.specialHandlers['Page.frameNavigated'] = null;
+        } else {
+          log.debug('No frame navigation callback set.');
+        }
       } else {
         log.debug('Frame navigated but we were warned about it, not ' +
                   'considering page state unloaded');
         this.willNavigateWithoutReload = false;
       }
     } else if (dataKey.method === 'Page.loadEventFired') {
-      await this.pageLoad();
+      await this.specialHandlers.pageLoad();
     } else if (dataKey.method === 'Timeline.eventRecorded') {
       this.timelineEventHandler(dataKey.params.record);
     } else if (_.isFunction(this.dataHandlers[msgId])) {
