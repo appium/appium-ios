@@ -1,0 +1,23 @@
+{
+  "name": "appium-ios-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/appium/appium-ios.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/appium/appium-ios/issues"
+  },
+  "homepage": "https://github.com/appium/appium-ios#readme",
+  "devDependencies": {
+    "lerna": "^4.0.0"
+  }
+}
