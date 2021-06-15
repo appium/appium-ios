@@ -10,9 +10,7 @@ describe('utilities', function () {
   let socket;
 
   afterEach(function (done) {
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should get unique udids', async function () {

@@ -14,18 +14,8 @@ describe('syslog', function () {
 
   afterEach(function (done) {
     syslogService?.close();
-    if (socket) {
-      socket.end(() => {
-        if (server) {
-          server.close(() => {
-            done();
-          });
-        } else {
-          done();
-        }
-      });
-    } else if (server) {
-      server.close(() => {
+    if (server) {
+      server.stop(() => {
         done();
       });
     } else {

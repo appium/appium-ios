@@ -16,9 +16,7 @@ describe('webinspector', function () {
     if (webInspectorService) {
       webInspectorService.close();
     }
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should receive webinspector WIRFinalMessageKey messages back', async function () {

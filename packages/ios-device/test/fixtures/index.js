@@ -1,7 +1,7 @@
 import path from 'path';
 import { fs, logger } from '@appium/support';
 import net from 'net';
-
+import stoppable from 'stoppable';
 
 const log = logger.getLogger('fixtures');
 
@@ -30,7 +30,7 @@ const fixtures = {
 };
 
 function getFixturePath (file) {
-  return path.resolve(__dirname, '..', '..', '..', 'test', 'fixtures', file);
+  return path.resolve(__dirname, file);
 }
 
 async function initFixtures () {
@@ -65,7 +65,7 @@ async function getServerWithFixtures (...args) {
 
   const fixturesToUse = args.map((key) => fixtureContents[key]);
 
-  const server = net.createServer();
+  const server = stoppable(net.createServer());
   server.listen();
   const socket = net.connect(server.address());
   server.on('connection', function (socket) {

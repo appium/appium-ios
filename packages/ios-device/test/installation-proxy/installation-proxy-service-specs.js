@@ -15,9 +15,7 @@ describe('installation proxy', function () {
     if (installationServiceProxy) {
       installationServiceProxy.close();
     }
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should get a list of installed applications', async function () {
