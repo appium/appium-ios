@@ -12,10 +12,10 @@ describe('lockdown', function () {
   let server;
   let socket;
 
-  afterEach(function () {
-    try {
-      server.close();
-    } catch (ign) {}
+  afterEach(function (done) {
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should lockdown get value', async function () {

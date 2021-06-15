@@ -2,9 +2,9 @@ import log from './logger';
 import _ from 'lodash';
 import { exec } from 'teen_process';
 import { waitForCondition } from 'asyncbox';
-import { getVersion } from 'appium-xcode';
-import Simctl from 'node-simctl';
-import { fs, tempDir, util } from 'appium-support';
+import xcode from '@appium/xcode';
+import Simctl from '@appium/node-simctl';
+import { fs, tempDir, util } from '@appium/support';
 import { Certificate } from './certificate';
 import path from 'path';
 import Simulator from './simulator-xcode-6';
@@ -61,7 +61,7 @@ async function pkill (appName, forceKill = false) {
 
 async function killAllSimulators (timeout = DEFAULT_SIM_SHUTDOWN_TIMEOUT) {
   log.debug('Killing all iOS Simulators');
-  const xcodeVersion = await getVersion(true);
+  const xcodeVersion = await xcode.getVersion(true);
   const appName = xcodeVersion.major >= 7 ? 'Simulator' : 'iOS Simulator';
 
   // later versions are slower to close
