@@ -2,7 +2,7 @@ import log from './logger';
 import _ from 'lodash';
 import B from 'bluebird';
 import { errorFromMJSONWPStatusCode } from 'appium-base-driver';
-import { util } from 'appium-support';
+import { util } from '@appium/support';
 
 
 const WEB_CONTENT_BUNDLE_ID = 'com.apple.WebKit.WebContent';

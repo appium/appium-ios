@@ -8,7 +8,7 @@ import SimulatorXcode10 from './simulator-xcode-10';
 import SimulatorXcode11 from './simulator-xcode-11';
 import SimulatorXcode11_4 from './simulator-xcode-11.4';
 import { getSimulatorInfo } from './utils';
-import xcode from 'appium-xcode';
+import xcode from '@appium/xcode';
 import { log, setLoggingPlatform } from './logger';
 
 

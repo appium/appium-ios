@@ -175,7 +175,7 @@ as the first argument and the set of options, which may contain additional comma
 environment variables, encoding, etc. For example:
 
 ```js
-import Simctl from 'node-simctl';
+import Simctl from '@appium/node-simctl';
 
 const simctl = new Simctl();
 const name = 'My Device Name';

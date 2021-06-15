@@ -1,9 +1,9 @@
 'use strict';
 
 const gulp = require('gulp');
-const boilerplate = require('appium-gulp-plugins').boilerplate.use(gulp);
+const boilerplate = require('@appium/gulp-plugins').boilerplate.use(gulp);
 const { exec, SubProcess } = require('teen_process');
-const { mkdirp, fs } = require('appium-support');
+const { mkdirp, fs } = require('@appium/support');
 const del = require('del');
 const path = require('path');
 const log = require('fancy-log');
@@ -24,7 +24,7 @@ const TEMP_BUILD_DIRECTORY_NAME = 'appium-atoms-driver';
 const ATOMS_BUILD_TARGET = 'build_atoms';
 
 boilerplate({
-  build: 'appium-remote-debugger',
+  build: '@appium/remote-debugger',
   files: [
     '*.js', 'lib/**/*.js', 'bin/**/*.js', 'test/**/*.js',
     '!gulpfile.js'

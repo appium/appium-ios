@@ -1,13 +1,13 @@
 // transpile:mocha
 
 import { getSimulator, getDeviceString } from '../..';
-import Simctl from 'node-simctl';
+import Simctl from '@appium/node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import sinon from 'sinon';
 import { devices } from '../assets/deviceList';
 import B from 'bluebird';
-import xcode from 'appium-xcode';
+import xcode from '@appium/xcode';
 import SimulatorXcode6 from '../../lib/simulator-xcode-6';
 import SimulatorXcode7 from '../../lib/simulator-xcode-7';
 import SimulatorXcode8 from '../../lib/simulator-xcode-8';

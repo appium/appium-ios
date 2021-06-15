@@ -1,9 +1,9 @@
 /* eslint-disable no-console */
 import { exec, SubProcess } from 'teen_process';
-import { plist, util } from 'appium-support';
+import { plist, util } from '@appium/support';
 import { asyncify } from 'asyncbox';
 import B from 'bluebird';
-import { getSimulator } from 'appium-ios-simulator';
+import { getSimulator } from '@appium/ios-simulator';
 import _ from 'lodash';
 
 

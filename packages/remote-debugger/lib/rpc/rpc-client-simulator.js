@@ -3,7 +3,7 @@ import _ from 'lodash';
 import B from 'bluebird';
 import net from 'net';
 import RpcClient from './rpc-client';
-import { services } from 'appium-ios-device';
+import { services } from '@appium/ios-device';
 
 
 export default class RpcClientSimulator extends RpcClient {

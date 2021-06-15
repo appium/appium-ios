@@ -2,7 +2,7 @@
 import https from 'https';
 import inquirer from 'inquirer';
 import { installSSLCert, uninstallSSLCert } from '../../../lib/utils';
-import { getDevices } from 'node-simctl';
+import { getDevices } from '@appium/node-simctl';
 import B from 'bluebird';
 import 'colors';
 
