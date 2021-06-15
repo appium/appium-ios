@@ -16,9 +16,7 @@ describe('usbmux', function () {
     try {
       usbmux.close();
     } catch (ign) {}
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should read usbmux message', async function () {

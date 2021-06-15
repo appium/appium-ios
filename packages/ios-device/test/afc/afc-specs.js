@@ -12,9 +12,7 @@ describe('afc', function () {
 
   afterEach(function (done) {
     service.close();
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should create directory', async function () {

@@ -13,9 +13,7 @@ describe('lockdown', function () {
   let socket;
 
   afterEach(function (done) {
-    socket.end(() => {
-      server.close(done);
-    });
+    server.stop(done);
   });
 
   it('should lockdown get value', async function () {
