@@ -15,7 +15,7 @@
     "url": "https://github.com/appium/appium-ios.git"
   },
   "license": "Apache-2.0",
-  "author": "appium",
+  "author": "Appium Contributors",
   "main": "./build/index.js",
   "directories": {
     "lib": "lib"
@@ -31,5 +31,6 @@
   },
   "engines": {
     "node": ">=12"
-  }
+  },
+  "homepage": "https://appium.io"
 }

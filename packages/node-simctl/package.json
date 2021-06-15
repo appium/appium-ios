@@ -10,7 +10,7 @@
     "url": "https://github.com/appium/appium-ios.git"
   },
   "license": "Apache-2.0",
-  "author": "https://github.com/appium",
+  "author": "Appium Contributors",
   "main": "./build/lib/simctl.js",
   "directories": {
     "lib": "./lib"
@@ -42,5 +42,6 @@
     "apple",
     "ios",
     "simctl"
-  ]
+  ],
+  "homepage": "https://appium.io"
 }
