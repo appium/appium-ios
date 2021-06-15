@@ -3,10 +3,22 @@
 const gulp = require('gulp');
 const boilerplate = require('@appium/gulp-plugins').boilerplate.use(gulp);
 
+gulp.task('copy-assets', () =>
+  gulp
+    .src([
+      './test/assets/sample.plist',
+      './test/assets/test-pem.pem',
+      './test/assets/TestApp-iphonesimulator.app',
+      './test/assets/Library',
+    ])
+    .pipe(gulp.dest('./build/test/assets/')),
+);
+
 boilerplate({
   build: 'appium-ios-simulator',
   coverage: {
     files: ['./build/test/unit/**/*-specs.js'],
-    verbose: true
+    verbose: true,
   },
+  postTranspile: ['copy-assets']
 });

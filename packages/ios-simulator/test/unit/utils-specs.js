@@ -45,8 +45,7 @@ const XCODE_VERSION_6 = {
   patch: 1
 };
 
-
-let assetsDir = `${process.cwd()}/test/assets`;
+let assetsDir = path.join(__dirname, '..', 'assets');
 
 describe('util', function () {
   let execStub;
