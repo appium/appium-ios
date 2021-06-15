@@ -9,10 +9,10 @@ describe('utilities', function () {
   let server;
   let socket;
 
-  afterEach(function () {
-    if (server) {
-      server.close();
-    }
+  afterEach(function (done) {
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should get unique udids', async function () {

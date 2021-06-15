@@ -1,6 +1,8 @@
 import { Usbmux } from '../..';
 import chai from 'chai';
 import { getServerWithFixtures, fixtures, UDID } from '../fixtures';
+import chaiAsPromised from 'chai-as-promised';
+chai.use(chaiAsPromised);
 
 
 chai.should();
@@ -10,13 +12,13 @@ describe('usbmux', function () {
   let server;
   let socket;
 
-  afterEach(function () {
+  afterEach(function (done) {
     try {
       usbmux.close();
     } catch (ign) {}
-    try {
-      server.close();
-    } catch (ign) {}
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should read usbmux message', async function () {

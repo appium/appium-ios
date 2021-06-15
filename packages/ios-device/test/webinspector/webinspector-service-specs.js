@@ -12,13 +12,13 @@ describe('webinspector', function () {
   let socket;
   let webInspectorService;
 
-  afterEach(function () {
+  afterEach(function (done) {
     if (webInspectorService) {
       webInspectorService.close();
     }
-    if (server) {
-      server.close();
-    }
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should receive webinspector WIRFinalMessageKey messages back', async function () {

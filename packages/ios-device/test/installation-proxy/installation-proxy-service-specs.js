@@ -11,13 +11,13 @@ describe('installation proxy', function () {
   let socket;
   let installationServiceProxy;
 
-  afterEach(function () {
+  afterEach(function (done) {
     if (installationServiceProxy) {
       installationServiceProxy.close();
     }
-    if (server) {
-      server.close();
-    }
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should get a list of installed applications', async function () {

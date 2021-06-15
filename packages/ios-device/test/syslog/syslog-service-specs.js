@@ -12,9 +12,25 @@ describe('syslog', function () {
   let socket;
   let syslogService;
 
-  afterEach(function () {
+  afterEach(function (done) {
     syslogService?.close();
-    server?.close();
+    if (socket) {
+      socket.end(() => {
+        if (server) {
+          server.close(() => {
+            done();
+          });
+        } else {
+          done();
+        }
+      });
+    } else if (server) {
+      server.close(() => {
+        done();
+      });
+    } else {
+      done();
+    }
   });
 
   it('should wait for first syslog message', async function () {

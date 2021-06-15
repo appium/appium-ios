@@ -10,11 +10,11 @@ describe('afc', function () {
   let socket;
   let service;
 
-  afterEach(function () {
+  afterEach(function (done) {
     service.close();
-    if (server) {
-      server.close();
-    }
+    socket.end(() => {
+      server.close(done);
+    });
   });
 
   it('should create directory', async function () {

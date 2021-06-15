@@ -16,4 +16,7 @@ boilerplate({
     },
     appName: 'TestApp.app',
   },
+  test: false,
+  e2eTest: false
 });
+
