@@ -7,7 +7,7 @@
     "testapp"
   ],
   "version": "3.1.0",
-  "author": "appium",
+  "author": "Appium Contributors",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -36,5 +36,6 @@
   ],
   "dependencies": {
     "gulp": "^4.0.0"
-  }
+  },
+  "homepage": "https://appium.io"
 }

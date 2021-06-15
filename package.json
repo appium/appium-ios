@@ -32,6 +32,10 @@
     "test": "lerna exec gulp once",
     "preversion": "npm run sync-pkgs && git add -A ./packages/*/package.json"
   },
+  "pre-commit": [
+    "precommit-msg",
+    "precommit-lint"
+  ],
   "lint-staged": {
     "*.js": "eslint --fix"
   },
@@ -57,10 +61,9 @@
     "pre-commit": "^1.2.2",
     "serve-static": "^1.14.1",
     "sinon": "^11.1.1",
-    "sync-monorepo-packages": "^0.3.2"
+    "sync-monorepo-packages": "^0.3.4"
   },
-  "pre-commit": [
-    "precommit-msg",
-    "precommit-lint"
-  ]
+  "engines": {
+    "node": ">=12"
+  }
 }
