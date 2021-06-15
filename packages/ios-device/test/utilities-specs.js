@@ -10,7 +10,7 @@ describe('utilities', function () {
   let socket;
 
   afterEach(function (done) {
-    socket.end(() => {
+    socket.destroy(() => {
       server.close(done);
     });
   });
