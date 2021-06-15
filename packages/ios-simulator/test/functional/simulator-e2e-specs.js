@@ -6,7 +6,7 @@ import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { fs } from '@appium/support';
 import B from 'bluebird';
-import { absolute as testAppPath } from 'ios-test-app';
+import { absolute as testAppPath } from '@appium/ios-test-app';
 import { retryInterval, waitForCondition } from 'asyncbox';
 import path from 'path';
 import xcode from '@appium/xcode';
