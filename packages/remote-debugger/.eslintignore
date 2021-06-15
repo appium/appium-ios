@@ -1,4 +1,7 @@
+# since gulp runs in this directory, the root .eslintignore file is not found.
+
+coverage
 atoms
 tmp
 atoms_build_dir
-coverage
+build

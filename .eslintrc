@@ -1,0 +1,14 @@
+{
+  "extends": "@appium/eslint-config-appium",
+  "overrides": [
+    {
+      "files": "packages/*/test/**/*.js",
+      "env": {"mocha": true},
+      "rules": {"func-names": "off"}
+    },
+    {
+      "files": "packages/node-simctl/test/**/*.js",
+      "rules": {"no-redeclare": "off"}
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+coverage
+packages/remote-debugger/atoms
+tmp
+packages/remote-debugger/atoms_build_dir
+build
