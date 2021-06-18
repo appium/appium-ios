@@ -1,4 +1,4 @@
-import { util, fs, plist, logger } from 'appium-support';
+import { util, fs, plist, logger } from '@appium/support';
 import path from 'path';
 import { retry } from 'asyncbox';
 import _ from 'lodash';
@@ -49,8 +49,8 @@ async function getPathFromSymlink (failMessage) {
   // so check that first
   if (util.hasContent(env.DEVELOPER_DIR)) {
     const customPath = hasExpectedSubDir(env.DEVELOPER_DIR) ?
-                                         env.DEVELOPER_DIR  :
-                                         env.DEVELOPER_DIR + XCODE_SUBDIR;
+      env.DEVELOPER_DIR :
+      env.DEVELOPER_DIR + XCODE_SUBDIR;
 
     if (await fs.exists(customPath)) {
       xcodePath = customPath;
@@ -220,7 +220,7 @@ async function getMaxIOSSDKWithoutRetry (timeout = XCRUN_TIMEOUT) {
     return '6.1';
   }
 
-  const args = ['--sdk',  'iphonesimulator',  '--show-sdk-version'];
+  const args = ['--sdk', 'iphonesimulator', '--show-sdk-version'];
   const {stdout} = await runXcrunCommand(args, timeout);
 
   const sdkVersion = stdout.trim();
@@ -240,7 +240,7 @@ const getMaxIOSSDK = _.memoize(
 );
 
 async function getMaxTVOSSDKWithoutRetry (timeout = XCRUN_TIMEOUT) {
-  const args = ['--sdk',  'appletvsimulator',  '--show-sdk-version'];
+  const args = ['--sdk', 'appletvsimulator', '--show-sdk-version'];
   const {stdout} = await runXcrunCommand(args, timeout);
 
   const sdkVersion = stdout.trim();
@@ -316,7 +316,7 @@ function clearInternalCache () {
 
   // memoized functions
   const memoized = [getPath, getVersionMemoized, getAutomationTraceTemplatePath,
-                    getMaxIOSSDK, getMaxTVOSSDK, getInstrumentsPath];
+    getMaxIOSSDK, getMaxTVOSSDK, getInstrumentsPath];
 
   memoized.forEach((f) => {
     if (f.cache) {
@@ -326,6 +326,6 @@ function clearInternalCache () {
 }
 
 export default { getPath, getVersion, getAutomationTraceTemplatePath, getMaxIOSSDK,
-         getAutomationTraceTemplatePathWithoutRetry, getMaxIOSSDKWithoutRetry,
-         getConnectedDevices, clearInternalCache, getInstrumentsPath,
-         getCommandLineToolsVersion, getMaxTVOSSDK, getMaxTVOSSDKWithoutRetry };
+                 getAutomationTraceTemplatePathWithoutRetry, getMaxIOSSDKWithoutRetry,
+                 getConnectedDevices, clearInternalCache, getInstrumentsPath,
+                 getCommandLineToolsVersion, getMaxTVOSSDK, getMaxTVOSSDKWithoutRetry };

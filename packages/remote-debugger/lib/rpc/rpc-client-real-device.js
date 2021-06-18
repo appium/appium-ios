@@ -1,6 +1,6 @@
 import log from '../logger';
 import RpcClient from './rpc-client';
-import { services } from 'appium-ios-device';
+import { services } from '@appium/ios-device';
 
 
 export default class RpcClientRealDevice extends RpcClient {

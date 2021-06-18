@@ -1,4 +1,8 @@
 {
+  "ci": false,
+  "npmClientArgs": [
+    "--no-package-lock"
+  ],
   "packages": [
     "packages/*"
   ],

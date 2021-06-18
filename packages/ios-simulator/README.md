@@ -21,7 +21,7 @@ This function returns a simulator object (see below) associated with the udid pa
 If you want to create a new simulator, you can use the `createDevice()` method of [node-simctl](https://github.com/appium/node-simctl).
 
 ```js
-import { getSimulator } from 'appium-ios-simulator';
+import { getSimulator } from '@appium/ios-simulator';
 
 let sim = await getSimulator('DAE95172-0788-4A85-8D0D-5C85509109E1');
 ```

@@ -1,7 +1,7 @@
 import path from 'path';
-import { default as xcode, getPath as getXcodePath } from 'appium-xcode';
+import { default as xcode, getPath as getXcodePath } from '@appium/xcode';
 import log from './logger';
-import { fs, tempDir, mkdirp, plist, timing, util } from 'appium-support';
+import { fs, tempDir, mkdirp, plist, timing, util } from '@appium/support';
 import B from 'bluebird';
 import _ from 'lodash';
 import AsyncLock from 'async-lock';
@@ -16,7 +16,7 @@ import extensions from './extensions/index';
 import { EventEmitter } from 'events';
 import Calendar from './calendar';
 import Permissions from './permissions';
-import Simctl from 'node-simctl';
+import Simctl from '@appium/node-simctl';
 
 
 const STARTUP_TIMEOUT = 60 * 1000;

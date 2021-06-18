@@ -1,6 +1,6 @@
 // transpile:mocha
 import { getSimulator, killAllSimulators } from '../..';
-import Simctl from 'node-simctl';
+import Simctl from '@appium/node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { LONG_TIMEOUT, verifyStates } from './helpers';

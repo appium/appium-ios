@@ -1,15 +1,15 @@
 // transpile:mocha
 import _ from 'lodash';
 import { getSimulator, killAllSimulators } from '../..';
-import Simctl from 'node-simctl';
+import Simctl from '@appium/node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { fs } from 'appium-support';
+import { fs } from '@appium/support';
 import B from 'bluebird';
 import { absolute as testAppPath } from 'ios-test-app';
 import { retryInterval, waitForCondition } from 'asyncbox';
 import path from 'path';
-import xcode from 'appium-xcode';
+import xcode from '@appium/xcode';
 import { LONG_TIMEOUT, verifyStates } from './helpers';
 import { readSettings } from '../../lib/settings';
 
