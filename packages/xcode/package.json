@@ -32,5 +32,11 @@
   "engines": {
     "node": ">=12"
   },
-  "homepage": "https://appium.io"
+  "homepage": "https://appium.io",
+  "os": [
+    "darwin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

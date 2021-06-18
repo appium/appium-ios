@@ -1,10 +1,4 @@
 {
-  "ci": false,
-  "npmClientArgs": [
-    "--no-package-lock"
-  ],
-  "packages": [
-    "packages/*"
-  ],
+  "packages": ["packages/*"],
   "version": "independent"
 }

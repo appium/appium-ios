@@ -37,5 +37,8 @@
   "dependencies": {
     "gulp": "^4.0.0"
   },
-  "homepage": "https://appium.io"
+  "homepage": "https://appium.io",
+  "publishConfig": {
+    "access": "public"
+  }
 }

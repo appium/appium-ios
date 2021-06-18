@@ -1,6 +1,6 @@
 // transpile:mocha
 import _ from 'lodash';
-import { getSimulator, killAllSimulators } from '../..';
+import { getSimulator, killAllSimulators } from '../../index.js';
 import Simctl from 'node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';

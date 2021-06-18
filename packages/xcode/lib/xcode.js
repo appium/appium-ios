@@ -325,7 +325,7 @@ function clearInternalCache () {
   });
 }
 
-export default { getPath, getVersion, getAutomationTraceTemplatePath, getMaxIOSSDK,
-                 getAutomationTraceTemplatePathWithoutRetry, getMaxIOSSDKWithoutRetry,
-                 getConnectedDevices, clearInternalCache, getInstrumentsPath,
-                 getCommandLineToolsVersion, getMaxTVOSSDK, getMaxTVOSSDKWithoutRetry };
+export { getPath, getVersion, getAutomationTraceTemplatePath, getMaxIOSSDK,
+  getAutomationTraceTemplatePathWithoutRetry, getMaxIOSSDKWithoutRetry,
+  getConnectedDevices, clearInternalCache, getInstrumentsPath,
+  getCommandLineToolsVersion, getMaxTVOSSDK, getMaxTVOSSDKWithoutRetry };

@@ -1,3 +1,2 @@
-import xcode from './lib/xcode';
-
-export default xcode;
+export * from './lib/xcode';
+export * as default from './lib/xcode';
