@@ -123,3 +123,4 @@ build-js
 .DS_Store
 xcuserdata
 packages/ios-simulator/test/assets
+.vscode/settings.json
