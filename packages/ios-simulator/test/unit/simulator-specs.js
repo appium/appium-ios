@@ -1,7 +1,7 @@
 // transpile:mocha
 
 import { getSimulator, getDeviceString } from '../..';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import sinon from 'sinon';

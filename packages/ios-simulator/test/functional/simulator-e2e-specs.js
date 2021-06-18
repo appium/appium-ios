@@ -1,7 +1,7 @@
 // transpile:mocha
 import _ from 'lodash';
 import { getSimulator, killAllSimulators } from '../..';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import { fs } from '@appium/support';

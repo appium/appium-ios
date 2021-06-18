@@ -16,7 +16,7 @@ import extensions from './extensions/index';
 import { EventEmitter } from 'events';
 import Calendar from './calendar';
 import Permissions from './permissions';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 
 
 const STARTUP_TIMEOUT = 60 * 1000;

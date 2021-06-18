@@ -3,7 +3,7 @@
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 import sinon from 'sinon';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import { devices } from '../assets/deviceList';
 import { getAllUdids } from '../../lib/extensions/isolate-sim.js';
 import B from 'bluebird';

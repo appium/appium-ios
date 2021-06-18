@@ -1,4 +1,4 @@
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import log from '../logger';
 import _ from 'lodash';
 

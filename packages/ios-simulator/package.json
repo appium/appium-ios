@@ -25,7 +25,7 @@
     "build/lib"
   ],
   "dependencies": {
-    "@appium/node-simctl": "^6.4.0",
+    "node-simctl": "^6.4.0",
     "@appium/support": "^2.44.0",
     "@appium/xcode": "^3.1.0",
     "@babel/runtime": "^7.0.0",

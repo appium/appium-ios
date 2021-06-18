@@ -1,6 +1,6 @@
 import { util } from '@appium/support';
 import { retryInterval } from 'asyncbox';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 
 const MODEL = process.env.DEVICE_NAME || 'iPhone 8';
 const PLATFORM_VERSION = process.env.PLATFORM_VERSION || '13.2';

@@ -6,7 +6,7 @@ import sinon from 'sinon';
 import B from 'bluebird';
 import * as TeenProcess from 'teen_process';
 import xcode from '@appium/xcode';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import {
   killAllSimulators, endAllSimulatorDaemons, simExists,
   installSSLCert, uninstallSSLCert

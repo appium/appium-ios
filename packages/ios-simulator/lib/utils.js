@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { exec } from 'teen_process';
 import { waitForCondition } from 'asyncbox';
 import xcode from '@appium/xcode';
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import { fs, tempDir, util } from '@appium/support';
 import { Certificate } from './certificate';
 import path from 'path';

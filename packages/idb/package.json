@@ -34,7 +34,7 @@
     "teen_process": "^1.11.0"
   },
   "devDependencies": {
-    "@appium/node-simctl": "^6.0.2"
+    "node-simctl": "^6.0.2"
   },
   "engines": {
     "node": ">=12"

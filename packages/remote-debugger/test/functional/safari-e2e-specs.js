@@ -1,4 +1,4 @@
-import Simctl from '@appium/node-simctl';
+import Simctl from 'node-simctl';
 import { getSimulator } from '@appium/ios-simulator';
 import { retryInterval, retry } from 'asyncbox';
 import { util } from '@appium/support';

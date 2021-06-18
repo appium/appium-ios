@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@appium/ios-simulator": "^3.10.0",
-    "@appium/node-simctl": "^6.0.2"
+    "node-simctl": "^6.0.2"
   },
   "engines": {
     "node": ">=12"
