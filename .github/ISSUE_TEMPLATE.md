@@ -22,7 +22,20 @@ Check the package(s) this issue involves, and fill in the version number.
 ## Details (Optional - Good to Have)
 
 <!--
-If possible, describe the problem you have been experiencing in more detail, add notes, etc. If this is a feature request: what might be an alternative solution?  Is there a workaround?
+IF THIS IS A BUG, please describe:
+
+1. The steps to reproduce
+2. The expected behavior
+3. The actual behavior
+
+IF THIS IS A FEATURE REQUEST, please answer:
+
+- Why is this needed?
+- Who will use it?
+- Are there workarounds?
+- What are some alternative solutions?
+- Can this feature be provided as a plugin or driver?
+
 -->
 
 <!-- *** BELOW IS FOR BUGS ONLY; IF REQUESTING A FEATURE, PLEASE DELETE TEXT BELOW *** -->
@@ -34,7 +47,8 @@ Please append the requested information to each list item below:
 -->
 
 - Appium version (or git revision) that exhibits the issue:
-- Last Appium version that did not exhibit the issue (if applicable):
+- Any other Appium plugins/drivers, and their versions:
+- Last version(s) that did not exhibit the issue (if applicable):
 - Desktop OS/version used to run Appium:
 - Node.js version (unless using Appium.app|exe):
 - npm or Yarn package manager version:
@@ -45,9 +59,9 @@ Please append the requested information to each list item below:
 ## Link to Appium logs (Required)
 
 <!--
-Do _NOT_ paste your full Appium logs here, as it will make this issue very long and hard to read!
-
 Create a [Gist](https://gist.github.com) and paste of your _full_ Appium logs, then provide the link below.  Please redact any sensitive information; this will be public!
+
+Do _NOT_ paste your full Appium logs here, as it will make this issue very long and hard to read!
 -->
 
 Link to Gist containing logs: <!-- gist link -->
