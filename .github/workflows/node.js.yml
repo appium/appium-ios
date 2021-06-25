@@ -24,14 +24,12 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        node-version: [12.x, 14.x, 16.x]
         device-name: [iPhone 12, iPhone 11]
+        xcode-version: [12.4, 12.3, 11.7]
         include:
           - device-name: iPhone 12
-            xcode-version: 12.4
             ios-version: 14.4
           - device-name: iPhone 11
-            xcode-version: 11.7
             ios-version: 13.7
     steps:
       - uses: actions/checkout@v2
