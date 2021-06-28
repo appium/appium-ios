@@ -34,7 +34,8 @@
   },
   "homepage": "https://appium.io",
   "os": [
-    "darwin"
+    "darwin",
+    "linux"
   ],
   "publishConfig": {
     "access": "public"
