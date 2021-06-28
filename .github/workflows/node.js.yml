@@ -7,7 +7,7 @@ on: [push, pull_request]
 
 jobs:
   common:
-    name: Common checks (Node.js v${{ matrix.node-version }})
+    name: Common tests (Node.js v${{ matrix.node-version }})
     runs-on: macos-latest
     strategy:
       matrix:
@@ -23,19 +23,60 @@ jobs:
           useRollingCache: true
       - run: npm run test:common
 
-  ios-simulator:
-    name: ios-simulator checks (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+  ios-simulator_unit:
+    name: ios-simulator unit tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
     runs-on: macos-latest
     strategy:
       matrix:
-        device-name: [iPhone 12, iPhone 11]
+        node-version: [12.x, 14.x, 16.x]
+        include:
+          - device-name: iPhone 12
+            xcode-version: 12.4
+            ios-version: 14.4
+    steps:
+      - uses: actions/checkout@v2
+      - uses: bahmutov/npm-install@v1
+        with:
+          useRollingCache: true
+      - name: Configure Homebrew cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/Library/Caches/Homebrew/applesimutils--*
+            ~/Library/Caches/Homebrew/downloads/*--applesimutils-*
+          key: brew-${{ hashFiles('.github/brew-formulae') }}
+          restore-keys: brew-
+      - name: Update Homebrew
+        run: |
+          brew tap wix/brew
+          brew update --preinstall
+          cat "$(brew --repository)/Library/Taps/wix/homebrew-brew/applesimutils.rb" > .github/brew-formulae
+      - name: Install Homebrew dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: brew install applesimutils
+      - name: Tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          npm run test:ios-simulator
+        env:
+          XCODE_VERSION: ${{ matrix.xcode-version }}
+          MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
+          MOBILE_OS_VERSION: ${{ matrix.ios-version }}
+
+  ios-simulator_e2e:
+    name: ios-simulator e2e tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+    runs-on: macos-latest
+    needs: [ios-simulator_unit]
+    strategy:
+      matrix:
         include:
           - device-name: iPhone 12
             xcode-version: 12.4
             ios-version: 14.4
           - device-name: iPhone 12
             xcode-version: 12.3
-            ios-version: 14.3       
+            ios-version: 14.3
           - device-name: iPhone 11
             xcode-version: 11.7
             ios-version: 13.7
@@ -62,7 +103,9 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: 1
         run: brew install applesimutils
       - name: Tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-        run: scripts/test-ios-simulator.sh
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          npm run test:e2e:ios-simulator
         env:
           XCODE_VERSION: ${{ matrix.xcode-version }}
           MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
