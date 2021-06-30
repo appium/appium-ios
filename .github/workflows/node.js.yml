@@ -5,6 +5,9 @@ name: Node.js CI
 
 on: [push, pull_request]
 
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+
 jobs:
   common:
     name: Common tests (Node.js v${{ matrix.node-version }})
@@ -47,6 +50,69 @@ jobs:
           MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
           MOBILE_OS_VERSION: ${{ matrix.ios-version }}
 
+  idb_e2e:
+    name: idb E2E tests (Node.js v${{ matrix.node-version }}
+    runs-on: macos-latest
+    needs: [common]
+    strategy:
+      matrix:
+        include:
+          - device-name: iPhone 12
+            xcode-version: 12.4
+            ios-version: 14.4
+          - device-name: iPhone 12
+            xcode-version: 12.3
+            ios-version: 14.3
+          - device-name: iPhone 11
+            xcode-version: 11.7
+            ios-version: 13.7
+    steps:
+      - uses: actions/checkout@v2
+      - uses: bahmutov/npm-install@v1
+        with:
+          useRollingCache: true
+      - name: Configure Homebrew cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/Library/Caches/Homebrew/idb-companion--*
+            ~/Library/Caches/Homebrew/*--cocoapods-*
+            ~/Library/Caches/Homebrew/*--abseil-*
+            ~/Library/Caches/Homebrew/*--protobuf-*
+            ~/Library/Caches/Homebrew/*--re2-*
+            ~/Library/Caches/Homebrew/*--grpc-*            
+            ~/Library/Caches/Homebrew/downloads/*--idb-companion-*
+            ~/Library/Caches/Homebrew/downloads/*--cocoapods-*
+            ~/Library/Caches/Homebrew/downloads/*--abseil-*
+            ~/Library/Caches/Homebrew/downloads/*--protobuf-*
+            ~/Library/Caches/Homebrew/downloads/*--re2-*
+            ~/Library/Caches/Homebrew/downloads/*--grpc-*
+          key: brew-${{ hashFiles('.github/brew-formulae') }}
+          restore-keys: brew-
+      - name: Configure Pip cache
+        uses: actions/cache@v2
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ hashFiles('./packages/idb/requirements.txt')}}
+          restore-keys: pip-
+      - name: Update Homebrew
+        run: |
+          brew tap facebook/fb
+          brew update --preinstall
+          cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
+      - name: Install Homebrew dependencies
+        run: brew install idb-companion
+      - name: Install Python dependencies
+        run: pip3 install -r ./packages/idb/requirements.txt
+      - name: idb E2E tests
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          npm run test:e2e:ios-simulator
+        env:
+          XCODE_VERSION: ${{ matrix.xcode-version }}
+          DEVICE_NAME: ${{ matrix.device-name }}
+          PLATFORM_VERSION: ${{ matrix.ios-version }}
+
   ios-simulator_e2e:
     name: ios-simulator e2e tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
     runs-on: macos-latest
@@ -82,8 +148,6 @@ jobs:
           brew update --preinstall
           cat "$(brew --repository)/Library/Taps/wix/homebrew-brew/applesimutils.rb" > .github/brew-formulae
       - name: Install Homebrew dependencies
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
         run: brew install applesimutils
       - name: E2E Tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
         run: |
