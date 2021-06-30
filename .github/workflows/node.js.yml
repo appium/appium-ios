@@ -71,6 +71,10 @@ jobs:
       - uses: bahmutov/npm-install@v1
         with:
           useRollingCache: true
+      - name: Select XCode
+        run: sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        env:
+          XCODE_VERSION: ${{ matrix.xcode-version }}
       - name: Configure Homebrew cache
         uses: actions/cache@v2
         with:
@@ -101,15 +105,12 @@ jobs:
           brew update --preinstall
           cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
       - name: Install Homebrew dependencies
-        run: brew install idb-companion --HEAD
+        run: brew install idb-companion
       - name: Install Python dependencies
         run: pip3 install -r ./packages/idb/requirements.txt
       - name: idb E2E tests
-        run: |
-          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-          npm run test:e2e:idb
+        run: npm run test:e2e:idb
         env:
-          XCODE_VERSION: ${{ matrix.xcode-version }}
           DEVICE_NAME: ${{ matrix.device-name }}
           PLATFORM_VERSION: ${{ matrix.ios-version }}
 
