@@ -51,7 +51,7 @@ jobs:
           MOBILE_OS_VERSION: ${{ matrix.ios-version }}
 
   idb_e2e:
-    name: idb E2E tests (Node.js v${{ matrix.node-version }}
+    name: idb E2E tests / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
     runs-on: macos-latest
     needs: [common]
     strategy:
@@ -101,7 +101,7 @@ jobs:
           brew update --preinstall
           cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
       - name: Install Homebrew dependencies
-        run: brew install idb-companion
+        run: brew install idb-companion --HEAD
       - name: Install Python dependencies
         run: pip3 install -r ./packages/idb/requirements.txt
       - name: idb E2E tests
