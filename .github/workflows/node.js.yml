@@ -107,7 +107,7 @@ jobs:
       - name: idb E2E tests
         run: |
           sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-          npm run test:e2e:ios-simulator
+          npm run test:e2e:idb
         env:
           XCODE_VERSION: ${{ matrix.xcode-version }}
           DEVICE_NAME: ${{ matrix.device-name }}
