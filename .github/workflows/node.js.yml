@@ -38,18 +38,25 @@ jobs:
 
   idb_e2e:
     name: idb E2E tests / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-    runs-on: [macos-latest, macos-11]
+    runs-on: ${{ matrix.os }}
     needs: [unit_tests]
     strategy:
       matrix:
         include:
-          - device-name: iPhone 12
+          - os: macos-11
+            device-name: iPhone 12 Pro Max
+            xcode-version: 12.5
+            ios-version: 14.5
+          - os: macos-10.15
+            device-name: iPhone 12
             xcode-version: 12.4
             ios-version: 14.4
-          - device-name: iPhone 12
+          - os: macos-10.15
+            device-name: iPhone 12 Pro
             xcode-version: 12.3
             ios-version: 14.3
-          - device-name: iPhone 11
+          - os: macos-10.15
+            device-name: iPhone 11
             xcode-version: 11.7
             ios-version: 13.7
     steps:
@@ -102,18 +109,25 @@ jobs:
 
   ios-simulator_e2e:
     name: ios-simulator e2e tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-    runs-on: [macos-latest, macos-11]
+    runs-on: ${{ matrix.os }}
     needs: [unit_tests]
     strategy:
       matrix:
         include:
-          - device-name: iPhone 12
+          - os: macos-11
+            device-name: iPhone 12 Pro Max
+            xcode-version: 12.5
+            ios-version: 14.5
+          - os: macos-10.15
+            device-name: iPhone 12
             xcode-version: 12.4
             ios-version: 14.4
-          - device-name: iPhone 12
+          - os: macos-10.15
+            device-name: iPhone 12 Pro
             xcode-version: 12.3
             ios-version: 14.3
-          - device-name: iPhone 11
+          - os: macos-10.15
+            device-name: iPhone 11
             xcode-version: 11.7
             ios-version: 13.7
     steps:
