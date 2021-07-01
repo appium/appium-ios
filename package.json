@@ -30,7 +30,7 @@
     "reinstall": "npm run clean && npm install",
     "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines,os,publishConfig",
     "test": "lerna exec gulp once",
-    "test:common": "lerna exec --ignore=@appium/ios-simulator gulp once",
+    "test:unit": "lerna exec gulp once",
     "test:e2e:ios-simulator": "lerna exec --scope=@appium/ios-simulator gulp e2e-test",
     "test:e2e:idb": "lerna exec --scope=@appium/idb gulp e2e-test",
     "test:idb": "lerna exec --scope=@appium/idb gulp once",

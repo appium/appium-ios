@@ -9,9 +9,9 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 jobs:
-  common:
+  unit_tests:
     name: Common tests (Node.js v${{ matrix.node-version }})
-    runs-on: macos-latest
+    runs-on: macos-11
     strategy:
       matrix:
         node-version: [12.x, 14.x, 16.x]
@@ -24,36 +24,12 @@ jobs:
       - uses: bahmutov/npm-install@v1
         with:
           useRollingCache: true
-      - run: npm run test:common
-
-  ios-simulator_unit:
-    name: ios-simulator unit tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        node-version: [12.x, 14.x, 16.x]
-        include:
-          - device-name: iPhone 12
-            xcode-version: 12.4
-            ios-version: 14.4
-    steps:
-      - uses: actions/checkout@v2
-      - uses: bahmutov/npm-install@v1
-        with:
-          useRollingCache: true
-      - name: Unit Tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-        run: |
-          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-          npm run test:ios-simulator
-        env:
-          XCODE_VERSION: ${{ matrix.xcode-version }}
-          MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
-          MOBILE_OS_VERSION: ${{ matrix.ios-version }}
+      - run: npm run test:unit
 
   idb_e2e:
     name: idb E2E tests / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-    runs-on: macos-latest
-    needs: [common]
+    runs-on: [macos-latest, macos-11]
+    needs: [unit_tests]
     strategy:
       matrix:
         include:
@@ -71,7 +47,7 @@ jobs:
       - uses: bahmutov/npm-install@v1
         with:
           useRollingCache: true
-      - name: Select XCode
+      - name: Select Xcode v${{ matrix.xcode-version }}
         run: sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
         env:
           XCODE_VERSION: ${{ matrix.xcode-version }}
@@ -108,7 +84,7 @@ jobs:
         run: brew install idb-companion
       - name: Install Python dependencies
         run: pip3 install -r ./packages/idb/requirements.txt
-      - name: idb E2E tests
+      - name: Run E2E tests
         run: npm run test:e2e:idb
         env:
           DEVICE_NAME: ${{ matrix.device-name }}
@@ -116,8 +92,8 @@ jobs:
 
   ios-simulator_e2e:
     name: ios-simulator e2e tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
-    runs-on: macos-latest
-    needs: [ios-simulator_unit]
+    runs-on: [macos-latest, macos-11]
+    needs: [unit_tests]
     strategy:
       matrix:
         include:
@@ -150,7 +126,7 @@ jobs:
           cat "$(brew --repository)/Library/Taps/wix/homebrew-brew/applesimutils.rb" > .github/brew-formulae
       - name: Install Homebrew dependencies
         run: brew install applesimutils
-      - name: E2E Tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+      - name: Run E2E Tests
         run: |
           sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
           npm run test:e2e:ios-simulator
