@@ -9,6 +9,16 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 jobs:
+  lint_check:
+    runs-on: ubuntu-latest
+    name: Lint check
+    steps:
+      - uses: actions/checkout@v2
+      - uses: bahmutov/npm-install@v1
+        with:
+          useRollingCache: true
+      - run: npm run lint
+
   unit_tests:
     name: Common tests (Node.js v${{ matrix.node-version }})
     runs-on: macos-11
