@@ -37,7 +37,7 @@ jobs:
       - run: npm run test:unit
 
   idb_e2e:
-    name: idb E2E tests / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+    name: idb E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
     runs-on: ${{ matrix.os }}
     needs: [unit_tests]
     strategy:
@@ -47,18 +47,18 @@ jobs:
             device-name: iPhone 12 Pro Max
             xcode-version: 12.5
             ios-version: 14.5
-          - os: macos-10.15
-            device-name: iPhone 12
-            xcode-version: 12.4
-            ios-version: 14.4
-          - os: macos-10.15
-            device-name: iPhone 12 Pro
-            xcode-version: 12.3
-            ios-version: 14.3
-          - os: macos-10.15
-            device-name: iPhone 11
-            xcode-version: 11.7
-            ios-version: 13.7
+          # - os: macos-10.15
+          #   device-name: iPhone 12
+          #   xcode-version: 12.4
+          #   ios-version: 14.4
+          # - os: macos-10.15
+          #   device-name: iPhone 12 Pro
+          #   xcode-version: 12.3
+          #   ios-version: 14.3
+          # - os: macos-10.15
+          #   device-name: iPhone 11
+          #   xcode-version: 11.7
+          #   ios-version: 13.7
     steps:
       - uses: actions/checkout@v2
       - uses: bahmutov/npm-install@v1
@@ -84,15 +84,21 @@ jobs:
             ~/Library/Caches/Homebrew/downloads/*--protobuf-*
             ~/Library/Caches/Homebrew/downloads/*--re2-*
             ~/Library/Caches/Homebrew/downloads/*--grpc-*
-          key: brew-${{ hashFiles('.github/brew-formulae') }}
-          restore-keys: brew-
+          key: brew-${{ matrix.os }}-${{ hashFiles('.github/brew-formulae') }}
+          restore-keys: brew-${{ matrix.os }}-
       - name: Configure Pip cache
         uses: actions/cache@v2
         with:
           path: ~/Library/Caches/pip
-          key: pip-${{ hashFiles('./packages/idb/requirements.txt')}}
-          restore-keys: pip-
+          key: pip-${{ matrix.os }}-${{ hashFiles('./packages/idb/requirements.txt')}}
+          restore-keys: pip-${{ matrix.os }}-
+      - name: Configure Cocoapods cache
+        uses: actions/cache@v2
+        with:
+          path: ~/Library/Caches/CocoaPods/Pods
+          key: pods-${{ matrix.os }}-${{ hashFiles('')}}
       - name: Update Homebrew
+
         run: |
           brew tap facebook/fb
           brew update --preinstall
@@ -100,7 +106,7 @@ jobs:
       - name: Install Homebrew dependencies
         run: brew install idb-companion
       - name: Install Python dependencies
-        run: pip3 install -r ./packages/idb/requirements.txt
+        run: sudo pip3 install -r ./packages/idb/requirements.txt
       - name: Run E2E tests
         run: npm run test:e2e:idb
         env:
@@ -108,7 +114,7 @@ jobs:
           PLATFORM_VERSION: ${{ matrix.ios-version }}
 
   ios-simulator_e2e:
-    name: ios-simulator e2e tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }})
+    name: ios-simulator E2E tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
     runs-on: ${{ matrix.os }}
     needs: [unit_tests]
     strategy:
@@ -142,7 +148,7 @@ jobs:
             ~/Library/Caches/Homebrew/applesimutils--*
             ~/Library/Caches/Homebrew/downloads/*--applesimutils-*
           key: brew-${{ hashFiles('.github/brew-formulae') }}
-          restore-keys: brew-
+          restore-keys: brew-${{ matrix.os }}-
       - name: Update Homebrew
         run: |
           brew tap wix/brew
