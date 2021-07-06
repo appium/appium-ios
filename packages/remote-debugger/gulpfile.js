@@ -23,6 +23,14 @@ const TEMP_BUILD_DIRECTORY_NAME = 'appium-atoms-driver';
 
 const ATOMS_BUILD_TARGET = 'build_atoms';
 
+gulp.task('copy-files-for-build', () =>
+  gulp
+    .src([
+      './test/functional/html/*'
+    ])
+    .pipe(gulp.dest('./build/test/functional/html/')),
+);
+
 boilerplate({
   build: '@appium/remote-debugger',
   files: [
@@ -34,7 +42,8 @@ boilerplate({
       '**/.*.yml', '**/*.yml', '**/.*.yaml', '**/*.yaml',
       '!test/**', '!node_modules/**', '!**/node_modules/**', '!tmp/**'
     ],
-  }
+  },
+  postTranspile: ['copy-files-for-build']
 });
 
 gulp.task('selenium:mkdir', function seleniumMkdir () {

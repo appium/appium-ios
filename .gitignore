@@ -123,3 +123,4 @@ build-js
 xcuserdata
 packages/ios-simulator/test/assets
 .vscode/settings.json
+tmp
