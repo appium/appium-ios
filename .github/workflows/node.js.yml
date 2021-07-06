@@ -180,10 +180,6 @@ jobs:
             xcode-version: 12.4
             ios-version: 14.4
           - os: macos-10.15
-            device-name: iPhone 12 Pro
-            xcode-version: 12.3
-            ios-version: 14.3
-          - os: macos-10.15
             device-name: iPhone 11
             xcode-version: 11.7
             ios-version: 13.7
@@ -198,5 +194,5 @@ jobs:
           npm run test:e2e:remote-debugger
         env:
           XCODE_VERSION: ${{ matrix.xcode-version }}
-          SIM_DEVICE_NAME: ${{ matrix.device-name }}
+          DEVICE_NAME: ${{ matrix.device-name }}
           PLATFORM_VERSION: ${{ matrix.ios-version }}          
