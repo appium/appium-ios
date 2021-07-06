@@ -104,7 +104,7 @@ jobs:
           brew update --preinstall
           cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
       - name: Install Homebrew dependencies
-        run: brew install idb-companion
+        run: brew install idb-companion --HEAD
       - name: Install Python dependencies
         run: sudo pip3 install -r ./packages/idb/requirements.txt
       - name: Run E2E tests
