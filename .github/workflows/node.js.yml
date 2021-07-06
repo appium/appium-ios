@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-            ~/Library/Caches/Homebrew/idb-companion--*
+            ~/Library/Caches/Homebrew/idb-companion--git
             ~/Library/Caches/Homebrew/*--cocoapods-*
             ~/Library/Caches/Homebrew/*--abseil-*
             ~/Library/Caches/Homebrew/*--protobuf-*
@@ -96,9 +96,8 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/Library/Caches/CocoaPods/Pods
-          key: pods-${{ matrix.os }}-${{ hashFiles('')}}
+          key: pods-${{ matrix.os }}-${{ hashFiles('~/Library/Caches/Homebrew/idb-companion--git/Podfile.lock')}}
       - name: Update Homebrew
-
         run: |
           brew tap facebook/fb
           brew update --preinstall
