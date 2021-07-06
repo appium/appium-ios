@@ -114,7 +114,7 @@ jobs:
           PLATFORM_VERSION: ${{ matrix.ios-version }}
 
   ios-simulator_e2e:
-    name: ios-simulator E2E tests (Node.js v${{ matrix.node-version }} / iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
+    name: ios-simulator E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
     runs-on: ${{ matrix.os }}
     needs: [unit_tests]
     strategy:
