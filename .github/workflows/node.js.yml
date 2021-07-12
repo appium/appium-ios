@@ -9,165 +9,165 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 jobs:
-  lint_check:
-    runs-on: ubuntu-latest
-    name: Lint check
-    steps:
-      - uses: actions/checkout@v2
-      - uses: bahmutov/npm-install@v1
-        with:
-          useRollingCache: true
-      - run: npm run lint
+  # lint_check:
+  #   runs-on: ubuntu-latest
+  #   name: Lint check
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: bahmutov/npm-install@v1
+  #       with:
+  #         useRollingCache: true
+  #     - run: npm run lint
 
-  unit_tests:
-    name: Common tests (Node.js v${{ matrix.node-version }})
-    runs-on: macos-11
-    strategy:
-      matrix:
-        node-version: [12.x, 14.x, 16.x]
-    steps:
-      - uses: actions/checkout@v2
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
-        with:
-          node-version: ${{ matrix.node-version }}
-      - uses: bahmutov/npm-install@v1
-        with:
-          useRollingCache: true
-      - run: npm run test:unit
+  # unit_tests:
+  #   name: Common tests (Node.js v${{ matrix.node-version }})
+  #   runs-on: macos-11
+  #   strategy:
+  #     matrix:
+  #       node-version: [12.x, 14.x, 16.x]
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Use Node.js ${{ matrix.node-version }}
+  #       uses: actions/setup-node@v1
+  #       with:
+  #         node-version: ${{ matrix.node-version }}
+  #     - uses: bahmutov/npm-install@v1
+  #       with:
+  #         useRollingCache: true
+  #     - run: npm run test:unit
 
-  idb_e2e:
-    name: idb E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
-    runs-on: ${{ matrix.os }}
-    needs: [unit_tests]
-    strategy:
-      matrix:
-        include:
-          - os: macos-11
-            device-name: iPhone 12 Pro Max
-            xcode-version: 12.5
-            ios-version: 14.5
-          # - os: macos-10.15
-          #   device-name: iPhone 12
-          #   xcode-version: 12.4
-          #   ios-version: 14.4
-          # - os: macos-10.15
-          #   device-name: iPhone 12 Pro
-          #   xcode-version: 12.3
-          #   ios-version: 14.3
-          # - os: macos-10.15
-          #   device-name: iPhone 11
-          #   xcode-version: 11.7
-          #   ios-version: 13.7
-    steps:
-      - uses: actions/checkout@v2
-      - uses: bahmutov/npm-install@v1
-        with:
-          useRollingCache: true
-      - name: Select Xcode v${{ matrix.xcode-version }}
-        run: sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-        env:
-          XCODE_VERSION: ${{ matrix.xcode-version }}
-      - name: Configure Homebrew cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/Library/Caches/Homebrew/idb-companion--git
-            ~/Library/Caches/Homebrew/*--cocoapods-*
-            ~/Library/Caches/Homebrew/*--abseil-*
-            ~/Library/Caches/Homebrew/*--protobuf-*
-            ~/Library/Caches/Homebrew/*--re2-*
-            ~/Library/Caches/Homebrew/*--grpc-*            
-            ~/Library/Caches/Homebrew/downloads/*--idb-companion-*
-            ~/Library/Caches/Homebrew/downloads/*--cocoapods-*
-            ~/Library/Caches/Homebrew/downloads/*--abseil-*
-            ~/Library/Caches/Homebrew/downloads/*--protobuf-*
-            ~/Library/Caches/Homebrew/downloads/*--re2-*
-            ~/Library/Caches/Homebrew/downloads/*--grpc-*
-          key: brew-${{ matrix.os }}-${{ hashFiles('.github/brew-formulae') }}
-          restore-keys: brew-${{ matrix.os }}-
-      - name: Configure Pip cache
-        uses: actions/cache@v2
-        with:
-          path: ~/Library/Caches/pip
-          key: pip-${{ matrix.os }}-${{ hashFiles('./packages/idb/requirements.txt')}}
-          restore-keys: pip-${{ matrix.os }}-
-      - name: Configure Cocoapods cache
-        uses: actions/cache@v2
-        with:
-          path: ~/Library/Caches/CocoaPods/Pods
-          key: pods-${{ matrix.os }}-${{ hashFiles('~/Library/Caches/Homebrew/idb-companion--git/Podfile.lock')}}
-      - name: Update Homebrew
-        run: |
-          brew tap facebook/fb
-          brew update --preinstall
-          cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
-      - name: Install Homebrew dependencies
-        run: brew install idb-companion --HEAD
-      - name: Install Python dependencies
-        run: sudo pip3 install -r ./packages/idb/requirements.txt
-      - name: Run E2E tests
-        run: npm run test:e2e:idb
-        env:
-          DEVICE_NAME: ${{ matrix.device-name }}
-          PLATFORM_VERSION: ${{ matrix.ios-version }}
+  # idb_e2e:
+  #   name: idb E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
+  #   runs-on: ${{ matrix.os }}
+  #   needs: [unit_tests]
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - os: macos-11
+  #           device-name: iPhone 12 Pro Max
+  #           xcode-version: 12.5
+  #           ios-version: 14.5
+  #         - os: macos-10.15
+  #           device-name: iPhone 12
+  #           xcode-version: 12.4
+  #           ios-version: 14.4
+  #         - os: macos-10.15
+  #           device-name: iPhone 12 Pro
+  #           xcode-version: 12.3
+  #           ios-version: 14.3
+  #         - os: macos-10.15
+  #           device-name: iPhone 11
+  #           xcode-version: 11.7
+  #           ios-version: 13.7
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: bahmutov/npm-install@v1
+  #       with:
+  #         useRollingCache: true
+  #     - name: Select Xcode v${{ matrix.xcode-version }}
+  #       run: sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+  #       env:
+  #         XCODE_VERSION: ${{ matrix.xcode-version }}
+  #     - name: Configure Homebrew cache
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           ~/Library/Caches/Homebrew/idb-companion--git
+  #           ~/Library/Caches/Homebrew/*--cocoapods-*
+  #           ~/Library/Caches/Homebrew/*--abseil-*
+  #           ~/Library/Caches/Homebrew/*--protobuf-*
+  #           ~/Library/Caches/Homebrew/*--re2-*
+  #           ~/Library/Caches/Homebrew/*--grpc-*            
+  #           ~/Library/Caches/Homebrew/downloads/*--idb-companion-*
+  #           ~/Library/Caches/Homebrew/downloads/*--cocoapods-*
+  #           ~/Library/Caches/Homebrew/downloads/*--abseil-*
+  #           ~/Library/Caches/Homebrew/downloads/*--protobuf-*
+  #           ~/Library/Caches/Homebrew/downloads/*--re2-*
+  #           ~/Library/Caches/Homebrew/downloads/*--grpc-*
+  #         key: brew-${{ matrix.os }}-${{ hashFiles('.github/brew-formulae') }}
+  #         restore-keys: brew-${{ matrix.os }}-
+  #     - name: Configure Pip cache
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: ~/Library/Caches/pip
+  #         key: pip-${{ matrix.os }}-${{ hashFiles('./packages/idb/requirements.txt')}}
+  #         restore-keys: pip-${{ matrix.os }}-
+  #     - name: Configure Cocoapods cache
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: ~/Library/Caches/CocoaPods/Pods
+  #         key: pods-${{ matrix.os }}-${{ hashFiles('~/Library/Caches/Homebrew/idb-companion--git/Podfile.lock')}}
+  #     - name: Update Homebrew
+  #       run: |
+  #         brew tap facebook/fb
+  #         brew update --preinstall
+  #         cat "$(brew --repository)/Library/Taps/facebook/homebrew-fb/idb-companion.rb" > .github/brew-formulae
+  #     - name: Install Homebrew dependencies
+  #       run: brew install idb-companion --HEAD
+  #     - name: Install Python dependencies
+  #       run: sudo pip3 install -r ./packages/idb/requirements.txt
+  #     - name: Run E2E tests
+  #       run: npm run test:e2e:idb
+  #       env:
+  #         DEVICE_NAME: ${{ matrix.device-name }}
+  #         PLATFORM_VERSION: ${{ matrix.ios-version }}
 
-  ios-simulator_e2e:
-    name: ios-simulator E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
-    runs-on: ${{ matrix.os }}
-    needs: [unit_tests]
-    strategy:
-      matrix:
-        include:
-          - os: macos-11
-            device-name: iPhone 12 Pro Max
-            xcode-version: 12.5
-            ios-version: 14.5
-          - os: macos-10.15
-            device-name: iPhone 12
-            xcode-version: 12.4
-            ios-version: 14.4
-          - os: macos-10.15
-            device-name: iPhone 12 Pro
-            xcode-version: 12.3
-            ios-version: 14.3
-          - os: macos-10.15
-            device-name: iPhone 11
-            xcode-version: 11.7
-            ios-version: 13.7
-    steps:
-      - uses: actions/checkout@v2
-      - uses: bahmutov/npm-install@v1
-        with:
-          useRollingCache: true
-      - name: Configure Homebrew cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/Library/Caches/Homebrew/applesimutils--*
-            ~/Library/Caches/Homebrew/downloads/*--applesimutils-*
-          key: brew-${{ hashFiles('.github/brew-formulae') }}
-          restore-keys: brew-${{ matrix.os }}-
-      - name: Update Homebrew
-        run: |
-          brew tap wix/brew
-          brew update --preinstall
-          cat "$(brew --repository)/Library/Taps/wix/homebrew-brew/applesimutils.rb" > .github/brew-formulae
-      - name: Install Homebrew dependencies
-        run: brew install applesimutils
-      - name: Run E2E Tests
-        run: |
-          sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
-          npm run test:e2e:ios-simulator
-        env:
-          XCODE_VERSION: ${{ matrix.xcode-version }}
-          MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
-          MOBILE_OS_VERSION: ${{ matrix.ios-version }}
+  # ios-simulator_e2e:
+  #   name: ios-simulator E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{matrix.os}})
+  #   runs-on: ${{ matrix.os }}
+  #   needs: [unit_tests]
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - os: macos-11
+  #           device-name: iPhone 12 Pro Max
+  #           xcode-version: 12.5
+  #           ios-version: 14.5
+  #         - os: macos-10.15
+  #           device-name: iPhone 12
+  #           xcode-version: 12.4
+  #           ios-version: 14.4
+  #         - os: macos-10.15
+  #           device-name: iPhone 12 Pro
+  #           xcode-version: 12.3
+  #           ios-version: 14.3
+  #         - os: macos-10.15
+  #           device-name: iPhone 11
+  #           xcode-version: 11.7
+  #           ios-version: 13.7
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: bahmutov/npm-install@v1
+  #       with:
+  #         useRollingCache: true
+  #     - name: Configure Homebrew cache
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           ~/Library/Caches/Homebrew/applesimutils--*
+  #           ~/Library/Caches/Homebrew/downloads/*--applesimutils-*
+  #         key: brew-${{ hashFiles('.github/brew-formulae') }}
+  #         restore-keys: brew-${{ matrix.os }}-
+  #     - name: Update Homebrew
+  #       run: |
+  #         brew tap wix/brew
+  #         brew update --preinstall
+  #         cat "$(brew --repository)/Library/Taps/wix/homebrew-brew/applesimutils.rb" > .github/brew-formulae
+  #     - name: Install Homebrew dependencies
+  #       run: brew install applesimutils
+  #     - name: Run E2E Tests
+  #       run: |
+  #         sudo xcode-select --switch "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+  #         npm run test:e2e:ios-simulator
+  #       env:
+  #         XCODE_VERSION: ${{ matrix.xcode-version }}
+  #         MOBILE_DEVICE_NAME: ${{ matrix.device-name }}
+  #         MOBILE_OS_VERSION: ${{ matrix.ios-version }}
 
   remote-debugger_e2e:
     name: remote-debugger E2E tests (iOS v${{ matrix.ios-version }} / Xcode v${{ matrix.xcode-version }} / ${{ matrix.device-name }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: [unit_tests]
+    # needs: [unit_tests]
     strategy:
       matrix:
         include:
