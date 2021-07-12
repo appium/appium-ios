@@ -3,7 +3,7 @@
 const gulp = require('gulp');
 const boilerplate = require('@appium/gulp-plugins').boilerplate.use(gulp);
 
-gulp.task('copy-assets', () =>
+gulp.task('copy-files-for-build', () =>
   gulp
     .src([
       './test/assets/sample.plist',
@@ -20,5 +20,5 @@ boilerplate({
     files: ['./build/test/unit/**/*-specs.js'],
     verbose: true,
   },
-  postTranspile: ['copy-assets']
+  postTranspile: ['copy-files-for-build']
 });

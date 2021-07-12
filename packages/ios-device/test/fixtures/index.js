@@ -2,6 +2,7 @@ import path from 'path';
 import { fs, logger } from '@appium/support';
 import net from 'net';
 import stoppable from 'stoppable';
+import getPort from 'get-port';
 
 const log = logger.getLogger('fixtures');
 
@@ -66,7 +67,10 @@ async function getServerWithFixtures (...args) {
   const fixturesToUse = args.map((key) => fixtureContents[key]);
 
   const server = stoppable(net.createServer());
-  server.listen();
+  /// XXX: there is a race condition here (or in code calling `getServerWithFixtures()` if we try to treat `net.Server#listen()` as async via a Promise or callback.
+  // listening is an asynchronous operation!
+  // this may have been causing the issues which caused me to reach for `get-port`
+  server.listen(await getPort());
   const socket = net.connect(server.address());
   server.on('connection', function (socket) {
     let i = 0;

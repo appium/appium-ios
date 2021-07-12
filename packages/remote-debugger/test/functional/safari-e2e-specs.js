@@ -13,8 +13,8 @@ chai.should();
 chai.use(chaiAsPromised);
 
 const SIM_NAME = process.env.SIM_DEVICE_NAME || `appium-test-${util.uuidV4()}`;
-const DEVICE_NAME = process.env.DEVICE_NAME || 'iPhone 6';
-const PLATFORM_VERSION = process.env.PLATFORM_VERSION || '12.1';
+const DEVICE_NAME = process.env.DEVICE_NAME || 'iPhone 12';
+const PLATFORM_VERSION = process.env.PLATFORM_VERSION || '14.5';
 
 const PAGE_TITLE = 'Remote debugger test page';
 
@@ -64,7 +64,7 @@ describe('Safari remote debugger', function () {
     });
 
     const port = await startHttpServer();
-    address = `http://localhost:${port}`;
+    address = `http://127.0.0.1:${port}`;
   });
   after(async function () {
     await sim.shutdown();

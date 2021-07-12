@@ -66,9 +66,10 @@ describe('xcode @skip-linux', function () {
     });
   });
 
-  it('should get the command line tools version', async function () {
+  //  XXX: package names have changed
+  // `brew config` can surface this info; copy what they do
+  it.skip('should get the command line tools version', async function () {
     if (!process.env.CI) {
-      // The function does not work anymore for recent xcode versions
       return this.skip();
     }
     let cliVersion = await xcode.getCommandLineToolsVersion();

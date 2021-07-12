@@ -1,12 +1,6 @@
-# appium-remote-debugger
-
-[![Build Status](https://travis-ci.org/appium/appium-remote-debugger.svg)](https://travis-ci.org/appium/appium-remote-debugger)
-[![Dependency Status](https://david-dm.org/appium/appium-remote-debugger.svg)](https://david-dm.org/appium/appium-remote-debugger)
-[![devDependency Status](https://david-dm.org/appium/appium-remote-debugger/dev-status.svg)](https://david-dm.org/appium/appium-remote-debugger#info=devDependencies)
+# @appium/remote-debugger
 
 A Node.js frontend for the Remote Debugger protocol used by Appium to connect to iOS webviews and Safari. Written using ES6+.
-
-Issues for this repo are disabled. Log any issues at the [main Appium repo's issue tracker](https://github.com/appium/appium/issues).
 
 ## Safari's version of the WebKit API
 
@@ -27,27 +21,11 @@ The steps to using the `RemoteDebugger` involve instantiating an object, then ru
 
 The remote debugger uses the standard [Selenium Atoms](https://github.com/SeleniumHQ/selenium/tree/master/javascript/atoms)
 to interact with web pages. These need to be manually updated when necessary. To
-do so, simply update the branch in the `gulpfile`, by modifying the `SELENIUM_BRANCH`
-constant at the top of the file. Then run `npm run build:atoms`, test and create
+do so, update the branch in `gulpfile.js`, by modifying the `SELENIUM_BRANCH`
+constant at the top of the file. Then, from the _working copy root_, run `npm run build:atoms`, test and create
 a pull request with the resulting changed atoms directory.
 
 One caveat is that there are some changes that are needed for Appium, that are
 not yet in the Selenium codebase. See the [atoms notes](./atoms-notes.md) for
 details.
 
-
-## Watch
-
-```
-npm run watch
-```
-
-```
-gulp watch
-```
-
-## Test
-
-```
-npm test
-```

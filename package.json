@@ -15,21 +15,32 @@
   "license": "Apache-2.0",
   "author": "Appium Contributors",
   "scripts": {
-    "build": "lerna exec gulp transpile",
-    "build:atoms": "lerna exec --scope=@appium/remote-debugger gulp atoms",
-    "build:atoms:import": "lerna exec --scope=@appium/remote-debugger gulp atoms:import",
-    "build:selenium": "lerna exec --scope=@appium/remote-debugger gulp selenium:clone",
-    "clean": "lerna clean -y && rm -rf node_modules && rm -f package-lock.json && rm -rf packages/*/build",
+    "build": "lerna exec -- gulp transpile",
+    "build:atoms": "lerna exec --scope=@appium/remote-debugger -- gulp atoms",
+    "build:atoms:import": "lerna exec --scope=@appium/remote-debugger -- gulp atoms:import",
+    "build:selenium": "lerna exec --scope=@appium/remote-debugger -- gulp selenium:clone",
+    "clean": "lerna clean -y && rm -rf node_modules && rm -rf packages/*/build",
     "e2e-test": "lerna exec gulp e2e-test",
     "inspect-safari": "node packages/remote-debugger/build/bin/web_inspector_proxy.js",
-    "postinstall": "lerna bootstrap && lerna exec gulp prepublish",
-    "lint": "lerna exec --parallel gulp lint",
-    "lint:fix": "lerna exec --parallel gulp lint -- --fix",
+    "postinstall": "lerna bootstrap && lerna exec -- gulp prepublish",
+    "lint": "lerna exec --parallel -- gulp lint",
+    "lint:fix": "lerna exec --parallel -- gulp lint --fix",
     "precommit-lint": "lint-staged",
     "precommit-msg": "echo 'Pre-commit checks...' && exit 0",
     "reinstall": "npm run clean && npm install",
-    "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
+    "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines,os,publishConfig",
     "test": "lerna exec gulp once",
+    "pretest:unit": "lerna exec --scope=@appium/ios-device --scope=@appium/ios-simulator --scope=@appium/remote-debugger -- gulp copy-files-for-build",
+    "test:unit": "lerna exec --ignore=@appium/ios-test-app -- gulp unit-test",
+    "test:e2e:ios-simulator": "lerna exec --scope=@appium/ios-simulator gulp e2e-test",
+    "test:e2e:idb": "lerna exec --scope=@appium/idb -- gulp e2e-test",
+    "test:e2e:remote-debugger": "lerna exec --scope=@appium/remote-debugger -- gulp e2e-test",
+    "test:idb": "lerna exec --scope=@appium/idb -- gulp once",
+    "test:ios-device": "lerna exec --scope=@appium/ios-device -- gulp once",
+    "test:ios-simulator": "lerna exec --scope=@appium/ios-simulator -- gulp once",
+    "test:ios-test-app": "lerna exec --scope=@appium/ios-test-app -- gulp once",
+    "test:remote-debugger": "lerna exec --scope=@appium/remote-debugger -- gulp once",
+    "test:xcode": "lerna exec --scope=@appium/xcode -- gulp once",
     "preversion": "npm run sync-pkgs && git add -A ./packages/*/package.json"
   },
   "pre-commit": [
@@ -42,7 +53,7 @@
   "devDependencies": {
     "@appium/eslint-config-appium": "^4.7.0",
     "@appium/gulp-plugins": "^5.5.0",
-    "@appium/ios-test-app": "file://./packages/ios-test-app",
+    "@appium/ios-test-app": "file:./packages/ios-test-app",
     "@appium/test-support": "^1.3.3",
     "@babel/core": "^7.0.0",
     "@babel/eslint-parser": "^7.14.3",
@@ -63,6 +74,7 @@
     "fancy-log": "^1.3.3",
     "finalhandler": "^1.1.2",
     "fs-extra": "^10.0.0",
+    "get-port": "^5.1.1",
     "gulp": "^4.0.2",
     "lerna": "^4.0.0",
     "lint-staged": "^11.0.0",
@@ -79,5 +91,12 @@
   },
   "engines": {
     "node": ">=12"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

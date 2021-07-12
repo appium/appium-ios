@@ -20,7 +20,8 @@
     "node": ">=12"
   },
   "os": [
-    "darwin"
+    "darwin",
+    "linux"
   ],
   "main": "index.js",
   "directories": {
@@ -37,5 +38,8 @@
   "dependencies": {
     "gulp": "^4.0.0"
   },
-  "homepage": "https://appium.io"
+  "homepage": "https://appium.io",
+  "publishConfig": {
+    "access": "public"
+  }
 }
