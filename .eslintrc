@@ -1,5 +1,6 @@
 {
   "extends": "@appium/eslint-config-appium",
+  "rules": {"import/no-unresolved": "off"},
   "overrides": [
     {
       "files": "packages/*/test/**/*.js",
