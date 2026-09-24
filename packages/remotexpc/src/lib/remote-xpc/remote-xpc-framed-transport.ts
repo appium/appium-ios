@@ -2,7 +2,6 @@ import {EventEmitter} from 'node:events';
 import net from 'node:net';
 
 import {getLogger} from '../logger.js';
-import type {XPCDictionary} from '../types.js';
 import {Http2Constants} from './constants.js';
 import {DataFrame} from './handshake-frames.js';
 import Handshake from './handshake.js';
@@ -12,7 +11,7 @@ import {
   type PeerTeardownFrame,
   buildWindowUpdateFrames,
 } from './http2-frame-parser.js';
-import {decodeMessage, probeXpcFraming, XPC_WRAPPER_HEADER_SIZE} from './xpc-protocol.js';
+import {type XPCMessage, decodeMessage, probeXpcFraming, XPC_WRAPPER_HEADER_SIZE} from './xpc-protocol.js';
 
 const log = getLogger('RemoteXpcFramedTransport');
 
@@ -22,6 +21,14 @@ const DEFAULT_SOCKET_END_TIMEOUT_MS = 500;
 export interface RemoteXpcFramedTransportConnectOptions {
   timeoutMs: number;
   handshakeDelayMs?: number;
+}
+
+/** Wrapper fields of a received message, passed as the second `'message'` listener argument. */
+export interface RemoteXpcMessageInfo {
+  /** HTTP/2 stream the message arrived on. */
+  streamId: number;
+  flags: number;
+  id: bigint;
 }
 
 /** Owned copies of one in-flight XPC message's chunks; `byteLength` is unset until the header is readable. */
@@ -362,7 +369,7 @@ export class RemoteXpcFramedTransport extends EventEmitter {
         });
         return;
       }
-      this.decodeAndEmit(rest.subarray(0, framing.byteLength));
+      this.decodeAndEmit(streamId, rest.subarray(0, framing.byteLength));
       rest = rest.subarray(framing.byteLength);
     }
   }
@@ -409,16 +416,17 @@ export class RemoteXpcFramedTransport extends EventEmitter {
    * it is not fatal, the messages behind it still arrive, and an unheard `'error'`
    * would be thrown by Node.
    */
-  private decodeAndEmit(message: Buffer): void {
-    let body: XPCDictionary | null | undefined;
+  private decodeAndEmit(streamId: number, message: Buffer): void {
+    let decoded: XPCMessage;
     try {
-      body = decodeMessage(message).message.body;
+      decoded = decodeMessage(message).message;
     } catch (error) {
       this.emit('decodeError', error instanceof Error ? error : new Error(String(error)));
       return;
     }
-    if (body) {
-      this.emit('message', body);
+    if (decoded.body) {
+      const info: RemoteXpcMessageInfo = {streamId, flags: decoded.flags, id: BigInt(decoded.id ?? 0)};
+      this.emit('message', decoded.body, info);
     }
   }
 

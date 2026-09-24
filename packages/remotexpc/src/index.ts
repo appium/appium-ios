@@ -90,6 +90,15 @@ export type {
 } from './services/ios/device-info/index.js';
 export {DeviceControlService} from './services/ios/device-control/index.js';
 export type {DeviceOrientationState, RotateDirection} from './services/ios/device-control/index.js';
+export {CoreDeviceFileService, FILE_SERVICE_DOMAIN} from './services/ios/file-service/index.js';
+export type {
+  FileServiceDomain,
+  FileServiceEntry,
+  FileServiceFileMetadata,
+  FileServiceListOptions,
+  FileServiceRequestOptions,
+  FileServiceSessionOptions,
+} from './services/ios/file-service/index.js';
 export {ConfigurationService} from './services/ios/configuration/index.js';
 export type {
   ColorFilterState,

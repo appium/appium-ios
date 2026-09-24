@@ -29,6 +29,7 @@ import {Notifications} from './services/ios/dvt/instruments/notifications.js';
 import {ProcessControl} from './services/ios/dvt/instruments/process-control.js';
 import {Screenshot} from './services/ios/dvt/instruments/screenshot.js';
 import {Sysmontap} from './services/ios/dvt/instruments/sysmontap.js';
+import {CoreDeviceFileService, type FileServiceSessionOptions} from './services/ios/file-service/index.js';
 import {HidIndigoService} from './services/ios/hid-indigo/index.js';
 import {HouseArrestService} from './services/ios/house-arrest/index.js';
 import {InstallationProxyService} from './services/ios/installation-proxy/index.js';
@@ -175,6 +176,24 @@ export async function startAccessibilityAuditService(udid: string): Promise<Acce
 export async function startDeviceControlService(udid: string): Promise<DeviceControlService> {
   await requireCatalogService(udid, DeviceControlService.RSD_SERVICE_NAME);
   return new DeviceControlService(udid);
+}
+
+/**
+ * Start the CoreDevice file service for the given device UDID.
+ *
+ * Lists and downloads files in one domain of the device (for example an app's
+ * data container) over RemoteXPC — the backend of `devicectl device info files`
+ * and `devicectl device copy from`. Call `close()` on the result when done.
+ *
+ * @param sessionOptions The domain (and its identifier and user) that the
+ * service's paths are relative to.
+ */
+export async function startCoreDeviceFileService(
+  udid: string,
+  sessionOptions: FileServiceSessionOptions,
+): Promise<CoreDeviceFileService> {
+  await requireCatalogServices(udid, [CoreDeviceFileService.RSD_SERVICE_NAME, CoreDeviceFileService.DATA_SERVICE_NAME]);
+  return new CoreDeviceFileService(udid, sessionOptions);
 }
 
 /**
