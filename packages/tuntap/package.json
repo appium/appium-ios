@@ -1,0 +1,64 @@
+{
+  "name": "appium-ios-tuntap",
+  "version": "2.0.13",
+  "description": "Native TUN/TAP interface module for Node.js",
+  "bugs": {
+    "url": "https://github.com/appium/appium-ios/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Appium Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/appium/appium-ios.git",
+    "directory": "packages/tuntap"
+  },
+  "files": [
+    "src",
+    "lib/src",
+    "prebuilds",
+    "scripts",
+    "!scripts/ci/**",
+    "vendor",
+    "binding.gyp",
+    "package.json",
+    "README.md",
+    "!.DS_Store",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "lib/src/index.js",
+  "types": "lib/src/index.d.ts",
+  "scripts": {
+    "clean": "rm -rf build node_modules lib",
+    "build": "tsc -b",
+    "build:addon": "node-gyp rebuild",
+    "build:prebuilds": "prebuildify --napi --strip",
+    "lint:cpp": "npm run build:compile-commands && bash scripts/ci/lint-cpp.sh",
+    "format:cpp": "clang-format -i src/tuntap.cc src/native/*.cc src/native/*.h",
+    "format:cpp:check": "clang-format --dry-run --Werror src/tuntap.cc src/native/*.cc src/native/*.h",
+    "build:compile-commands": "node-gyp configure -- -f compile_commands_json",
+    "install": "node-gyp-build",
+    "refresh:wintun": "node scripts/fetch-wintun.mjs",
+    "prepare": "npm run build",
+    "test": "npm run test:integration && npm run test:unit",
+    "test:unit": "node --enable-source-maps --test --test-force-exit --test-timeout=15000 \"lib/test/unit/**/*.spec.js\"",
+    "test:integration": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=60000 \"lib/test/integration/**/*.spec.js\""
+  },
+  "dependencies": {
+    "@appium/support": "^7.2.6",
+    "node-addon-api": "^8.5.0",
+    "node-gyp-build": "^4.8.4"
+  },
+  "devDependencies": {
+    "@appium/tsconfig": "^1.2.0",
+    "@types/node": "^26.1.2",
+    "commander": "^14.0.3",
+    "prebuildify": "^6.0.1"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "npm": ">=10"
+  },
+  "gypfile": true
+}
