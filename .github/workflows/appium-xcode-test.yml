@@ -1,0 +1,36 @@
+name: appium-xcode Unit Tests
+
+on:
+  pull_request:
+    paths: ['packages/appium-xcode/**']
+  push:
+    branches: [main]
+    paths: ['packages/appium-xcode/**']
+
+jobs:
+  node_matrix:
+    uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
+
+  test:
+    needs:
+    - node_matrix
+    strategy:
+      matrix:
+        node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ matrix.node-version }}
+    - uses: SocketDev/action@v1
+      with:
+        mode: firewall-free
+    - name: Install dev dependencies
+      run: sfw npm install
+    - name: Build
+      run: npm run build -w packages/appium-xcode
+    - name: Run unit tests
+      run: npm run test -w packages/appium-xcode

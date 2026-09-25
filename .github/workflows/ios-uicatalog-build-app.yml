@@ -1,0 +1,88 @@
+name: Build ios-uicatalog App (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      upload_pr_artifacts:
+        description: 'Whether to upload build artifacts as GitHub Actions artifacts'
+        required: false
+        type: boolean
+        default: false
+      checkout_ref:
+        description: 'Git ref to checkout'
+        required: false
+        type: string
+        default: ''
+      run_lint:
+        description: 'Whether to run lint'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-ios:
+    name: Build ios-uicatalog App
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - uses: SocketDev/action@v1
+        if: inputs.run_lint == true
+        with:
+          mode: firewall-free
+
+      - name: Install dependencies
+        if: inputs.run_lint != true
+        run: npm install
+
+      - name: Install dependencies
+        if: inputs.run_lint == true
+        run: sfw npm install
+
+      - name: Run lint
+        if: inputs.run_lint == true
+        run: npm run lint
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+
+      - name: Clean build directory
+        working-directory: packages/ios-uicatalog
+        run: rm -rf UIKitCatalog/build
+
+      - name: Build iOS App for Simulator
+        run: npm run build:uicatalog:simulator -w packages/ios-uicatalog
+
+      - name: Create ZIP archive
+        working-directory: packages/ios-uicatalog
+        run: |
+          APP_PATH="UIKitCatalog/build/Build/Products/Release-iphonesimulator/UIKitCatalog.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Error: App not found at $APP_PATH"
+            echo "Build directory structure:"
+            find UIKitCatalog/build -type d 2>/dev/null | head -20
+            exit 1
+          fi
+          WORKSPACE_ROOT=$(pwd)
+          cd UIKitCatalog/build/Build/Products/Release-iphonesimulator
+          zip -r "UIKitCatalog-iphonesimulator.zip" "UIKitCatalog.app"
+          mv "UIKitCatalog-iphonesimulator.zip" "$WORKSPACE_ROOT/"
+
+      - name: Upload iOS App as Artifact
+        if: inputs.upload_pr_artifacts == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: UIKitCatalog-iphonesimulator.zip
+          path: packages/ios-uicatalog/UIKitCatalog-iphonesimulator.zip
+          retention-days: 7
