@@ -61,7 +61,7 @@ jobs:
     needs:
       - prepare_e2e_packages
     name: E2E Tests - ${{ matrix.package_dir }}
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' && needs.prepare_e2e_packages.outputs.packages != '[]' }}
     strategy:
       fail-fast: false
       matrix:

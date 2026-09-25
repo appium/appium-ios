@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/lerna",
   "changelogPreset": "conventional-changelog-conventionalcommits",
+  "packages": ["packages/*"],
   "command": {
     "publish": {
       "message": "chore: publish"

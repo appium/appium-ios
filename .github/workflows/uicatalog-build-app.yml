@@ -8,6 +8,16 @@ on:
         required: false
         type: boolean
         default: false
+      upload_release_artifacts:
+        description: 'Whether to upload build artifacts to a release'
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release tag name for artifact upload'
+        required: false
+        type: string
+        default: ''
       checkout_ref:
         description: 'Git ref to checkout'
         required: false
@@ -66,3 +76,12 @@ jobs:
           name: UIKitCatalog-iphonesimulator.zip
           path: packages/uicatalog/UIKitCatalog-iphonesimulator.zip
           retention-days: 7
+
+      - name: Upload iOS App to Release
+        if: inputs.upload_release_artifacts == true
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            packages/uicatalog/UIKitCatalog-iphonesimulator.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
