@@ -1,10 +1,22 @@
 {
-  "ci": false,
-  "npmClientArgs": [
-    "--no-package-lock"
-  ],
-  "packages": [
-    "packages/*"
-  ],
+  "$schema": "https://json.schemastore.org/lerna",
+  "changelogPreset": "conventional-changelog-conventionalcommits",
+  "packages": ["packages/*"],
+  "command": {
+    "publish": {
+      "message": "chore: publish"
+    },
+    "run": {
+      "concurrency": 8
+    },
+    "version": {
+      "conventionalCommits": true,
+      "createRelease": "github",
+      "allowBranch": ["main"],
+      "exact": true
+    }
+  },
+  "ignoreChanges": ["**/test/**", "**/*.md"],
+  "useNx": false,
   "version": "independent"
 }

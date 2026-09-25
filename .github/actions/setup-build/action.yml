@@ -1,0 +1,39 @@
+name: Setup Node, Install, Build
+
+description: |
+  Common setup for CI jobs: checkout, setup Node, install deps, optional build.
+
+inputs:
+  node-version:
+    description: Node.js version to setup
+    required: true
+  install-command:
+    description: npm install command
+    required: false
+    default: npm ci --foreground-scripts
+  run-build:
+    description: Whether to run npm run build
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Use Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+    - uses: SocketDev/action@v1
+      with:
+        mode: firewall-free
+    - name: Install dependencies
+      shell: bash
+      run: |
+        install_cmd="${{ inputs.install-command }}"
+        sfw_install_cmd="${install_cmd//npm /sfw npm }"
+        $sfw_install_cmd
+    - name: Build packages
+      if: ${{ inputs.run-build == 'true' }}
+      shell: bash
+      run: npm run build

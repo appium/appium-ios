@@ -3,81 +3,64 @@
   "version": "0.0.0",
   "private": true,
   "description": "Monorepo for official iOS-related Appium packages",
-  "keywords": [],
+  "keywords": [
+    "appium",
+    "automation",
+    "ios",
+    "testing",
+    "webdriver"
+  ],
   "homepage": "https://appium.io",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
   },
+  "license": "Apache-2.0",
+  "author": "Appium Contributors",
   "repository": {
     "type": "git",
     "url": "https://github.com/appium/appium-ios.git"
   },
-  "license": "Apache-2.0",
-  "author": "Appium Contributors",
-  "scripts": {
-    "build": "lerna exec gulp transpile",
-    "build:atoms": "lerna exec --scope=@appium/remote-debugger gulp atoms",
-    "build:atoms:import": "lerna exec --scope=@appium/remote-debugger gulp atoms:import",
-    "build:selenium": "lerna exec --scope=@appium/remote-debugger gulp selenium:clone",
-    "clean": "lerna clean -y && rm -rf node_modules && rm -f package-lock.json && rm -rf packages/*/build",
-    "e2e-test": "lerna exec gulp e2e-test",
-    "inspect-safari": "node packages/remote-debugger/build/bin/web_inspector_proxy.js",
-    "postinstall": "lerna bootstrap && lerna exec gulp prepublish",
-    "lint": "lerna exec --parallel gulp lint",
-    "lint:fix": "lerna exec --parallel gulp lint -- --fix",
-    "precommit-lint": "lint-staged",
-    "precommit-msg": "echo 'Pre-commit checks...' && exit 0",
-    "reinstall": "npm run clean && npm install",
-    "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
-    "test": "lerna exec gulp once",
-    "preversion": "npm run sync-pkgs && git add -A ./packages/*/package.json"
-  },
-  "pre-commit": [
-    "precommit-msg",
-    "precommit-lint"
+  "workspaces": [
+    "packages/*"
   ],
-  "lint-staged": {
-    "*.js": "eslint --fix"
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "ci": "npm ci",
+    "clean": "run-s clean:distfiles clean:workspaces",
+    "clean:deps": "lerna clean --yes",
+    "clean:distfiles": "npx rimraf --glob \"./packages/*/build\" \"./packages/*/**/.tsconfig.tsbuildinfo\"",
+    "clean:workspaces": "lerna run clean",
+    "format": "oxfmt -c oxfmt.config.mjs .",
+    "format:check": "oxfmt -c oxfmt.config.mjs --check .",
+    "lint": "oxlint -c oxlint.config.mjs .",
+    "lint:fix": "oxlint -c oxlint.config.mjs --fix .",
+    "prepare": "npm run build",
+    "reinstall": "run-s clean clean:deps ci",
+    "release": "lerna publish --exact",
+    "stage-synced-pkgs": "git add -A \"packages/*/package.json\"",
+    "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
+    "test": "run-s test:quick",
+    "test:e2e": "lerna run test:e2e",
+    "test:quick": "run-s lint test:unit",
+    "test:slow": "run-s test:quick test:e2e",
+    "test:unit": "lerna run test",
+    "version": "run-s sync-pkgs stage-synced-pkgs"
   },
   "devDependencies": {
-    "@appium/eslint-config-appium": "^4.7.0",
-    "@appium/gulp-plugins": "^5.5.0",
-    "@appium/ios-test-app": "file://./packages/ios-test-app",
-    "@appium/test-support": "^1.3.3",
-    "@babel/core": "^7.0.0",
-    "@babel/eslint-parser": "^7.14.3",
-    "@babel/plugin-proposal-class-properties": "^7.0.0",
-    "@babel/plugin-proposal-nullish-coalescing-operator": "^7.0.0",
-    "@babel/plugin-proposal-numeric-separator": "^7.0.0",
-    "@babel/plugin-proposal-optional-chaining": "^7.0.0",
-    "@babel/plugin-proposal-private-methods": "^7.0.0",
-    "@babel/plugin-syntax-bigint": "^7.0.0",
-    "@babel/plugin-transform-runtime": "^7.0.0",
-    "@babel/preset-env": "^7.0.0",
-    "@babel/register": "^7.0.0",
-    "@babel/runtime": "^7.0.0",
-    "axios": "^0.21.1",
-    "chai": "^4.3.4",
-    "chai-as-promised": "^7.1.1",
-    "colors": "^1.4.0",
-    "fancy-log": "^1.3.3",
-    "finalhandler": "^1.1.2",
-    "fs-extra": "^10.0.0",
-    "gulp": "^4.0.2",
-    "lerna": "^4.0.0",
-    "lint-staged": "^11.0.0",
-    "mocha": "^9.0.0",
-    "mocha-junit-reporter": "^2.0.0",
-    "mocha-multi-reporters": "^1.5.1",
-    "node-simctl": "^6.0.2",
-    "pem": "^1.14.4",
-    "pre-commit": "^1.2.2",
-    "serve-static": "^1.14.1",
-    "sinon": "^11.1.1",
-    "stoppable": "^1.1.0",
-    "sync-monorepo-packages": "^0.3.4"
+    "@appium/oxc-config": "1.1.2",
+    "@tsconfig/node22": "22.0.0",
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "lerna": "10.0.1",
+    "npm-run-all2": "9.0.3",
+    "rimraf": "6.1.3",
+    "sync-monorepo-packages": "0.3.5",
+    "typescript": "6.0.3"
   },
   "engines": {
-    "node": ">=12"
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "npm": ">=10"
   }
 }

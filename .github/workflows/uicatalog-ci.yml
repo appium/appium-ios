@@ -1,0 +1,14 @@
+name: ios-uicatalog CI
+on:
+  pull_request:
+    paths: ['packages/uicatalog/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/uicatalog-build-app.yml
+    with:
+      upload_pr_artifacts: ${{ github.event_name == 'pull_request' }}
