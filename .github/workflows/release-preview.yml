@@ -1,0 +1,79 @@
+name: Release Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Preview package versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup and install (no build)
+        uses: ./.github/actions/setup-build
+        with:
+          node-version: lts/*
+          install-command: npm ci
+          run-build: 'false'
+
+      - name: Preview lerna version bumps
+        run: |
+          set -uo pipefail
+
+          # actions/checkout leaves a detached HEAD for pull_request events, but lerna version
+          # requires a named branch regardless of --allow-branch (ENOGIT otherwise) - a
+          # throwaway local branch satisfies that without needing to push anything. Suffixed
+          # with the run id so concurrent/local runs can never collide on the branch name.
+          git checkout -B "release-preview-${{ github.run_id }}"
+
+          # Same dry-run invocation the release workflows use: prints what `lerna version`
+          # would bump each package to (per conventional commits since its last release tag),
+          # then aborts (answers "n") without writing any changes. --allow-branch overrides
+          # lerna.json's allowBranch restriction (normally main-only) for this preview-only run.
+          # Declining the prompt (or lerna finding nothing to release) can exit non-zero, and
+          # GitHub Actions runs this script with `bash -e`, so guard against that explicitly -
+          # otherwise the shell exits before the output below is ever printed.
+          set +e
+          output="$(printf "n\n" | npx lerna version --exact --no-git-tag-version --no-push --allow-branch '*' 2>&1)"
+          set -e
+          printf '%s\n' "$output"
+
+          # Strip ANSI escapes (the confirmation prompt is colorized) before extracting the
+          # "Changes:" section, bounded by the prompt line that follows it.
+          clean="$(printf '%s\n' "$output" | sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g')"
+          changes="$(printf '%s\n' "$clean" | awk '/^Changes:/{flag=1; next} /^\?/{flag=0} flag && NF')"
+
+          {
+            echo "## Release preview"
+            echo ""
+            echo "Package versions that would be published if this PR is merged into \`main\`:"
+            echo ""
+            if [ -n "$changes" ]; then
+              echo '```'
+              printf '%s\n' "$changes"
+              echo '```'
+            else
+              echo "_No packages would be published — no conventional-commit changes detected since the last release._"
+            fi
+            echo ""
+            echo "<details><summary>Full lerna output</summary>"
+            echo ""
+            echo '```'
+            printf '%s\n' "$clean"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,79 @@
+name: Appium iOS Automated Release
+
+on:
+  push:
+    branches:
+      - main
+  # Also callable from manual-release.yml so a manual/recovery run publishes to npm as
+  # this same workflow file
+  workflow_call:
+    inputs:
+      dry_run:
+        description: 'Dry run (no publishing or tagging)'
+        required: false
+        type: boolean
+        default: false
+      recover_missing_only:
+        description: 'Recovery mode: skip version bump, publish only packages missing on npm at their current package.json version'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      uicatalog_release_tag:
+        description: '"<pkg_name>@<pkg_version>" if ios-uicatalog was published this run, empty otherwise'
+        value: ${{ jobs.release.outputs.uicatalog_release_tag }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write # to enable use of OIDC for trusted publishing and npm provenance
+
+# Avoid two releases racing each other; queue rather than cancel a publish in progress.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
+      # published this run, empty otherwise - see the lerna-release action.
+      uicatalog_release_tag: ${{ steps.run-lerna-publish.outputs.uicatalog_release_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Setup Node and install deps (LTS)
+        uses: ./.github/actions/setup-build
+        with:
+          node-version: lts/*
+          install-command: npm ci
+          run-build: 'true'
+
+      - name: Run Lerna publish
+        id: run-lerna-publish
+        uses: ./.github/actions/lerna-release
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry_run: ${{ inputs.dry_run || false }}
+          recover_missing_only: ${{ inputs.recover_missing_only || false }}
+
+  release-uicatalog-app:
+    name: Build and upload UIKitCatalog app
+    needs: release
+    if: needs.release.outputs.uicatalog_release_tag != ''
+    uses: ./.github/workflows/uicatalog-build-app.yml
+    with:
+      upload_release_artifacts: true
+      release_tag: ${{ needs.release.outputs.uicatalog_release_tag }}
+      checkout_ref: ${{ needs.release.outputs.uicatalog_release_tag }}
