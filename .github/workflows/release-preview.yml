@@ -31,13 +31,18 @@ jobs:
 
       - name: Preview lerna version bumps
         run: |
-          set -uo pipefail # no -e: declining lerna's confirmation prompt may exit non-zero
+          set -uo pipefail
 
           # Same dry-run invocation the release workflows use: prints what `lerna version`
           # would bump each package to (per conventional commits since its last release tag),
           # then aborts (answers "n") without writing any changes. --allow-branch overrides
           # lerna.json's allowBranch restriction (normally main-only) for this preview-only run.
+          # Declining the prompt (or lerna finding nothing to release) can exit non-zero, and
+          # GitHub Actions runs this script with `bash -e`, so guard against that explicitly -
+          # otherwise the shell exits before the output below is ever printed.
+          set +e
           output="$(printf "n\n" | npx lerna version --exact --no-git-tag-version --no-push --allow-branch '*' 2>&1)"
+          set -e
           printf '%s\n' "$output"
 
           # Strip ANSI escapes (the confirmation prompt is colorized) before extracting the

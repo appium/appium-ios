@@ -145,7 +145,11 @@ runs:
 
         if [ "$DRY_RUN" = "true" ]; then
           echo "Running lerna publish in dry-run mode"
+          # Declining the prompt (or lerna finding nothing to release) can exit non-zero;
+          # that's not a failure for a dry run, so don't let it fail the step under set -e.
+          set +e
           printf "n\n" | npx lerna version --exact --no-git-tag-version --no-push
+          set -e
         else
           echo "Running lerna publish for real"
           set +e
