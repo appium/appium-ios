@@ -39,7 +39,7 @@
     "lint:fix": "oxlint -c oxlint.config.mjs --fix .",
     "prepare": "npm run build",
     "reinstall": "run-s clean clean:deps ci",
-    "release": "lerna publish",
+    "release": "lerna publish --exact",
     "stage-synced-pkgs": "git add -A \"packages/*/package.json\"",
     "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
     "test": "run-s test:quick",

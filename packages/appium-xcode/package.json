@@ -48,7 +48,6 @@
     "teen_process": "4.2.1"
   },
   "devDependencies": {
-    "@appium/semantic-release-config": "1.2.0",
     "@appium/tsconfig": "1.2.1",
     "@appium/types": "1.7.1",
     "@types/node": "26.6.2",
