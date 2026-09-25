@@ -59,14 +59,12 @@ jobs:
 
   test-e2e:
     needs:
-      - prepare_matrix
       - prepare_e2e_packages
-    name: E2E Tests - ${{ matrix.package_dir }} (Node ${{ matrix.node-version }})
+    name: E2E Tests - ${{ matrix.package_dir }}
     if: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: ${{ fromJSON(needs.prepare_matrix.outputs.versions) }}
         package_dir: ${{ fromJSON(needs.prepare_e2e_packages.outputs.packages) }}
     runs-on: macos-latest
     steps:
@@ -74,7 +72,7 @@ jobs:
       - name: Setup, install and build
         uses: ./.github/actions/setup-build
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: lts/*
           install-command: npm ci --foreground-scripts
           run-build: 'true'
       - name: Run E2E tests for ${{ matrix.package_dir }}
