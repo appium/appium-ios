@@ -42,16 +42,20 @@
     "release": "lerna publish",
     "stage-synced-pkgs": "git add -A \"packages/*/package.json\"",
     "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
-    "test": "lerna run test",
+    "test": "run-s test:quick",
+    "test:e2e": "lerna run test:e2e",
+    "test:quick": "run-s lint test:unit",
+    "test:slow": "run-s test:quick test:e2e",
+    "test:unit": "lerna run test",
     "version": "run-s sync-pkgs stage-synced-pkgs"
   },
   "devDependencies": {
-    "@appium/oxc-config": "^1.1.0",
+    "@appium/oxc-config": "1.1.2",
     "@tsconfig/node22": "22.0.0",
     "lerna": "10.0.1",
     "npm-run-all2": "9.0.3",
     "rimraf": "6.1.3",
-    "sync-monorepo-packages": "^0.3.4",
+    "sync-monorepo-packages": "0.3.5",
     "typescript": "6.0.3"
   },
   "engines": {

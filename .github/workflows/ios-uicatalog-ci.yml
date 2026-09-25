@@ -12,4 +12,3 @@ jobs:
     uses: ./.github/workflows/ios-uicatalog-build-app.yml
     with:
       upload_pr_artifacts: ${{ github.event_name == 'pull_request' }}
-      run_lint: true

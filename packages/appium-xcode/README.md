@@ -46,7 +46,7 @@ Develop
 
 ```
 npm test
-npm e2e-test
+npm run test:e2e
 ```
 
 Debug

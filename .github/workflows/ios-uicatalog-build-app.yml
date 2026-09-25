@@ -13,11 +13,6 @@ on:
         required: false
         type: string
         default: ''
-      run_lint:
-        description: 'Whether to run lint'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build-ios:
@@ -30,27 +25,12 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+      - name: Setup, install and build
+        uses: ./.github/actions/setup-build
         with:
           node-version: 'lts/*'
-
-      - uses: SocketDev/action@v1
-        if: inputs.run_lint == true
-        with:
-          mode: firewall-free
-
-      - name: Install dependencies
-        if: inputs.run_lint != true
-        run: npm install
-
-      - name: Install dependencies
-        if: inputs.run_lint == true
-        run: sfw npm install
-
-      - name: Run lint
-        if: inputs.run_lint == true
-        run: npm run lint
+          install-command: npm ci --foreground-scripts
+          run-build: 'false'
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
