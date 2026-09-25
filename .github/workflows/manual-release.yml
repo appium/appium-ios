@@ -23,7 +23,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && contains(fromJSON('["mykola-mokhnach"]'), github.actor)
+    if: github.ref == 'refs/heads/main' && contains(fromJSON('["mykola-mokhnach", "jlipps", "eglitise", "KazuCocoa"]'), github.actor)
 
     steps:
       - name: Checkout repository
