@@ -35,7 +35,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Always build tuntap's native addon for every platform before publishing - matches
+  # appium-ios-tuntap's own publish.js.yml, which unconditionally rebuilds all 6 platforms
+  # on every push to main regardless of whether tuntap itself has a qualifying release this
+  # run. Publishing tuntap via lerna without this would ship a package with no prebuilds.
+  prebuild-tuntap:
+    uses: ./.github/workflows/tuntap-prebuild.yml
+    with:
+      upload-artifacts: true
+
   release:
+    needs: prebuild-tuntap
     runs-on: ubuntu-latest
     outputs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
@@ -53,10 +63,27 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+      - name: Download tuntap prebuild artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: tuntap-prebuild-*
+          path: tuntap-prebuild-staging
+
+      - name: Merge tuntap prebuilds
+        run: |
+          mkdir -p packages/tuntap/prebuilds
+          for dir in tuntap-prebuild-staging/tuntap-prebuild-*/; do
+            cp -R "${dir}"* packages/tuntap/prebuilds/
+          done
+          find packages/tuntap/prebuilds -type f -name '*.node' | sort
+
       - name: Setup Node and install deps (LTS)
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
+          # Full install, unscoped: prebuilds are already in place above, so tuntap's
+          # node-gyp-build install hook finds a matching prebuild and is a cheap no-op
+          # rather than a full compile.
           install-command: npm ci
           run-build: 'true'
 

@@ -26,7 +26,9 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
-          install-command: npm ci
+          # Scoped to skip packages/tuntap's native (node-gyp) install - lerna version only
+          # needs package.json/git metadata, not tuntap's own dependencies installed.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root
           run-build: 'false'
 
       - name: Preview lerna version bumps

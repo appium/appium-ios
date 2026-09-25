@@ -52,7 +52,9 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: ${{ matrix.node-version }}
-          install-command: npm ci --foreground-scripts
+          # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
+          # dedicated CI (tuntap-ci.yml) with the toolchain that needs.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run unit tests
         run: npm run test:unit
@@ -73,7 +75,9 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
-          install-command: npm ci --foreground-scripts
+          # Scoped to skip packages/tuntap's native (node-gyp) install - discover-e2e-packages.mjs
+          # never selects it (no real test:e2e script) and it has its own dedicated CI.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run E2E tests for ${{ matrix.package_dir }}
         run: |
@@ -90,7 +94,9 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
-          install-command: npm ci
+          # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
+          # dedicated CI (tuntap-ci.yml) with the toolchain that needs.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root
           run-build: 'false'
       - name: Lint
         run: npm run lint
