@@ -1,18 +1,9 @@
-name: Appium iOS Release
+name: Appium iOS Automated Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run (no publishing or tagging)'
-        required: true
-        type: boolean
-        default: true
-      recover_missing_only:
-        description: 'Recovery mode: skip version bump, publish only packages missing on npm at their current package.json version'
-        required: true
-        type: boolean
-        default: false
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -20,10 +11,14 @@ permissions:
   issues: write
   id-token: write # to enable use of OIDC for trusted publishing and npm provenance
 
+# Avoid two releases racing each other; queue rather than cancel a publish in progress.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && contains(fromJSON('["mykola-mokhnach", "jlipps", "eglitise", "KazuCocoa"]'), github.actor)
     outputs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
       # published this run, empty otherwise - see the lerna-release action.
@@ -52,8 +47,6 @@ jobs:
         uses: ./.github/actions/lerna-release
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          dry_run: ${{ inputs.dry_run }}
-          recover_missing_only: ${{ inputs.recover_missing_only }}
 
   release-uicatalog-app:
     name: Build and upload UIKitCatalog app
