@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import {PassThrough, Writable} from 'node:stream';
+import {PassThrough, Readable, Writable} from 'node:stream';
 import {afterEach, beforeEach, describe, it} from 'node:test';
 
 import {CoreDeviceError, CoreDeviceFileService, type FileServiceSessionOptions} from '../../../src/index.js';
@@ -38,6 +38,7 @@ class FakeFileServiceTransport extends EventEmitter {
   readonly sent: SentMessage[] = [];
   listing: XPCValue[][] = [];
   fileReply: XPCDictionary = {NewFileID: 1, Response: 1, FilePermissions: 0o100644, FileLastModificationTime: 10};
+  proposeReply: XPCDictionary = {NewFileID: 7, Response: 1};
   /** Sends a reply to an unrelated message id before replying to `CreateSession`. */
   sendStaleReply = false;
   /** Never answers listing commands. */
@@ -106,6 +107,12 @@ class FakeFileServiceTransport extends EventEmitter {
         return;
       case 'RetrieveFile':
         this.reply(id, this.fileReply);
+        return;
+      case 'ProposeFile':
+        this.reply(id, this.proposeReply);
+        return;
+      case 'ProposeEmptyFile':
+        this.reply(id, {Response: 1});
         return;
       case 'EndSession':
       case 'FileSystemOperation':
@@ -577,9 +584,269 @@ describe('CoreDeviceFileService', function () {
         },
       });
 
-      await service.pull('a', slow, {timeoutMs: 100});
+      await service.pull('a', slow, {idleTimeoutMs: 100});
 
       assert.deepStrictEqual(Buffer.concat(chunks), payload);
+    });
+
+    it('does not use the control timeout as the transfer idle timeout', async function () {
+      const service = newService();
+      const slowDevice = (socket: net.Socket): void => {
+        socket.once('data', (request: Buffer) => {
+          const {fileId} = decodeDataChannelHeader(request);
+          const header = {type: DATA_CHANNEL_MESSAGE_TYPE.FILE_DATA, fileId, size: BigInt(payload.length)};
+          socket.write(encodeDataChannelHeader(header));
+          setTimeout(() => {
+            socket.write(payload);
+            socket.write(
+              encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE, fileId, size: 0n}),
+            );
+          }, 150);
+        });
+      };
+      server.removeAllListeners('connection');
+      server.on('connection', slowDevice);
+      const stream = new PassThrough();
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      await service.pull('a', stream, {timeoutMs: 50});
+
+      assert.deepStrictEqual(Buffer.concat(chunks), payload);
+    });
+
+    it('destroys a destination stream when the device refuses the file', async function () {
+      const service = newService();
+      service.fake.fileReply = {Error: 'no such file', Response: 3};
+      const stream = new PassThrough();
+
+      await assert.rejects(service.pull('missing', stream), CoreDeviceError);
+      assert.strictEqual(stream.destroyed, true);
+    });
+
+    it('finishes the transfer and keeps the connection when the destination fails', async function () {
+      const service = newService();
+      const failing = new Writable({
+        write(_chunk, _encoding, callback) {
+          callback(new Error('disk full'));
+        },
+      });
+
+      await assert.rejects(service.pull('a', failing), /disk full/);
+      assert.strictEqual(service.fake.closeCalls, 0);
+      assert.strictEqual(failing.destroyed, true);
+    });
+
+    it('cuts a running transfer short on close()', async function () {
+      server.removeAllListeners('connection');
+      // The device announces the file but never sends it.
+      server.on('connection', (socket) => {
+        socket.once('data', (request: Buffer) => {
+          const {fileId} = decodeDataChannelHeader(request);
+          socket.write(encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.FILE_DATA, fileId, size: 10n}));
+        });
+        socket.on('error', () => undefined);
+      });
+      const service = newService();
+      const pulled = service.pull('a', new PassThrough());
+      const outcome = assert.rejects(pulled, /closed during the transfer/);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await service.close();
+
+      await outcome;
+    });
+
+    it('removes the local file when close() cuts a pull short', async function () {
+      server.removeAllListeners('connection');
+      // The device sends part of a large file and then stalls.
+      server.on('connection', (socket) => {
+        socket.once('data', (request: Buffer) => {
+          const {fileId} = decodeDataChannelHeader(request);
+          socket.write(encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.FILE_DATA, fileId, size: 1n << 30n}));
+          socket.write(Buffer.alloc(4 * 1024 * 1024));
+        });
+        socket.on('error', () => undefined);
+      });
+      const service = newService();
+      const destination = path.join(tmpDir, 'closing.bin');
+      const outcome = assert.rejects(service.pull('a', destination), /closed during the transfer/);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await service.close();
+
+      await outcome;
+      assert.strictEqual(fs.existsSync(destination), false);
+    });
+  });
+
+  describe('push', function () {
+    let server: net.Server;
+    let tmpDir: string;
+    /** What the fake device does once it has the header and the announced bytes. */
+    let deviceBehavior: 'confirm' | 'no-confirmation' | 'stop-reading';
+    let received: {header?: ReturnType<typeof decodeDataChannelHeader>; data: Buffer};
+
+    beforeEach(async function () {
+      tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'file-service-push-'));
+      deviceBehavior = 'confirm';
+      received = {data: Buffer.alloc(0)};
+      server = net.createServer((socket) => {
+        if (deviceBehavior === 'stop-reading') {
+          socket.pause();
+          return;
+        }
+        let buffer = Buffer.alloc(0);
+        socket.on('data', (chunk: Buffer) => {
+          buffer = Buffer.concat([buffer, chunk]);
+          if (!received.header && buffer.length >= 40) {
+            received.header = decodeDataChannelHeader(buffer.subarray(0, 40));
+            buffer = buffer.subarray(40);
+          }
+          if (received.header && buffer.length >= Number(received.header.size)) {
+            received.data = buffer;
+            if (deviceBehavior === 'confirm') {
+              socket.write(
+                encodeDataChannelHeader({
+                  type: DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE,
+                  fileId: received.header.fileId,
+                  size: 0n,
+                }),
+              );
+            }
+          }
+        });
+        socket.on('error', () => undefined);
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+    });
+
+    afterEach(async function () {
+      server.close();
+      await fs.promises.rm(tmpDir, {recursive: true, force: true});
+    });
+
+    function newService(): TestFileService {
+      const service = new TestFileService(new FakeFileServiceTransport());
+      service.dataPort = (server.address() as net.AddressInfo).port;
+      return service;
+    }
+
+    function proposals(service: TestFileService): XPCDictionary[] {
+      return service.fake
+        .requests()
+        .map(({body}) => body)
+        .filter((body) => String(body.Cmd).startsWith('Propose'));
+    }
+
+    function removals(service: TestFileService): string[] {
+      return service.fake
+        .requests()
+        .filter(({body}) => body.OperationType === 'RemoveFile')
+        .map(({body}) => String(body.Path));
+    }
+
+    it('uploads a local file with its size and metadata', async function () {
+      const service = newService();
+      const source = path.join(tmpDir, 'in.txt');
+      await fs.promises.writeFile(source, 'local bytes');
+      await fs.promises.chmod(source, 0o640);
+      await fs.promises.utimes(source, new Date(5000), new Date(5000));
+
+      await service.push(source, 'tmp/in.txt');
+
+      const [proposal] = proposals(service);
+      assert.strictEqual(proposal.Cmd, 'ProposeFile');
+      assert.strictEqual(proposal.Path, 'tmp/in.txt');
+      // Sent as a uint64 (the device rejects an int64); the decoder turns small uint64s into numbers
+      assert.strictEqual(Number(proposal.FileSize), 11);
+      assert.strictEqual(proposal.FilePermissions, 0o640);
+      assert.strictEqual(proposal.FileLastModificationTime, 5);
+      assert.strictEqual(received.header?.type, DATA_CHANNEL_MESSAGE_TYPE.FILE_UPLOAD);
+      assert.strictEqual(received.header?.fileId, 7n);
+      assert.strictEqual(received.header?.size, 11n);
+      assert.strictEqual(received.data.toString(), 'local bytes');
+    });
+
+    it('uploads a buffer and a sized stream', async function () {
+      const service = newService();
+      await service.push(Buffer.from('buffer bytes'), 'tmp/a.txt', {permissions: 0o600});
+      assert.strictEqual(received.data.toString(), 'buffer bytes');
+      assert.strictEqual(proposals(service)[0].FilePermissions, 0o600);
+
+      received = {data: Buffer.alloc(0)};
+      await service.push(Readable.from([Buffer.from('str'), Buffer.from('eam')]), 'tmp/b.txt', {size: 6});
+      assert.strictEqual(received.data.toString(), 'stream');
+    });
+
+    it('creates an empty file without the data channel', async function () {
+      const service = newService();
+
+      await service.push(Buffer.alloc(0), 'tmp/empty.txt');
+
+      assert.deepStrictEqual(
+        proposals(service).map(({Cmd}) => Cmd),
+        ['ProposeEmptyFile'],
+      );
+      assert.strictEqual(received.header, undefined);
+    });
+
+    it('fails when the device will not create the file', async function () {
+      const service = newService();
+      service.fake.proposeReply = {Response: 1};
+
+      await assert.rejects(service.push(Buffer.from('x'), 'tmp/x.txt'), /refused to create 'tmp\/x.txt'/);
+    });
+
+    it('removes the incomplete file when the stream has fewer bytes than announced', async function () {
+      const service = newService();
+
+      await assert.rejects(
+        service.push(Readable.from([Buffer.from('12345')]), 'tmp/short.txt', {size: 10}),
+        /ended after 5 of the announced 10 bytes/,
+      );
+      assert.deepStrictEqual(removals(service), ['tmp/short.txt']);
+    });
+
+    it('removes the incomplete file when the stream has more bytes than announced', async function () {
+      const service = newService();
+
+      await assert.rejects(
+        service.push(Readable.from([Buffer.from('1234567890')]), 'tmp/long.txt', {size: 4}),
+        /more than the announced 4 bytes/,
+      );
+      assert.deepStrictEqual(removals(service), ['tmp/long.txt']);
+    });
+
+    it('fails when the device does not confirm the upload', async function () {
+      deviceBehavior = 'no-confirmation';
+      const service = newService();
+
+      await assert.rejects(service.push(Buffer.from('abc'), 'tmp/c.txt', {idleTimeoutMs: 200}), /did not confirm/);
+      assert.deepStrictEqual(removals(service), ['tmp/c.txt']);
+    });
+
+    it('fails when the device stops taking data', async function () {
+      deviceBehavior = 'stop-reading';
+      const service = newService();
+
+      await assert.rejects(
+        service.push(Buffer.alloc(64 * 1024 * 1024, 1), 'tmp/big.bin', {idleTimeoutMs: 300}),
+        /took no upload data for 300ms/,
+      );
+    });
+
+    it('rejects invalid sources and paths before contacting the device', async function () {
+      const service = newService();
+
+      await assert.rejects(service.push(Readable.from([Buffer.from('x')]), 'tmp/x.txt'), /size of the data to push/);
+      await assert.rejects(service.push(tmpDir, 'tmp/x.txt'), /is not a regular file/);
+      await assert.rejects(service.push(undefined as any, 'tmp/x.txt'), /must be a local file path/);
+      for (const remotePath of ['SystemData/x.txt', 'x.txt', '../x.txt']) {
+        await assert.rejects(service.push(Buffer.from('x'), remotePath), /Access restricted/, remotePath);
+      }
+      assert.strictEqual(service.fake.sent.length, 0);
     });
   });
 });

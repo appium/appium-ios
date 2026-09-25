@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import type {Socket} from 'node:net';
 import path from 'node:path';
-import type {Writable} from 'node:stream';
-import {pipeline} from 'node:stream/promises';
+import {Readable, type Writable} from 'node:stream';
+import {finished, pipeline} from 'node:stream/promises';
 
 import {getLogger} from '../../../lib/logger.js';
 import {connectToTunnelHost} from '../../../lib/port-forwarding/connectors.js';
@@ -20,22 +20,33 @@ import {
 } from '../core-device/core-device-service.js';
 import {
   APP_CONTAINER_WRITABLE_DIRECTORIES,
+  DATA_CHANNEL_HEADER_SIZE,
   DEFAULT_FILE_SERVICE_USERNAME,
+  DEFAULT_PUSHED_FILE_PERMISSIONS,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
   FILE_SERVICE_COMMAND,
   FILE_SERVICE_DOMAIN,
   FILE_SYSTEM_OPERATION,
+  MAX_DISCARDED_BYTES,
+  PERMISSION_BITS_MASK,
 } from './constants.js';
-import {FileDataDecoder, buildFileDataRequest} from './data-channel.js';
+import {
+  FileDataDecoder,
+  assertUploadConfirmation,
+  buildFileDataRequest,
+  buildFileUploadHeader,
+} from './data-channel.js';
 import {assertSuccessfulReply, parseFileNodes, parseRetrievedFileMetadata} from './replies.js';
 import type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServicePushOptions,
   FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
+  FileServiceTransferOptions,
 } from './types.js';
 
 export {FILE_SERVICE_DOMAIN} from './constants.js';
@@ -44,9 +55,11 @@ export type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServicePushOptions,
   FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
+  FileServiceTransferOptions,
 } from './types.js';
 
 const log = getLogger('CoreDeviceFileService');
@@ -77,6 +90,10 @@ export class CoreDeviceFileService extends CoreDeviceService {
 
   private readonly sessionOptions: FileServiceSessionOptions;
   private session: FileServiceSession | undefined;
+  /** Open data channels, which {@link close} cuts short. */
+  private readonly dataChannels = new Set<Socket>();
+  /** Running pulls and pushes, which {@link close} waits for. */
+  private readonly transfers = new Set<Promise<unknown>>();
 
   constructor(udid: string, sessionOptions: FileServiceSessionOptions) {
     super(udid, CoreDeviceFileService.RSD_SERVICE_NAME);
@@ -144,50 +161,37 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * @param remotePath File path relative to the session root.
    * @param destination Local file path (missing parent directories are created
    * and an existing file is overwritten), or a writable stream that is ended once
-   * the file has been written. A partially written local file is removed on failure.
+   * the file has been written. On failure, the stream is destroyed and a
+   * partially written local file is removed.
    * @returns The metadata of the downloaded file.
    * @throws {CoreDeviceError} If `remotePath` does not exist or is a directory.
    */
   async pull(
     remotePath: string,
     destination: string | Writable,
-    options: FileServiceRequestOptions = {},
+    options: FileServiceTransferOptions = {},
   ): Promise<FileServiceFileMetadata> {
-    const timeoutMs = options.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS;
-    if (typeof destination !== 'string') {
-      assertWritableDestination(destination);
-    }
-    // Open the local file first, so a bad destination fails before the device is asked for anything
-    const output = typeof destination === 'string' ? await openLocalFile(destination) : destination;
-    let socket: Socket | undefined;
-    let isTransferStarted = false;
-    try {
-      const [host, port] = await this.resolveServiceAddress(CoreDeviceFileService.DATA_SERVICE_NAME);
-      // devicectl connects the data channel before it asks for the file.
-      socket = await connectToTunnelHost(host, port, timeoutMs);
-      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, options);
-      if (isDirectoryMode(reply.FilePermissions)) {
-        throw new CoreDeviceError(`'${remotePath}' is a directory, not a file`, reply);
-      }
-      const fileId = asFileId(reply.NewFileID);
-      socket.write(buildFileDataRequest(fileId));
-      isTransferStarted = true;
-      const size = await receiveFile(socket, output, fileId, timeoutMs);
-      log.debug(`Pulled '${remotePath}' (${size} bytes)`);
-      return parseRetrievedFileMetadata(reply, size);
-    } catch (err) {
-      if (typeof destination === 'string') {
-        output.destroy();
-        await fsp.rm(destination, {force: true});
-      }
-      if (isTransferStarted) {
-        // The device resets the control connection when a transfer is cut short
-        await this.dropTransport();
-      }
-      throw err;
-    } finally {
-      socket?.destroy();
-    }
+    return await this.trackTransfer(this.pullFile(remotePath, destination, options));
+  }
+
+  /**
+   * Uploads a file, like `devicectl device copy to`. Missing parent directories
+   * are created and an existing file is replaced. The device only allows
+   * changes below `Library`, `Documents` and `tmp` of an app container.
+   *
+   * @param source Local file path, file contents, or a readable stream of them
+   * (a stream needs `options.size`).
+   * @param remotePath Destination path relative to the session root.
+   * @throws {TypeError} If the source or its size is invalid, or a path of an
+   * `appDataContainer` session is not below `Library`, `Documents` or `tmp`.
+   * @throws {CoreDeviceError} If the device refuses the file.
+   */
+  async push(
+    source: string | Buffer | Readable,
+    remotePath: string,
+    options: FileServicePushOptions = {},
+  ): Promise<void> {
+    await this.trackTransfer(this.pushFile(source, remotePath, options));
   }
 
   /**
@@ -264,9 +268,14 @@ export class CoreDeviceFileService extends CoreDeviceService {
   }
 
   /**
-   * Ends the session and closes the connection.
+   * Ends the session and closes the connection. Pulls and pushes still running
+   * are cut short.
    */
   override async close(): Promise<void> {
+    for (const socket of this.dataChannels) {
+      socket.destroy(new Error('The file service was closed during the transfer'));
+    }
+    await Promise.allSettled(this.transfers);
     const session = this.session;
     this.session = undefined;
     if (session && session.transport === this.transport && session.transport.isConnected) {
@@ -285,14 +294,125 @@ export class CoreDeviceFileService extends CoreDeviceService {
 
   /**
    * The device numbers its own requests (the listing messages) 2, 4, 6, ... and
-   * devicectl numbers its requests 1, 3, 5, ... With an even request id the
-   * device aborts while replying to `RetrieveFile`
+   * devicectl numbers its requests 1, 3, 5, ... Any request with an even id
+   * makes the device close the connection
    * (`Attempted to send non-reply msg 2 on the reply channel`).
    */
   protected override allocateMessageId(): number {
     const id = this.nextMessageId;
     this.nextMessageId += 2;
     return id;
+  }
+
+  private async pullFile(
+    remotePath: string,
+    destination: string | Writable,
+    options: FileServiceTransferOptions,
+  ): Promise<FileServiceFileMetadata> {
+    const {idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS, ...requestOptions} = options;
+    if (typeof destination !== 'string') {
+      assertWritableDestination(destination);
+    }
+    // Open the local file first, so a bad destination fails before the device is asked for anything
+    const output = typeof destination === 'string' ? await openLocalFile(destination) : destination;
+    let socket: Socket | undefined;
+    let isTransferInFlight = false;
+    try {
+      // devicectl connects the data channel before it asks for the file.
+      socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS);
+      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions);
+      if (isDirectoryMode(reply.FilePermissions)) {
+        throw new CoreDeviceError(`'${remotePath}' is a directory, not a file`, reply);
+      }
+      const fileId = asFileId(reply.NewFileID);
+      socket.write(buildFileDataRequest(fileId));
+      isTransferInFlight = true;
+      const {size, outputError} = await receiveFile(socket, output, fileId, idleTimeoutMs);
+      isTransferInFlight = false;
+      if (outputError) {
+        throw outputError;
+      }
+      log.debug(`Pulled '${remotePath}' (${size} bytes)`);
+      return parseRetrievedFileMetadata(reply, size);
+    } catch (err) {
+      // A write still pending when the stream is destroyed fails with ERR_STREAM_DESTROYED
+      output.on('error', () => undefined);
+      output.destroy();
+      if (typeof destination === 'string') {
+        await fsp.rm(destination, {force: true});
+      }
+      if (isTransferInFlight) {
+        // The device resets the control connection when a transfer is cut short
+        await this.dropTransport();
+      }
+      throw err;
+    } finally {
+      socket?.destroy();
+    }
+  }
+
+  private async pushFile(
+    source: string | Buffer | Readable,
+    remotePath: string,
+    options: FileServicePushOptions,
+  ): Promise<void> {
+    const {
+      size: declaredSize,
+      permissions,
+      modifiedAt,
+      idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS,
+      ...requestOptions
+    } = options;
+    if (this.sessionOptions.domain === 'appDataContainer') {
+      assertInWritableAppContainerDirectory(remotePath);
+    }
+    const upload = await openUploadSource(source, {size: declaredSize, permissions, modifiedAt});
+    const fields: XPCDictionary = {
+      Path: remotePath,
+      FilePermissions: upload.permissions,
+      FileCreationTime: upload.modifiedAtSeconds,
+      FileLastModificationTime: upload.modifiedAtSeconds,
+    };
+    if (upload.size === 0) {
+      upload.stream.destroy();
+      await this.request(FILE_SERVICE_COMMAND.PROPOSE_EMPTY_FILE, fields, requestOptions);
+      log.debug(`Pushed '${remotePath}' (0 bytes)`);
+      return;
+    }
+
+    let socket: Socket | undefined;
+    let isFileProposed = false;
+    let isTransferStarted = false;
+    try {
+      // devicectl connects the data channel before it announces the file.
+      socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS);
+      const reply = await this.request(
+        FILE_SERVICE_COMMAND.PROPOSE_FILE,
+        {...fields, FileSize: BigInt(upload.size)},
+        requestOptions,
+      );
+      isFileProposed = true;
+      // The device answers without a file ID when it will not create the file there
+      if (reply.NewFileID === undefined) {
+        throw new CoreDeviceError(`The device refused to create '${remotePath}'`, reply);
+      }
+      const fileId = asFileId(reply.NewFileID);
+      isTransferStarted = true;
+      await sendFile(socket, upload, fileId, idleTimeoutMs);
+      log.debug(`Pushed '${remotePath}' (${upload.size} bytes)`);
+    } catch (err) {
+      upload.stream.destroy();
+      if (isTransferStarted) {
+        // The device resets the control connection when a transfer is cut short
+        await this.dropTransport();
+      }
+      if (isFileProposed) {
+        await this.removeIncompleteUpload(remotePath);
+      }
+      throw err;
+    } finally {
+      socket?.destroy();
+    }
   }
 
   /**
@@ -319,6 +439,37 @@ export class CoreDeviceFileService extends CoreDeviceService {
       respond({MessageUUID: messageUuid});
     });
     return fileList;
+  }
+
+  private async trackTransfer<T>(transfer: Promise<T>): Promise<T> {
+    this.transfers.add(transfer);
+    try {
+      return await transfer;
+    } finally {
+      this.transfers.delete(transfer);
+    }
+  }
+
+  private async openDataChannel(timeoutMs: number): Promise<Socket> {
+    const [host, port] = await this.resolveServiceAddress(CoreDeviceFileService.DATA_SERVICE_NAME);
+    const socket = await connectToTunnelHost(host, port, timeoutMs);
+    this.dataChannels.add(socket);
+    socket.once('close', () => this.dataChannels.delete(socket));
+    // Transfers see socket errors through the stream; this keeps one raised while nothing reads from being unhandled
+    socket.on('error', (err) => log.debug(`File service data channel error: ${err.message}`));
+    return socket;
+  }
+
+  /**
+   * `ProposeFile` creates the file right away, so a failed transfer would leave
+   * an empty or partial file behind.
+   */
+  private async removeIncompleteUpload(remotePath: string): Promise<void> {
+    try {
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: remotePath}, {});
+    } catch (err) {
+      log.debug(`Cannot remove the incomplete upload '${remotePath}': ${(err as Error).message}`);
+    }
   }
 
   private async runFileSystemOperation(
@@ -389,44 +540,257 @@ export class CoreDeviceFileService extends CoreDeviceService {
 /**
  * Streams the device's reply to a file data request into `output` and ends it.
  *
- * The transfer fails when the device sends nothing for `timeoutMs`. Time spent
- * waiting for a slow `output` does not count.
+ * The transfer fails when the device sends nothing for `idleTimeoutMs`. Time
+ * spent waiting for a slow `output` does not count. When `output` fails, the
+ * rest of the file is read and discarded if no more than
+ * {@link MAX_DISCARDED_BYTES} are left, so the transfer still completes on the
+ * device; that failure is returned as `outputError`.
  *
- * @returns The number of bytes written.
+ * @returns The number of bytes in the file.
  */
-async function receiveFile(socket: Socket, output: Writable, fileId: bigint, timeoutMs: number): Promise<number> {
+async function receiveFile(
+  socket: Socket,
+  output: Writable,
+  fileId: bigint,
+  idleTimeoutMs: number,
+): Promise<{size: number; outputError?: Error}> {
   const decoder = new FileDataDecoder(fileId);
-  let lastActivityAt = Date.now();
+  let lastActivityAt = performance.now();
   let isWaitingForOutput = false;
+  let received = 0;
+  let outputError: Error | undefined;
+  const onOutputError = (err: Error): void => {
+    outputError ??= err;
+  };
+  const onOutputClose = (): void => {
+    outputError ??= new Error('The destination stream was closed before the file was written');
+  };
+  output.on('error', onOutputError);
+  output.on('close', onOutputClose);
   const watchdog = setInterval(
     () => {
-      if (!isWaitingForOutput && Date.now() - lastActivityAt >= timeoutMs) {
-        socket.destroy(new Error(`File service data channel was idle for ${timeoutMs}ms`));
+      if (!isWaitingForOutput && performance.now() - lastActivityAt >= idleTimeoutMs) {
+        socket.destroy(new Error(`File service data channel was idle for ${idleTimeoutMs}ms`));
       }
     },
-    Math.min(timeoutMs, WATCHDOG_INTERVAL_MS),
+    Math.min(idleTimeoutMs, WATCHDOG_INTERVAL_MS),
   );
-  async function* fileBytes(): AsyncGenerator<Buffer> {
+  try {
     for await (const chunk of socket) {
-      lastActivityAt = Date.now();
+      lastActivityAt = performance.now();
       for (const part of decoder.push(chunk as Buffer)) {
-        isWaitingForOutput = true;
-        yield part;
-        isWaitingForOutput = false;
-        lastActivityAt = Date.now();
+        received += part.length;
+        if (output.destroyed) {
+          onOutputClose();
+        }
+        if (outputError) {
+          if (Number(decoder.size) - received > MAX_DISCARDED_BYTES) {
+            throw outputError;
+          }
+          continue;
+        }
+        if (!output.write(part)) {
+          isWaitingForOutput = true;
+          await waitForDrain(output);
+          isWaitingForOutput = false;
+          lastActivityAt = performance.now();
+        }
       }
       if (decoder.isDone) {
-        return;
+        break;
       }
     }
-    throw new Error('The file service data channel closed before the file transfer completed');
-  }
-  try {
-    await pipeline(fileBytes, output);
+    if (!decoder.isDone) {
+      throw new Error('The file service data channel closed before the file transfer completed');
+    }
   } finally {
     clearInterval(watchdog);
+    output.off('error', onOutputError);
+    output.off('close', onOutputClose);
   }
-  return Number(decoder.size);
+  const size = Number(decoder.size);
+  if (outputError) {
+    return {size, outputError};
+  }
+  try {
+    output.end();
+    await finished(output);
+  } catch (err) {
+    return {size, outputError: err as Error};
+  }
+  return {size};
+}
+
+/**
+ * Resolves once `output` can take more data, or has failed or closed.
+ */
+async function waitForDrain(output: Writable): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const done = (): void => {
+      output.off('drain', done);
+      output.off('error', done);
+      output.off('close', done);
+      resolve();
+    };
+    output.on('drain', done);
+    output.on('error', done);
+    output.on('close', done);
+  });
+}
+
+interface UploadSource {
+  stream: Readable;
+  size: number;
+  permissions: number;
+  modifiedAtSeconds: number;
+}
+
+/**
+ * Resolves what to upload: its bytes as a stream, their size and the metadata
+ * of the new file.
+ */
+async function openUploadSource(
+  source: string | Buffer | Readable,
+  options: Pick<FileServicePushOptions, 'size' | 'permissions' | 'modifiedAt'>,
+): Promise<UploadSource> {
+  let stream: Readable;
+  let size: number | undefined;
+  let permissions = options.permissions;
+  let modifiedAt = options.modifiedAt;
+  if (typeof source === 'string') {
+    const stats = await fsp.stat(source);
+    if (!stats.isFile()) {
+      throw new TypeError(`'${source}' is not a regular file`);
+    }
+    size = stats.size;
+    permissions ??= stats.mode & PERMISSION_BITS_MASK;
+    modifiedAt ??= stats.mtime;
+    stream = fs.createReadStream(source);
+  } else if (Buffer.isBuffer(source)) {
+    size = source.length;
+    stream = Readable.from([source]);
+  } else if (typeof source?.pipe === 'function') {
+    size = options.size;
+    stream = source;
+  } else {
+    throw new TypeError('The source must be a local file path, a Buffer or a readable stream');
+  }
+  if (size === undefined || !Number.isSafeInteger(size) || size < 0) {
+    throw new TypeError(`The size of the data to push must be a non-negative integer, got ${size}`);
+  }
+  return {
+    stream,
+    size,
+    permissions: permissions ?? DEFAULT_PUSHED_FILE_PERMISSIONS,
+    modifiedAtSeconds: Math.floor((modifiedAt ?? new Date()).getTime() / 1000),
+  };
+}
+
+/**
+ * Sends a file announced by `ProposeFile` over the data channel and waits for
+ * the device's confirmation that it received all of it.
+ *
+ * The transfer fails when the device takes no data for `idleTimeoutMs` while
+ * bytes are waiting to be sent, when its confirmation does not arrive within
+ * `idleTimeoutMs` after the last byte, or when the source produces a different
+ * number of bytes than announced. Time spent waiting for a slow source does
+ * not count.
+ */
+async function sendFile(socket: Socket, upload: UploadSource, fileId: bigint, idleTimeoutMs: number): Promise<void> {
+  const confirmation = createUploadConfirmationWaiter(socket, fileId);
+  async function* uploadBytes(): AsyncGenerator<Buffer> {
+    yield buildFileUploadHeader(fileId, BigInt(upload.size));
+    let sent = 0;
+    for await (const chunk of upload.stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      sent += buffer.length;
+      if (sent > upload.size) {
+        throw new Error(`The source has more than the announced ${upload.size} bytes`);
+      }
+      yield buffer;
+      lastProgressAt = performance.now();
+    }
+    if (sent !== upload.size) {
+      throw new Error(`The source ended after ${sent} of the announced ${upload.size} bytes`);
+    }
+  }
+  let lastProgressAt = performance.now();
+  const onDrain = (): void => {
+    lastProgressAt = performance.now();
+  };
+  socket.on('drain', onDrain);
+  const watchdog = setInterval(
+    () => {
+      if (socket.writableNeedDrain && performance.now() - lastProgressAt >= idleTimeoutMs) {
+        socket.destroy(new Error(`The device took no upload data for ${idleTimeoutMs}ms`));
+      }
+    },
+    Math.min(idleTimeoutMs, WATCHDOG_INTERVAL_MS),
+  );
+  try {
+    await pipeline(uploadBytes, socket, {end: false});
+    clearInterval(watchdog);
+    await confirmation.wait(idleTimeoutMs);
+  } finally {
+    clearInterval(watchdog);
+    socket.off('drain', onDrain);
+    confirmation.stop();
+  }
+}
+
+/**
+ * Collects the header the device sends after receiving the last byte of a
+ * file. Listening starts right away, so a quick confirmation is not missed.
+ */
+function createUploadConfirmationWaiter(
+  socket: Socket,
+  fileId: bigint,
+): {wait: (timeoutMs: number) => Promise<void>; stop: () => void} {
+  let received = Buffer.alloc(0);
+  let settle: ((err?: Error) => void) | undefined;
+  let outcome: {err?: Error} | undefined;
+  const finish = (err?: Error): void => {
+    outcome ??= {err};
+    settle?.(outcome.err);
+  };
+  const onData = (chunk: Buffer): void => {
+    received = Buffer.concat([received, chunk]);
+    if (received.length >= DATA_CHANNEL_HEADER_SIZE) {
+      try {
+        assertUploadConfirmation(received.subarray(0, DATA_CHANNEL_HEADER_SIZE), fileId);
+        finish();
+      } catch (err) {
+        finish(err as Error);
+      }
+    }
+  };
+  const onClose = (): void => finish(new Error('The file service data channel closed before the upload was confirmed'));
+  socket.on('data', onData);
+  socket.on('close', onClose);
+  return {
+    wait: (timeoutMs) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => finish(new Error(`The device did not confirm the upload within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+        settle = (err) => {
+          clearTimeout(timer);
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        };
+        if (outcome) {
+          settle(outcome.err);
+        }
+      }),
+    stop: () => {
+      socket.off('data', onData);
+      socket.off('close', onClose);
+    },
+  };
 }
 
 /**

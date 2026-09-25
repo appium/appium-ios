@@ -1,10 +1,8 @@
 import {asDictionary, asNumber, asString} from '../../../lib/remote-xpc/xpc-value.js';
 import type {XPCDictionary, XPCValue} from '../../../lib/types.js';
 import {CoreDeviceError} from '../core-device/core-device-service.js';
-import {FILE_NODE_RESOURCE_DIRECTORY, FILE_SERVICE_ERROR_RESPONSE} from './constants.js';
+import {FILE_NODE_RESOURCE_DIRECTORY, FILE_SERVICE_ERROR_RESPONSE, PERMISSION_BITS_MASK} from './constants.js';
 import type {FileServiceEntry, FileServiceFileMetadata} from './types.js';
-
-const PERMISSION_BITS_MASK = 0o7777;
 
 /**
  * Returns the reply unchanged, or throws the error it carries.

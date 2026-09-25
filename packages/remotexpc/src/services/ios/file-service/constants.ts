@@ -19,6 +19,8 @@ export const FILE_SERVICE_COMMAND = {
   LIST_DIRECTORY_FILE_NODES: 'ListDirectoryFileNodes',
   RETRIEVE_DIRECTORY_LIST: 'RetrieveDirectoryList',
   RETRIEVE_FILE: 'RetrieveFile',
+  PROPOSE_FILE: 'ProposeFile',
+  PROPOSE_EMPTY_FILE: 'ProposeEmptyFile',
   FILE_SYSTEM_OPERATION: 'FileSystemOperation',
 } as const;
 
@@ -48,6 +50,19 @@ export const DEFAULT_FILE_SERVICE_USERNAME = 'mobile';
 /** How long closing the file service waits for the device to end the session. */
 export const END_SESSION_TIMEOUT_MS = 5000;
 
+/**
+ * A transfer cut short makes the device hold up its next session, from any
+ * client, for about 10 seconds. So when the destination of a pull fails, the
+ * rest of the file is read and discarded if no more than this many bytes are left.
+ */
+export const MAX_DISCARDED_BYTES = 64 * 1024 * 1024;
+
+/** POSIX permission bits of a file mode, without the file type bits. */
+export const PERMISSION_BITS_MASK = 0o7777;
+
+/** Permissions of a pushed file when neither the caller nor a local source file provides them. */
+export const DEFAULT_PUSHED_FILE_PERMISSIONS = 0o644;
+
 /** Bit of a file node's `resources` field that marks a directory. */
 export const FILE_NODE_RESOURCE_DIRECTORY = 0x1;
 
@@ -62,8 +77,10 @@ export const DATA_CHANNEL_HEADER_SIZE = DATA_CHANNEL_MAGIC.length + 4 * 8;
 
 /** Data-channel message types. */
 export const DATA_CHANNEL_MESSAGE_TYPE = {
+  /** Client header in front of the bytes of a file announced by `ProposeFile`. */
+  FILE_UPLOAD: 0n,
   /** Client request for a file's bytes, and the device's header in front of them. */
   FILE_DATA: 1n,
-  /** Device confirmation that follows the last byte of a file. */
+  /** Confirmation that follows the last byte of a file, in either direction. */
   TRANSFER_COMPLETE: 0x63n,
 } as const;

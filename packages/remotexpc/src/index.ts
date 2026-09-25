@@ -96,9 +96,11 @@ export type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServicePushOptions,
   FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
+  FileServiceTransferOptions,
 } from './services/ios/file-service/index.js';
 export {ConfigurationService} from './services/ios/configuration/index.js';
 export type {

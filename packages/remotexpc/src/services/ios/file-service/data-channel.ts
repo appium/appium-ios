@@ -48,6 +48,31 @@ export function buildFileDataRequest(fileId: bigint): Buffer {
   return encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.FILE_DATA, fileId, size: 0n});
 }
 
+/**
+ * Builds the header that precedes the bytes of a file announced by `ProposeFile`.
+ */
+export function buildFileUploadHeader(fileId: bigint, size: bigint): Buffer {
+  return encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.FILE_UPLOAD, fileId, size});
+}
+
+/**
+ * Checks the device's confirmation that it received a whole uploaded file.
+ *
+ * @throws {Error} If the header is malformed or confirms another message or file.
+ */
+export function assertUploadConfirmation(buffer: Buffer, fileId: bigint): void {
+  const header = decodeDataChannelHeader(buffer);
+  if (header.type !== DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE) {
+    throw new Error(
+      `Expected a file service upload confirmation (type ${DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE}), ` +
+        `got type ${header.type}`,
+    );
+  }
+  if (header.fileId !== fileId) {
+    throw new Error(`Expected the upload confirmation for file ID ${fileId}, got file ID ${header.fileId}`);
+  }
+}
+
 type DecoderState = 'header' | 'body' | 'confirmation' | 'done';
 
 /**

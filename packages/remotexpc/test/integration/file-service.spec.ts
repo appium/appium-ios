@@ -137,6 +137,22 @@ describe('CoreDeviceFileService', {timeout: 120000}, function () {
     await assert.rejects(service!.listDirectory(root), CoreDeviceError);
   });
 
+  it('uploads files and reads them back', async function () {
+    const root = `tmp/file-service-spec-${Date.now()}`;
+    const payload = Buffer.from(Array.from({length: 5000}, (_, i) => `line ${i}`).join('\n'));
+    try {
+      await service!.push(payload, `${root}/nested/data.txt`);
+      await service!.push(Buffer.alloc(0), `${root}/empty.txt`);
+      const pulled = path.join(tmpDir, 'pushed');
+      await service!.pull(`${root}/nested/data.txt`, pulled);
+      assert.deepStrictEqual(await fs.promises.readFile(pulled), payload);
+      const entries = await service!.listDirectory(root, {recursive: true});
+      assert.strictEqual(entries.find((e) => e.path === 'empty.txt')?.metadata?.size, 0);
+    } finally {
+      await service!.rm(root, {recursive: true});
+    }
+  });
+
   it('renames a directory', async function () {
     const root = `tmp/file-service-spec-${Date.now()}`;
     await service!.mkdir(root);

@@ -18,11 +18,18 @@ export interface FileServiceSessionOptions {
 
 export interface FileServiceRequestOptions {
   /**
-   * Maximum time without a message from the device on the control channel, the
-   * timeout for connecting the data channel, and its maximum idle time while a
-   * file is transferred.
+   * Maximum time without a message from the device on the control channel, and
+   * the timeout for connecting the data channel.
    */
   timeoutMs?: number;
+}
+
+export interface FileServiceTransferOptions extends FileServiceRequestOptions {
+  /**
+   * Maximum time the data channel may stall while a file is transferred.
+   * Defaults to 30 seconds.
+   */
+  idleTimeoutMs?: number;
 }
 
 export interface FileServiceListOptions extends FileServiceRequestOptions {
@@ -40,6 +47,18 @@ export interface FileServiceRemoveOptions extends FileServiceRequestOptions {
    * it, only a file or an empty directory can be removed. Defaults to `false`.
    */
   recursive?: boolean;
+}
+
+export interface FileServicePushOptions extends FileServiceTransferOptions {
+  /**
+   * Size of the data in bytes. Required when the source is a stream, because
+   * the device needs it before the transfer starts.
+   */
+  size?: number;
+  /** POSIX permission bits of the new file. Defaults to those of a local source file, else `0o644`. */
+  permissions?: number;
+  /** Modification time of the new file. Defaults to that of a local source file, else the current time. */
+  modifiedAt?: Date;
 }
 
 export interface FileServiceFileMetadata {
