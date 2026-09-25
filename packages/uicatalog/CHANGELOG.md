@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 4.1.0 (2026-09-25)
+
+### Features
+
+* Restore &#x60;appium-ios&#x60; monorepo to a working state ([#7](https://github.com/appium/appium-ios/issues/7)) ([80d12e2](https://github.com/appium/appium-ios/commit/80d12e2498fbad7c08eea0ddb868196f00af0840))
+
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
