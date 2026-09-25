@@ -7,7 +7,7 @@
     "ios",
     "uicatalog"
   ],
-  "homepage": "https://github.com/appium/appium-ios/tree/main/packages/ios-uicatalog",
+  "homepage": "https://github.com/appium/appium-ios/tree/main/packages/uicatalog",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
   },
@@ -16,7 +16,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/appium/appium-ios.git",
-    "directory": "packages/ios-uicatalog"
+    "directory": "packages/uicatalog"
   },
   "files": [
     "index.js",

@@ -9,7 +9,7 @@
   },
   "references": [
     {
-      "path": "packages/appium-xcode"
+      "path": "packages/xcode"
     }
   ]
 }

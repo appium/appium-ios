@@ -11,8 +11,8 @@
 
 See the main [Appium site](https://appium.io) or [Appium GitHub repository](https://github.com/appium/appium).
 
-[`appium-xcode`]: https://github.com/appium/appium-ios/tree/main/packages/appium-xcode
-[`ios-uicatalog`]: https://github.com/appium/appium-ios/tree/main/packages/ios-uicatalog
+[`appium-xcode`]: https://github.com/appium/appium-ios/tree/main/packages/xcode
+[`ios-uicatalog`]: https://github.com/appium/appium-ios/tree/main/packages/uicatalog
 
 ## License
 

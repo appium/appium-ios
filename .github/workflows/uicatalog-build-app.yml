@@ -38,14 +38,14 @@ jobs:
           xcode-version: '26.0'
 
       - name: Clean build directory
-        working-directory: packages/ios-uicatalog
+        working-directory: packages/uicatalog
         run: rm -rf UIKitCatalog/build
 
       - name: Build iOS App for Simulator
-        run: npm run build:uicatalog:simulator -w packages/ios-uicatalog
+        run: npm run build:uicatalog:simulator -w packages/uicatalog
 
       - name: Create ZIP archive
-        working-directory: packages/ios-uicatalog
+        working-directory: packages/uicatalog
         run: |
           APP_PATH="UIKitCatalog/build/Build/Products/Release-iphonesimulator/UIKitCatalog.app"
           if [ ! -d "$APP_PATH" ]; then
@@ -64,5 +64,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: UIKitCatalog-iphonesimulator.zip
-          path: packages/ios-uicatalog/UIKitCatalog-iphonesimulator.zip
+          path: packages/uicatalog/UIKitCatalog-iphonesimulator.zip
           retention-days: 7

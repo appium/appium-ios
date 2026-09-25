@@ -2,5 +2,5 @@ import appiumConfig, {defineConfig, ignorePatterns} from '@appium/oxc-config/oxl
 
 export default defineConfig({
   extends: [appiumConfig],
-  ignorePatterns: [...ignorePatterns, 'packages/ios-uicatalog/UIKitCatalog/**'],
+  ignorePatterns: [...ignorePatterns, 'packages/uicatalog/UIKitCatalog/**'],
 });
