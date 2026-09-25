@@ -1,6 +1,7 @@
 {
   "name": "ios-uicatalog",
   "version": "4.0.4",
+  "private": true,
   "description": "Apple iOS UIKitCatalog app",
   "keywords": [
     "appium",
