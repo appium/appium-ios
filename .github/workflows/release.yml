@@ -4,6 +4,25 @@ on:
   push:
     branches:
       - main
+  # Also callable from manual-release.yml so a manual/recovery run publishes to npm as
+  # this same workflow file - required to match appium-xcode's npm trusted publisher (OIDC),
+  # which is pinned to this filename.
+  workflow_call:
+    inputs:
+      dry_run:
+        description: 'Dry run (no publishing or tagging)'
+        required: false
+        type: boolean
+        default: false
+      recover_missing_only:
+        description: 'Recovery mode: skip version bump, publish only packages missing on npm at their current package.json version'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      uicatalog_release_tag:
+        description: '"<pkg_name>@<pkg_version>" if ios-uicatalog was published this run, empty otherwise'
+        value: ${{ jobs.release.outputs.uicatalog_release_tag }}
 
 permissions:
   contents: write
@@ -47,6 +66,8 @@ jobs:
         uses: ./.github/actions/lerna-release
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry_run: ${{ inputs.dry_run || false }}
+          recover_missing_only: ${{ inputs.recover_missing_only || false }}
 
   release-uicatalog-app:
     name: Build and upload UIKitCatalog app

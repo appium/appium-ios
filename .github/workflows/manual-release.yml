@@ -21,46 +21,12 @@ permissions:
   id-token: write # to enable use of OIDC for trusted publishing and npm provenance
 
 jobs:
+  # Delegates the whole release (lerna publish + uicatalog app upload) to release.yml rather
+  # than running it here, so the npm publish step always runs as release.yml - the workflow
+  # file appium-xcode's npm trusted publisher (OIDC) is pinned to.
   release:
-    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && contains(fromJSON('["mykola-mokhnach", "jlipps", "eglitise", "KazuCocoa"]'), github.actor)
-    outputs:
-      # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
-      # published this run, empty otherwise - see the lerna-release action.
-      uicatalog_release_tag: ${{ steps.run-lerna-publish.outputs.uicatalog_release_tag }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Configure git user
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-      - name: Setup Node and install deps (LTS)
-        uses: ./.github/actions/setup-build
-        with:
-          node-version: lts/*
-          install-command: npm ci
-          run-build: 'true'
-
-      - name: Run Lerna publish
-        id: run-lerna-publish
-        uses: ./.github/actions/lerna-release
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          dry_run: ${{ inputs.dry_run }}
-          recover_missing_only: ${{ inputs.recover_missing_only }}
-
-  release-uicatalog-app:
-    name: Build and upload UIKitCatalog app
-    needs: release
-    if: needs.release.outputs.uicatalog_release_tag != ''
-    uses: ./.github/workflows/uicatalog-build-app.yml
+    uses: ./.github/workflows/release.yml
     with:
-      upload_release_artifacts: true
-      release_tag: ${{ needs.release.outputs.uicatalog_release_tag }}
-      checkout_ref: ${{ needs.release.outputs.uicatalog_release_tag }}
+      dry_run: ${{ inputs.dry_run }}
+      recover_missing_only: ${{ inputs.recover_missing_only }}
