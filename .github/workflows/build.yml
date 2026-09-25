@@ -36,7 +36,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.sha }}
-        run: node .github/scripts/discover-e2e-packages.mjs
+        run: node scripts/discover-e2e-packages.mjs
 
   test-unit:
     needs:
