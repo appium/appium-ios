@@ -23,45 +23,20 @@ jobs:
     uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
 
   prepare_e2e_packages:
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     outputs:
       packages: ${{ steps.discover-packages.outputs.packages }}
     steps:
       - uses: actions/checkout@v7
-      - name: Discover packages with e2e tests
+        with:
+          fetch-depth: 0
+      - name: Discover packages needing e2e tests
         id: discover-packages
-        run: |
-          packages=()
-          for package_dir in packages/*/; do
-            package_json="${package_dir}package.json"
-            if [[ -f "$package_json" ]]; then
-              has_e2e=$(node -e "
-                try {
-                  const pkg = require('./$package_json');
-                  const script = pkg.scripts && pkg.scripts['test:e2e'];
-                  if (script && !script.includes('echo') && !script.includes('No e2e tests')) {
-                    console.log('true');
-                  }
-                } catch(e) {
-                  // Ignore errors
-                }
-              ")
-              if [[ "$has_e2e" == "true" ]]; then
-                package_name="${package_dir%/}"
-                package_name="${package_name#packages/}"
-                packages+=("$package_name")
-              fi
-            fi
-          done
-          if [[ ${#packages[@]} -eq 0 ]]; then
-            echo "No packages with e2e tests found"
-            packages_json="[]"
-          else
-            packages_json=$(printf '%s\n' "${packages[@]}" | jq -R '.' | jq -s '.' | jq -c '.')
-          fi
-          echo "packages=$packages_json" >> $GITHUB_OUTPUT
-          echo "Found packages with e2e tests:"
-          echo "$packages_json" | jq -r '.[]' | sed 's/^/  - /'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node .github/scripts/discover-e2e-packages.mjs
 
   test-unit:
     needs:
