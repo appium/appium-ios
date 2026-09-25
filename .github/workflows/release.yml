@@ -5,8 +5,7 @@ on:
     branches:
       - main
   # Also callable from manual-release.yml so a manual/recovery run publishes to npm as
-  # this same workflow file - required to match appium-xcode's npm trusted publisher (OIDC),
-  # which is pinned to this filename.
+  # this same workflow file
   workflow_call:
     inputs:
       dry_run:
