@@ -108,6 +108,7 @@ class FakeFileServiceTransport extends EventEmitter {
         this.reply(id, this.fileReply);
         return;
       case 'EndSession':
+      case 'FileSystemOperation':
         this.reply(id, {Response: 1});
         return;
       default:
@@ -320,6 +321,114 @@ describe('CoreDeviceFileService', function () {
     assert.strictEqual(fake.requests().at(-1)?.body.Cmd, 'EndSession');
     assert.strictEqual(fake.requests().at(-1)?.body.SessionID, 'SESSION-1');
     assert.strictEqual(fake.closeCalls, 1);
+  });
+
+  describe('rm and mkdir', function () {
+    function fileSystemOperations(fake: FakeFileServiceTransport): string[] {
+      return fake
+        .requests()
+        .filter(({body}) => body.Cmd === 'FileSystemOperation')
+        .map(({body}) => `${body.OperationType} ${body.Path}`);
+    }
+
+    it('removes a file', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.listing = [['tmp/a.mov']];
+      const service = new TestFileService(fake);
+
+      await service.rm('/tmp/a.mov');
+
+      assert.deepStrictEqual(fileSystemOperations(fake), ['RemoveFile tmp/a.mov']);
+    });
+
+    it('removes an empty directory', async function () {
+      const fake = new FakeFileServiceTransport();
+      const service = new TestFileService(fake);
+
+      await service.rm('tmp/empty/');
+
+      assert.deepStrictEqual(fileSystemOperations(fake), ['RemoveDirectory tmp/empty']);
+    });
+
+    it('refuses to remove a non-empty directory unless recursive', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.listing = [[fileNode('a.txt', 1)]];
+      const service = new TestFileService(fake);
+
+      await assert.rejects(service.rm('tmp/dir'), /Cannot remove 'tmp\/dir': the directory is not empty/);
+      assert.deepStrictEqual(fileSystemOperations(fake), []);
+    });
+
+    it('removes a directory tree files first, then directories deepest first', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.listing = [[fileNode('a/', 0), fileNode('a/b/', 0), fileNode('a/b/c.txt', 1), fileNode('d.txt', 1)]];
+      const service = new TestFileService(fake);
+
+      await service.rm('tmp/dir', {recursive: true});
+
+      assert.deepStrictEqual(fileSystemOperations(fake), [
+        'RemoveFile tmp/dir/a/b/c.txt',
+        'RemoveFile tmp/dir/d.txt',
+        'RemoveDirectory tmp/dir/a/b',
+        'RemoveDirectory tmp/dir/a',
+        'RemoveDirectory tmp/dir',
+      ]);
+    });
+
+    it('refuses to remove the session root', async function () {
+      const service = new TestFileService(new FakeFileServiceTransport());
+
+      for (const remotePath of ['', '.', '/', './']) {
+        await assert.rejects(service.rm(remotePath, {recursive: true}), /root of a file service session/);
+      }
+      assert.strictEqual(service.fake.sent.length, 0);
+    });
+
+    it('renames with the old and new paths', async function () {
+      const fake = new FakeFileServiceTransport();
+      const service = new TestFileService(fake);
+
+      await service.rename('tmp/a.mov', 'Documents/b.mov');
+
+      const [operation] = fake.requests().filter(({body}) => body.Cmd === 'FileSystemOperation');
+      assert.strictEqual(operation.body.OperationType, 'Rename');
+      assert.strictEqual(operation.body.OldPath, 'tmp/a.mov');
+      assert.strictEqual(operation.body.NewPath, 'Documents/b.mov');
+      assert.strictEqual(operation.body.Path, undefined);
+    });
+
+    it('refuses to rename outside the writable app container directories', async function () {
+      const service = new TestFileService(new FakeFileServiceTransport());
+
+      for (const [oldPath, newPath] of [
+        ['tmp/a', 'SystemData/a'],
+        ['SystemData/a', 'tmp/a'],
+        ['.com.apple.mobile_container_manager.metadata.plist', 'tmp/x'],
+        ['tmp', 'tmp2'],
+        ['tmp/a', '/Library'],
+      ]) {
+        await assert.rejects(service.rename(oldPath, newPath), /Access restricted/, `${oldPath} -> ${newPath}`);
+      }
+      assert.strictEqual(service.fake.sent.length, 0);
+    });
+
+    it('leaves rename checks to the device for other domains', async function () {
+      const fake = new FakeFileServiceTransport();
+      const service = new TestFileService(fake, {domain: 'temporary'});
+
+      await service.rename('a', 'b');
+
+      assert.strictEqual(fake.requests().filter(({body}) => body.Cmd === 'FileSystemOperation').length, 1);
+    });
+
+    it('creates a directory', async function () {
+      const fake = new FakeFileServiceTransport();
+      const service = new TestFileService(fake);
+
+      await service.mkdir('tmp/new');
+
+      assert.deepStrictEqual(fileSystemOperations(fake), ['CreateDirectory tmp/new']);
+    });
   });
 
   describe('pull', function () {

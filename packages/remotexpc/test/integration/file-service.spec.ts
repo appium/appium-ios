@@ -120,6 +120,39 @@ describe('CoreDeviceFileService', {timeout: 120000}, function () {
     assert.deepStrictEqual(Buffer.concat(chunks), onDisk);
   });
 
+  it('creates and removes a directory tree', async function () {
+    const root = `tmp/file-service-spec-${Date.now()}`;
+    await service!.mkdir(root);
+    await service!.mkdir(`${root}/a`);
+    await service!.mkdir(`${root}/a/b`);
+    assert.deepStrictEqual((await service!.listDirectory(root, {recursive: true})).map((e) => e.path).sort(), [
+      'a',
+      'a/b',
+    ]);
+
+    await assert.rejects(service!.rm(root), /the directory is not empty/);
+    await service!.rm(`${root}/a/b`);
+    await service!.rm(root, {recursive: true});
+
+    await assert.rejects(service!.listDirectory(root), CoreDeviceError);
+  });
+
+  it('renames a directory', async function () {
+    const root = `tmp/file-service-spec-${Date.now()}`;
+    await service!.mkdir(root);
+    await service!.mkdir(`${root}/old`);
+    try {
+      await service!.rename(`${root}/old`, `${root}/new`);
+      assert.deepStrictEqual(
+        (await service!.listDirectory(root)).map((e) => e.path),
+        ['new'],
+      );
+      await assert.rejects(service!.rename(`${root}/missing`, `${root}/x`), CoreDeviceError);
+    } finally {
+      await service!.rm(root, {recursive: true});
+    }
+  });
+
   it('reports a missing file as a CoreDeviceError', async function () {
     const destination = path.join(tmpDir, 'missing');
     await assert.rejects(service!.pull('tmp/does-not-exist', destination), CoreDeviceError);

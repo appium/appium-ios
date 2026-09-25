@@ -19,7 +19,26 @@ export const FILE_SERVICE_COMMAND = {
   LIST_DIRECTORY_FILE_NODES: 'ListDirectoryFileNodes',
   RETRIEVE_DIRECTORY_LIST: 'RetrieveDirectoryList',
   RETRIEVE_FILE: 'RetrieveFile',
+  FILE_SYSTEM_OPERATION: 'FileSystemOperation',
 } as const;
+
+/**
+ * `OperationType` values of a `FileSystemOperation` command. The device only
+ * allows changes below `Library`, `Documents` and `tmp` of an app container.
+ */
+export const FILE_SYSTEM_OPERATION = {
+  CREATE_DIRECTORY: 'CreateDirectory',
+  REMOVE_DIRECTORY: 'RemoveDirectory',
+  REMOVE_FILE: 'RemoveFile',
+  RENAME: 'Rename',
+} as const;
+
+/**
+ * Directories of an app data container that the device allows changes in. Its
+ * `Rename` does not enforce this for the new path (seen on iOS 26), so the
+ * client checks it.
+ */
+export const APP_CONTAINER_WRITABLE_DIRECTORIES = ['Library', 'Documents', 'tmp'] as const;
 
 /** `Response` value of a control-channel reply that carries an error. */
 export const FILE_SERVICE_ERROR_RESPONSE = 3;

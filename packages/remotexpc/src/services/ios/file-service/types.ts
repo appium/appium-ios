@@ -34,6 +34,14 @@ export interface FileServiceListOptions extends FileServiceRequestOptions {
   recursive?: boolean;
 }
 
+export interface FileServiceRemoveOptions extends FileServiceRequestOptions {
+  /**
+   * Whether to remove a directory together with everything below it. Without
+   * it, only a file or an empty directory can be removed. Defaults to `false`.
+   */
+  recursive?: boolean;
+}
+
 export interface FileServiceFileMetadata {
   /** Size in bytes. */
   size: number;

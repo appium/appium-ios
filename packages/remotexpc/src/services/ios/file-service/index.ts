@@ -19,11 +19,13 @@ import {
   DEFAULT_INVOKE_TIMEOUT_MS,
 } from '../core-device/core-device-service.js';
 import {
+  APP_CONTAINER_WRITABLE_DIRECTORIES,
   DEFAULT_FILE_SERVICE_USERNAME,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
   FILE_SERVICE_COMMAND,
   FILE_SERVICE_DOMAIN,
+  FILE_SYSTEM_OPERATION,
 } from './constants.js';
 import {FileDataDecoder, buildFileDataRequest} from './data-channel.js';
 import {assertSuccessfulReply, parseFileNodes, parseRetrievedFileMetadata} from './replies.js';
@@ -31,6 +33,7 @@ import type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
 } from './types.js';
@@ -41,6 +44,7 @@ export type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
 } from './types.js';
@@ -187,6 +191,79 @@ export class CoreDeviceFileService extends CoreDeviceService {
   }
 
   /**
+   * Removes a file or a directory. The device only allows changes below
+   * `Library`, `Documents` and `tmp` of an app container.
+   *
+   * @param remotePath Path relative to the session root. The root itself cannot be removed.
+   * @param options Set `recursive` to remove a directory together with its contents.
+   * @throws {CoreDeviceError} If `remotePath` does not exist, cannot be removed,
+   * or is a non-empty directory and `recursive` is not set.
+   */
+  async rm(remotePath: string, options: FileServiceRemoveOptions = {}): Promise<void> {
+    const {recursive = false, ...requestOptions} = options;
+    const target = toSessionRelativePath(remotePath);
+    if (target === '' || target === '.') {
+      throw new TypeError('The root of a file service session cannot be removed');
+    }
+    const entries = await this.listDirectory(target, {...requestOptions, recursive: true});
+    // A listed regular file comes back as its own entry without metadata
+    if (entries.length === 1 && !entries[0].metadata && entries[0].path === target) {
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: target}, requestOptions);
+      return;
+    }
+    if (entries.length > 0 && !recursive) {
+      throw new CoreDeviceError(`Cannot remove '${remotePath}': the directory is not empty`);
+    }
+    // Remove the files first, then the directories from the deepest one up
+    const files = entries.filter(({isDirectory}) => !isDirectory);
+    const directories = entries
+      .filter(({isDirectory}) => isDirectory)
+      .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
+    for (const {path: relativePath} of files) {
+      const filePath = path.posix.join(target, relativePath);
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: filePath}, requestOptions);
+    }
+    for (const {path: relativePath} of directories) {
+      const directoryPath = path.posix.join(target, relativePath);
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: directoryPath}, requestOptions);
+    }
+    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: target}, requestOptions);
+    log.debug(`Removed '${target}' (${entries.length} entries below it)`);
+  }
+
+  /**
+   * Creates a directory. Its parent directory must already exist. The device
+   * only allows changes below `Library`, `Documents` and `tmp` of an app container.
+   *
+   * @param remotePath Path relative to the session root.
+   * @throws {CoreDeviceError} If the directory cannot be created, for example
+   * because it already exists or its parent does not.
+   */
+  async mkdir(remotePath: string, options: FileServiceRequestOptions = {}): Promise<void> {
+    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.CREATE_DIRECTORY, {Path: remotePath}, options);
+  }
+
+  /**
+   * Renames or moves a file or a directory within the session's domain. The
+   * device only allows changes below `Library`, `Documents` and `tmp` of an app
+   * container.
+   *
+   * @param oldPath Current path relative to the session root.
+   * @param newPath New path relative to the session root. Its parent directory
+   * must exist. An existing file at `newPath` is replaced.
+   * @throws {TypeError} If either path of an `appDataContainer` session is not
+   * below `Library`, `Documents` or `tmp`.
+   * @throws {CoreDeviceError} If `oldPath` does not exist or the rename is not allowed.
+   */
+  async rename(oldPath: string, newPath: string, options: FileServiceRequestOptions = {}): Promise<void> {
+    if (this.sessionOptions.domain === 'appDataContainer') {
+      assertInWritableAppContainerDirectory(oldPath);
+      assertInWritableAppContainerDirectory(newPath);
+    }
+    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.RENAME, {OldPath: oldPath, NewPath: newPath}, options);
+  }
+
+  /**
    * Ends the session and closes the connection.
    */
   override async close(): Promise<void> {
@@ -242,6 +319,14 @@ export class CoreDeviceFileService extends CoreDeviceService {
       respond({MessageUUID: messageUuid});
     });
     return fileList;
+  }
+
+  private async runFileSystemOperation(
+    operationType: string,
+    fields: XPCDictionary,
+    options: FileServiceRequestOptions,
+  ): Promise<void> {
+    await this.request(FILE_SERVICE_COMMAND.FILE_SYSTEM_OPERATION, {...fields, OperationType: operationType}, options);
   }
 
   private async request(
@@ -354,6 +439,20 @@ function assertWritableDestination(destination: Writable | undefined): void {
   }
   if (destination.writableEnded || destination.destroyed) {
     throw new TypeError('The destination stream has already been ended or destroyed');
+  }
+}
+
+/**
+ * Rejects a path that is not strictly below one of the app container
+ * directories the device allows changes in.
+ */
+function assertInWritableAppContainerDirectory(remotePath: string): void {
+  const [topDirectory, ...rest] = toSessionRelativePath(remotePath).split('/');
+  if (rest.length === 0 || !(APP_CONTAINER_WRITABLE_DIRECTORIES as readonly string[]).includes(topDirectory)) {
+    throw new TypeError(
+      `Access restricted: '${remotePath}' is not below the allowed container directories ` +
+        `(${APP_CONTAINER_WRITABLE_DIRECTORIES.join(', ')})`,
+    );
   }
 }
 

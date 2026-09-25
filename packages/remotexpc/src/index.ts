@@ -96,6 +96,7 @@ export type {
   FileServiceEntry,
   FileServiceFileMetadata,
   FileServiceListOptions,
+  FileServiceRemoveOptions,
   FileServiceRequestOptions,
   FileServiceSessionOptions,
 } from './services/ios/file-service/index.js';
