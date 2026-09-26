@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 2.1.0 (2026-09-26)
+
+### Features
+
+* move appium-ios-tuntap into the monorepo as packages/tuntap ([#14](https://github.com/appium/appium-ios/issues/14)) ([92421e1](https://github.com/appium/appium-ios/commit/92421e10b385fb1b3f05cfa7601954734e8b0196))
+
+
 ## [2.0.13](https://github.com/appium/appium-ios-tuntap/compare/v2.0.12...v2.0.13) (2026-09-25)
 
 ### Bug Fixes
