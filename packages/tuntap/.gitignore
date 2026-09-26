@@ -1,0 +1,7 @@
+node_modules
+build
+lib
+prebuilds
+*.node
+package-lock.json*
+tsconfig.tsbuildinfo

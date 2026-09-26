@@ -1,0 +1,544 @@
+## [2.0.13](https://github.com/appium/appium-ios-tuntap/compare/v2.0.12...v2.0.13) (2026-09-25)
+
+### Bug Fixes
+
+* use a single process exit listener for all TunTap devices ([#114](https://github.com/appium/appium-ios-tuntap/issues/114)) ([2b61330](https://github.com/appium/appium-ios-tuntap/commit/2b6133054fc9b7a9a87864b31182020c9a4a78cc))
+
+## [2.0.12](https://github.com/appium/appium-ios-tuntap/compare/v2.0.11...v2.0.12) (2026-09-20)
+
+### Bug Fixes
+
+* report a peer hangup during TLS connect as a closed connection, not a timeout ([#113](https://github.com/appium/appium-ios-tuntap/issues/113)) ([f489d18](https://github.com/appium/appium-ios-tuntap/commit/f489d18c4b65f7104e17f3e6d82b10ff094943c5))
+
+## [2.0.11](https://github.com/appium/appium-ios-tuntap/compare/v2.0.10...v2.0.11) (2026-09-18)
+
+### Bug Fixes
+
+* drop oversized WinTun packets instead of truncating them ([#112](https://github.com/appium/appium-ios-tuntap/issues/112)) ([ee19d0c](https://github.com/appium/appium-ios-tuntap/commit/ee19d0c369cc539f49225c1017fce0a09fbd887a))
+
+## [2.0.10](https://github.com/appium/appium-ios-tuntap/compare/v2.0.9...v2.0.10) (2026-09-15)
+
+### Bug Fixes
+
+* bound reassembled frame length by the granted MTU ([#110](https://github.com/appium/appium-ios-tuntap/issues/110)) ([e51c736](https://github.com/appium/appium-ios-tuntap/commit/e51c73636170770b6f8f3c7b0a1a192cc8079878))
+
+## [2.0.9](https://github.com/appium/appium-ios-tuntap/compare/v2.0.8...v2.0.9) (2026-09-14)
+
+### Bug Fixes
+
+* set close-on-exec on the TUN fd and the owned TLS socket ([#108](https://github.com/appium/appium-ios-tuntap/issues/108)) ([fbc8209](https://github.com/appium/appium-ios-tuntap/commit/fbc8209f3c72f04d1d4e179187ce32f8e15c316f))
+
+## [2.0.8](https://github.com/appium/appium-ios-tuntap/compare/v2.0.7...v2.0.8) (2026-09-13)
+
+### Miscellaneous Chores
+
+* **release:** remove shrinkwrap step from publish workflow ([#109](https://github.com/appium/appium-ios-tuntap/issues/109)) ([83e065b](https://github.com/appium/appium-ios-tuntap/commit/83e065b236391887313ce4716042b93bc1d8e03a))
+
+## [2.0.7](https://github.com/appium/appium-ios-tuntap/compare/v2.0.6...v2.0.7) (2026-09-12)
+
+### Bug Fixes
+
+* reject NaN and non-integer MTU in configure() ([#107](https://github.com/appium/appium-ios-tuntap/issues/107)) ([eef4666](https://github.com/appium/appium-ios-tuntap/commit/eef4666ec0fe8cb39787f6f82de55d1cbd9ebb69))
+
+## [2.0.6](https://github.com/appium/appium-ios-tuntap/compare/v2.0.5...v2.0.6) (2026-09-11)
+
+### Bug Fixes
+
+* map "Operation not permitted" in open() to TunTapPermissionError ([#105](https://github.com/appium/appium-ios-tuntap/issues/105)) ([f6f7974](https://github.com/appium/appium-ios-tuntap/commit/f6f79744a623b2a80b9c588f56983e1a29014805))
+
+## [2.0.5](https://github.com/appium/appium-ios-tuntap/compare/v2.0.4...v2.0.5) (2026-09-09)
+
+### Bug Fixes
+
+* serialize tunnel teardown against in-flight workers and device close ([#104](https://github.com/appium/appium-ios-tuntap/issues/104)) ([e87faef](https://github.com/appium/appium-ios-tuntap/commit/e87faef56793c4b0e52fc748fd5a53237777a86d))
+
+## [2.0.4](https://github.com/appium/appium-ios-tuntap/compare/v2.0.3...v2.0.4) (2026-09-05)
+
+### Bug Fixes
+
+* destroy the socket when the native connect throws synchronously ([#102](https://github.com/appium/appium-ios-tuntap/issues/102)) ([a19ee6e](https://github.com/appium/appium-ios-tuntap/commit/a19ee6eeae5d159a3a15a062dfefa992610e037c))
+
+## [2.0.3](https://github.com/appium/appium-ios-tuntap/compare/v2.0.2...v2.0.3) (2026-09-04)
+
+### Bug Fixes
+
+* run the POSIX TLS connect off the JS thread ([#101](https://github.com/appium/appium-ios-tuntap/issues/101)) ([957f77a](https://github.com/appium/appium-ios-tuntap/commit/957f77a158d135c619d3223883ecb1bcb87736ae))
+
+## [2.0.2](https://github.com/appium/appium-ios-tuntap/compare/v2.0.1...v2.0.2) (2026-09-03)
+
+### Bug Fixes
+
+* parse Darwin netstat counters right-anchored so utun rows are not shifted ([#99](https://github.com/appium/appium-ios-tuntap/issues/99)) ([9009e02](https://github.com/appium/appium-ios-tuntap/commit/9009e020654cc8ed3b87e9f47b2614cdf4070f46))
+
+## [2.0.1](https://github.com/appium/appium-ios-tuntap/compare/v2.0.0...v2.0.1) (2026-08-29)
+
+### Miscellaneous Chores
+
+* bump support ([#97](https://github.com/appium/appium-ios-tuntap/issues/97)) ([aab38a2](https://github.com/appium/appium-ios-tuntap/commit/aab38a20305b2e8af592622c99fcae498449a6ae))
+
+## [2.0.0](https://github.com/appium/appium-ios-tuntap/compare/v1.3.2...v2.0.0) (2026-08-29)
+
+### ⚠ BREAKING CHANGES
+
+* startPolling(), pausePolling(), resumePolling() and the
+PacketCallback export are removed. read() throws on terminal EOF instead
+of returning an empty buffer.
+
+### Features
+
+* remove the JS polling API (startPolling/pausePolling/resumePolling) ([#96](https://github.com/appium/appium-ios-tuntap/issues/96)) ([67df6f3](https://github.com/appium/appium-ios-tuntap/commit/67df6f38b7b9d63f7d1f6d3975870ac5a7297650)), closes [#52](https://github.com/appium/appium-ios-tuntap/issues/52)
+
+## [1.3.2](https://github.com/appium/appium-ios-tuntap/compare/v1.3.1...v1.3.2) (2026-08-24)
+
+### Bug Fixes
+
+* release device mutex around receive-thread join on Windows ([#94](https://github.com/appium/appium-ios-tuntap/issues/94)) ([b4bab4d](https://github.com/appium/appium-ios-tuntap/commit/b4bab4d91db00a7413d52d7da1f430265b9176b2))
+
+## [1.3.1](https://github.com/appium/appium-ios-tuntap/compare/v1.3.0...v1.3.1) (2026-08-17)
+
+### Bug Fixes
+
+* warn once per invalid MTU request value ([#93](https://github.com/appium/appium-ios-tuntap/issues/93)) ([cb3b8a1](https://github.com/appium/appium-ios-tuntap/commit/cb3b8a198510b2cc077130664568d7b0637b650e))
+
+## [1.3.0](https://github.com/appium/appium-ios-tuntap/compare/v1.2.14...v1.3.0) (2026-08-17)
+
+### Features
+
+* allow requesting a larger tunnel MTU via env var ([#91](https://github.com/appium/appium-ios-tuntap/issues/91)) ([31357cf](https://github.com/appium/appium-ios-tuntap/commit/31357cfaaf27934933a6ad20f27877ef3f43a5f7))
+
+## [1.2.14](https://github.com/appium/appium-ios-tuntap/compare/v1.2.13...v1.2.14) (2026-08-16)
+
+### Bug Fixes
+
+* share TUN backend ownership between device and forwarder ([#90](https://github.com/appium/appium-ios-tuntap/issues/90)) ([5c8bd79](https://github.com/appium/appium-ios-tuntap/commit/5c8bd79ff51d9d4b3ea6f3deb819cea7161b0291))
+
+## [1.2.13](https://github.com/appium/appium-ios-tuntap/compare/v1.2.12...v1.2.13) (2026-08-15)
+
+### Bug Fixes
+
+* release TSFN after polling and stop caching admin check failures ([#88](https://github.com/appium/appium-ios-tuntap/issues/88)) ([add05d9](https://github.com/appium/appium-ios-tuntap/commit/add05d96d8d9d81b82f745511b7a27019297f0b1))
+
+## [1.2.12](https://github.com/appium/appium-ios-tuntap/compare/v1.2.11...v1.2.12) (2026-08-15)
+
+### Miscellaneous Chores
+
+* clean up forwarder and typing nits ([#87](https://github.com/appium/appium-ios-tuntap/issues/87)) ([f06229f](https://github.com/appium/appium-ios-tuntap/commit/f06229f135b05d9c618efb3923343b1ddeeb7af5))
+
+## [1.2.11](https://github.com/appium/appium-ios-tuntap/compare/v1.2.10...v1.2.11) (2026-08-14)
+
+### Bug Fixes
+
+* **native:** address clang-tidy warnings across native sources ([#85](https://github.com/appium/appium-ios-tuntap/issues/85)) ([7105dc2](https://github.com/appium/appium-ios-tuntap/commit/7105dc2c1d01558fcd8c6dc4224c42f6877d1868))
+
+## [1.2.10](https://github.com/appium/appium-ios-tuntap/compare/v1.2.9...v1.2.10) (2026-08-14)
+
+### Bug Fixes
+
+* **platform:** time out OS commands after 30s ([#84](https://github.com/appium/appium-ios-tuntap/issues/84)) ([d185ff2](https://github.com/appium/appium-ios-tuntap/commit/d185ff2c84f401e70154c362b9e7bf32fb86b027))
+
+## [1.2.9](https://github.com/appium/appium-ios-tuntap/compare/v1.2.8...v1.2.9) (2026-08-14)
+
+### Miscellaneous Chores
+
+* **tunnel:** remove stale forwarder helpers ([#83](https://github.com/appium/appium-ios-tuntap/issues/83)) ([6c460cd](https://github.com/appium/appium-ios-tuntap/commit/6c460cd0bbac447a89da09a29cf5bb183cc53a1f))
+
+## [1.2.8](https://github.com/appium/appium-ios-tuntap/compare/v1.2.7...v1.2.8) (2026-08-14)
+
+### Miscellaneous Chores
+
+* add clang-format/clang-tidy tooling for C++ sources ([#82](https://github.com/appium/appium-ios-tuntap/issues/82)) ([aee92d6](https://github.com/appium/appium-ios-tuntap/commit/aee92d677dc432708d163a17e76cea6288be6dcd))
+
+## [1.2.7](https://github.com/appium/appium-ios-tuntap/compare/v1.2.6...v1.2.7) (2026-08-13)
+
+### Miscellaneous Chores
+
+* **native:** drop unused members ([#81](https://github.com/appium/appium-ios-tuntap/issues/81)) ([e9e7441](https://github.com/appium/appium-ios-tuntap/commit/e9e744103aa97271f2c861f69ee9af7bc74265d3))
+
+## [1.2.6](https://github.com/appium/appium-ios-tuntap/compare/v1.2.5...v1.2.6) (2026-08-13)
+
+### Bug Fixes
+
+* **native:** read CDTunnel header length via memcpy ([#80](https://github.com/appium/appium-ios-tuntap/issues/80)) ([9fe43fd](https://github.com/appium/appium-ios-tuntap/commit/9fe43fd544740c88a29bd52f4d08c6461236279c))
+
+## [1.2.5](https://github.com/appium/appium-ios-tuntap/compare/v1.2.4...v1.2.5) (2026-08-13)
+
+### Bug Fixes
+
+* **native:** keep poll dispatch alive until queued callbacks drain ([#79](https://github.com/appium/appium-ios-tuntap/issues/79)) ([04e400e](https://github.com/appium/appium-ios-tuntap/commit/04e400ebc09d1dd0d4b26a170257627aad3d17f3))
+
+## [1.2.4](https://github.com/appium/appium-ios-tuntap/compare/v1.2.3...v1.2.4) (2026-08-13)
+
+### Bug Fixes
+
+* **native:** report TLS connect failures without dereferencing null ([#78](https://github.com/appium/appium-ios-tuntap/issues/78)) ([58a31bd](https://github.com/appium/appium-ios-tuntap/commit/58a31bdfa631d7c6d0f8bd9f0c90893256f54bc5))
+
+## [1.2.3](https://github.com/appium/appium-ios-tuntap/compare/v1.2.2...v1.2.3) (2026-08-12)
+
+### Bug Fixes
+
+* replace V8-internals socket extraction with loopback bridge on Windows ([#77](https://github.com/appium/appium-ios-tuntap/issues/77)) ([0b11ab2](https://github.com/appium/appium-ios-tuntap/commit/0b11ab2750aaa9ca3e5ac36c0c318c326efb71d0))
+
+## [1.2.2](https://github.com/appium/appium-ios-tuntap/compare/v1.2.1...v1.2.2) (2026-07-29)
+
+### Miscellaneous Chores
+
+* Align tsconfig with the shared one ([#76](https://github.com/appium/appium-ios-tuntap/issues/76)) ([1609578](https://github.com/appium/appium-ios-tuntap/commit/1609578d4e8f6c4528e9ed33db6ad5e35b1b554a))
+
+## [1.2.1](https://github.com/appium/appium-ios-tuntap/compare/v1.2.0...v1.2.1) (2026-07-28)
+
+### Miscellaneous Chores
+
+* Update .editorconfig for JavaScript and JSON files ([c41c6a8](https://github.com/appium/appium-ios-tuntap/commit/c41c6a8de896065201de961a088ca7b4c185d635))
+
+## [1.2.0](https://github.com/appium/appium-ios-tuntap/compare/v1.1.0...v1.2.0) (2026-07-26)
+
+### Features
+
+* Integrate oxc and release configs ([#73](https://github.com/appium/appium-ios-tuntap/issues/73)) ([2929100](https://github.com/appium/appium-ios-tuntap/commit/292910002d59a3cc8159d12857281921e47521d3))
+
+## [1.1.0](https://github.com/appium/appium-ios-tuntap/compare/v1.0.1...v1.1.0) (2026-06-19)
+
+### Features
+
+* enable Windows native tunnel forwarder ([#57](https://github.com/appium/appium-ios-tuntap/issues/57)) ([e1f8f9b](https://github.com/appium/appium-ios-tuntap/commit/e1f8f9b6814807ce682ec7a85553429179092030))
+
+## [1.0.1](https://github.com/appium/appium-ios-tuntap/compare/v1.0.0...v1.0.1) (2026-06-17)
+
+### Bug Fixes
+
+* Logging on tunnel shutdown ([#56](https://github.com/appium/appium-ios-tuntap/issues/56)) ([6cfdf11](https://github.com/appium/appium-ios-tuntap/commit/6cfdf11768420598b8a098dc1e59d25fb6082d3a))
+
+## [1.0.0](https://github.com/appium/appium-ios-tuntap/compare/v0.6.1...v1.0.0) (2026-06-14)
+
+### ⚠ BREAKING CHANGES
+
+* connectToTunnelLockdown now requires (tcpSocket, { cert, key }) — pass plain TCP to CoreDeviceProxy; do not upgrade to Node TLSSocket first.
+* Packet tap removed — no PacketData, no TunnelManager data / EventEmitter consumers.
+* TunnelBridge and the JS tun↔TLS pump path removed.
+* Native forwarder is macOS/Linux only — Windows throws at connect time.
+* OpenSSL is statically linked in the addon — larger binary; avoids Node/OpenSSL ABI conflicts at runtime.
+
+### Features
+
+* Move tunnel implementation to the native layer ([1287bc8](https://github.com/appium/appium-ios-tuntap/commit/1287bc81e55f95e70ff157c2d3e0f064eed8eada))
+
+## [0.6.1](https://github.com/appium/appium-ios-tuntap/compare/v0.6.0...v0.6.1) (2026-06-14)
+
+### Bug Fixes
+
+* Revert "feat: Move tunnel implementation to the native layer ([#52](https://github.com/appium/appium-ios-tuntap/issues/52))" ([#53](https://github.com/appium/appium-ios-tuntap/issues/53)) ([7e383f7](https://github.com/appium/appium-ios-tuntap/commit/7e383f772c603501ce5e1cae94ad1581b3138463))
+
+## [0.6.0](https://github.com/appium/appium-ios-tuntap/compare/v0.5.0...v0.6.0) (2026-06-14)
+
+### ⚠ BREAKING CHANGES
+
+* connectToTunnelLockdown now requires (tcpSocket, { cert, key }) — pass plain TCP to CoreDeviceProxy; do not upgrade to Node TLSSocket first.
+* Packet tap removed — no PacketData, no TunnelManager data / EventEmitter consumers.
+* TunnelBridge and the JS tun↔TLS pump path removed.
+* Native forwarder is macOS/Linux only — Windows throws at connect time.
+* OpenSSL is statically linked in the addon — larger binary; avoids Node/OpenSSL ABI conflicts at runtime.
+
+### Features
+
+* Move tunnel implementation to the native layer ([#52](https://github.com/appium/appium-ios-tuntap/issues/52)) ([0cee99c](https://github.com/appium/appium-ios-tuntap/commit/0cee99c8809f76ec12d1edfc78e3cff2e188944c))
+
+## [0.5.0](https://github.com/appium/appium-ios-tuntap/compare/v0.4.4...v0.5.0) (2026-06-13)
+
+### Features
+
+* Switch to a different tunnelling architecture ([#51](https://github.com/appium/appium-ios-tuntap/issues/51)) ([7267755](https://github.com/appium/appium-ios-tuntap/commit/726775526d50d1976192bf3ebfbae6cb81883631))
+
+## [0.4.4](https://github.com/appium/appium-ios-tuntap/compare/v0.4.3...v0.4.4) (2026-06-12)
+
+### Bug Fixes
+
+* Update tunnel backpressure handling ([#50](https://github.com/appium/appium-ios-tuntap/issues/50)) ([28b8bce](https://github.com/appium/appium-ios-tuntap/commit/28b8bce8edcf2a0446a653bbec759e6b4a199827))
+
+## [0.4.3](https://github.com/appium/appium-ios-tuntap/compare/v0.4.2...v0.4.3) (2026-06-10)
+
+### Bug Fixes
+
+* Improve raw transfer performance ([#48](https://github.com/appium/appium-ios-tuntap/issues/48)) ([f5cf38f](https://github.com/appium/appium-ios-tuntap/commit/f5cf38f1156fec4dfbd8a71840d616a17f728106))
+
+## [0.4.2](https://github.com/appium/appium-ios-tuntap/compare/v0.4.1...v0.4.2) (2026-06-01)
+
+### Miscellaneous Chores
+
+* Tune further tunnel perf ([#46](https://github.com/appium/appium-ios-tuntap/issues/46)) ([d422937](https://github.com/appium/appium-ios-tuntap/commit/d422937a47b16bf1c984030772d1de6e555609e6))
+
+## [0.4.1](https://github.com/appium/appium-ios-tuntap/compare/v0.4.0...v0.4.1) (2026-05-31)
+
+### Bug Fixes
+
+* Improve tunnel performance ([#45](https://github.com/appium/appium-ios-tuntap/issues/45)) ([576d353](https://github.com/appium/appium-ios-tuntap/commit/576d3535137bb0cf79634ab820b3675db6cbbb86))
+
+## [0.4.0](https://github.com/appium/appium-ios-tuntap/compare/v0.3.0...v0.4.0) (2026-05-30)
+
+### Features
+
+* implement Windows (WinTun) JavaScript platform layer ([#44](https://github.com/appium/appium-ios-tuntap/issues/44)) ([da2a9bb](https://github.com/appium/appium-ios-tuntap/commit/da2a9bba1d7226f67ce0f00c533df72164aac858))
+
+## [0.3.0](https://github.com/appium/appium-ios-tuntap/compare/v0.2.5...v0.3.0) (2026-05-22)
+
+### Features
+
+* add Windows (WinTun) native backend ([#43](https://github.com/appium/appium-ios-tuntap/issues/43)) ([565b4c1](https://github.com/appium/appium-ios-tuntap/commit/565b4c1cfd2ddf4956ed32ade4f8208cd0d4f0f6)), closes [#ifdef](https://github.com/appium/appium-ios-tuntap/issues/ifdef)
+
+## [0.2.5](https://github.com/appium/appium-ios-tuntap/compare/v0.2.4...v0.2.5) (2026-05-14)
+
+### Code Refactoring
+
+* backends own fd, polling, and lifecycle ([#42](https://github.com/appium/appium-ios-tuntap/issues/42)) ([f089944](https://github.com/appium/appium-ios-tuntap/commit/f08994477cb9909b597386d0893abbf9b6a3c137))
+
+## [0.2.4](https://github.com/appium/appium-ios-tuntap/compare/v0.2.3...v0.2.4) (2026-05-13)
+
+### Code Refactoring
+
+* eliminate tun_backend_common.cc indirection ([#41](https://github.com/appium/appium-ios-tuntap/issues/41)) ([5fd387e](https://github.com/appium/appium-ios-tuntap/commit/5fd387e230fb772dbf280472dbadb43d131a4a2e))
+
+## [0.2.3](https://github.com/appium/appium-ios-tuntap/compare/v0.2.2...v0.2.3) (2026-05-13)
+
+## [0.2.2](https://github.com/appium/appium-ios-tuntap/compare/v0.2.1...v0.2.2) (2026-04-30)
+
+### Bug Fixes
+
+* linter ([#38](https://github.com/appium/appium-ios-tuntap/issues/38)) ([8dfed52](https://github.com/appium/appium-ios-tuntap/commit/8dfed527cc557856025bba6070b2686414d582a2))
+
+## [0.2.1](https://github.com/appium/appium-ios-tuntap/compare/v0.2.0...v0.2.1) (2026-04-13)
+
+### Miscellaneous Chores
+
+* Refactor native tuntap implementation ([#33](https://github.com/appium/appium-ios-tuntap/issues/33)) ([c24636e](https://github.com/appium/appium-ios-tuntap/commit/c24636ed054dd37a36a08b6b5c09bfd7f40d55b1))
+
+## [0.2.0](https://github.com/appium/appium-ios-tuntap/compare/v0.1.10...v0.2.0) (2026-04-13)
+
+### Features
+
+* Supply the package with prebuilt addon ([#31](https://github.com/appium/appium-ios-tuntap/issues/31)) ([c475d1c](https://github.com/appium/appium-ios-tuntap/commit/c475d1ce89a4b44d0ebed90f9b4b8fc519241079))
+
+## [0.1.10](https://github.com/appium/appium-ios-tuntap/compare/v0.1.9...v0.1.10) (2026-04-13)
+
+### Bug Fixes
+
+* Use native `which` helper ([#32](https://github.com/appium/appium-ios-tuntap/issues/32)) ([37cb5c3](https://github.com/appium/appium-ios-tuntap/commit/37cb5c3ed68d7c46fdacec00b94d2c3319bc440c))
+
+## [0.1.9](https://github.com/appium/appium-ios-tuntap/compare/v0.1.8...v0.1.9) (2026-04-13)
+
+### Miscellaneous Chores
+
+* Introduce automated formatting using prettier tool ([#28](https://github.com/appium/appium-ios-tuntap/issues/28)) ([4b74da1](https://github.com/appium/appium-ios-tuntap/commit/4b74da15932ffb630c3c6e368de73b1e933afbba))
+
+## [0.1.8](https://github.com/appium/appium-ios-tuntap/compare/v0.1.7...v0.1.8) (2026-04-12)
+
+### Code Refactoring
+
+* isolate OS networking in TunTapPlatform ([#27](https://github.com/appium/appium-ios-tuntap/issues/27)) ([7de387f](https://github.com/appium/appium-ios-tuntap/commit/7de387f0e4c2a07b81056f8da95f69cf34809cef))
+
+## [0.1.7](https://github.com/appium/appium-ios-tuntap/compare/v0.1.6...v0.1.7) (2026-04-11)
+
+### Miscellaneous Chores
+
+* **deps:** bump typescript from 5.9.3 to 6.0.2 ([#22](https://github.com/appium/appium-ios-tuntap/issues/22)) ([07c2620](https://github.com/appium/appium-ios-tuntap/commit/07c2620f5743d59fee236f6e835045047b91c7f8))
+
+## [0.1.6](https://github.com/appium/appium-ios-tuntap/compare/v0.1.5...v0.1.6) (2026-04-11)
+
+### Code Refactoring
+
+* refactor TUN/TAP native layer and harden TunTap TypeScript interface ([3fa00fe](https://github.com/appium/appium-ios-tuntap/commit/3fa00fe57a7cc44e6490d8e97d7defe2f782c0dc))
+
+## [0.1.5](https://github.com/appium/appium-ios-tuntap/compare/v0.1.4...v0.1.5) (2026-04-09)
+
+### Code Refactoring
+
+* remove global signal handlers from library code ([6e267df](https://github.com/appium/appium-ios-tuntap/commit/6e267dffe1785acfcd57d431090e4cd4995bfa39))
+
+## [0.1.4](https://github.com/appium/appium-ios-tuntap/compare/v0.1.3...v0.1.4) (2026-04-08)
+
+### Bug Fixes
+
+* replace exec with execFile to prevent shell injection ([9614041](https://github.com/appium/appium-ios-tuntap/commit/9614041375fb5f9edfcd14d6cf4c65b002f19e4a))
+
+## [0.1.3](https://github.com/appium/appium-ios-tuntap/compare/v0.1.2...v0.1.3) (2026-01-28)
+
+### Miscellaneous Chores
+
+* **deps-dev:** bump @appium/eslint-config-appium-ts from 2.0.5 to 3.0.0 ([#21](https://github.com/appium/appium-ios-tuntap/issues/21)) ([d6ad919](https://github.com/appium/appium-ios-tuntap/commit/d6ad91935c2e0a3ac46c6db55a8ac229276df0f4))
+* **deps-dev:** bump @types/node from 24.10.3 to 25.0.1 ([#20](https://github.com/appium/appium-ios-tuntap/issues/20)) ([ed4d95c](https://github.com/appium/appium-ios-tuntap/commit/ed4d95c64d9ed0b94b170b081efea4c7e635b1d9))
+
+## [0.1.2](https://github.com/appium/appium-ios-tuntap/compare/v0.1.1...v0.1.2) (2025-11-15)
+
+### Miscellaneous Chores
+
+* publish via trusted publisher ([e01e51c](https://github.com/appium/appium-ios-tuntap/commit/e01e51c7a54849b7ae450ce5278c970756dd6aee))
+
+## [0.1.1](https://github.com/appium/appium-ios-tuntap/compare/v0.1.0...v0.1.1) (2025-10-17)
+
+### Miscellaneous Chores
+
+* **deps-dev:** bump semantic-release from 24.2.9 to 25.0.0 ([#18](https://github.com/appium/appium-ios-tuntap/issues/18)) ([58a93f9](https://github.com/appium/appium-ios-tuntap/commit/58a93f9a7e0d9882272a943fad63dabb5c00dc33))
+
+## [0.1.0](https://github.com/appium/appium-ios-tuntap/compare/v0.0.11...v0.1.0) (2025-08-16)
+
+### ⚠ BREAKING CHANGES
+
+* Required Node.js version has been bumped to ^20.19.0 || ^22.12.0 || >=24.0.0
+* Required npm version has been bumped to >=10
+
+### Features
+
+* Set minium Node.js version ([#16](https://github.com/appium/appium-ios-tuntap/issues/16)) ([3493f7b](https://github.com/appium/appium-ios-tuntap/commit/3493f7bb7b66b036f362f5c0780503dd1a324cee))
+
+## [0.0.11](https://github.com/appium/appium-ios-tuntap/compare/v0.0.10...v0.0.11) (2025-07-23)
+
+### Bug Fixes
+
+* Move appium support to dependencies section ([44d0270](https://github.com/appium/appium-ios-tuntap/commit/44d0270106c0643942955d69cdb560c30783262a))
+
+## [0.0.10](https://github.com/appium/appium-ios-tuntap/compare/v0.0.9...v0.0.10) (2025-07-23)
+
+### Reverts
+
+* Revert "chore: include npm-shrinkwrap.json" ([6fc113f](https://github.com/appium/appium-ios-tuntap/commit/6fc113fb87ee213d5f23829493336aab3c9cb9e9))
+
+## [0.0.9](https://github.com/appium/appium-ios-tuntap/compare/v0.0.8...v0.0.9) (2025-07-23)
+
+### Miscellaneous Chores
+
+* include npm-shrinkwrap.json ([99721fd](https://github.com/appium/appium-ios-tuntap/commit/99721fde2bb4de2e57da2f785feffa6d481fe5c6))
+
+## [0.0.8](https://github.com/appium/appium-ios-tuntap/compare/v0.0.7...v0.0.8) (2025-07-23)
+
+### Miscellaneous Chores
+
+* use macos for ci to publish ([#13](https://github.com/appium/appium-ios-tuntap/issues/13)) ([1facca1](https://github.com/appium/appium-ios-tuntap/commit/1facca1011399ad3cea7876427d1c7f7cf6cee72))
+
+## [0.0.7](https://github.com/appium/appium-ios-tuntap/compare/v0.0.6...v0.0.7) (2025-07-23)
+
+### Bug Fixes
+
+* resolve npm publish error by removing hard links ([#12](https://github.com/appium/appium-ios-tuntap/issues/12)) ([7b06fa7](https://github.com/appium/appium-ios-tuntap/commit/7b06fa741b43005bbae6375c8bae4e923b6f4cb1))
+
+## [0.0.6](https://github.com/appium/appium-ios-tuntap/compare/v0.0.5...v0.0.6) (2025-07-23)
+
+### Miscellaneous Chores
+
+* Apply standard Appium linter ([#11](https://github.com/appium/appium-ios-tuntap/issues/11)) ([a55693a](https://github.com/appium/appium-ios-tuntap/commit/a55693a90cca41f54ced506404b8456ea6994875))
+
+## [0.0.5](https://github.com/appium/appium-ios-tuntap/compare/v0.0.4...v0.0.5) (2025-07-23)
+
+### Bug Fixes
+
+* hard link release issue ([#10](https://github.com/appium/appium-ios-tuntap/issues/10)) ([e7152b7](https://github.com/appium/appium-ios-tuntap/commit/e7152b7af519425d2045e61719fd460c251db391))
+
+## [0.0.4](https://github.com/appium/appium-ios-tuntap/compare/v0.0.3...v0.0.4) (2025-07-22)
+
+### Miscellaneous Chores
+
+* **deps-dev:** bump @types/node from 22.16.5 to 24.1.0 ([#9](https://github.com/appium/appium-ios-tuntap/issues/9)) ([60a0d4b](https://github.com/appium/appium-ios-tuntap/commit/60a0d4beb1e36b4ccbf73a0cacda1179df75c834))
+
+## [0.0.3](https://github.com/appium/appium-ios-tuntap/compare/v0.0.2...v0.0.3) (2025-07-22)
+
+### Bug Fixes
+
+* ensure clean shutdown and resource release on SIGINT (Ctrl+C) ([#1](https://github.com/appium/appium-ios-tuntap/issues/1)) ([d527960](https://github.com/appium/appium-ios-tuntap/commit/d5279605ac30a253382cbcd932926edd5dc285a2))
+
+## [0.0.2](https://github.com/appium/appium-ios-tuntap/compare/v0.0.1...v0.0.2) (2025-07-22)
+
+### Miscellaneous Chores
+
+* update changelog to release it ([4e8fe0a](https://github.com/appium/appium-ios-tuntap/commit/4e8fe0a610a908c2f3a56bff7031f7580eb011c1))
+
+## [0.0.1] - [2025-07-22]
+
+### Features
+
+* add packet streaming api instead of eventEmitter ([8c4df4b](https://github.com/appium/appium-ios-tuntap/commit/8c4df4bace59c2b29a567e2f9c81b1737500c42b))
+
+### Bug Fixes
+
+* add proper headers for linux ([967ea00](https://github.com/appium/appium-ios-tuntap/commit/967ea007b198f77f7e3aaaa1489dc5a0977bc5e6))
+* add test to ci ([8753e01](https://github.com/appium/appium-ios-tuntap/commit/8753e0109f0ad4120ac4db1318c103fc2be0f7c7))
+
+### Miscellaneous Chores
+
+* add semantics release ([#7](https://github.com/appium/appium-ios-tuntap/issues/7)) ([a52b2e6](https://github.com/appium/appium-ios-tuntap/commit/a52b2e6010e99f1e5518726a93b313efab6475fb))
+* **release:** bump version to 0.0.2 ([ed690cf](https://github.com/appium/appium-ios-tuntap/commit/ed690cfcc56c22a33cfc303960b46091619fe7e1))
+* **release:** initial release of tuntap-bridge npm package v0.0.1 ([0b68aea](https://github.com/appium/appium-ios-tuntap/commit/0b68aeaae2af9d0a7af386055f3667b6826c6d22))
+* turn release ([#8](https://github.com/appium/appium-ios-tuntap/issues/8)) ([3efc5a4](https://github.com/appium/appium-ios-tuntap/commit/3efc5a4eb7cb4e4f59daffb2623ead811292fa69))
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.0.4] - 2025-07-18
+
+### Changed
+- **Shutdown Responsibility**: Refactored the shutdown logic to be managed entirely by the TypeScript application layer, removing the signal handler from the C++ addon. This creates a single, reliable source of truth for shutdown orchestration and resolves the race condition.
+- **Improved Thread Safety**: Hardened mutex locking around all public C++ methods to prevent potential race conditions during concurrent access.
+- **Memory Safety**: Implemented smart pointers (`std::unique_ptr`) for libuv handle management in the C++ addon to prevent potential memory leaks.
+
+### Fixed
+- **Process Hanging on Shutdown**: Resolved an issue where the Node.js process would hang on `Ctrl+C` (SIGINT). This was caused by a race condition between competing signal handlers in the C++ addon and the TypeScript application layer.
+
+
+## [0.0.3] - 2025-01-07
+
+### Added
+- Signal handling for graceful shutdown (SIGINT/SIGTERM)
+- Thread safety with mutex protection in C++ code
+- Custom error types for better error handling:
+  - `TunTapError` - Base error class
+  - `TunTapPermissionError` - Permission-related errors
+  - `TunTapDeviceError` - Device availability errors
+- Input validation for all methods:
+  - IPv6 address format validation
+  - MTU range checking (1280-65535)
+  - Buffer size validation
+  - Type checking for all parameters
+- New methods:
+  - `removeRoute()` - Remove routes from the interface
+  - `getStats()` - Get network interface statistics
+- Resource cleanup handlers for automatic cleanup on process exit
+- Timeout handling for network operations
+- Memory leak prevention with RAII pattern
+- Debug logging support with `--debug` flag
+- Comprehensive test suite
+
+### Changed
+- Updated to C++17 standard for better performance and modern features
+- Improved error messages with more context and suggestions
+- Enhanced buffer management to reduce memory allocations
+- Better handling of concurrent operations
+- Optimized compilation with `-O3` flag
+- Improved TypeScript type definitions
+
+### Fixed
+- File descriptor leaks on error conditions
+- Resource cleanup on unexpected process termination
+- Race conditions in multi-threaded environments
+- Memory leaks in error paths
+- Proper cleanup of network interfaces on shutdown
+- Better error handling for permission issues
+
+### Security
+- Added proper bounds checking for all buffer operations
+- Validated all user inputs to prevent invalid operations
+- Thread-safe operations to prevent race conditions
+
+## [0.0.2] - Previous Release
+
+### Added
+- Basic TUN/TAP device support for macOS and Linux
+- TypeScript support
+- Basic read/write operations
+- IPv6 configuration support
+
+## [0.0.1] - Initial Release
+
+### Added
+- Initial implementation of TUN/TAP bridge
+- Support for creating virtual network interfaces
+- Basic documentation

@@ -46,7 +46,7 @@
     "test:e2e": "lerna run test:e2e",
     "test:quick": "run-s lint test:unit",
     "test:slow": "run-s test:quick test:e2e",
-    "test:unit": "lerna run test",
+    "test:unit": "lerna run test --ignore appium-ios-tuntap",
     "version": "run-s sync-pkgs stage-synced-pkgs"
   },
   "devDependencies": {
