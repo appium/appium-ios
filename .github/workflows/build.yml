@@ -22,25 +22,30 @@ jobs:
   prepare_matrix:
     uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
 
-  prepare_e2e_packages:
+  prepare_affected_packages:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     outputs:
-      packages: ${{ steps.discover-packages.outputs.packages }}
+      e2e_packages: ${{ steps.discover-packages.outputs.e2e_packages }}
+      unit_packages: ${{ steps.discover-packages.outputs.unit_packages }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Discover packages needing e2e tests
+      - name: Discover packages affected by this PR
         id: discover-packages
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.sha }}
-        run: node scripts/discover-e2e-packages.mjs
+        run: node scripts/discover-affected-packages.mjs
 
   test-unit:
     needs:
       - prepare_matrix
+      - prepare_affected_packages
+    # prepare_affected_packages only runs for pull_request; don't let its skip on push cascade
+    # into skipping this job too (push always runs the full suite, see run-unit-tests.mjs).
+    if: ${{ !cancelled() }}
     name: Unit Tests
     strategy:
       matrix:
@@ -57,17 +62,20 @@ jobs:
           install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run unit tests
-        run: npm run test:unit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          UNIT_PACKAGES: ${{ needs.prepare_affected_packages.outputs.unit_packages }}
+        run: node scripts/run-unit-tests.mjs
 
   test-e2e:
     needs:
-      - prepare_e2e_packages
+      - prepare_affected_packages
     name: E2E Tests - ${{ matrix.package_dir }}
-    if: ${{ github.event_name == 'pull_request' && needs.prepare_e2e_packages.outputs.packages != '[]' }}
+    if: ${{ github.event_name == 'pull_request' && needs.prepare_affected_packages.outputs.e2e_packages != '[]' }}
     strategy:
       fail-fast: false
       matrix:
-        package_dir: ${{ fromJSON(needs.prepare_e2e_packages.outputs.packages) }}
+        package_dir: ${{ fromJSON(needs.prepare_affected_packages.outputs.e2e_packages) }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -75,7 +83,7 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
-          # Scoped to skip packages/tuntap's native (node-gyp) install - discover-e2e-packages.mjs
+          # Scoped to skip packages/tuntap's native (node-gyp) install - discover-affected-packages.mjs
           # never selects it (no real test:e2e script) and it has its own dedicated CI.
           install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
           run-build: 'true'

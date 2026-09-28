@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-// Selects which packages/* need their e2e suite run: those that changed
-// themselves, or whose direct in-monorepo dependency changed. Falls back to
-// running everything when the diff can't be computed or shared root config
-// changed, since skipping e2e silently is worse than an extra run.
+// Selects which packages/* are affected by the current diff, for two purposes:
+//   - e2e: only a package that changed itself (a dependency bump doesn't need a full
+//     downstream e2e run - the dependency's own unit tests already cover that).
+//   - unit: a package that changed itself, OR whose direct in-monorepo dependency changed
+//     (a shared dep's behavior can break a dependent package's unit tests too).
+// Excludes packages/tuntap and packages/coresim from unit selection - they have their own
+// dedicated, path-scoped CI (tuntap-ci.yml/coresim-ci.yml) and are never installed here.
+// Falls back to running everything when the diff can't be computed or shared root config
+// changed, since skipping tests silently is worse than an extra run.
 import {execFile} from 'node:child_process';
 import {readFile, readdir, appendFile, access} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -12,6 +17,8 @@ import {promisify} from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const PACKAGES_DIR = join(process.cwd(), 'packages');
+// Have their own dedicated CI (tuntap-ci.yml/coresim-ci.yml) - never installed/run here.
+const UNIT_TEST_IGNORE_DIRS = new Set(['tuntap', 'coresim']);
 const baseSha = process.env.BASE_SHA;
 const headSha = process.env.HEAD_SHA || 'HEAD';
 const githubOutput = process.env.GITHUB_OUTPUT;
@@ -57,10 +64,11 @@ async function main() {
   );
 
   const e2eDirs = packageDirs.filter((dir) => hasRealE2eScript(pkgByDir.get(dir)));
+  const unitDirs = packageDirs.filter((dir) => !UNIT_TEST_IGNORE_DIRS.has(dir));
 
   function selectAll(reason) {
-    console.log(`Running e2e for all packages with a test:e2e script: ${reason}`);
-    return e2eDirs;
+    console.log(`Running tests for all packages: ${reason}`);
+    return {e2e: e2eDirs, unit: unitDirs};
   }
 
   let selected;
@@ -84,25 +92,35 @@ async function main() {
       const changedDirs = new Set(changedFiles.map((file) => file.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean));
       console.log(`Changed packages: ${[...changedDirs].join(', ') || '(none)'}`);
 
-      selected = e2eDirs.filter((dir) => {
+      const e2eSelected = e2eDirs.filter((dir) => changedDirs.has(dir));
+      const unitSelected = unitDirs.filter((dir) => {
         if (changedDirs.has(dir)) {
           return true;
         }
         return directWorkspaceDeps(pkgByDir.get(dir), nameToDir).some((depDir) => changedDirs.has(depDir));
       });
+      selected = {e2e: e2eSelected, unit: unitSelected};
     }
   }
 
   console.log('Packages selected for e2e:');
-  for (const dir of selected) {
+  for (const dir of selected.e2e) {
+    console.log(`  - ${dir}`);
+  }
+  console.log('Packages selected for unit tests:');
+  for (const dir of selected.unit) {
     console.log(`  - ${dir}`);
   }
 
-  const packagesJson = JSON.stringify(selected);
+  const e2ePackagesJson = JSON.stringify(selected.e2e);
+  // lerna --scope needs npm package names, not directory names.
+  const unitPackageNamesJson = JSON.stringify(selected.unit.map((dir) => pkgByDir.get(dir).name));
   if (githubOutput) {
-    await appendFile(githubOutput, `packages=${packagesJson}\n`);
+    await appendFile(githubOutput, `e2e_packages=${e2ePackagesJson}\n`);
+    await appendFile(githubOutput, `unit_packages=${unitPackageNamesJson}\n`);
   } else {
-    console.log(packagesJson);
+    console.log(e2ePackagesJson);
+    console.log(unitPackageNamesJson);
   }
 }
 
