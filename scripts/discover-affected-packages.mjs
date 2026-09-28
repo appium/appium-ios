@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 // Selects which packages/* are affected by the current diff, for two purposes:
-//   - e2e: only a package that changed itself (a dependency bump doesn't need a full
-//     downstream e2e run - the dependency's own unit tests already cover that).
+//   - e2e: ONLY a package that changed itself, full stop - even a shared root config/tooling
+//     change doesn't widen this, since e2e runs are the expensive one to run unnecessarily.
 //   - unit: a package that changed itself, OR whose direct in-monorepo dependency changed
-//     (a shared dep's behavior can break a dependent package's unit tests too).
+//     (a shared dep's behavior can break a dependent package's unit tests too), OR every
+//     package when a shared root config/tooling file changed (cheap enough to be the safety
+//     net for "something outside any single package might affect everyone" instead of e2e).
 // Excludes packages/tuntap and packages/coresim from unit selection - they have their own
 // dedicated, path-scoped CI (tuntap-ci.yml/coresim-ci.yml) and are never installed here.
-// Falls back to running everything when the diff can't be computed or shared root config
-// changed, since skipping tests silently is worse than an extra run.
+// Falls back to running everything (e2e included) only when the diff itself can't be
+// computed at all - there's no changed-file list to scope e2e against in that case, and
+// skipping tests silently is worse than an extra run.
 import {execFile} from 'node:child_process';
 import {readFile, readdir, appendFile, access} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -86,19 +89,25 @@ async function main() {
 
     if (changedFiles === null) {
       selected = selectAll('failed to compute the diff');
-    } else if (changedFiles.some((file) => !file.startsWith('packages/'))) {
-      selected = selectAll('shared root config/tooling changed');
     } else {
       const changedDirs = new Set(changedFiles.map((file) => file.match(/^packages\/([^/]+)\//)?.[1]).filter(Boolean));
+      const sharedRootChanged = changedFiles.some((file) => !file.startsWith('packages/'));
       console.log(`Changed packages: ${[...changedDirs].join(', ') || '(none)'}`);
+      if (sharedRootChanged) {
+        console.log(
+          'Shared root config/tooling also changed - widening unit test selection to all packages (e2e stays scoped to actual package changes).',
+        );
+      }
 
       const e2eSelected = e2eDirs.filter((dir) => changedDirs.has(dir));
-      const unitSelected = unitDirs.filter((dir) => {
-        if (changedDirs.has(dir)) {
-          return true;
-        }
-        return directWorkspaceDeps(pkgByDir.get(dir), nameToDir).some((depDir) => changedDirs.has(depDir));
-      });
+      const unitSelected = sharedRootChanged
+        ? unitDirs
+        : unitDirs.filter((dir) => {
+            if (changedDirs.has(dir)) {
+              return true;
+            }
+            return directWorkspaceDeps(pkgByDir.get(dir), nameToDir).some((depDir) => changedDirs.has(depDir));
+          });
       selected = {e2e: e2eSelected, unit: unitSelected};
     }
   }
