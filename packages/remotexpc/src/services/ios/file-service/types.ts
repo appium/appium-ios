@@ -55,9 +55,15 @@ export interface FileServicePushOptions extends FileServiceTransferOptions {
    * the device needs it before the transfer starts.
    */
   size?: number;
-  /** POSIX permission bits of the new file. Defaults to those of a local source file, else `0o644`. */
+  /**
+   * POSIX permission bits of the new file, from `0o1` to `0o777`. Defaults to
+   * those of a local source file, else `0o644`.
+   */
   permissions?: number;
-  /** Modification time of the new file. Defaults to that of a local source file, else the current time. */
+  /**
+   * Modification time of the new file, after the Unix epoch. Defaults to that
+   * of a local source file, else the current time.
+   */
   modifiedAt?: Date;
 }
 
@@ -72,7 +78,7 @@ export interface FileServiceFileMetadata {
 }
 
 export interface FileServiceEntry {
-  /** Path relative to the listed directory, without a trailing slash. */
+  /** Path relative to the listed directory, without a trailing slash. Names are in Unicode NFD. */
   path: string;
   isDirectory: boolean;
   /** Present for every entry of a directory listing. */

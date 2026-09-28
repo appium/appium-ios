@@ -20,6 +20,7 @@ import {
 } from '../core-device/core-device-service.js';
 import {
   APP_CONTAINER_WRITABLE_DIRECTORIES,
+  CREATED_DIRECTORY_PERMISSIONS,
   DATA_CHANNEL_HEADER_SIZE,
   DEFAULT_FILE_SERVICE_USERNAME,
   DEFAULT_PUSHED_FILE_PERMISSIONS,
@@ -30,6 +31,7 @@ import {
   FILE_SYSTEM_OPERATION,
   MAX_DISCARDED_BYTES,
   PERMISSION_BITS_MASK,
+  PUSHED_FILE_PERMISSION_BITS_MASK,
 } from './constants.js';
 import {
   FileDataDecoder,
@@ -118,7 +120,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * only its direct children.
    * @returns Files and directories with paths relative to `path`. When `path` is
    * a regular file, the only entry is that file's path, relative to the session
-   * root and without metadata.
+   * root and without metadata. The device returns names in Unicode NFD, so a
+   * name pushed as NFC comes back decomposed.
    */
   async listDirectory(remotePath = '.', options: FileServiceListOptions = {}): Promise<FileServiceEntry[]> {
     const {recursive = false, ...requestOptions} = options;
@@ -176,14 +179,20 @@ export class CoreDeviceFileService extends CoreDeviceService {
 
   /**
    * Uploads a file, like `devicectl device copy to`. Missing parent directories
-   * are created and an existing file is replaced. The device only allows
-   * changes below `Library`, `Documents` and `tmp` of an app container.
+   * are created. The device only allows changes below `Library`, `Documents`
+   * and `tmp` of an app container.
+   *
+   * Whatever is at `remotePath` is replaced without warning, as with devicectl:
+   * an existing file, and also an existing directory together with everything
+   * below it. Likewise, a file where a parent directory of `remotePath` should
+   * be is replaced by that directory.
    *
    * @param source Local file path, file contents, or a readable stream of them
    * (a stream needs `options.size`).
    * @param remotePath Destination path relative to the session root.
-   * @throws {TypeError} If the source or its size is invalid, or a path of an
-   * `appDataContainer` session is not below `Library`, `Documents` or `tmp`.
+   * @throws {TypeError} If the source, its size, `options.permissions` or
+   * `options.modifiedAt` is invalid, or a path of an `appDataContainer` session
+   * is not below `Library`, `Documents` or `tmp`.
    * @throws {CoreDeviceError} If the device refuses the file.
    */
   async push(
@@ -236,15 +245,21 @@ export class CoreDeviceFileService extends CoreDeviceService {
   }
 
   /**
-   * Creates a directory. Its parent directory must already exist. The device
-   * only allows changes below `Library`, `Documents` and `tmp` of an app container.
+   * Creates a directory with permissions `0o755`. Its parent directory must
+   * already exist. The device only allows changes below `Library`, `Documents`
+   * and `tmp` of an app container.
    *
    * @param remotePath Path relative to the session root.
    * @throws {CoreDeviceError} If the directory cannot be created, for example
    * because it already exists or its parent does not.
    */
   async mkdir(remotePath: string, options: FileServiceRequestOptions = {}): Promise<void> {
-    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.CREATE_DIRECTORY, {Path: remotePath}, options);
+    // Without a uint64 Mode (an int64 one is ignored) the device creates the directory with mode 000
+    await this.runFileSystemOperation(
+      FILE_SYSTEM_OPERATION.CREATE_DIRECTORY,
+      {Path: remotePath, Mode: BigInt(CREATED_DIRECTORY_PERMISSIONS)},
+      options,
+    );
   }
 
   /**
@@ -653,6 +668,7 @@ async function openUploadSource(
   source: string | Buffer | Readable,
   options: Pick<FileServicePushOptions, 'size' | 'permissions' | 'modifiedAt'>,
 ): Promise<UploadSource> {
+  assertValidPushMetadata(options);
   let stream: Readable;
   let size: number | undefined;
   let permissions = options.permissions;
@@ -684,6 +700,28 @@ async function openUploadSource(
     permissions: permissions ?? DEFAULT_PUSHED_FILE_PERMISSIONS,
     modifiedAtSeconds: Math.floor((modifiedAt ?? new Date()).getTime() / 1000),
   };
+}
+
+/**
+ * Rejects file metadata the device would not store: it treats a zero mode or
+ * timestamp as unset and silently substitutes its own.
+ */
+function assertValidPushMetadata({
+  permissions,
+  modifiedAt,
+}: Pick<FileServicePushOptions, 'permissions' | 'modifiedAt'>): void {
+  if (
+    permissions !== undefined &&
+    (!Number.isInteger(permissions) || permissions < 1 || permissions > PUSHED_FILE_PERMISSION_BITS_MASK)
+  ) {
+    const shown = Number.isInteger(permissions) && permissions >= 0 ? `0o${permissions.toString(8)}` : permissions;
+    throw new TypeError(`The permissions of a pushed file must be an integer from 0o1 to 0o777, got ${shown}`);
+  }
+  if (modifiedAt !== undefined && (!(modifiedAt instanceof Date) || !(modifiedAt.getTime() >= 1000))) {
+    throw new TypeError(
+      `The modification time of a pushed file must be a valid Date after the Unix epoch, got ${String(modifiedAt)}`,
+    );
+  }
 }
 
 /**

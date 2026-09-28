@@ -63,6 +63,12 @@ export const PERMISSION_BITS_MASK = 0o7777;
 /** Permissions of a pushed file when neither the caller nor a local source file provides them. */
 export const DEFAULT_PUSHED_FILE_PERMISSIONS = 0o644;
 
+/** Permission bits the device keeps on a pushed file; it drops setuid, setgid and sticky. */
+export const PUSHED_FILE_PERMISSION_BITS_MASK = 0o777;
+
+/** Permissions of a directory created by `mkdir`, like those of the parents a push creates. */
+export const CREATED_DIRECTORY_PERMISSIONS = 0o755;
+
 /** Bit of a file node's `resources` field that marks a directory. */
 export const FILE_NODE_RESOURCE_DIRECTORY = 0x1;
 

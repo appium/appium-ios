@@ -20,6 +20,7 @@ interface SentMessage {
   flags: number;
   id: number;
   body: XPCDictionary;
+  payload: Buffer;
 }
 
 const REPLY_FLAGS =
@@ -48,7 +49,7 @@ class FakeFileServiceTransport extends EventEmitter {
 
   sendDataFrame(payload: Buffer, streamId = Http2Constants.ROOT_CHANNEL): void {
     const {message} = decodeMessage(payload);
-    const sent = {streamId, flags: message.flags, id: Number(message.id), body: message.body as XPCDictionary};
+    const sent = {streamId, flags: message.flags, id: Number(message.id), body: message.body as XPCDictionary, payload};
     this.sent.push(sent);
     queueMicrotask(() => this.respond(sent));
   }
@@ -435,6 +436,13 @@ describe('CoreDeviceFileService', function () {
       await service.mkdir('tmp/new');
 
       assert.deepStrictEqual(fileSystemOperations(fake), ['CreateDirectory tmp/new']);
+      const [request] = fake.requests().filter(({body}) => body.Cmd === 'FileSystemOperation');
+      // The device ignores a Mode encoded as int64: it must go out as uint64
+      const uint64Mode = Buffer.alloc(20);
+      uint64Mode.write('Mode', 0, 'ascii');
+      uint64Mode.writeUInt32LE(0x4000, 8);
+      uint64Mode.writeBigUInt64LE(BigInt(0o755), 12);
+      assert.ok(request.payload.includes(uint64Mode));
     });
   });
 
@@ -845,6 +853,26 @@ describe('CoreDeviceFileService', function () {
       await assert.rejects(service.push(undefined as any, 'tmp/x.txt'), /must be a local file path/);
       for (const remotePath of ['SystemData/x.txt', 'x.txt', '../x.txt']) {
         await assert.rejects(service.push(Buffer.from('x'), remotePath), /Access restricted/, remotePath);
+      }
+      assert.strictEqual(service.fake.sent.length, 0);
+    });
+
+    it('rejects file metadata the device would not store before contacting the device', async function () {
+      const service = newService();
+
+      for (const permissions of [0, -1, 1.5, 0o1000, 0o4755, NaN]) {
+        await assert.rejects(
+          service.push(Buffer.from('x'), 'tmp/x.txt', {permissions}),
+          {name: 'TypeError', message: /permissions of a pushed file/},
+          String(permissions),
+        );
+      }
+      for (const modifiedAt of [new Date(NaN), new Date(0), new Date(-1000), 5000 as any]) {
+        await assert.rejects(
+          service.push(Buffer.from('x'), 'tmp/x.txt', {modifiedAt}),
+          {name: 'TypeError', message: /modification time of a pushed file/},
+          String(modifiedAt),
+        );
       }
       assert.strictEqual(service.fake.sent.length, 0);
     });
