@@ -1,0 +1,9 @@
+node_modules
+lib
+build
+prebuilds
+compile_commands.json
+.idea
+
+# Downloaded on first integration test run (see test/fixtures.ts) — never committed.
+test/fixtures/*.app

@@ -1,0 +1,45 @@
+name: Build coresim native addon (Reusable)
+
+# N-API prebuild for darwin-arm64 (the only platform/arch native functionality works on - see
+# binding.gyp and scripts/install.mjs; package.json itself has no "os"/"cpu" restriction so
+# `npm install` still succeeds everywhere else), ported from the standalone appium/coresim
+# repo's own prebuild.yml, adapted for the monorepo: installs run at the workspace root and
+# the prebuild command is scoped to the coresim workspace.
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifacts:
+        description: Upload the .node as a workflow artifact (off for PR smoke builds)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  prebuild:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          check-latest: true
+
+      - name: Install dependencies
+        # --ignore-scripts: skip every workspace's own install/prepare hooks (including
+        # coresim's node-gyp-build) - build:prebuilds below invokes node-gyp itself.
+        run: npm ci --ignore-scripts
+
+      - name: Create N-API prebuild
+        run: npm run build:prebuilds --workspace packages/coresim
+
+      - name: Upload prebuild
+        if: ${{ inputs.upload-artifacts }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coresim-prebuild-darwin-arm64
+          path: packages/coresim/prebuilds/

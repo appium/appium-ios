@@ -1,0 +1,134 @@
+name: Reusable coresim native test
+
+# Ported from the standalone appium/coresim repo's own shared.yml, adapted for the monorepo:
+# installs run at the workspace root (shared lockfile) rather than inside packages/coresim, and
+# test/build commands are scoped to the coresim workspace. TS/JS lint and format:check are NOT
+# re-run here - build.yml's lint job already covers packages/coresim via the shared root
+# oxlint/oxfmt config. Only the C++-specific format check (clang-format), which has no
+# equivalent elsewhere in the monorepo, is exposed as an input here.
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: Runner image (must be an arm64 macOS image - see binding.gyp)
+        required: false
+        default: macos-latest
+        type: string
+      xcode-version:
+        description: Xcode version to select via maxim-lobanov/setup-xcode (empty uses the
+          runner image's default Xcode)
+        required: false
+        default: ''
+        type: string
+      node-version:
+        description: Node.js version
+        required: true
+        type: string
+      test-command:
+        description: npm script to execute (run via `--workspace packages/coresim`)
+        required: true
+        type: string
+      test-name:
+        description: Human-readable test name
+        required: true
+        type: string
+      run-cpp-format-check:
+        description: Run C++ format check (clang-format) before tests
+        required: false
+        default: false
+        type: boolean
+      run-xcodebuild-check:
+        description: Rebuild the native addon via xcodebuild with warnings-as-errors before tests
+        required: false
+        default: false
+        type: boolean
+      install-ffmpeg:
+        description: Install ffmpeg (and ffprobe) so video codec/decode assertions run instead of skipping
+        required: false
+        default: false
+        type: boolean
+      grant-audio-capture:
+        description: Seed a "System Audio Recording Only" TCC grant for the test Node.js binary
+          before running tests, so the audio-capture integration tests exercise the real (not
+          permission-denied) path - only takes effect when SIP is disabled (see
+          packages/coresim/scripts/ci/grant-audio-capture.sh); otherwise those tests just t.skip()
+        required: false
+        default: false
+        type: boolean
+      timeout-minutes:
+        description: Job-level timeout backstop - real simulator boot on a CI runner is far
+          slower than on real hardware, so integration callers should raise this well above the
+          default.
+        required: false
+        default: 15
+        type: number
+
+jobs:
+  test:
+    # macOS arm64 only - CoreSimulator.framework doesn't exist anywhere else (see binding.gyp).
+    # Every input.platform value callers pass must be an arm64-hosted macOS image.
+    runs-on: ${{ inputs.platform }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      # GitHub Actions already sets this by default; set explicitly so test code (which branches
+      # on process.env.CI to share one booted simulator across tests instead of booting a fresh
+      # one per test) doesn't depend on that default staying true.
+      CI: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Select Xcode ${{ inputs.xcode-version }}
+        if: ${{ inputs.xcode-version != '' }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Check SIP status
+        id: sip
+        if: ${{ inputs.grant-audio-capture }}
+        run: |
+          status="$(csrutil status)"
+          echo "$status"
+          if echo "$status" | grep -qi "enabled"; then
+            echo "sip_disabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::System Integrity Protection appears enabled on ${{ inputs.platform }}; skipping the audio-capture TCC grant - those integration tests will fall back to t.skip()."
+          else
+            echo "sip_disabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Grant "System Audio Recording Only" to Node.js
+        if: ${{ inputs.grant-audio-capture && steps.sip.outputs.sip_disabled == 'true' }}
+        run: ./packages/coresim/scripts/ci/grant-audio-capture.sh "$(command -v node)"
+
+      - name: Install clang-format
+        if: ${{ inputs.run-cpp-format-check }}
+        run: brew install clang-format
+
+      - name: Run C++ format check
+        if: ${{ inputs.run-cpp-format-check }}
+        run: npm run format:cpp:check --workspace packages/coresim
+
+      - name: Rebuild native addon via xcodebuild (warnings as errors)
+        if: ${{ inputs.run-xcodebuild-check }}
+        run: npm run build:addon:xcodebuild --workspace packages/coresim
+
+      - name: Install ffmpeg
+        if: ${{ inputs.install-ffmpeg }}
+        run: brew install ffmpeg
+
+      - name: Show selected Xcode and available simulator runtimes
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Run ${{ inputs.test-name }}
+        run: npm run ${{ inputs.test-command }} --workspace packages/coresim

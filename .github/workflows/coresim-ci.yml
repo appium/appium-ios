@@ -1,0 +1,77 @@
+name: coresim CI
+
+# Ported from the standalone appium/coresim repo's own unit-test.yml + integration-test.yml.
+# Path-scoped like tuntap-ci.yml/uicatalog-ci.yml, since coresim's native build/test needs a
+# real macOS/Xcode toolchain (and, for integration, simulator boot time) the rest of the
+# monorepo's CI doesn't - it stays out of build.yml entirely.
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/coresim/**']
+  pull_request:
+    branches: [main]
+    paths: ['packages/coresim/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_matrix:
+    uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
+
+  prebuild:
+    uses: ./.github/workflows/coresim-prebuild.yml
+    with:
+      upload-artifacts: false
+
+  unit-test:
+    needs:
+      - node_matrix
+      - prebuild
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
+    uses: ./.github/workflows/coresim-shared-test.yml
+    with:
+      node-version: ${{ matrix.node-version }}
+      test-command: test:unit
+      test-name: Unit tests
+      run-cpp-format-check: true
+      run-xcodebuild-check: true
+
+  integration-test:
+    needs:
+      - prebuild
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcodeVersion: '27.0'
+            platform: xcode-27
+          - xcodeVersion: '26.5'
+            platform: macos-26
+          - xcodeVersion: '16.4'
+            platform: macos-15
+    uses: ./.github/workflows/coresim-shared-test.yml
+    with:
+      platform: ${{ matrix.platform }}
+      xcode-version: ${{ matrix.xcodeVersion }}
+      node-version: lts/*
+      test-command: test:integration
+      test-name: Integration tests (Xcode ${{ matrix.xcodeVersion }})
+      # Cheap to run per Xcode version here (no simulator boot involved) and gives warnings-as-
+      # errors coverage across the same Xcode/CoreSimulator versions the functional tests cover.
+      run-xcodebuild-check: true
+      # Without this, video codec/decode assertions silently skip - see test/fixtures.ts's hasFfmpeg().
+      install-ffmpeg: true
+      # Without this, the audio-capture tests (startVideoRecording/startVideoStream's `audio`
+      # option) still run, just permission-denied - see grant-audio-capture.sh and CLAUDE.md.
+      grant-audio-capture: true
+      # Real simulator boot/create/delete on a CI runner is far slower than on real hardware -
+      # this only needs to cover ONE boot cycle per Xcode version since test/integration shares a
+      # single throwaway device across all its cases.
+      timeout-minutes: 30
