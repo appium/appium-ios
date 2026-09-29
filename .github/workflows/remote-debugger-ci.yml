@@ -15,10 +15,13 @@ name: remote-debugger CI
 on:
   push:
     branches: [main]
-    paths: ['packages/remote-debugger/**']
+    # Also triggered by packages/coresim/** - the e2e job's simulator boot goes through
+    # @appium/coresim (see test/functional/rd-fixture.ts), so a coresim regression can only show
+    # up here.
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
   pull_request:
     branches: [main]
-    paths: ['packages/remote-debugger/**']
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

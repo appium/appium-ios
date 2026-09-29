@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 // Selects which packages/* are affected by the current diff, for two purposes:
-//   - e2e: ONLY a package that changed itself, full stop - even a shared root config/tooling
-//     change doesn't widen this, since e2e runs are the expensive one to run unnecessarily.
-//   - unit: a package that changed itself, OR whose direct in-monorepo dependency changed
-//     (a shared dep's behavior can break a dependent package's unit tests too), OR every
-//     package when a shared root config/tooling file changed (cheap enough to be the safety
-//     net for "something outside any single package might affect everyone" instead of e2e).
+//   - e2e: a package that changed itself, OR whose direct in-monorepo dependency changed (e.g. a
+//     packages/coresim change also runs packages/simulator's e2e, since simulator depends on it
+//     and a coresim regression can only show up there) - but a shared root config/tooling change
+//     does NOT widen this to every package, since e2e runs are the expensive one to run
+//     unnecessarily on a signal that untargeted.
+//   - unit: the same self-or-direct-dependency rule as e2e, OR every package when a shared root
+//     config/tooling file changed (cheap enough to be the safety net for "something outside any
+//     single package might affect everyone" instead of e2e).
 // Excludes packages with their own dedicated, path-scoped CI (tuntap-ci.yml/coresim-ci.yml/
 // remote-debugger-ci.yml) from both e2e and unit selection - they're never installed here.
 // Falls back to running everything (e2e included) only when the diff itself can't be
@@ -46,6 +48,16 @@ function directWorkspaceDeps(pkg, nameToDir) {
   return Object.keys(deps)
     .map((depName) => nameToDir.get(depName))
     .filter(Boolean);
+}
+
+// A dir is selected if it changed itself, or if any of its direct in-monorepo dependencies did.
+function selectSelfOrDependency(dirs, changedDirs, pkgByDir, nameToDir) {
+  return dirs.filter((dir) => {
+    if (changedDirs.has(dir)) {
+      return true;
+    }
+    return directWorkspaceDeps(pkgByDir.get(dir), nameToDir).some((depDir) => changedDirs.has(depDir));
+  });
 }
 
 async function main() {
@@ -100,15 +112,10 @@ async function main() {
         );
       }
 
-      const e2eSelected = e2eDirs.filter((dir) => changedDirs.has(dir));
+      const e2eSelected = selectSelfOrDependency(e2eDirs, changedDirs, pkgByDir, nameToDir);
       const unitSelected = sharedRootChanged
         ? unitDirs
-        : unitDirs.filter((dir) => {
-            if (changedDirs.has(dir)) {
-              return true;
-            }
-            return directWorkspaceDeps(pkgByDir.get(dir), nameToDir).some((depDir) => changedDirs.has(depDir));
-          });
+        : selectSelfOrDependency(unitDirs, changedDirs, pkgByDir, nameToDir);
       selected = {e2e: e2eSelected, unit: unitSelected};
     }
   }
