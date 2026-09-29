@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.1.0...appium-ios-tuntap@2.2.0) (2026-09-29)
+
+### Features
+
+* move appium/coresim into the monorepo as packages/coresim ([#16](https://github.com/appium/appium-ios/issues/16)) ([a1acd55](https://github.com/appium/appium-ios/commit/a1acd556f716595d120bc2bf92b317ad84cbfad4))
+
+
 ## 2.1.0 (2026-09-26)
 
 ### Features
