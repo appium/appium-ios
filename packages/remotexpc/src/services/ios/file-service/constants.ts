@@ -90,3 +90,15 @@ export const DATA_CHANNEL_MESSAGE_TYPE = {
   /** Confirmation that follows the last byte of a file, in either direction. */
   TRANSFER_COMPLETE: 0x63n,
 } as const;
+
+/**
+ * How many UTF-8 bytes of a pushed file's name go into its temporary name, which
+ * also carries a UUID, so that the temporary name stays within the 255-byte limit.
+ */
+export const MAX_TEMPORARY_NAME_PREFIX_BYTES = 100;
+
+/** Error domain of the POSIX errors the device reports as the underlying error. */
+export const POSIX_ERROR_DOMAIN = 'NSPOSIXErrorDomain';
+
+/** `ENOTEMPTY` on the device (Darwin); the host's `os.constants.errno` may differ. */
+export const DEVICE_ENOTEMPTY = 66;

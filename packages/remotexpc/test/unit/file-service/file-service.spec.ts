@@ -44,6 +44,10 @@ class FakeFileServiceTransport extends EventEmitter {
   sendStaleReply = false;
   /** Never answers listing commands. */
   isListingSilent = false;
+  /** Listings for the next listing commands, one per command; `listing` once they run out. */
+  listingQueue: XPCValue[][][] = [];
+  /** `FileSystemOperation`s (`'<OperationType> <Path>'`) that fail once, with the error reply to send. */
+  failingOperations = new Map<string, XPCDictionary>();
   private peerMessageId = 2;
   private pendingListing: {id: number; acksLeft: number} | undefined;
 
@@ -92,6 +96,9 @@ class FakeFileServiceTransport extends EventEmitter {
         if (this.isListingSilent) {
           return;
         }
+        if (this.listingQueue.length > 0) {
+          this.listing = this.listingQueue.shift()!;
+        }
         if (this.listing.length === 0) {
           this.reply(id, {Response: 1});
           return;
@@ -115,8 +122,14 @@ class FakeFileServiceTransport extends EventEmitter {
       case 'ProposeEmptyFile':
         this.reply(id, {Response: 1});
         return;
+      case 'FileSystemOperation': {
+        const key = `${body.OperationType} ${body.Path ?? body.NewPath}`;
+        const failure = this.failingOperations.get(key);
+        this.failingOperations.delete(key);
+        this.reply(id, failure ?? {Response: 1});
+        return;
+      }
       case 'EndSession':
-      case 'FileSystemOperation':
         this.reply(id, {Response: 1});
         return;
       default:
@@ -381,6 +394,91 @@ describe('CoreDeviceFileService', function () {
         'RemoveDirectory tmp/dir/a',
         'RemoveDirectory tmp/dir',
       ]);
+    });
+
+    it('lists the tree again when a directory it left out makes a removal fail', async function () {
+      const fake = new FakeFileServiceTransport();
+      // With the link present, the listing leaves out what is in target/
+      fake.listingQueue = [
+        [[fileNode('link', 9), fileNode('target/', 0)]],
+        [[fileNode('target/', 0), fileNode('target/a.txt', 1)]],
+      ];
+      fake.failingOperations.set('RemoveDirectory tmp/dir/target', {
+        Response: 3,
+        Error: 'Failed to remove directory',
+        EncodedError: {ErrorCode: 11001, NSUnderlyingError: {ErrorCode: 66, ErrorDomain: 'NSPOSIXErrorDomain'}},
+      });
+      const service = new TestFileService(fake);
+
+      await service.rm('tmp/dir', {recursive: true});
+
+      assert.deepStrictEqual(fileSystemOperations(fake), [
+        'RemoveFile tmp/dir/link',
+        'RemoveDirectory tmp/dir/target',
+        'RemoveFile tmp/dir/target/a.txt',
+        'RemoveDirectory tmp/dir/target',
+        'RemoveDirectory tmp/dir',
+      ]);
+    });
+
+    it('keeps listing again while each pass removes something', async function () {
+      const fake = new FakeFileServiceTransport();
+      const notEmpty = {
+        Response: 3,
+        Error: 'Failed to remove directory',
+        EncodedError: {ErrorCode: 11001, NSUnderlyingError: {ErrorCode: 66, ErrorDomain: 'NSPOSIXErrorDomain'}},
+      };
+      // Each level hides the next one until its link is gone
+      fake.listingQueue = [
+        [[fileNode('l1', 1), fileNode('a/', 0)]],
+        [[fileNode('a/', 0), fileNode('a/l2', 1), fileNode('a/b/', 0)]],
+        [[fileNode('a/', 0), fileNode('a/b/', 0), fileNode('a/b/l3', 1), fileNode('a/b/c/', 0)]],
+        [[fileNode('a/', 0), fileNode('a/b/', 0), fileNode('a/b/c/', 0), fileNode('a/b/c/f.txt', 1)]],
+      ];
+      // Each hidden level is not empty the first time a pass tries to remove it
+      for (const directory of ['a', 'a/b', 'a/b/c']) {
+        fake.failingOperations.set(`RemoveDirectory tmp/dir/${directory}`, notEmpty);
+      }
+      const service = new TestFileService(fake);
+
+      await service.rm('tmp/dir', {recursive: true});
+
+      const operations = fileSystemOperations(fake);
+      assert.strictEqual(operations.at(-1), 'RemoveDirectory tmp/dir');
+      assert.ok(operations.includes('RemoveFile tmp/dir/a/b/c/f.txt'));
+    });
+
+    it('gives up when a pass removes nothing', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.failingOperations.set('RemoveDirectory tmp/dir', {
+        Response: 3,
+        Error: 'Failed to remove directory',
+        EncodedError: {ErrorCode: 11001, NSUnderlyingError: {ErrorCode: 66, ErrorDomain: 'NSPOSIXErrorDomain'}},
+      });
+      const service = new TestFileService(fake);
+
+      await assert.rejects(service.rm('tmp/dir', {recursive: true}), /Failed to remove directory/);
+      assert.deepStrictEqual(fileSystemOperations(fake), ['RemoveDirectory tmp/dir']);
+    });
+
+    it('does not list the tree again for other failures after removing something', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.listing = [[fileNode('a.txt', 1), fileNode('b.txt', 1)]];
+      fake.failingOperations.set('RemoveFile tmp/dir/b.txt', {Response: 3, Error: 'Operation not permitted'});
+      const service = new TestFileService(fake);
+
+      await assert.rejects(service.rm('tmp/dir', {recursive: true}), /Operation not permitted/);
+      assert.deepStrictEqual(fileSystemOperations(fake), ['RemoveFile tmp/dir/a.txt', 'RemoveFile tmp/dir/b.txt']);
+    });
+
+    it('does not list the tree again for other removal failures', async function () {
+      const fake = new FakeFileServiceTransport();
+      fake.listing = [[fileNode('a.txt', 1)]];
+      fake.failingOperations.set('RemoveFile tmp/dir/a.txt', {Response: 3, Error: 'Operation not permitted'});
+      const service = new TestFileService(fake);
+
+      await assert.rejects(service.rm('tmp/dir', {recursive: true}), /Operation not permitted/);
+      assert.deepStrictEqual(fileSystemOperations(fake), ['RemoveFile tmp/dir/a.txt']);
     });
 
     it('refuses to remove the session root', async function () {
@@ -665,6 +763,42 @@ describe('CoreDeviceFileService', function () {
       await outcome;
     });
 
+    it('keeps an existing local file when the pull fails', async function () {
+      const service = newService();
+      service.fake.fileReply = {Error: 'no such file', Response: 3};
+      const destination = path.join(tmpDir, 'existing.mov');
+      await fs.promises.writeFile(destination, 'keep me');
+
+      await assert.rejects(service.pull('missing', destination), CoreDeviceError);
+
+      assert.strictEqual(await fs.promises.readFile(destination, 'utf8'), 'keep me');
+      assert.deepStrictEqual(await fs.promises.readdir(tmpDir), ['existing.mov']);
+    });
+
+    it('replaces an existing local file once the download is complete', async function () {
+      const service = newService();
+      const destination = path.join(tmpDir, 'existing.mov');
+      await fs.promises.writeFile(destination, 'old content that is longer than nothing');
+
+      await service.pull('a', destination);
+
+      assert.deepStrictEqual(await fs.promises.readFile(destination), payload);
+      assert.deepStrictEqual(await fs.promises.readdir(tmpDir), ['existing.mov']);
+    });
+
+    it('cuts a pull waiting for its destination short on close()', async function () {
+      const service = newService();
+      // Nobody reads it, so it never drains
+      const stuck = new PassThrough({highWaterMark: 1});
+      const outcome = assert.rejects(service.pull('a', stuck), /closed during the transfer/);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await service.close();
+
+      await outcome;
+      assert.strictEqual(stuck.destroyed, true);
+    });
+
     it('removes the local file when close() cuts a pull short', async function () {
       server.removeAllListeners('connection');
       // The device sends part of a large file and then stalls.
@@ -755,6 +889,24 @@ describe('CoreDeviceFileService', function () {
         .map(({body}) => String(body.Path));
     }
 
+    function renames(service: TestFileService): string[][] {
+      return service.fake
+        .requests()
+        .filter(({body}) => body.OperationType === 'Rename')
+        .map(({body}) => [String(body.OldPath), String(body.NewPath)]);
+    }
+
+    /** The hidden temporary path a push to `remotePath` uploads to. */
+    function temporaryPathOf(service: TestFileService): string {
+      return String(proposals(service)[0].Path);
+    }
+
+    function assertTemporaryPathFor(temporaryPath: string, remotePath: string): void {
+      const dir = path.posix.dirname(remotePath);
+      const name = path.posix.basename(remotePath);
+      assert.match(temporaryPath, new RegExp(`^${dir}/\\.${name.replaceAll('.', '\\.')}\\.[0-9a-f-]{36}\\.partial$`));
+    }
+
     it('uploads a local file with its size and metadata', async function () {
       const service = newService();
       const source = path.join(tmpDir, 'in.txt');
@@ -766,7 +918,8 @@ describe('CoreDeviceFileService', function () {
 
       const [proposal] = proposals(service);
       assert.strictEqual(proposal.Cmd, 'ProposeFile');
-      assert.strictEqual(proposal.Path, 'tmp/in.txt');
+      assertTemporaryPathFor(String(proposal.Path), 'tmp/in.txt');
+      assert.deepStrictEqual(renames(service), [[proposal.Path, 'tmp/in.txt']]);
       // Sent as a uint64 (the device rejects an int64); the decoder turns small uint64s into numbers
       assert.strictEqual(Number(proposal.FileSize), 11);
       assert.strictEqual(proposal.FilePermissions, 0o640);
@@ -798,6 +951,8 @@ describe('CoreDeviceFileService', function () {
         ['ProposeEmptyFile'],
       );
       assert.strictEqual(received.header, undefined);
+      assertTemporaryPathFor(temporaryPathOf(service), 'tmp/empty.txt');
+      assert.deepStrictEqual(renames(service), [[temporaryPathOf(service), 'tmp/empty.txt']]);
     });
 
     it('fails when the device will not create the file', async function () {
@@ -805,6 +960,81 @@ describe('CoreDeviceFileService', function () {
       service.fake.proposeReply = {Response: 1};
 
       await assert.rejects(service.push(Buffer.from('x'), 'tmp/x.txt'), /refused to create 'tmp\/x.txt'/);
+      // Nothing was created, so nothing is removed
+      assert.deepStrictEqual(removals(service), []);
+      assert.deepStrictEqual(renames(service), []);
+    });
+
+    it('removes the temporary file when the rename over the destination fails', async function () {
+      const service = newService();
+      service.fake.failingOperations.set('Rename tmp/dir', {Response: 3, Error: 'Failed to rename'});
+
+      await assert.rejects(service.push(Buffer.from('x'), 'tmp/dir'), /Failed to rename/);
+      assert.deepStrictEqual(removals(service), [temporaryPathOf(service)]);
+    });
+
+    it('accepts a destination with a leading slash, which the rename would not', async function () {
+      const service = newService();
+
+      await service.push(Buffer.from('x'), '/tmp/a.txt');
+      await service.push(Buffer.from('x'), './tmp/b.txt');
+
+      assert.deepStrictEqual(
+        renames(service).map(([, newPath]) => newPath),
+        ['tmp/a.txt', 'tmp/b.txt'],
+      );
+    });
+
+    it('leaves `..` in the destination for the device to reject', async function () {
+      const service = newService();
+
+      await service.push(Buffer.from('x'), 'tmp/a/../b.txt');
+
+      assert.strictEqual(path.posix.dirname(temporaryPathOf(service)), 'tmp/a/..');
+    });
+
+    it('keeps the temporary name within the file name length limit', async function () {
+      const service = newService();
+      // 255 bytes in UTF-8, with multi-byte and surrogate-pair characters
+      for (const name of ['n'.repeat(255), '文'.repeat(85), `${'😀'.repeat(63)}abc`]) {
+        await service.push(Buffer.from('x'), `tmp/${name}`);
+
+        const temporaryName = path.posix.basename(String(proposals(service).at(-1)!.Path));
+        assert.ok(Buffer.byteLength(temporaryName) <= 255, `${Buffer.byteLength(temporaryName)} bytes`);
+        // No character is cut in half
+        assert.strictEqual(Buffer.from(temporaryName).toString(), temporaryName);
+        assert.ok(name.startsWith(temporaryName.slice(1, temporaryName.indexOf('.', 1))));
+      }
+    });
+
+    it('rejects an unreadable local file before contacting the device', async function () {
+      const service = newService();
+      const source = path.join(tmpDir, 'unreadable.txt');
+      await fs.promises.writeFile(source, 'secret');
+      await fs.promises.chmod(source, 0);
+      try {
+        await assert.rejects(service.push(source, 'tmp/x.txt'), {code: 'EACCES'});
+      } finally {
+        await fs.promises.chmod(source, 0o600);
+      }
+      assert.strictEqual(service.fake.sent.length, 0);
+    });
+
+    it('cuts a push waiting for its source short on close()', async function () {
+      const service = newService();
+      const stalled = new Readable({read() {}});
+      stalled.push(Buffer.from('12345'));
+      const outcome = assert.rejects(
+        service.push(stalled, 'tmp/stalled.txt', {size: 10}),
+        /closed during the transfer/,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await service.close();
+
+      await outcome;
+      assert.deepStrictEqual(removals(service), [temporaryPathOf(service)]);
+      assert.deepStrictEqual(renames(service), []);
     });
 
     it('removes the incomplete file when the stream has fewer bytes than announced', async function () {
@@ -814,7 +1044,7 @@ describe('CoreDeviceFileService', function () {
         service.push(Readable.from([Buffer.from('12345')]), 'tmp/short.txt', {size: 10}),
         /ended after 5 of the announced 10 bytes/,
       );
-      assert.deepStrictEqual(removals(service), ['tmp/short.txt']);
+      assert.deepStrictEqual(removals(service), [temporaryPathOf(service)]);
     });
 
     it('removes the incomplete file when the stream has more bytes than announced', async function () {
@@ -824,7 +1054,7 @@ describe('CoreDeviceFileService', function () {
         service.push(Readable.from([Buffer.from('1234567890')]), 'tmp/long.txt', {size: 4}),
         /more than the announced 4 bytes/,
       );
-      assert.deepStrictEqual(removals(service), ['tmp/long.txt']);
+      assert.deepStrictEqual(removals(service), [temporaryPathOf(service)]);
     });
 
     it('fails when the device does not confirm the upload', async function () {
@@ -832,7 +1062,7 @@ describe('CoreDeviceFileService', function () {
       const service = newService();
 
       await assert.rejects(service.push(Buffer.from('abc'), 'tmp/c.txt', {idleTimeoutMs: 200}), /did not confirm/);
-      assert.deepStrictEqual(removals(service), ['tmp/c.txt']);
+      assert.deepStrictEqual(removals(service), [temporaryPathOf(service)]);
     });
 
     it('fails when the device stops taking data', async function () {
@@ -851,6 +1081,7 @@ describe('CoreDeviceFileService', function () {
       await assert.rejects(service.push(Readable.from([Buffer.from('x')]), 'tmp/x.txt'), /size of the data to push/);
       await assert.rejects(service.push(tmpDir, 'tmp/x.txt'), /is not a regular file/);
       await assert.rejects(service.push(undefined as any, 'tmp/x.txt'), /must be a local file path/);
+      await assert.rejects(service.push(Buffer.from('x'), 'tmp/dir/'), /must be a file path/);
       for (const remotePath of ['SystemData/x.txt', 'x.txt', '../x.txt']) {
         await assert.rejects(service.push(Buffer.from('x'), remotePath), /Access restricted/, remotePath);
       }

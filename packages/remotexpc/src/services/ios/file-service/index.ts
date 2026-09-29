@@ -10,7 +10,7 @@ import {finished, pipeline} from 'node:stream/promises';
 import {getLogger} from '../../../lib/logger.js';
 import {connectToTunnelHost} from '../../../lib/port-forwarding/connectors.js';
 import type {RemoteXpcFramedTransport} from '../../../lib/remote-xpc/remote-xpc-framed-transport.js';
-import {asNumber} from '../../../lib/remote-xpc/xpc-value.js';
+import {asDictionary, asNumber, asString} from '../../../lib/remote-xpc/xpc-value.js';
 import type {XPCDictionary, XPCValue} from '../../../lib/types.js';
 import {
   CoreDeviceError,
@@ -24,13 +24,16 @@ import {
   DATA_CHANNEL_HEADER_SIZE,
   DEFAULT_FILE_SERVICE_USERNAME,
   DEFAULT_PUSHED_FILE_PERMISSIONS,
+  DEVICE_ENOTEMPTY,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
   FILE_SERVICE_COMMAND,
   FILE_SERVICE_DOMAIN,
   FILE_SYSTEM_OPERATION,
   MAX_DISCARDED_BYTES,
+  MAX_TEMPORARY_NAME_PREFIX_BYTES,
   PERMISSION_BITS_MASK,
+  POSIX_ERROR_DOMAIN,
   PUSHED_FILE_PERMISSION_BITS_MASK,
 } from './constants.js';
 import {
@@ -92,10 +95,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
 
   private readonly sessionOptions: FileServiceSessionOptions;
   private session: FileServiceSession | undefined;
-  /** Open data channels, which {@link close} cuts short. */
-  private readonly dataChannels = new Set<Socket>();
-  /** Running pulls and pushes, which {@link close} waits for. */
-  private readonly transfers = new Set<Promise<unknown>>();
+  /** Running pulls and pushes, which {@link close} cuts short and waits for. */
+  private readonly transfers = new Map<Promise<unknown>, AbortController>();
 
   constructor(udid: string, sessionOptions: FileServiceSessionOptions) {
     super(udid, CoreDeviceFileService.RSD_SERVICE_NAME);
@@ -162,10 +163,11 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * Downloads a file, like `devicectl device copy from`.
    *
    * @param remotePath File path relative to the session root.
-   * @param destination Local file path (missing parent directories are created
-   * and an existing file is overwritten), or a writable stream that is ended once
-   * the file has been written. On failure, the stream is destroyed and a
-   * partially written local file is removed.
+   * @param destination Local file path (missing parent directories are created),
+   * or a writable stream that is ended once the file has been written. A local
+   * file is written under a temporary name next to it and renamed into place
+   * once complete, so an existing file is only replaced by a complete download.
+   * On failure, the stream is destroyed and the temporary file is removed.
    * @returns The metadata of the downloaded file.
    * @throws {CoreDeviceError} If `remotePath` does not exist or is a directory.
    */
@@ -174,7 +176,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     destination: string | Writable,
     options: FileServiceTransferOptions = {},
   ): Promise<FileServiceFileMetadata> {
-    return await this.trackTransfer(this.pullFile(remotePath, destination, options));
+    return await this.trackTransfer((signal) => this.pullFile(remotePath, destination, options, signal));
   }
 
   /**
@@ -182,25 +184,28 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * are created. The device only allows changes below `Library`, `Documents`
    * and `tmp` of an app container.
    *
-   * Whatever is at `remotePath` is replaced without warning, as with devicectl:
-   * an existing file, and also an existing directory together with everything
-   * below it. Likewise, a file where a parent directory of `remotePath` should
-   * be is replaced by that directory.
+   * The file is uploaded under a hidden temporary name next to `remotePath`
+   * (`.<name>.<uuid>.partial`) and renamed over it once complete. So an existing
+   * file is replaced only by a complete upload, concurrent pushes to one path
+   * leave one whole file, and an existing directory at `remotePath` is not
+   * replaced (the rename fails). A file where a parent directory of
+   * `remotePath` should be is still replaced by that directory, as with devicectl.
    *
    * @param source Local file path, file contents, or a readable stream of them
    * (a stream needs `options.size`).
-   * @param remotePath Destination path relative to the session root.
+   * @param remotePath Destination file path relative to the session root.
    * @throws {TypeError} If the source, its size, `options.permissions` or
    * `options.modifiedAt` is invalid, or a path of an `appDataContainer` session
    * is not below `Library`, `Documents` or `tmp`.
-   * @throws {CoreDeviceError} If the device refuses the file.
+   * @throws {CoreDeviceError} If the device refuses the file, or `remotePath`
+   * is a directory.
    */
   async push(
     source: string | Buffer | Readable,
     remotePath: string,
     options: FileServicePushOptions = {},
   ): Promise<void> {
-    await this.trackTransfer(this.pushFile(source, remotePath, options));
+    await this.trackTransfer((signal) => this.pushFile(source, remotePath, options, signal));
   }
 
   /**
@@ -218,30 +223,32 @@ export class CoreDeviceFileService extends CoreDeviceService {
     if (target === '' || target === '.') {
       throw new TypeError('The root of a file service session cannot be removed');
     }
-    const entries = await this.listDirectory(target, {...requestOptions, recursive: true});
-    // A listed regular file comes back as its own entry without metadata
-    if (entries.length === 1 && !entries[0].metadata && entries[0].path === target) {
-      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: target}, requestOptions);
-      return;
+    // A recursive listing leaves out the contents of a directory that a symbolic
+    // link next to it points to. Links are removed like files, so when a directory
+    // cannot be removed because it is not empty, a new listing shows more of what
+    // is left, for as long as each pass removes something.
+    for (let isFirstPass = true; ; isFirstPass = false) {
+      const entries = await this.listDirectory(target, {...requestOptions, recursive: true});
+      // A listed regular file comes back as its own entry without metadata
+      if (isFirstPass && entries.length === 1 && !entries[0].metadata && entries[0].path === target) {
+        await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: target}, requestOptions);
+        return;
+      }
+      if (entries.length > 0 && !recursive) {
+        throw new CoreDeviceError(`Cannot remove '${remotePath}': the directory is not empty`);
+      }
+      const removals = {count: 0};
+      try {
+        await this.removeListedTree(target, entries, {...requestOptions, removals});
+        log.debug(`Removed '${target}' (${entries.length} entries below it)`);
+        return;
+      } catch (err) {
+        if (removals.count === 0 || !isDirectoryNotEmptyError(err)) {
+          throw err;
+        }
+        log.debug(`'${target}' was not fully listed, listing it again: ${(err as Error).message}`);
+      }
     }
-    if (entries.length > 0 && !recursive) {
-      throw new CoreDeviceError(`Cannot remove '${remotePath}': the directory is not empty`);
-    }
-    // Remove the files first, then the directories from the deepest one up
-    const files = entries.filter(({isDirectory}) => !isDirectory);
-    const directories = entries
-      .filter(({isDirectory}) => isDirectory)
-      .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
-    for (const {path: relativePath} of files) {
-      const filePath = path.posix.join(target, relativePath);
-      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: filePath}, requestOptions);
-    }
-    for (const {path: relativePath} of directories) {
-      const directoryPath = path.posix.join(target, relativePath);
-      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: directoryPath}, requestOptions);
-    }
-    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: target}, requestOptions);
-    log.debug(`Removed '${target}' (${entries.length} entries below it)`);
   }
 
   /**
@@ -284,13 +291,14 @@ export class CoreDeviceFileService extends CoreDeviceService {
 
   /**
    * Ends the session and closes the connection. Pulls and pushes still running
-   * are cut short.
+   * are cut short, also while they wait for their local source or destination.
+   * One waiting for a reply from the device first gets that reply, or times out.
    */
   override async close(): Promise<void> {
-    for (const socket of this.dataChannels) {
-      socket.destroy(new Error('The file service was closed during the transfer'));
+    for (const controller of this.transfers.values()) {
+      controller.abort(new Error('The file service was closed during the transfer'));
     }
-    await Promise.allSettled(this.transfers);
+    await Promise.allSettled(this.transfers.keys());
     const session = this.session;
     this.session = undefined;
     if (session && session.transport === this.transport && session.transport.isConnected) {
@@ -319,33 +327,64 @@ export class CoreDeviceFileService extends CoreDeviceService {
     return id;
   }
 
+  /**
+   * Removes the files, then the directories from the deepest one up, then
+   * `target`, counting the removals that succeed in `options.removals`.
+   */
+  private async removeListedTree(
+    target: string,
+    entries: FileServiceEntry[],
+    {removals, ...options}: FileServiceRequestOptions & {removals: {count: number}},
+  ): Promise<void> {
+    const files = entries.filter(({isDirectory}) => !isDirectory);
+    const directories = entries
+      .filter(({isDirectory}) => isDirectory)
+      .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
+    for (const {path: relativePath} of files) {
+      const filePath = path.posix.join(target, relativePath);
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_FILE, {Path: filePath}, options);
+      removals.count++;
+    }
+    for (const {path: relativePath} of directories) {
+      const directoryPath = path.posix.join(target, relativePath);
+      await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: directoryPath}, options);
+      removals.count++;
+    }
+    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: target}, options);
+  }
+
   private async pullFile(
     remotePath: string,
     destination: string | Writable,
     options: FileServiceTransferOptions,
+    signal: AbortSignal,
   ): Promise<FileServiceFileMetadata> {
     const {idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS, ...requestOptions} = options;
     if (typeof destination !== 'string') {
       assertWritableDestination(destination);
     }
     // Open the local file first, so a bad destination fails before the device is asked for anything
-    const output = typeof destination === 'string' ? await openLocalFile(destination) : destination;
+    const localFile = typeof destination === 'string' ? await openLocalFile(destination) : undefined;
+    const output = localFile?.stream ?? (destination as Writable);
     let socket: Socket | undefined;
     let isTransferInFlight = false;
     try {
       // devicectl connects the data channel before it asks for the file.
-      socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS);
+      socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS, signal);
       const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions);
       if (isDirectoryMode(reply.FilePermissions)) {
         throw new CoreDeviceError(`'${remotePath}' is a directory, not a file`, reply);
       }
-      const fileId = asFileId(reply.NewFileID);
+      const fileId = asFileId(reply.NewFileID, FILE_SERVICE_COMMAND.RETRIEVE_FILE);
       socket.write(buildFileDataRequest(fileId));
       isTransferInFlight = true;
-      const {size, outputError} = await receiveFile(socket, output, fileId, idleTimeoutMs);
+      const {size, outputError} = await receiveFile(socket, output, fileId, {idleTimeoutMs, signal});
       isTransferInFlight = false;
       if (outputError) {
         throw outputError;
+      }
+      if (localFile) {
+        await fsp.rename(localFile.temporaryPath, localFile.path);
       }
       log.debug(`Pulled '${remotePath}' (${size} bytes)`);
       return parseRetrievedFileMetadata(reply, size);
@@ -353,8 +392,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
       // A write still pending when the stream is destroyed fails with ERR_STREAM_DESTROYED
       output.on('error', () => undefined);
       output.destroy();
-      if (typeof destination === 'string') {
-        await fsp.rm(destination, {force: true});
+      if (localFile) {
+        await fsp.rm(localFile.temporaryPath, {force: true});
       }
       if (isTransferInFlight) {
         // The device resets the control connection when a transfer is cut short
@@ -370,6 +409,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     source: string | Buffer | Readable,
     remotePath: string,
     options: FileServicePushOptions,
+    signal: AbortSignal,
   ): Promise<void> {
     const {
       size: declaredSize,
@@ -378,42 +418,62 @@ export class CoreDeviceFileService extends CoreDeviceService {
       idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS,
       ...requestOptions
     } = options;
+    const target = stripLeadingRoot(remotePath);
+    // Split without normalizing, so the device still sees (and rejects) any `..`
+    const directoryPrefix = target.slice(0, target.lastIndexOf('/') + 1);
+    const name = target.slice(directoryPrefix.length);
+    if (!name) {
+      throw new TypeError(`The destination of a push must be a file path, got '${remotePath}'`);
+    }
     if (this.sessionOptions.domain === 'appDataContainer') {
-      assertInWritableAppContainerDirectory(remotePath);
+      assertInWritableAppContainerDirectory(target);
     }
     const upload = await openUploadSource(source, {size: declaredSize, permissions, modifiedAt});
+    const abortUpload = (): void => {
+      upload.stream.destroy(signal.reason as Error);
+    };
+    signal.addEventListener('abort', abortUpload, {once: true});
+    // The device skips a file whose size and modification time match the one at
+    // the path, and truncates an existing file before the new bytes arrive: a
+    // fresh temporary path avoids both, and the rename replaces the file whole.
+    const temporaryPath = `${directoryPrefix}.${truncateUtf8(name, MAX_TEMPORARY_NAME_PREFIX_BYTES)}.${randomUUID()}.partial`;
     const fields: XPCDictionary = {
-      Path: remotePath,
+      Path: temporaryPath,
       FilePermissions: upload.permissions,
       FileCreationTime: upload.modifiedAtSeconds,
       FileLastModificationTime: upload.modifiedAtSeconds,
     };
-    if (upload.size === 0) {
-      upload.stream.destroy();
-      await this.request(FILE_SERVICE_COMMAND.PROPOSE_EMPTY_FILE, fields, requestOptions);
-      log.debug(`Pushed '${remotePath}' (0 bytes)`);
-      return;
-    }
-
     let socket: Socket | undefined;
-    let isFileProposed = false;
+    let isFileCreated = false;
     let isTransferStarted = false;
     try {
-      // devicectl connects the data channel before it announces the file.
-      socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS);
-      const reply = await this.request(
-        FILE_SERVICE_COMMAND.PROPOSE_FILE,
-        {...fields, FileSize: BigInt(upload.size)},
+      if (upload.size === 0) {
+        upload.stream.destroy();
+        await this.request(FILE_SERVICE_COMMAND.PROPOSE_EMPTY_FILE, fields, requestOptions);
+        isFileCreated = true;
+      } else {
+        // devicectl connects the data channel before it announces the file.
+        socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS, signal);
+        const reply = await this.request(
+          FILE_SERVICE_COMMAND.PROPOSE_FILE,
+          {...fields, FileSize: BigInt(upload.size)},
+          requestOptions,
+        );
+        // The device answers without a file ID when it will not create the file there
+        if (reply.NewFileID === undefined) {
+          throw new CoreDeviceError(`The device refused to create '${remotePath}'`, reply);
+        }
+        isFileCreated = true;
+        const fileId = asFileId(reply.NewFileID, FILE_SERVICE_COMMAND.PROPOSE_FILE);
+        isTransferStarted = true;
+        await sendFile(socket, upload, fileId, idleTimeoutMs);
+        isTransferStarted = false;
+      }
+      await this.runFileSystemOperation(
+        FILE_SYSTEM_OPERATION.RENAME,
+        {OldPath: temporaryPath, NewPath: target},
         requestOptions,
       );
-      isFileProposed = true;
-      // The device answers without a file ID when it will not create the file there
-      if (reply.NewFileID === undefined) {
-        throw new CoreDeviceError(`The device refused to create '${remotePath}'`, reply);
-      }
-      const fileId = asFileId(reply.NewFileID);
-      isTransferStarted = true;
-      await sendFile(socket, upload, fileId, idleTimeoutMs);
       log.debug(`Pushed '${remotePath}' (${upload.size} bytes)`);
     } catch (err) {
       upload.stream.destroy();
@@ -421,11 +481,12 @@ export class CoreDeviceFileService extends CoreDeviceService {
         // The device resets the control connection when a transfer is cut short
         await this.dropTransport();
       }
-      if (isFileProposed) {
-        await this.removeIncompleteUpload(remotePath);
+      if (isFileCreated) {
+        await this.removeIncompleteUpload(temporaryPath);
       }
       throw err;
     } finally {
+      signal.removeEventListener('abort', abortUpload);
       socket?.destroy();
     }
   }
@@ -456,8 +517,13 @@ export class CoreDeviceFileService extends CoreDeviceService {
     return fileList;
   }
 
-  private async trackTransfer<T>(transfer: Promise<T>): Promise<T> {
-    this.transfers.add(transfer);
+  /**
+   * Runs a pull or a push that {@link close} can cut short through `signal`.
+   */
+  private async trackTransfer<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
+    const transfer = run(controller.signal);
+    this.transfers.set(transfer, controller);
     try {
       return await transfer;
     } finally {
@@ -465,19 +531,29 @@ export class CoreDeviceFileService extends CoreDeviceService {
     }
   }
 
-  private async openDataChannel(timeoutMs: number): Promise<Socket> {
+  /**
+   * Connects to the data service. The connection is destroyed when `signal` aborts.
+   */
+  private async openDataChannel(timeoutMs: number, signal: AbortSignal): Promise<Socket> {
     const [host, port] = await this.resolveServiceAddress(CoreDeviceFileService.DATA_SERVICE_NAME);
     const socket = await connectToTunnelHost(host, port, timeoutMs);
-    this.dataChannels.add(socket);
-    socket.once('close', () => this.dataChannels.delete(socket));
     // Transfers see socket errors through the stream; this keeps one raised while nothing reads from being unhandled
     socket.on('error', (err) => log.debug(`File service data channel error: ${err.message}`));
+    const onAbort = (): void => {
+      socket.destroy(signal.reason as Error);
+    };
+    if (signal.aborted) {
+      onAbort();
+      signal.throwIfAborted();
+    }
+    signal.addEventListener('abort', onAbort, {once: true});
+    socket.once('close', () => signal.removeEventListener('abort', onAbort));
     return socket;
   }
 
   /**
-   * `ProposeFile` creates the file right away, so a failed transfer would leave
-   * an empty or partial file behind.
+   * Removes the temporary file of a push that failed: `ProposeFile` creates it
+   * right away, so it would otherwise be left behind empty or partial.
    */
   private async removeIncompleteUpload(remotePath: string): Promise<void> {
     try {
@@ -559,7 +635,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
  * spent waiting for a slow `output` does not count. When `output` fails, the
  * rest of the file is read and discarded if no more than
  * {@link MAX_DISCARDED_BYTES} are left, so the transfer still completes on the
- * device; that failure is returned as `outputError`.
+ * device; that failure is returned as `outputError`. Aborting `signal` cuts the
+ * transfer short, also while waiting for `output`.
  *
  * @returns The number of bytes in the file.
  */
@@ -567,7 +644,7 @@ async function receiveFile(
   socket: Socket,
   output: Writable,
   fileId: bigint,
-  idleTimeoutMs: number,
+  {idleTimeoutMs, signal}: {idleTimeoutMs: number; signal: AbortSignal},
 ): Promise<{size: number; outputError?: Error}> {
   const decoder = new FileDataDecoder(fileId);
   let lastActivityAt = performance.now();
@@ -606,7 +683,8 @@ async function receiveFile(
         }
         if (!output.write(part)) {
           isWaitingForOutput = true;
-          await waitForDrain(output);
+          await waitForDrain(output, signal);
+          signal.throwIfAborted();
           isWaitingForOutput = false;
           lastActivityAt = performance.now();
         }
@@ -637,19 +715,21 @@ async function receiveFile(
 }
 
 /**
- * Resolves once `output` can take more data, or has failed or closed.
+ * Resolves once `output` can take more data, has failed or closed, or `signal` aborts.
  */
-async function waitForDrain(output: Writable): Promise<void> {
+async function waitForDrain(output: Writable, signal: AbortSignal): Promise<void> {
   await new Promise<void>((resolve) => {
     const done = (): void => {
       output.off('drain', done);
       output.off('error', done);
       output.off('close', done);
+      signal.removeEventListener('abort', done);
       resolve();
     };
     output.on('drain', done);
     output.on('error', done);
     output.on('close', done);
+    signal.addEventListener('abort', done, {once: true});
   });
 }
 
@@ -682,6 +762,8 @@ async function openUploadSource(
     permissions ??= stats.mode & PERMISSION_BITS_MASK;
     modifiedAt ??= stats.mtime;
     stream = fs.createReadStream(source);
+    // Open it now, so an unreadable file fails before the device is asked for anything
+    await once(stream, 'open');
   } else if (Buffer.isBuffer(source)) {
     size = source.length;
     stream = Readable.from([source]);
@@ -858,14 +940,31 @@ function assertInWritableAppContainerDirectory(remotePath: string): void {
   }
 }
 
+interface LocalDestination {
+  stream: fs.WriteStream;
+  /** Where the file goes once it is complete. */
+  path: string;
+  /** Where it is written until then. */
+  temporaryPath: string;
+}
+
 /**
- * Opens a local file for writing, creating its parent directories.
+ * Opens a temporary file next to `localPath` for writing, creating its parent
+ * directories. It is renamed to `localPath` once the download is complete.
+ *
+ * @throws {Error} With code `EISDIR` if `localPath` is a directory.
  */
-async function openLocalFile(localPath: string): Promise<fs.WriteStream> {
+async function openLocalFile(localPath: string): Promise<LocalDestination> {
+  const stats = await fsp.stat(localPath).catch((): undefined => undefined);
+  if (stats?.isDirectory()) {
+    // What opening the directory itself for writing would fail with
+    throw Object.assign(new Error(`EISDIR: illegal operation on a directory, open '${localPath}'`), {code: 'EISDIR'});
+  }
   await fsp.mkdir(path.dirname(localPath), {recursive: true});
-  const stream = fs.createWriteStream(localPath);
+  const temporaryPath = path.join(path.dirname(localPath), `.${path.basename(localPath)}.${randomUUID()}.partial`);
+  const stream = fs.createWriteStream(temporaryPath);
   await once(stream, 'open');
-  return stream;
+  return {stream, path: localPath, temporaryPath};
 }
 
 /**
@@ -874,6 +973,43 @@ async function openLocalFile(localPath: string): Promise<fs.WriteStream> {
  */
 function toSessionRelativePath(remotePath: string): string {
   return path.posix.normalize(remotePath).replace(/^\/+|\/+$/g, '');
+}
+
+/**
+ * Removes a leading `/` or `./`, which the device's `Rename` does not accept
+ * (unlike its other commands).
+ */
+function stripLeadingRoot(remotePath: string): string {
+  return remotePath.replace(/^(?:\.?\/)+/, '');
+}
+
+/**
+ * Returns the longest start of `value` that is at most `maxBytes` long in UTF-8,
+ * without splitting a character.
+ */
+function truncateUtf8(value: string, maxBytes: number): string {
+  let bytes = 0;
+  let end = 0;
+  for (const character of value) {
+    bytes += Buffer.byteLength(character, 'utf8');
+    if (bytes > maxBytes) {
+      break;
+    }
+    end += character.length;
+  }
+  return value.slice(0, end);
+}
+
+/**
+ * Whether the device failed to remove a directory because it is not empty.
+ */
+function isDirectoryNotEmptyError(err: unknown): boolean {
+  const underlying = asDictionary(asDictionary((err as CoreDeviceError)?.response?.EncodedError)?.NSUnderlyingError);
+  return (
+    err instanceof CoreDeviceError &&
+    asString(underlying?.ErrorDomain) === POSIX_ERROR_DOMAIN &&
+    asNumber(underlying?.ErrorCode) === DEVICE_ENOTEMPTY
+  );
 }
 
 function isDirectChild(relativePath: string): boolean {
@@ -888,10 +1024,10 @@ function isDirectoryMode(mode: XPCValue | undefined): boolean {
   return ((asNumber(mode) ?? 0) & fs.constants.S_IFMT) === fs.constants.S_IFDIR;
 }
 
-function asFileId(value: XPCValue | undefined): bigint {
+function asFileId(value: XPCValue | undefined, command: string): bigint {
   const fileId = typeof value === 'bigint' ? value : asNumber(value);
   if (fileId === undefined || fileId < 0 || !Number.isInteger(Number(fileId))) {
-    throw new CoreDeviceError(`File service '${FILE_SERVICE_COMMAND.RETRIEVE_FILE}' returned no file id`);
+    throw new CoreDeviceError(`File service '${command}' returned no file id`);
   }
   return BigInt(fileId);
 }
