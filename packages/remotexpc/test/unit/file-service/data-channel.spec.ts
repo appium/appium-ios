@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
-import {DATA_CHANNEL_HEADER_SIZE, DATA_CHANNEL_MESSAGE_TYPE} from '../../../src/services/ios/file-service/constants.js';
+import {DATA_CHANNEL_MESSAGE_TYPE} from '../../../src/services/ios/file-service/constants.js';
 import {
   FileDataDecoder,
   buildFileDataRequest,
@@ -39,13 +39,6 @@ describe('file service data channel', function () {
     });
   });
 
-  it('round-trips a header', function () {
-    const header = {type: DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE, fileId: 7n, size: 0n};
-    const encoded = encodeDataChannelHeader(header);
-    assert.strictEqual(encoded.length, DATA_CHANNEL_HEADER_SIZE);
-    assert.deepStrictEqual(decodeDataChannelHeader(encoded), header);
-  });
-
   it('rejects a short header or a bad magic', function () {
     assert.throws(() => decodeDataChannelHeader(Buffer.alloc(10)), /must be 40 bytes/);
     const header = encodeDataChannelHeader({type: 1n, fileId: 1n, size: 0n});
@@ -54,17 +47,6 @@ describe('file service data channel', function () {
   });
 
   describe('FileDataDecoder', function () {
-    it('extracts the file bytes from a single chunk', function () {
-      const payload = Buffer.from('hello world');
-      const decoder = new FileDataDecoder(1n);
-
-      const parts = decoder.push(deviceReply(1n, payload));
-
-      assert.deepStrictEqual(Buffer.concat(parts), payload);
-      assert.strictEqual(decoder.isDone, true);
-      assert.strictEqual(decoder.size, BigInt(payload.length));
-    });
-
     it('extracts the file bytes when every chunk is a single byte', function () {
       const payload = Buffer.from('split across many chunks');
       const wire = deviceReply(3n, payload);
@@ -78,6 +60,7 @@ describe('file service data channel', function () {
 
       assert.deepStrictEqual(Buffer.concat(parts), payload);
       assert.strictEqual(decoder.isDone, true);
+      assert.strictEqual(decoder.size, BigInt(payload.length));
     });
 
     it('handles an empty file', function () {

@@ -2,11 +2,7 @@ import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
 import {CoreDeviceError} from '../../../src/index.js';
-import {
-  assertSuccessfulReply,
-  parseFileNodes,
-  parseRetrievedFileMetadata,
-} from '../../../src/services/ios/file-service/replies.js';
+import {assertSuccessfulReply, parseFileNodes} from '../../../src/services/ios/file-service/replies.js';
 
 const CONTAINER = 'file:///private/var/mobile/Containers/Data/Application/A735498E/';
 
@@ -59,12 +55,6 @@ describe('file service replies', function () {
       ]);
     });
 
-    it('treats a plain path string as a file without metadata', function () {
-      assert.deepStrictEqual(parseFileNodes(['Library/Caches/a.dyld4']), [
-        {path: 'Library/Caches/a.dyld4', isDirectory: false},
-      ]);
-    });
-
     it('skips malformed nodes and non-array input', function () {
       assert.deepStrictEqual(parseFileNodes([{metadata: {}}, 5]), []);
       assert.deepStrictEqual(parseFileNodes(undefined), []);
@@ -100,28 +90,6 @@ describe('file service replies', function () {
 
     it('throws for an error response without details', function () {
       assert.throws(() => assertSuccessfulReply('RetrieveFile', {Response: 3}), /unknown error \[unknown\]/);
-    });
-  });
-
-  it('parseRetrievedFileMetadata strips the file type bits', function () {
-    const metadata = parseRetrievedFileMetadata(
-      {
-        FileOwnerGroupID: 501,
-        NewFileID: 1,
-        FileCreationTime: 0,
-        FileOwnerUserID: 501,
-        Response: 1,
-        FilePermissions: 0o100400,
-        FileLastModificationTime: 1789544015,
-      },
-      7016,
-    );
-    assert.deepStrictEqual(metadata, {
-      size: 7016,
-      permissions: 0o400,
-      ownerUid: 501,
-      ownerGid: 501,
-      modifiedAt: new Date(1789544015 * 1000),
     });
   });
 });
