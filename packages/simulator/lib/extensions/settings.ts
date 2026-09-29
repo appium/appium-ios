@@ -1,0 +1,504 @@
+import path from 'node:path';
+
+import {fs, util} from '@appium/support';
+import type {StringRecord} from '@appium/types';
+import AsyncLock from 'async-lock';
+import {exec} from 'teen_process';
+
+import {DEFAULTS_PATH, LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
+import type {HasNativeSimctl} from '../native/types.js';
+import {
+  appearanceToRaw,
+  contentSizeToRaw,
+  contrastToEnabled,
+  rawToAppearance,
+  rawToContentSize,
+  rawToContrast,
+} from '../native/ui-mappings.js';
+import type {
+  CoreSimulator,
+  HasSettings,
+  DevicePreferences,
+  CommonPreferences,
+  RunOptions,
+  LocalizationOptions,
+} from '../types.js';
+import {NSUserDefaults, generateDefaultsCommandArgs} from '../utils/index.js';
+
+declare module '../simulator-xcode-15.js' {
+  interface SimulatorXcode15 extends HasSettings {}
+}
+
+type CoreSimulatorWithSettings = CoreSimulator & HasSettings & HasNativeSimctl;
+
+// com.apple.SpringBoard: translates com.apple.SpringBoard and system prompts for push notification
+// com.apple.locationd: translates system prompts for location
+// com.apple.tccd: translates system prompts for camera, microphone, contact, photos and app tracking transparency
+// com.apple.akd: translates `Sign in with your Apple ID` system prompt
+const SERVICES_FOR_TRANSLATION = [
+  'com.apple.SpringBoard',
+  'com.apple.locationd',
+  'com.apple.tccd',
+  'com.apple.akd',
+] as const;
+const GLOBAL_PREFS_PLIST = '.GlobalPreferences.plist';
+const PREFERENCES_PLIST_GUARD = new AsyncLock();
+const DOMAIN = Object.freeze({
+  KEYBOARD: 'com.apple.keyboard.preferences',
+  ACCESSIBILITY: 'com.apple.Accessibility',
+} as const);
+
+/**
+ * Updates Reduce Motion setting state.
+ *
+ * @param reduceMotion Whether to enable or disable the setting.
+ */
+export async function setReduceMotion(this: CoreSimulatorWithSettings, reduceMotion: boolean): Promise<boolean> {
+  return await this.updateSettings(DOMAIN.ACCESSIBILITY, {
+    ReduceMotionEnabled: Number(reduceMotion),
+  });
+}
+
+/**
+ * Updates Reduce Transparency setting state.
+ *
+ * @param reduceTransparency Whether to enable or disable the setting.
+ */
+export async function setReduceTransparency(
+  this: CoreSimulatorWithSettings,
+  reduceTransparency: boolean,
+): Promise<boolean> {
+  return await this.updateSettings(DOMAIN.ACCESSIBILITY, {
+    EnhancedBackgroundContrastEnabled: Number(reduceTransparency),
+  });
+}
+
+/**
+ * Disable keyboard tutorial as 'com.apple.keyboard.preferences' domain via 'defaults' command.
+ * @returns Promise that resolves to true if settings were updated
+ */
+export async function disableKeyboardIntroduction(this: CoreSimulatorWithSettings): Promise<boolean> {
+  return await this.updateSettings(DOMAIN.KEYBOARD, {
+    // To disable 'DidShowContinuousPathIntroduction' for iOS 15+ simulators since changing the preference via WDA
+    // does not work on them. Lower than the versions also can have this preference, but nothing happen.
+    DidShowContinuousPathIntroduction: 1,
+  });
+}
+
+/**
+ * Allows to update Simulator preferences in runtime.
+ *
+ * @param domain The name of preferences domain to be updated,
+ * for example, 'com.apple.Preferences' or 'com.apple.Accessibility' or
+ * full path to a plist file on the local file system.
+ * @param updates Mapping of keys/values to be updated
+ * @returns True if settings were actually changed
+ */
+export async function updateSettings(
+  this: CoreSimulatorWithSettings,
+  domain: string,
+  updates: StringRecord,
+): Promise<boolean> {
+  if (Object.keys(updates).length === 0) {
+    return false;
+  }
+
+  const argChunks = generateDefaultsCommandArgs(updates);
+  await Promise.all(
+    argChunks.map((args) => spawnAndWait(this._native, this.udid, DEFAULTS_PATH, ['write', domain, ...args])),
+  );
+  return true;
+}
+
+/**
+ * Sets UI appearance style.
+ * This function can only be called on a booted simulator.
+ *
+ * @param value one of possible appearance values:
+ * - dark: to switch to the Dark mode
+ * - light: to switch to the Light mode
+ * @since Xcode SDK 11.4
+ */
+export async function setAppearance(this: CoreSimulatorWithSettings, value: string): Promise<void> {
+  await this._native.setAppearance(this.udid, appearanceToRaw(value));
+}
+
+/**
+ * Gets the current UI appearance style
+ * This function can only be called on a booted simulator.
+ *
+ * @returns the current UI appearance style.
+ * Possible values are:
+ * - dark: to switch to the Dark mode
+ * - light: to switch to the Light mode
+ * @since Xcode SDK 11.4
+ */
+export async function getAppearance(this: CoreSimulatorWithSettings): Promise<string> {
+  return rawToAppearance(await this._native.getAppearance(this.udid));
+}
+
+/**
+ * Sets the increase contrast configuration for the given simulator.
+ * This function can only be called on a booted simulator.
+ *
+ * @param value valid increase contrast configuration value.
+ *                       Acceptable value is 'enabled' or 'disabled' with Xcode 16.2.
+ * @since Xcode SDK 15
+ */
+export async function setIncreaseContrast(this: CoreSimulatorWithSettings, value: string): Promise<void> {
+  await this._native.setIncreaseContrast(this.udid, contrastToEnabled(value));
+}
+
+/**
+ * Retrieves the current increase contrast configuration value from the given simulator.
+ * This function can only be called on a booted simulator.
+ *
+ * @returns the contrast configuration value.
+ *                            Possible return value is 'enabled', 'disabled',
+ *                            'unsupported' or 'unknown' with Xcode 16.2.
+ * @since Xcode SDK 15
+ */
+export async function getIncreaseContrast(this: CoreSimulatorWithSettings): Promise<string> {
+  return rawToContrast(await this._native.getIncreaseContrast(this.udid));
+}
+
+/**
+ * Sets content size for the given simulator.
+ * This function can only be called on a booted simulator.
+ *
+ * @param value valid content size or action value. Acceptable value is
+ *                       extra-small, small, medium, large, extra-large, extra-extra-large,
+ *                       extra-extra-extra-large, accessibility-medium, accessibility-large,
+ *                       accessibility-extra-large, accessibility-extra-extra-large,
+ *                       accessibility-extra-extra-extra-large with Xcode 16.2.
+ * @since Xcode SDK 15
+ */
+export async function setContentSize(this: CoreSimulatorWithSettings, value: string): Promise<void> {
+  await this._native.setContentSize(this.udid, contentSizeToRaw(value));
+}
+
+/**
+ * Retrieves the current content size value from the given simulator.
+ * This function can only be called on a booted simulator.
+ *
+ * @return the content size value. Possible return value is
+ *                           extra-small, small, medium, large, extra-large, extra-extra-large,
+ *                           extra-extra-extra-large, accessibility-medium, accessibility-large,
+ *                           accessibility-extra-large, accessibility-extra-extra-large,
+ *                           accessibility-extra-extra-extra-large,
+ *                           unknown or unsupported with Xcode 16.2.
+ * @since Xcode SDK 15
+ */
+export async function getContentSize(this: CoreSimulatorWithSettings): Promise<string> {
+  return rawToContentSize(await this._native.getContentSize(this.udid));
+}
+
+/**
+ * Change localization settings on the currently booted simulator
+ *
+ * @param opts Localization options
+ * @throws {Error} If there was a failure while setting the preferences
+ * @returns `true` if any of settings has been successfully changed
+ */
+export async function configureLocalization(
+  this: CoreSimulatorWithSettings,
+  opts: LocalizationOptions = {},
+): Promise<boolean> {
+  if (Object.keys(opts).length === 0) {
+    return false;
+  }
+
+  const {language, locale, keyboard} = opts;
+  const globalPrefs: Record<string, any> = {};
+  let keyboardId: string | null = null;
+  if (util.isPlainObject(keyboard)) {
+    const {name, layout, hardware} = keyboard;
+    if (!name) {
+      throw new Error(`The 'keyboard' field must have a valid name set`);
+    }
+    if (!layout) {
+      throw new Error(`The 'keyboard' field must have a valid layout set`);
+    }
+    keyboardId = `${name}@sw=${layout}`;
+    if (hardware) {
+      keyboardId += `;@hw=${hardware}`;
+    }
+    globalPrefs.AppleKeyboards = [keyboardId];
+  }
+  if (util.isPlainObject(language)) {
+    const {name} = language;
+    if (!name) {
+      throw new Error(`The 'language' field must have a valid name set`);
+    }
+    globalPrefs.AppleLanguages = [name];
+  }
+  if (util.isPlainObject(locale)) {
+    const {name, calendar} = locale;
+    if (!name) {
+      throw new Error(`The 'locale' field must have a valid name set`);
+    }
+    let localeId = name;
+    if (calendar) {
+      localeId += `@calendar=${calendar}`;
+    }
+    globalPrefs.AppleLocale = localeId;
+  }
+  if (Object.keys(globalPrefs).length === 0) {
+    return false;
+  }
+
+  let previousAppleLanguages: unknown = null;
+  if (globalPrefs.AppleLanguages) {
+    const absolutePrefsPath = path.join(this.getDir(), 'Library', 'Preferences', GLOBAL_PREFS_PLIST);
+    try {
+      const {stdout} = await exec('plutil', ['-convert', 'json', absolutePrefsPath, '-o', '-']);
+      previousAppleLanguages = JSON.parse(stdout).AppleLanguages;
+    } catch (e: any) {
+      this.log.debug(`Cannot retrieve the current value of the 'AppleLanguages' preference: ${e.message}`);
+    }
+  }
+
+  const argChunks = generateDefaultsCommandArgs(globalPrefs, true);
+  await Promise.all(
+    argChunks.map((args) =>
+      spawnAndWait(this._native, this.udid, DEFAULTS_PATH, ['write', GLOBAL_PREFS_PLIST, ...args]),
+    ),
+  );
+
+  if (keyboard && keyboardId) {
+    const argChunks = generateDefaultsCommandArgs(
+      {
+        KeyboardsCurrentAndNext: [keyboardId],
+        KeyboardLastUsed: keyboardId,
+        KeyboardLastUsedForLanguage: {[keyboard.name]: keyboardId},
+      },
+      true,
+    );
+    await Promise.all(
+      argChunks.map((args) =>
+        spawnAndWait(this._native, this.udid, DEFAULTS_PATH, ['write', 'com.apple.Preferences', ...args]),
+      ),
+    );
+  }
+
+  if (globalPrefs.AppleLanguages) {
+    if (JSON.stringify(previousAppleLanguages) === JSON.stringify(globalPrefs.AppleLanguages)) {
+      this.log.info(
+        `The 'AppleLanguages' preference is already set to '${globalPrefs.AppleLanguages}'. ` +
+          `Skipping services reset`,
+      );
+    } else if (language?.skipSyncUiDialogTranslation) {
+      this.log.info('Skipping services reset as requested. This might leave some system UI alerts untranslated');
+    } else {
+      this.log.info(
+        `Will restart the following services in order to sync UI dialogs translation: ` +
+          `${SERVICES_FOR_TRANSLATION}. This might have unexpected side effects, ` +
+          `see https://github.com/appium/appium/issues/19440 for more details`,
+      );
+      await Promise.all(
+        SERVICES_FOR_TRANSLATION.map((service) =>
+          spawnAndWait(this._native, this.udid, LAUNCHCTL_PATH, ['stop', service]),
+        ),
+      );
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Updates Auto Fill Passwords setting state.
+ *
+ * @param isEnabled Whether to enable or disable the setting.
+ * @returns Promise that resolves to true if settings were updated
+ */
+export async function setAutoFillPasswords(this: CoreSimulatorWithSettings, isEnabled: boolean): Promise<boolean> {
+  return await this.updateSettings('com.apple.WebUI', {
+    AutoFillPasswords: Number(isEnabled),
+  });
+}
+
+/**
+ * Update the common iOS Simulator preferences file with new values.
+ * It is necessary to restart the corresponding Simulator before
+ * these changes are applied.
+ *
+ * @param devicePrefs The mapping, which represents new device preference values
+ * for the given Simulator.
+ * @param commonPrefs The mapping, which represents new common preference values
+ * for all Simulators.
+ * @return True if the preferences were successfully updated.
+ */
+export async function updatePreferences(
+  this: CoreSimulatorWithSettings,
+  devicePrefs: DevicePreferences = {},
+  commonPrefs: CommonPreferences = {},
+): Promise<boolean> {
+  if (Object.keys(devicePrefs).length > 0) {
+    this.log.debug(`Setting preferences of ${this.udid} Simulator to ${JSON.stringify(devicePrefs)}`);
+  }
+  if (Object.keys(commonPrefs).length > 0) {
+    this.log.debug(`Setting common Simulator preferences to ${JSON.stringify(commonPrefs)}`);
+  }
+  const homeFolderPath = process.env.HOME;
+  if (!homeFolderPath) {
+    this.log.warn(
+      `Cannot get the path to HOME folder from the process environment. Ignoring Simulator preferences update.`,
+    );
+    return false;
+  }
+  verifyDevicePreferences.bind(this)(devicePrefs);
+  const plistPath = path.resolve(homeFolderPath, 'Library', 'Preferences', 'com.apple.iphonesimulator.plist');
+  return await PREFERENCES_PLIST_GUARD.acquire(this.constructor.name, async () => {
+    const defaults = new NSUserDefaults(plistPath);
+    const prefsToUpdate = {...commonPrefs};
+    try {
+      if (Object.keys(devicePrefs).length > 0) {
+        let existingDevicePrefs: DevicePreferences | undefined;
+        const udidKey = this.udid.toUpperCase();
+        if (await fs.exists(plistPath)) {
+          const currentPlistContent = await defaults.asJson();
+          if (
+            util.isPlainObject(currentPlistContent.DevicePreferences) &&
+            util.isPlainObject(currentPlistContent.DevicePreferences[udidKey])
+          ) {
+            existingDevicePrefs = currentPlistContent.DevicePreferences[udidKey];
+          }
+        }
+        Object.assign(prefsToUpdate, {
+          DevicePreferences: {
+            [udidKey]: Object.assign({}, existingDevicePrefs || {}, devicePrefs),
+          },
+        });
+      }
+      await defaults.update(prefsToUpdate);
+      this.log.debug(
+        `Updated ${this.udid} Simulator preferences at '${plistPath}' with ` + JSON.stringify(prefsToUpdate),
+      );
+      return true;
+    } catch (e: any) {
+      this.log.warn(
+        `Cannot update ${this.udid} Simulator preferences at '${plistPath}'. ` +
+          `Try to delete the file manually in order to reset it. Original error: ${e.message}`,
+      );
+      return false;
+    }
+  });
+}
+
+/**
+ * Creates device and common Simulator preferences, which could
+ * be later applied using `defaults` CLI utility.
+ *
+ * @param opts Run options
+ * @returns The first array item is the resulting device preferences
+ * object and the second one is common preferences object
+ */
+export function compileSimulatorPreferences(
+  this: CoreSimulatorWithSettings,
+  opts: RunOptions = {},
+): [DevicePreferences, CommonPreferences & Record<string, any>] {
+  const {connectHardwareKeyboard, tracePointer, pasteboardAutomaticSync, scaleFactor} = opts;
+  const commonPreferences: CommonPreferences & Record<string, any> = {
+    // This option is necessary to make the Simulator window follow
+    // the actual XCUIDevice orientation
+    RotateWindowWhenSignaledByGuest: true,
+    // https://github.com/appium/appium/issues/16418
+    StartLastDeviceOnLaunch: false,
+    DetachOnWindowClose: false,
+    AttachBootedOnStart: true,
+  };
+  const devicePreferences: DevicePreferences = opts.devicePreferences ? structuredClone(opts.devicePreferences) : {};
+  if (scaleFactor) {
+    devicePreferences.SimulatorWindowLastScale = parseFloat(scaleFactor);
+  }
+  if (
+    typeof connectHardwareKeyboard === 'boolean' ||
+    connectHardwareKeyboard === null ||
+    connectHardwareKeyboard === undefined
+  ) {
+    devicePreferences.ConnectHardwareKeyboard = connectHardwareKeyboard ?? false;
+    commonPreferences.ConnectHardwareKeyboard = connectHardwareKeyboard ?? false;
+  }
+  if (typeof tracePointer === 'boolean') {
+    commonPreferences.ShowSingleTouches = tracePointer;
+    commonPreferences.ShowPinches = tracePointer;
+    commonPreferences.ShowPinchPivotPoint = tracePointer;
+    commonPreferences.HighlightEdgeGestures = tracePointer;
+  }
+  switch ((pasteboardAutomaticSync || '').toLowerCase()) {
+    case 'on':
+      commonPreferences.PasteboardAutomaticSync = true;
+      break;
+    case 'off':
+      // Improve launching simulator performance
+      // https://github.com/WebKit/webkit/blob/master/Tools/Scripts/webkitpy/xcode/simulated_device.py#L413
+      commonPreferences.PasteboardAutomaticSync = false;
+      break;
+    case 'system':
+      // Do not add -PasteboardAutomaticSync
+      break;
+    default:
+      this.log.info(
+        `['on', 'off' or 'system'] are available as the pasteboard automatic sync option. Defaulting to 'off'`,
+      );
+      commonPreferences.PasteboardAutomaticSync = false;
+  }
+  return [devicePreferences, commonPreferences];
+}
+
+/**
+ * Perform verification of device preferences correctness.
+ *
+ * @param prefs The preferences to be verified
+ * @returns void
+ * @throws {Error} If any of the given preference values does not match the expected
+ * format.
+ */
+export function verifyDevicePreferences(this: CoreSimulatorWithSettings, prefs: DevicePreferences = {}): void {
+  if (Object.keys(prefs).length === 0) {
+    return;
+  }
+
+  // https://regex101.com/r/2ZXOij/2
+  const simulatorWindowCenterPattern = /{-?\d+(\.\d+)?,-?\d+(\.\d+)?}/;
+  const acceptableSimulatorWindowOrientations = ['Portrait', 'LandscapeLeft', 'PortraitUpsideDown', 'LandscapeRight'];
+
+  if (
+    prefs.SimulatorWindowLastScale !== undefined &&
+    (typeof prefs.SimulatorWindowLastScale !== 'number' || prefs.SimulatorWindowLastScale <= 0)
+  ) {
+    throw this.log.errorWithException(
+      `SimulatorWindowLastScale is expected to be a positive float value. ` +
+        `'${prefs.SimulatorWindowLastScale}' is assigned instead.`,
+    );
+  }
+
+  if (
+    prefs.SimulatorWindowCenter !== undefined &&
+    (typeof prefs.SimulatorWindowCenter !== 'string' || !simulatorWindowCenterPattern.test(prefs.SimulatorWindowCenter))
+  ) {
+    throw this.log.errorWithException(
+      `SimulatorWindowCenter is expected to match "{floatXPosition,floatYPosition}" format (without spaces). ` +
+        `'${prefs.SimulatorWindowCenter}' is assigned instead.`,
+    );
+  }
+
+  if (
+    prefs.SimulatorWindowOrientation !== undefined &&
+    (!prefs.SimulatorWindowOrientation ||
+      !acceptableSimulatorWindowOrientations.includes(prefs.SimulatorWindowOrientation))
+  ) {
+    throw this.log.errorWithException(
+      `SimulatorWindowOrientation is expected to be one of ${acceptableSimulatorWindowOrientations}. ` +
+        `'${prefs.SimulatorWindowOrientation}' is assigned instead.`,
+    );
+  }
+
+  if (prefs.SimulatorWindowRotationAngle !== undefined && typeof prefs.SimulatorWindowRotationAngle !== 'number') {
+    throw this.log.errorWithException(
+      `SimulatorWindowRotationAngle is expected to be a valid number. ` +
+        `'${prefs.SimulatorWindowRotationAngle}' is assigned instead.`,
+    );
+  }
+}

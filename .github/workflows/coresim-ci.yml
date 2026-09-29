@@ -21,6 +21,9 @@ jobs:
   node_matrix:
     uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
 
+  xcode_matrix:
+    uses: ./.github/workflows/ios-xcode-matrix.yml
+
   prebuild:
     uses: ./.github/workflows/coresim-prebuild.yml
     with:
@@ -45,24 +48,19 @@ jobs:
   integration-test:
     needs:
       - prebuild
+      - xcode_matrix
     if: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - xcodeVersion: '27.0'
-            platform: xcode-27
-          - xcodeVersion: '26.5'
-            platform: macos-26
-          - xcodeVersion: '16.4'
-            platform: macos-15
+        combo: ${{ fromJSON(needs.xcode_matrix.outputs.matrix) }}
     uses: ./.github/workflows/coresim-shared-test.yml
     with:
-      platform: ${{ matrix.platform }}
-      xcode-version: ${{ matrix.xcodeVersion }}
+      platform: ${{ matrix.combo.image }}
+      xcode-version: ${{ matrix.combo.xcodeVersion }}
       node-version: lts/*
       test-command: test:integration
-      test-name: Integration tests (Xcode ${{ matrix.xcodeVersion }})
+      test-name: Integration tests (Xcode ${{ matrix.combo.xcodeVersion }})
       # Cheap to run per Xcode version here (no simulator boot involved) and gives warnings-as-
       # errors coverage across the same Xcode/CoreSimulator versions the functional tests cover.
       run-xcodebuild-check: true
