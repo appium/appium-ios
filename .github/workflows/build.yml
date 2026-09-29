@@ -58,8 +58,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
-          # dedicated CI (tuntap-ci.yml) with the toolchain that needs.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
+          # dedicated CI (tuntap-ci.yml) with the toolchain that needs. packages/simulator pulls
+          # in packages/coresim's native addon transitively (its own dependency), so that one
+          # still gets built here.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run unit tests
         env:
@@ -85,7 +87,8 @@ jobs:
           node-version: lts/*
           # Scoped to skip packages/tuntap's native (node-gyp) install - discover-affected-packages.mjs
           # never selects it (no real test:e2e script) and it has its own dedicated CI.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root --foreground-scripts
+          # packages/simulator pulls in packages/coresim's native addon transitively.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run E2E tests for ${{ matrix.package_dir }}
         run: |
@@ -104,7 +107,7 @@ jobs:
           node-version: lts/*
           # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
           # dedicated CI (tuntap-ci.yml) with the toolchain that needs.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root
           run-build: 'false'
       - name: Lint
         run: npm run lint

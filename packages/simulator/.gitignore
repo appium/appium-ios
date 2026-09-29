@@ -1,0 +1,5 @@
+node_modules
+build
+
+# Downloaded on first functional test run (see test/functional/fixtures.ts) — never committed.
+test/fixtures/*.app

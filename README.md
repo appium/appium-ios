@@ -8,6 +8,7 @@
 - [`ios-uicatalog`][]: Apple iOS UIKitCatalog test app
 - [`appium-ios-tuntap`][]: Native TUN/TAP interface module for Node.js
 - [`@appium/coresim`][]: Native bindings to CoreSimulator.framework for Apple platform simulator control
+- [`appium-ios-simulator`][]: iOS Simulator interface for Appium
 
 ## More Info
 
@@ -17,6 +18,7 @@ See the main [Appium site](https://appium.io) or [Appium GitHub repository](http
 [`ios-uicatalog`]: https://github.com/appium/appium-ios/tree/main/packages/uicatalog
 [`appium-ios-tuntap`]: https://github.com/appium/appium-ios/tree/main/packages/tuntap
 [`@appium/coresim`]: https://github.com/appium/appium-ios/tree/main/packages/coresim
+[`appium-ios-simulator`]: https://github.com/appium/appium-ios/tree/main/packages/simulator
 
 ## License
 

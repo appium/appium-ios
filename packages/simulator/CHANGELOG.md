@@ -1,0 +1,719 @@
+## [10.3.0](https://github.com/appium/appium-ios-simulator/compare/v10.2.0...v10.3.0) (2026-09-29)
+
+### Features
+
+* bump @appium/coresim and expose device orientation APIs ([#510](https://github.com/appium/appium-ios-simulator/issues/510)) ([0599eba](https://github.com/appium/appium-ios-simulator/commit/0599eba69b5bf84e38b2ad6dc06b7900a7b99bd6))
+
+## [10.2.0](https://github.com/appium/appium-ios-simulator/compare/v10.1.1...v10.2.0) (2026-09-25)
+
+### Features
+
+* expose CoreSimulator video recording and streaming APIs ([#508](https://github.com/appium/appium-ios-simulator/issues/508)) ([b54b6bd](https://github.com/appium/appium-ios-simulator/commit/b54b6bd620d77bfef326145aeb61b13aabfee8cb))
+
+## [10.1.1](https://github.com/appium/appium-ios-simulator/compare/v10.1.0...v10.1.1) (2026-09-23)
+
+### Bug Fixes
+
+* serialize UI client startup across processes with a file lock ([#507](https://github.com/appium/appium-ios-simulator/issues/507)) ([9deec7d](https://github.com/appium/appium-ios-simulator/commit/9deec7dbe86c6f22466b8f01180a40e7273395f0))
+
+## [10.1.0](https://github.com/appium/appium-ios-simulator/compare/v10.0.1...v10.1.0) (2026-09-19)
+
+### Features
+
+* confine spawnProcess to the Simulator runtime root ([#505](https://github.com/appium/appium-ios-simulator/issues/505)) ([a149623](https://github.com/appium/appium-ios-simulator/commit/a1496238db1ff0c0d68bcad83bda94b95310c3a7))
+
+## [10.0.1](https://github.com/appium/appium-ios-simulator/compare/v10.0.0...v10.0.1) (2026-09-18)
+
+### Bug Fixes
+
+* match simulator udid lookups case-insensitively ([#504](https://github.com/appium/appium-ios-simulator/issues/504)) ([e4a44db](https://github.com/appium/appium-ios-simulator/commit/e4a44db608b27ba1d5f2ea44905e2582665acd33))
+
+## [10.0.0](https://github.com/appium/appium-ios-simulator/compare/v9.1.3...v10.0.0) (2026-09-18)
+
+### ⚠ BREAKING CHANGES
+
+* Simulator/CoreSimulator no longer exposes a simctl property (a raw node-simctl Simctl instance).
+* Constructing a Simulator for Xcode < 15 now throws.
+* SimulatorXcode14 no longer exists. BaseSimulator is exported in its place for instanceof checks (e.g. replace 'simctl' in device with device instanceof BaseSimulator).
+
+### Features
+
+* replace node-simctl and applesimutils with @appium/coresim  ([#503](https://github.com/appium/appium-ios-simulator/issues/503)) ([0ebfa01](https://github.com/appium/appium-ios-simulator/commit/0ebfa0195b1967568a741237ff0a62a86778b7c0))
+
+### Code Refactoring
+
+* mix in extension methods via prototype instead of class fields ([#502](https://github.com/appium/appium-ios-simulator/issues/502)) ([f104016](https://github.com/appium/appium-ios-simulator/commit/f104016afea238b138054d7c9b868dfbec77be72))
+
+## [9.1.3](https://github.com/appium/appium-ios-simulator/compare/v9.1.2...v9.1.3) (2026-09-01)
+
+### Miscellaneous Chores
+
+* bump support & other dependencies ([#501](https://github.com/appium/appium-ios-simulator/issues/501)) ([12156af](https://github.com/appium/appium-ios-simulator/commit/12156afc6dc44b039fad449f84b0da256d06735c))
+
+## [9.1.2](https://github.com/appium/appium-ios-simulator/compare/v9.1.1...v9.1.2) (2026-07-30)
+
+### Miscellaneous Chores
+
+* Drop esmock ([#500](https://github.com/appium/appium-ios-simulator/issues/500)) ([4f4c35d](https://github.com/appium/appium-ios-simulator/commit/4f4c35dee2e4eab38d70bbb48748237809ab9d97))
+
+## [9.1.1](https://github.com/appium/appium-ios-simulator/compare/v9.1.0...v9.1.1) (2026-07-27)
+
+### Miscellaneous Chores
+
+* Drop chai ([#499](https://github.com/appium/appium-ios-simulator/issues/499)) ([b0cc0ad](https://github.com/appium/appium-ios-simulator/commit/b0cc0ad8170d5d04d898d46ac37e29cf7f44f73a))
+
+## [9.1.0](https://github.com/appium/appium-ios-simulator/compare/v9.0.1...v9.1.0) (2026-07-25)
+
+### Features
+
+* Integrate oxc and release configs ([#498](https://github.com/appium/appium-ios-simulator/issues/498)) ([02505a9](https://github.com/appium/appium-ios-simulator/commit/02505a932916c0bc0d7f1e9c90ac0e649fd6208a))
+
+## [9.0.1](https://github.com/appium/appium-ios-simulator/compare/v9.0.0...v9.0.1) (2026-07-25)
+
+### Miscellaneous Chores
+
+* Bump dependencies ([#497](https://github.com/appium/appium-ios-simulator/issues/497)) ([1548610](https://github.com/appium/appium-ios-simulator/commit/1548610dd474184ebb8e42dbaa2e32debffdee61))
+
+## [9.0.0](https://github.com/appium/appium-ios-simulator/compare/v8.2.8...v9.0.0) (2026-07-24)
+
+### ⚠ BREAKING CHANGES
+
+* Consumers using require('appium-ios-simulator') must switch to import/dynamic import() — the package no longer ships a CommonJS entry point.
+
+### Features
+
+* Migrate the package to ESM ([#496](https://github.com/appium/appium-ios-simulator/issues/496)) ([3d4ec18](https://github.com/appium/appium-ios-simulator/commit/3d4ec18a84acf64489ecf80f01dd57ce56942602))
+
+## [8.2.8](https://github.com/appium/appium-ios-simulator/compare/v8.2.7...v8.2.8) (2026-07-15)
+
+### Miscellaneous Chores
+
+* **deps:** Bump actions/setup-node from 6 to 7 ([#493](https://github.com/appium/appium-ios-simulator/issues/493)) ([54d20cb](https://github.com/appium/appium-ios-simulator/commit/54d20cbef1f0de8705dcce82af689c46d51ca5e7))
+
+## [8.2.7](https://github.com/appium/appium-ios-simulator/compare/v8.2.6...v8.2.7) (2026-07-07)
+
+### Miscellaneous Chores
+
+* Drop mocha ([#490](https://github.com/appium/appium-ios-simulator/issues/490)) ([9cf1c6b](https://github.com/appium/appium-ios-simulator/commit/9cf1c6b1212bde6da2ce783f45f68936c7106ea1))
+
+## [8.2.6](https://github.com/appium/appium-ios-simulator/compare/v8.2.5...v8.2.6) (2026-07-01)
+
+### Miscellaneous Chores
+
+* downgrade conventional-changelog-conventionalcommits to v9 ([#487](https://github.com/appium/appium-ios-simulator/issues/487)) ([cadb76e](https://github.com/appium/appium-ios-simulator/commit/cadb76e3c5065d67072f146ed6b0aca4997f9a37))
+
+## [8.2.5](https://github.com/appium/appium-ios-simulator/compare/v8.2.4...v8.2.5) (2026-07-01)
+
+## [8.2.4](https://github.com/appium/appium-ios-simulator/compare/v8.2.3...v8.2.4) (2026-06-29)
+
+## [8.2.3](https://github.com/appium/appium-ios-simulator/compare/v8.2.2...v8.2.3) (2026-06-19)
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump @types/node from 25.9.4 to 26.0.0 ([#483](https://github.com/appium/appium-ios-simulator/issues/483)) ([e8411b5](https://github.com/appium/appium-ios-simulator/commit/e8411b513d758f6e3877b24bd526e62515ac512b))
+
+## [8.2.2](https://github.com/appium/appium-ios-simulator/compare/v8.2.1...v8.2.2) (2026-06-19)
+
+### Miscellaneous Chores
+
+* **deps:** Bump actions/checkout from 6 to 7 ([#484](https://github.com/appium/appium-ios-simulator/issues/484)) ([74754e1](https://github.com/appium/appium-ios-simulator/commit/74754e10b366293cbb73acd705b8348a9ee8b0f1))
+
+## [8.2.1](https://github.com/appium/appium-ios-simulator/compare/v8.2.0...v8.2.1) (2026-06-10)
+
+### Bug Fixes
+
+* Use getPath API from 'appium-xcode' ([#482](https://github.com/appium/appium-ios-simulator/issues/482)) ([6cfb853](https://github.com/appium/appium-ios-simulator/commit/6cfb8534c3cf1f2eee7bb761852bfc6844a393ba))
+
+## [8.2.0](https://github.com/appium/appium-ios-simulator/compare/v8.1.3...v8.2.0) (2026-06-10)
+
+### Features
+
+* Add support of Xcode27 ([#481](https://github.com/appium/appium-ios-simulator/issues/481)) ([f8ae5ef](https://github.com/appium/appium-ios-simulator/commit/f8ae5efefd6c21a3751b632dd1494c22c17a81b3))
+
+## [8.1.3](https://github.com/appium/appium-ios-simulator/compare/v8.1.2...v8.1.3) (2026-05-08)
+
+### Miscellaneous Chores
+
+* Make TS mode strict ([#480](https://github.com/appium/appium-ios-simulator/issues/480)) ([ddf5b26](https://github.com/appium/appium-ios-simulator/commit/ddf5b261af5b0a919d08a687a1b20e7d9514d151))
+
+## [8.1.2](https://github.com/appium/appium-ios-simulator/compare/v8.1.1...v8.1.2) (2026-05-06)
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump sinon from 21.1.2 to 22.0.0 ([#479](https://github.com/appium/appium-ios-simulator/issues/479)) ([296c1bb](https://github.com/appium/appium-ios-simulator/commit/296c1bbdceb44d223937d0ac6e5372fc05ce4ce8))
+
+## [8.1.1](https://github.com/appium/appium-ios-simulator/compare/v8.1.0...v8.1.1) (2026-04-28)
+
+### Bug Fixes
+
+* Copilot review comments ([#478](https://github.com/appium/appium-ios-simulator/issues/478)) ([3dbc29c](https://github.com/appium/appium-ios-simulator/commit/3dbc29c61e18533d05433f2239a78e6350e8415c))
+
+## [8.1.0](https://github.com/appium/appium-ios-simulator/compare/v8.0.13...v8.1.0) (2026-04-27)
+
+### Features
+
+* Strip bluebird and lodash usage ([#477](https://github.com/appium/appium-ios-simulator/issues/477)) ([3f19625](https://github.com/appium/appium-ios-simulator/commit/3f1962542e6bcad5098c8d056218c41e0fac9c9e))
+
+## [8.0.13](https://github.com/appium/appium-ios-simulator/compare/v8.0.12...v8.0.13) (2026-04-10)
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump typescript from 5.9.3 to 6.0.2 ([#476](https://github.com/appium/appium-ios-simulator/issues/476)) ([3943b85](https://github.com/appium/appium-ios-simulator/commit/3943b855d3c62c6a6c5cefd195b4a5915558ab01))
+
+## [8.0.12](https://github.com/appium/appium-ios-simulator/compare/v8.0.11...v8.0.12) (2026-02-16)
+
+### Bug Fixes
+
+* format ([#475](https://github.com/appium/appium-ios-simulator/issues/475)) ([43d520c](https://github.com/appium/appium-ios-simulator/commit/43d520c475fad9b1c6567397185499be02e90d84))
+
+## [8.0.11](https://github.com/appium/appium-ios-simulator/compare/v8.0.10...v8.0.11) (2026-01-28)
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump @appium/eslint-config-appium-ts from 2.0.5 to 3.0.0 ([#474](https://github.com/appium/appium-ios-simulator/issues/474)) ([47def60](https://github.com/appium/appium-ios-simulator/commit/47def60dabd4a7104696b387bc3acca933c31c27))
+
+## [8.0.10](https://github.com/appium/appium-ios-simulator/compare/v8.0.9...v8.0.10) (2026-01-27)
+
+### Miscellaneous Chores
+
+* **deps:** Bump asyncbox from 4.1.1 to 6.0.1 ([#473](https://github.com/appium/appium-ios-simulator/issues/473)) ([3aca303](https://github.com/appium/appium-ios-simulator/commit/3aca3038adc13b7d8253881f308a1a32dc2418c0))
+
+## [8.0.9](https://github.com/appium/appium-ios-simulator/compare/v8.0.8...v8.0.9) (2025-12-22)
+
+### Miscellaneous Chores
+
+* bump teen_process ([#470](https://github.com/appium/appium-ios-simulator/issues/470)) ([76b4be6](https://github.com/appium/appium-ios-simulator/commit/76b4be6485f8cc2a526680b702b0ee3880207fa7))
+
+## [8.0.8](https://github.com/appium/appium-ios-simulator/compare/v8.0.7...v8.0.8) (2025-12-19)
+
+### Miscellaneous Chores
+
+* **deps:** Bump asyncbox from 3.0.0 to 4.0.1 ([#468](https://github.com/appium/appium-ios-simulator/issues/468)) ([075a39d](https://github.com/appium/appium-ios-simulator/commit/075a39d27f9c63b0d080dfe74963feb5f0c13d0e))
+
+## [8.0.7](https://github.com/appium/appium-ios-simulator/compare/v8.0.6...v8.0.7) (2025-12-13)
+
+### Miscellaneous Chores
+
+* **deps:** remove source-map-support ([#467](https://github.com/appium/appium-ios-simulator/issues/467)) ([888b31b](https://github.com/appium/appium-ios-simulator/commit/888b31bfa24f6f934508316b164876a42b15c23f))
+
+## [8.0.6](https://github.com/appium/appium-ios-simulator/compare/v8.0.5...v8.0.6) (2025-12-12)
+
+### Bug Fixes
+
+* appinfo call via node-simctl ([#466](https://github.com/appium/appium-ios-simulator/issues/466)) ([5169955](https://github.com/appium/appium-ios-simulator/commit/516995541b68f6f4f1c0c32f102fac1477d72725))
+
+## [8.0.5](https://github.com/appium/appium-ios-simulator/compare/v8.0.4...v8.0.5) (2025-12-11)
+
+### Miscellaneous Chores
+
+* **deps-dev:** Bump @types/node from 24.10.3 to 25.0.0 ([#464](https://github.com/appium/appium-ios-simulator/issues/464)) ([290b831](https://github.com/appium/appium-ios-simulator/commit/290b831eb320ac435f99a012127802a920e40e76))
+
+## [8.0.4](https://github.com/appium/appium-ios-simulator/compare/v8.0.3...v8.0.4) (2025-12-09)
+
+### Miscellaneous Chores
+
+* Migrate extensions to typescript ([#463](https://github.com/appium/appium-ios-simulator/issues/463)) ([3bc4543](https://github.com/appium/appium-ios-simulator/commit/3bc45431601b76359944aa2b21e676ea5e9cdfbe))
+
+## [8.0.3](https://github.com/appium/appium-ios-simulator/compare/v8.0.2...v8.0.3) (2025-12-06)
+
+### Miscellaneous Chores
+
+* Migrate utils to typescript ([#462](https://github.com/appium/appium-ios-simulator/issues/462)) ([0b2f77d](https://github.com/appium/appium-ios-simulator/commit/0b2f77dd7e1228d2bc0b75892b824978287ae1ca))
+
+## [8.0.2](https://github.com/appium/appium-ios-simulator/compare/v8.0.1...v8.0.2) (2025-12-02)
+
+### Miscellaneous Chores
+
+* **deps:** Bump actions/setup-node from 3 to 6 ([#461](https://github.com/appium/appium-ios-simulator/issues/461)) ([8fcaaa7](https://github.com/appium/appium-ios-simulator/commit/8fcaaa734f2cec5e504b0f60265125544822da6a))
+
+## [8.0.1](https://github.com/appium/appium-ios-simulator/compare/v8.0.0...v8.0.1) (2025-12-02)
+
+### Miscellaneous Chores
+
+* **deps:** Bump actions/checkout from 3 to 6 ([#460](https://github.com/appium/appium-ios-simulator/issues/460)) ([230adad](https://github.com/appium/appium-ios-simulator/commit/230adad1e9f93e7f4d12b74d59af8a2263b49692))
+
+## [8.0.0](https://github.com/appium/appium-ios-simulator/compare/v7.0.3...v8.0.0) (2025-11-22)
+
+### ⚠ BREAKING CHANGES
+
+* The minimum supported Xcode version is set to 14
+* Removed idb getter and setter from Simulator class
+
+### Features
+
+* Stop supporting Xcode versions below 14 ([#458](https://github.com/appium/appium-ios-simulator/issues/458)) ([8071076](https://github.com/appium/appium-ios-simulator/commit/807107669c69f1b01c14156c548e6f28fbc0470f))
+
+## [7.0.3](https://github.com/appium/appium-ios-simulator/compare/v7.0.2...v7.0.3) (2025-11-15)
+
+### Miscellaneous Chores
+
+* publish via trusted publisher ([#456](https://github.com/appium/appium-ios-simulator/issues/456)) ([8e1f1af](https://github.com/appium/appium-ios-simulator/commit/8e1f1af8b55311641b580b48f0ff28dfecf4fe59))
+
+## [7.0.2](https://github.com/appium/appium-ios-simulator/compare/v7.0.1...v7.0.2) (2025-10-17)
+
+### Miscellaneous Chores
+
+* Bump semantic-release from 24.2.9 to 25.0.0 ([#455](https://github.com/appium/appium-ios-simulator/issues/455)) ([29cdc45](https://github.com/appium/appium-ios-simulator/commit/29cdc4576ca8b16ba5a6655cc0c227a8d160efa7))
+
+## [7.0.1](https://github.com/appium/appium-ios-simulator/compare/v7.0.0...v7.0.1) (2025-08-23)
+
+### Miscellaneous Chores
+
+* Bump chai from 5.3.2 to 6.0.0 ([#453](https://github.com/appium/appium-ios-simulator/issues/453)) ([db3bcc8](https://github.com/appium/appium-ios-simulator/commit/db3bcc88bf2e0a0a7bcd7f6d31489d13a91a7063))
+
+## [7.0.0](https://github.com/appium/appium-ios-simulator/compare/v6.2.6...v7.0.0) (2025-08-17)
+
+### ⚠ BREAKING CHANGES
+
+* Required Node.js version has been bumped to ^20.19.0 || ^22.12.0 || >=24.0.0
+* Required npm version has been bumped to >=10
+
+### Features
+
+* Bump Node.js version ([#452](https://github.com/appium/appium-ios-simulator/issues/452)) ([8aa62d0](https://github.com/appium/appium-ios-simulator/commit/8aa62d0688154002ab08d7c4f182731969f6ec37))
+
+## [6.2.6](https://github.com/appium/appium-ios-simulator/compare/v6.2.5...v6.2.6) (2025-06-13)
+
+### Miscellaneous Chores
+
+* Bump sinon from 20.0.0 to 21.0.0 ([#451](https://github.com/appium/appium-ios-simulator/issues/451)) ([c7509df](https://github.com/appium/appium-ios-simulator/commit/c7509df0e047915a16ac4da41c9425899cc0aeec))
+
+## [6.2.5](https://github.com/appium/appium-ios-simulator/compare/v6.2.4...v6.2.5) (2025-06-11)
+
+### Miscellaneous Chores
+
+* Bump @types/node from 22.15.31 to 24.0.0 ([#449](https://github.com/appium/appium-ios-simulator/issues/449)) ([fbc07f2](https://github.com/appium/appium-ios-simulator/commit/fbc07f2560c5b87e75b39fdb01116178df1b363c))
+
+## [6.2.4](https://github.com/appium/appium-ios-simulator/compare/v6.2.3...v6.2.4) (2025-06-11)
+
+### Bug Fixes
+
+* Keychains backup and restore ([#450](https://github.com/appium/appium-ios-simulator/issues/450)) ([c1ee6e6](https://github.com/appium/appium-ios-simulator/commit/c1ee6e628dd472c1f294e64ba02b68a315cb7e01))
+
+## [6.2.3](https://github.com/appium/appium-ios-simulator/compare/v6.2.2...v6.2.3) (2025-05-20)
+
+### Miscellaneous Chores
+
+* Bump conventional-changelog-conventionalcommits ([#448](https://github.com/appium/appium-ios-simulator/issues/448)) ([d442f17](https://github.com/appium/appium-ios-simulator/commit/d442f171c7de6a11d0e47556a9e312a70c908b82))
+
+## [6.2.2](https://github.com/appium/appium-ios-simulator/compare/v6.2.1...v6.2.2) (2025-04-05)
+
+### Bug Fixes
+
+* Wait for springboard restart and spotlight application restart after applesimutils invocation ([#447](https://github.com/appium/appium-ios-simulator/issues/447)) ([76d38b3](https://github.com/appium/appium-ios-simulator/commit/76d38b37930318c0c6c6a558903ca0f6bd11f25f))
+
+## [6.2.1](https://github.com/appium/appium-ios-simulator/compare/v6.2.0...v6.2.1) (2025-03-25)
+
+### Miscellaneous Chores
+
+* Bump sinon from 19.0.5 to 20.0.0 ([#446](https://github.com/appium/appium-ios-simulator/issues/446)) ([b3fc653](https://github.com/appium/appium-ios-simulator/commit/b3fc6536c99a6d149b7bdcf2bdd0356f30b4d8a4))
+
+## [6.2.0](https://github.com/appium/appium-ios-simulator/compare/v6.1.17...v6.2.0) (2025-01-27)
+
+### Features
+
+* add increase contrast and content size commands ([#444](https://github.com/appium/appium-ios-simulator/issues/444)) ([486bc4d](https://github.com/appium/appium-ios-simulator/commit/486bc4d0bf152a6d8885a14a35235a78b1ee450e))
+
+## [6.1.17](https://github.com/appium/appium-ios-simulator/compare/v6.1.16...v6.1.17) (2025-01-05)
+
+### Miscellaneous Chores
+
+* Bump @appium/eslint-config-appium-ts from 0.3.3 to 1.0.1 ([#443](https://github.com/appium/appium-ios-simulator/issues/443)) ([b387d8d](https://github.com/appium/appium-ios-simulator/commit/b387d8d5933510d104cfb3a697a2b3b56fb929fc))
+
+## [6.1.16](https://github.com/appium/appium-ios-simulator/compare/v6.1.15...v6.1.16) (2024-12-12)
+
+### Miscellaneous Chores
+
+* Replace occurrences of the deprecated errorAndThrow API ([#442](https://github.com/appium/appium-ios-simulator/issues/442)) ([9e3a72c](https://github.com/appium/appium-ios-simulator/commit/9e3a72cb9ed607f48d583c76d695e3185c25a2f9))
+
+## [6.1.15](https://github.com/appium/appium-ios-simulator/compare/v6.1.14...v6.1.15) (2024-12-06)
+
+### Miscellaneous Chores
+
+* Bump @appium/support from 5.1.8 to 6.0.0 ([#441](https://github.com/appium/appium-ios-simulator/issues/441)) ([e0f4e24](https://github.com/appium/appium-ios-simulator/commit/e0f4e249eb052aa788888426780d4b4bb2ad0958))
+
+## [6.1.14](https://github.com/appium/appium-ios-simulator/compare/v6.1.13...v6.1.14) (2024-12-03)
+
+### Miscellaneous Chores
+
+* Bump mocha from 10.8.2 to 11.0.1 ([#440](https://github.com/appium/appium-ios-simulator/issues/440)) ([a015e35](https://github.com/appium/appium-ios-simulator/commit/a015e355c1ab19331c64cda72b4f6fed77e3d84d))
+
+## [6.1.13](https://github.com/appium/appium-ios-simulator/compare/v6.1.12...v6.1.13) (2024-09-16)
+
+### Miscellaneous Chores
+
+* Bump sinon from 18.0.1 to 19.0.1 ([#436](https://github.com/appium/appium-ios-simulator/issues/436)) ([a5460c0](https://github.com/appium/appium-ios-simulator/commit/a5460c0b05fb438e22d95b900445de08c71e4fa2))
+
+## [6.1.12](https://github.com/appium/appium-ios-simulator/compare/v6.1.11...v6.1.12) (2024-09-16)
+
+### Bug Fixes
+
+* type error by xmldom ([#437](https://github.com/appium/appium-ios-simulator/issues/437)) ([4d85282](https://github.com/appium/appium-ios-simulator/commit/4d85282ce6a5d89342fa20d96dd95d0fa3e25604))
+
+## [6.1.11](https://github.com/appium/appium-ios-simulator/compare/v6.1.10...v6.1.11) (2024-07-29)
+
+### Miscellaneous Chores
+
+* Bump @types/node from 20.14.13 to 22.0.0 ([#435](https://github.com/appium/appium-ios-simulator/issues/435)) ([6642944](https://github.com/appium/appium-ios-simulator/commit/664294491be51362c28c0ec2db06590a01d50045))
+
+## [6.1.10](https://github.com/appium/appium-ios-simulator/compare/v6.1.9...v6.1.10) (2024-07-09)
+
+### Miscellaneous Chores
+
+* Remove extra import ([22edcf1](https://github.com/appium/appium-ios-simulator/commit/22edcf130ccc92cbe6566d51d3def97a37b25bd8))
+
+## [6.1.9](https://github.com/appium/appium-ios-simulator/compare/v6.1.8...v6.1.9) (2024-06-18)
+
+### Miscellaneous Chores
+
+* Bump chai and chai-as-promised ([#434](https://github.com/appium/appium-ios-simulator/issues/434)) ([ef29844](https://github.com/appium/appium-ios-simulator/commit/ef298446f987925ea749e0881a272a0ea0737e85))
+
+## [6.1.8](https://github.com/appium/appium-ios-simulator/compare/v6.1.7...v6.1.8) (2024-06-12)
+
+### Miscellaneous Chores
+
+* Bump @appium/support from 4.5.0 to 5.0.3 ([#433](https://github.com/appium/appium-ios-simulator/issues/433)) ([a9c974d](https://github.com/appium/appium-ios-simulator/commit/a9c974d9ea3bb5f333756e1071d0be07ce4d660a))
+
+## [6.1.7](https://github.com/appium/appium-ios-simulator/compare/v6.1.6...v6.1.7) (2024-06-05)
+
+### Bug Fixes
+
+* system prompt for Apple ID sign in unexpectedly not translated ([#431](https://github.com/appium/appium-ios-simulator/issues/431)) ([9c3bb77](https://github.com/appium/appium-ios-simulator/commit/9c3bb77cb0ea3168f80e0db3161d70ed73873638))
+
+## [6.1.6](https://github.com/appium/appium-ios-simulator/compare/v6.1.5...v6.1.6) (2024-06-04)
+
+### Miscellaneous Chores
+
+* Bump semantic-release from 23.1.1 to 24.0.0 and conventional-changelog-conventionalcommits to 8.0.0 ([#430](https://github.com/appium/appium-ios-simulator/issues/430)) ([0d819ef](https://github.com/appium/appium-ios-simulator/commit/0d819ef415df6086363d85f62474f10982e47351))
+
+## [6.1.5](https://github.com/appium/appium-ios-simulator/compare/v6.1.4...v6.1.5) (2024-05-16)
+
+
+### Miscellaneous Chores
+
+* Update dev dependencies ([b386580](https://github.com/appium/appium-ios-simulator/commit/b386580930d30cd26f2d76bd118419fa08e10abc))
+
+## [6.1.4](https://github.com/appium/appium-ios-simulator/compare/v6.1.3...v6.1.4) (2024-05-16)
+
+
+### Miscellaneous Chores
+
+* Bump sinon from 17.0.2 to 18.0.0 ([#429](https://github.com/appium/appium-ios-simulator/issues/429)) ([b5393d7](https://github.com/appium/appium-ios-simulator/commit/b5393d7f5ff3b3809b9ae3c0e1d5022f4131c796))
+
+## [6.1.3](https://github.com/appium/appium-ios-simulator/compare/v6.1.2...v6.1.3) (2024-04-09)
+
+
+### Miscellaneous Chores
+
+* Remove extra imports ([3905f38](https://github.com/appium/appium-ios-simulator/commit/3905f38fabc34d78f1d577a05d1ed2b8e18ffa1f))
+
+## [6.1.2](https://github.com/appium/appium-ios-simulator/compare/v6.1.1...v6.1.2) (2024-03-26)
+
+
+### Bug Fixes
+
+* Update settings domain name ([42f5b90](https://github.com/appium/appium-ios-simulator/commit/42f5b9032b2659cbbdead478f7e7c2559142da0f))
+
+## [6.1.1](https://github.com/appium/appium-ios-simulator/compare/v6.1.0...v6.1.1) (2024-03-26)
+
+
+### Bug Fixes
+
+* Update the typedef for scrubSafari API ([#423](https://github.com/appium/appium-ios-simulator/issues/423)) ([3ccbf80](https://github.com/appium/appium-ios-simulator/commit/3ccbf809144e2ff202b7f3cd642bb44a6ed65dca))
+
+## [6.1.0](https://github.com/appium/appium-ios-simulator/compare/v6.0.0...v6.1.0) (2024-03-26)
+
+
+### Features
+
+* Export all types ([#422](https://github.com/appium/appium-ios-simulator/issues/422)) ([deb8463](https://github.com/appium/appium-ios-simulator/commit/deb84636e963a319cdcc90364a4ce1e1d9539b40))
+
+## [6.0.0](https://github.com/appium/appium-ios-simulator/compare/v5.5.3...v6.0.0) (2024-03-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* Dropped obsolete simulator classes: SimulatorXcode8, SimulatorXcode9 and SimulatorXcode9_3. APIs that are still relevant have been moved to SimulatorXcode10
+* Added proper type definitions. Interfaces were refactored and connected to appropriate extension classes.
+
+Now it is possible to provide a logger to the factory method, which improves the visibility of session identifiers
+
+### Features
+
+* Drop obsolete Simulator versions ([#420](https://github.com/appium/appium-ios-simulator/issues/420)) ([bff7e56](https://github.com/appium/appium-ios-simulator/commit/bff7e561caa9d48c07203ce5e2b7641245168538))
+
+## [5.5.3](https://github.com/appium/appium-ios-simulator/compare/v5.5.2...v5.5.3) (2024-03-07)
+
+
+### Miscellaneous Chores
+
+* bump typescript ([f68792d](https://github.com/appium/appium-ios-simulator/commit/f68792dbc677f0f47cb67747fcdd11d65a9f1909))
+
+## [5.5.2](https://github.com/appium/appium-ios-simulator/compare/v5.5.1...v5.5.2) (2024-01-17)
+
+
+### Miscellaneous Chores
+
+* Bump semantic-release from 22.0.12 to 23.0.0 ([#410](https://github.com/appium/appium-ios-simulator/issues/410)) ([c5dbc59](https://github.com/appium/appium-ios-simulator/commit/c5dbc599e9ca8b27c235f7aea05dca0fe8912376))
+* use latest lts for the publishment ([96c21d2](https://github.com/appium/appium-ios-simulator/commit/96c21d2724a774ba2b0edc8c203c708b373b143f))
+
+## [5.5.1](https://github.com/appium/appium-ios-simulator/compare/v5.5.0...v5.5.1) (2023-12-04)
+
+
+### Bug Fixes
+
+* handle location command as case insensitive ([#407](https://github.com/appium/appium-ios-simulator/issues/407)) ([fa060a4](https://github.com/appium/appium-ios-simulator/commit/fa060a49fd6564cf41c492dc18b8f25bb270178a))
+
+## [5.5.0](https://github.com/appium/appium-ios-simulator/compare/v5.4.0...v5.5.0) (2023-11-26)
+
+
+### Features
+
+* use xcrun privacy instead of wix for location permission but keep using wix for rest ([#406](https://github.com/appium/appium-ios-simulator/issues/406)) ([6280527](https://github.com/appium/appium-ios-simulator/commit/628052753caaa68fd8afffe14956d180156dded9))
+
+## [5.4.0](https://github.com/appium/appium-ios-simulator/compare/v5.3.10...v5.4.0) (2023-11-24)
+
+
+### Features
+
+* add skipSyncUiTranslation option ([#404](https://github.com/appium/appium-ios-simulator/issues/404)) ([1833e83](https://github.com/appium/appium-ios-simulator/commit/1833e839ddd17d32372d95745fc8e8078ce94faf))
+
+## [5.3.10](https://github.com/appium/appium-ios-simulator/compare/v5.3.9...v5.3.10) (2023-11-23)
+
+
+### Bug Fixes
+
+* Only restart system services if the language is actually changed ([#403](https://github.com/appium/appium-ios-simulator/issues/403)) ([62c2ffb](https://github.com/appium/appium-ios-simulator/commit/62c2ffb17e878438aa2141f285c4b562d25f34e3))
+
+## [5.3.9](https://github.com/appium/appium-ios-simulator/compare/v5.3.8...v5.3.9) (2023-11-06)
+
+
+### Miscellaneous Chores
+
+* Bump @types/sinon from 10.0.20 to 17.0.0 ([#402](https://github.com/appium/appium-ios-simulator/issues/402)) ([b2ced20](https://github.com/appium/appium-ios-simulator/commit/b2ced206a110c992ed9d2ddb6e23d449f40367b4))
+
+## [5.3.8](https://github.com/appium/appium-ios-simulator/compare/v5.3.7...v5.3.8) (2023-11-01)
+
+
+### Miscellaneous Chores
+
+* Bump asyncbox from 2.9.4 to 3.0.0 ([#401](https://github.com/appium/appium-ios-simulator/issues/401)) ([04ea35c](https://github.com/appium/appium-ios-simulator/commit/04ea35cac6f2e3d9430e9cf224d9d98588cb0643))
+
+## [5.3.7](https://github.com/appium/appium-ios-simulator/compare/v5.3.6...v5.3.7) (2023-11-01)
+
+
+### Bug Fixes
+
+* appropriately translate some system prompts on iOS 16.1 simulator ([#400](https://github.com/appium/appium-ios-simulator/issues/400)) ([f551113](https://github.com/appium/appium-ios-simulator/commit/f55111343c77be88011c31a5c111127b57af01cd))
+
+## [5.3.6](https://github.com/appium/appium-ios-simulator/compare/v5.3.5...v5.3.6) (2023-10-28)
+
+
+### Miscellaneous Chores
+
+* Bump @typescript-eslint/eslint-plugin from 5.62.0 to 6.9.0 ([#399](https://github.com/appium/appium-ios-simulator/issues/399)) ([3229686](https://github.com/appium/appium-ios-simulator/commit/322968656da427c7a65010a577e1eab5415f5367))
+
+## [5.3.5](https://github.com/appium/appium-ios-simulator/compare/v5.3.4...v5.3.5) (2023-10-24)
+
+
+### Miscellaneous Chores
+
+* Bump sinon from 16.1.3 to 17.0.0 ([#398](https://github.com/appium/appium-ios-simulator/issues/398)) ([c28ad31](https://github.com/appium/appium-ios-simulator/commit/c28ad312bd1119ddb8f914776515fdf227646135))
+
+## [5.3.4](https://github.com/appium/appium-ios-simulator/compare/v5.3.3...v5.3.4) (2023-10-19)
+
+
+### Miscellaneous Chores
+
+* Bump @types/teen_process from 2.0.0 to 2.0.2 ([#394](https://github.com/appium/appium-ios-simulator/issues/394)) ([d7aff53](https://github.com/appium/appium-ios-simulator/commit/d7aff5367ff9624a713dcfb38b569baa06a8e5e7))
+* Bump eslint-config-prettier from 8.10.0 to 9.0.0 ([#395](https://github.com/appium/appium-ios-simulator/issues/395)) ([8a9dd1b](https://github.com/appium/appium-ios-simulator/commit/8a9dd1b2e6959fe38e0187bed5be43e42165b6a8))
+* Bump lint-staged from 14.0.1 to 15.0.2 ([#396](https://github.com/appium/appium-ios-simulator/issues/396)) ([65bc459](https://github.com/appium/appium-ios-simulator/commit/65bc4598800327ad19453e925bf3e5e4451435b7))
+* Bump semantic-release from 21.1.2 to 22.0.5 ([#387](https://github.com/appium/appium-ios-simulator/issues/387)) ([e86a288](https://github.com/appium/appium-ios-simulator/commit/e86a2888461aa17f317de836a12f22dfe662d634))
+* Use latest teen_process types ([5c97a49](https://github.com/appium/appium-ios-simulator/commit/5c97a495f4e72ed72db2cadb49d9b9f892621313))
+* Use latest types ([858661a](https://github.com/appium/appium-ios-simulator/commit/858661a45a0b547ee8b4895ce4571acefc7a67c4))
+
+## [5.3.3](https://github.com/appium/appium-ios-simulator/compare/v5.3.2...v5.3.3) (2023-09-26)
+
+
+### Bug Fixes
+
+* Only restart springboard if the system language is changed ([#388](https://github.com/appium/appium-ios-simulator/issues/388)) ([99e3ae5](https://github.com/appium/appium-ios-simulator/commit/99e3ae5c91f0a6c57313cef5afb3311ee0f974d1))
+
+## [5.3.2](https://github.com/appium/appium-ios-simulator/compare/v5.3.1...v5.3.2) (2023-09-23)
+
+
+### Bug Fixes
+
+* appropriately translate com.apple.SpringBoard and system prompts ([#384](https://github.com/appium/appium-ios-simulator/issues/384)) ([edde636](https://github.com/appium/appium-ios-simulator/commit/edde6368d540bb3df8611be38a1099c7ea2a8dea))
+
+## [5.3.1](https://github.com/appium/appium-ios-simulator/compare/v5.3.0...v5.3.1) (2023-09-14)
+
+
+### Miscellaneous Chores
+
+* Bump sinon from 15.2.0 to 16.0.0 ([#381](https://github.com/appium/appium-ios-simulator/issues/381)) ([686ee76](https://github.com/appium/appium-ios-simulator/commit/686ee7612f63c0b21fbde5842144afc007ff99d7))
+
+## [5.3.0](https://github.com/appium/appium-ios-simulator/compare/v5.2.2...v5.3.0) (2023-09-07)
+
+
+### Features
+
+* Add setAutoFillPasswordsEnabled function ([#378](https://github.com/appium/appium-ios-simulator/issues/378)) ([fa724ec](https://github.com/appium/appium-ios-simulator/commit/fa724eca6a7dde034e6375140c503c042132672e))
+
+## [5.2.2](https://github.com/appium/appium-ios-simulator/compare/v5.2.1...v5.2.2) (2023-08-28)
+
+
+### Miscellaneous Chores
+
+* Bump conventional-changelog-conventionalcommits ([#375](https://github.com/appium/appium-ios-simulator/issues/375)) ([4c5b6cc](https://github.com/appium/appium-ios-simulator/commit/4c5b6cce8c9017f5e824147d7045c47d821d1e71))
+
+## [5.2.1](https://github.com/appium/appium-ios-simulator/compare/v5.2.0...v5.2.1) (2023-08-25)
+
+
+### Miscellaneous Chores
+
+* Bump semantic-release from 20.1.3 to 21.1.0 ([#374](https://github.com/appium/appium-ios-simulator/issues/374)) ([0dd29f8](https://github.com/appium/appium-ios-simulator/commit/0dd29f8b82ce02d744a6b790e442b0f9bc15d70d))
+
+## [5.2.0](https://github.com/appium/appium-ios-simulator/compare/v5.1.4...v5.2.0) (2023-08-21)
+
+
+### Features
+
+* Switch babel to typescript ([#372](https://github.com/appium/appium-ios-simulator/issues/372)) ([1d934e9](https://github.com/appium/appium-ios-simulator/commit/1d934e9b098295604bd12a704d6298c9471cc714))
+
+## [5.1.4](https://github.com/appium/appium-ios-simulator/compare/v5.1.3...v5.1.4) (2023-08-14)
+
+
+### Miscellaneous Chores
+
+* Bump lint-staged from 13.3.0 to 14.0.0 ([#370](https://github.com/appium/appium-ios-simulator/issues/370)) ([1ae4371](https://github.com/appium/appium-ios-simulator/commit/1ae437118fa5cbb32c93282403d754725c214dd6))
+
+## [5.1.3](https://github.com/appium/appium-ios-simulator/compare/v5.1.2...v5.1.3) (2023-07-28)
+
+
+### Bug Fixes
+
+* Exclude empty entries from the list of system bundle identifiers ([#369](https://github.com/appium/appium-ios-simulator/issues/369)) ([698f4e5](https://github.com/appium/appium-ios-simulator/commit/698f4e5ee82112868c6d286c6f2255f529160f10))
+
+## [5.1.2](https://github.com/appium/appium-ios-simulator/compare/v5.1.1...v5.1.2) (2023-07-21)
+
+
+### Bug Fixes
+
+* isAppInstalled in lib/simulator-xcode-15.js ([#368](https://github.com/appium/appium-ios-simulator/issues/368)) ([8a749d1](https://github.com/appium/appium-ios-simulator/commit/8a749d17a5951bfc6b717f7e9f24afb57330b90e))
+
+## [5.1.1](https://github.com/appium/appium-ios-simulator/compare/v5.1.0...v5.1.1) (2023-07-07)
+
+
+### Miscellaneous Chores
+
+* Bump prettier from 2.8.8 to 3.0.0 ([#367](https://github.com/appium/appium-ios-simulator/issues/367)) ([c2604d9](https://github.com/appium/appium-ios-simulator/commit/c2604d995a96658cc441252c3e0cf608a4d6d0c9))
+
+## [5.1.0](https://github.com/appium/appium-ios-simulator/compare/v5.0.9...v5.1.0) (2023-06-23)
+
+
+### Features
+
+* Add Xcode15 support ([#364](https://github.com/appium/appium-ios-simulator/issues/364)) ([fcf5b70](https://github.com/appium/appium-ios-simulator/commit/fcf5b702c3dab993ef894ba6556540a99ee7c756))
+
+## [5.0.9](https://github.com/appium/appium-ios-simulator/compare/v5.0.8...v5.0.9) (2023-06-07)
+
+
+### Miscellaneous Chores
+
+* Bump conventional-changelog-conventionalcommits ([#362](https://github.com/appium/appium-ios-simulator/issues/362)) ([025f81b](https://github.com/appium/appium-ios-simulator/commit/025f81b53e10890be7aa044240ff6614967bec9e))
+
+## [5.0.8](https://github.com/appium/appium-ios-simulator/compare/v5.0.7...v5.0.8) (2023-05-18)
+
+
+### Miscellaneous Chores
+
+* Bump @appium/support from 3.1.11 to 4.0.0 ([#359](https://github.com/appium/appium-ios-simulator/issues/359)) ([c5a7a99](https://github.com/appium/appium-ios-simulator/commit/c5a7a99b6383075f1d04297da05dd3c5c70a26d2))
+
+## [5.0.7](https://github.com/appium/appium-ios-simulator/compare/v5.0.6...v5.0.7) (2023-01-17)
+
+
+### Miscellaneous Chores
+
+* Bump semantic-release from 19.0.5 to 20.0.2 ([#354](https://github.com/appium/appium-ios-simulator/issues/354)) ([f4a2b93](https://github.com/appium/appium-ios-simulator/commit/f4a2b936927fa32e3e26c15f6b9e1b32cf1f8d40))
+
+## [5.0.6](https://github.com/appium/appium-ios-simulator/compare/v5.0.5...v5.0.6) (2023-01-13)
+
+
+### Miscellaneous Chores
+
+* Bump appium-xcode from 4.0.5 to 5.0.0 ([#355](https://github.com/appium/appium-ios-simulator/issues/355)) ([ddbacb5](https://github.com/appium/appium-ios-simulator/commit/ddbacb5b16d0bd9c8c6b988377f85eb627a474f8))
+
+## [5.0.5](https://github.com/appium/appium-ios-simulator/compare/v5.0.4...v5.0.5) (2023-01-09)
+
+
+### Bug Fixes
+
+* add ios 14 and above case ([#351](https://github.com/appium/appium-ios-simulator/issues/351)) ([de60d15](https://github.com/appium/appium-ios-simulator/commit/de60d15540908d3f03e4854cde58efcd8aedf942))
+
+## [5.0.4](https://github.com/appium/appium-ios-simulator/compare/v5.0.3...v5.0.4) (2023-01-08)
+
+
+### Miscellaneous Chores
+
+* update links for set-simulator-location ([#353](https://github.com/appium/appium-ios-simulator/issues/353)) ([1db8818](https://github.com/appium/appium-ios-simulator/commit/1db88187647c354af523336d151a3dccde2193af))
+
+## [5.0.3](https://github.com/appium/appium-ios-simulator/compare/v5.0.2...v5.0.3) (2023-01-04)
+
+
+### Bug Fixes
+
+* retrieve an appropriate unix socket path ([#352](https://github.com/appium/appium-ios-simulator/issues/352)) ([de11bfc](https://github.com/appium/appium-ios-simulator/commit/de11bfc13b9f66252fe6f14865f6970c8950db63))
+
+## [5.0.2](https://github.com/appium/appium-ios-simulator/compare/v5.0.1...v5.0.2) (2022-12-19)
+
+
+### Bug Fixes
+
+* udid reference in setAccess ([#350](https://github.com/appium/appium-ios-simulator/issues/350)) ([73d12a4](https://github.com/appium/appium-ios-simulator/commit/73d12a4417b7e3ec75b850e948c6bd91e75f214f))
+
+## [5.0.1](https://github.com/appium/appium-ios-simulator/compare/v5.0.0...v5.0.1) (2022-12-15)
+
+
+### Miscellaneous Chores
+
+* Bump @appium/support from 2.61.1 to 3.0.0 ([#349](https://github.com/appium/appium-ios-simulator/issues/349)) ([f8a85dc](https://github.com/appium/appium-ios-simulator/commit/f8a85dc16bcbc09f8c228d435cd52c871009ee53))
+
+## [4.2.1](https://github.com/appium/appium-ios-simulator/compare/v4.2.0...v4.2.1) (2022-12-12)
+
+
+### Bug Fixes
+
+* Update Simulator preferences configuration ([#347](https://github.com/appium/appium-ios-simulator/issues/347)) ([355c5da](https://github.com/appium/appium-ios-simulator/commit/355c5dabea80330952705570cd0e48ef1633a3fc))
+
+
+### Code Refactoring
+
+* do not launch in setReduceMotion ([#343](https://github.com/appium/appium-ios-simulator/issues/343)) ([cc35e3e](https://github.com/appium/appium-ios-simulator/commit/cc35e3e7b10585fd127630c1ca01b6de14a2cf63))
+* Drop usage of fs-extra module ([#344](https://github.com/appium/appium-ios-simulator/issues/344)) ([4c1a63e](https://github.com/appium/appium-ios-simulator/commit/4c1a63e0672534b2f401e416b3face095fec639f))
+* Streamline settings helpers for the simulator ([#346](https://github.com/appium/appium-ios-simulator/issues/346)) ([bcf4753](https://github.com/appium/appium-ios-simulator/commit/bcf475318d707b3ac8531b72dbc0d1db9bff4578))
+
+## [4.2.0](https://github.com/appium/appium-ios-simulator/compare/v4.1.8...v4.2.0) (2022-12-09)
+
+
+### Features
+
+* add setReduceTransparency ([#342](https://github.com/appium/appium-ios-simulator/issues/342)) ([ef57f51](https://github.com/appium/appium-ios-simulator/commit/ef57f51570a756b999bf1b0739b8d7149e1a1b0d))
+
+## [4.1.8](https://github.com/appium/appium-ios-simulator/compare/v4.1.7...v4.1.8) (2022-12-09)
+
+
+### Miscellaneous Chores
+
+* Bump fs-extra from 10.1.0 to 11.1.0 ([#340](https://github.com/appium/appium-ios-simulator/issues/340)) ([14b9e4c](https://github.com/appium/appium-ios-simulator/commit/14b9e4c949839b399fbf7b172a6ac98994c73c7b))
+
+## [4.1.7](https://github.com/appium/appium-ios-simulator/compare/v4.1.6...v4.1.7) (2022-12-01)
+
+
+### Miscellaneous Chores
+
+* update releaserc ([#341](https://github.com/appium/appium-ios-simulator/issues/341)) ([109b12d](https://github.com/appium/appium-ios-simulator/commit/109b12dae7c6069bc20d35794abb7b500aa0dd6d))
+
+## [4.1.6](https://github.com/appium/appium-ios-simulator/compare/v4.1.5...v4.1.6) (2022-11-29)
+
+## [4.1.5](https://github.com/appium/appium-ios-simulator/compare/v4.1.4...v4.1.5) (2022-11-06)
