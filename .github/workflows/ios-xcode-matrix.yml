@@ -10,7 +10,7 @@ on:
   workflow_call:
     outputs:
       matrix:
-        description: JSON array of {xcodeVersion, iosVersion, deviceName, platform} objects
+        description: JSON array of {xcodeVersion, iosVersion, deviceName, image} objects
         value: ${{ jobs.matrix.outputs.matrix }}
 
 jobs:
@@ -21,9 +21,12 @@ jobs:
     steps:
       - id: set
         run: |
+          # "image" is the runs-on runner image - each Xcode version only ships on specific
+          # macOS runner images, so it travels with xcodeVersion in the same matrix entry rather
+          # than being picked independently.
           json='[
-            {"xcodeVersion": "27.0", "iosVersion": "27.0", "deviceName": "iPhone 17", "platform": "xcode-27"},
-            {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "platform": "macos-26"},
-            {"xcodeVersion": "16.4", "iosVersion": "18.5", "deviceName": "iPhone 16", "platform": "macos-15"}
+            {"xcodeVersion": "27.0", "iosVersion": "27.0", "deviceName": "iPhone 17", "image": "xcode-27"},
+            {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "image": "macos-26"},
+            {"xcodeVersion": "16.4", "iosVersion": "18.5", "deviceName": "iPhone 16", "image": "macos-15"}
           ]'
           echo "matrix=$(echo "$json" | jq -c .)" >> "$GITHUB_OUTPUT"

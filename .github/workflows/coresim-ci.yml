@@ -56,7 +56,7 @@ jobs:
         combo: ${{ fromJSON(needs.xcode_matrix.outputs.matrix) }}
     uses: ./.github/workflows/coresim-shared-test.yml
     with:
-      platform: ${{ matrix.combo.platform }}
+      platform: ${{ matrix.combo.image }}
       xcode-version: ${{ matrix.combo.xcodeVersion }}
       node-version: lts/*
       test-command: test:integration

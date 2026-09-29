@@ -86,7 +86,7 @@ jobs:
         # against (see ios-xcode-matrix.yml) - keeps every package's real-simulator test suite
         # aligned instead of each drifting to whatever "macos-latest" happens to ship by default.
         combo: ${{ fromJSON(needs.xcode_matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.combo.platform }}
+    runs-on: ${{ matrix.combo.image }}
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode ${{ matrix.combo.xcodeVersion }}
