@@ -1,0 +1,11 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++17
+ColumnLimit: 120
+---
+Language: ObjC
+BasedOnStyle: Google
+Standard: c++17
+ColumnLimit: 120
+ObjCBlockIndentWidth: 2

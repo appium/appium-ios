@@ -44,8 +44,19 @@ jobs:
     with:
       upload-artifacts: true
 
+  # Always build coresim's native addon before publishing - matches the standalone appium/coresim
+  # repo's own publish.js.yml, which unconditionally rebuilds its one darwin-arm64 target on every
+  # push to main regardless of whether coresim itself has a qualifying release this run. Publishing
+  # coresim via lerna without this would ship a package with no prebuilds.
+  prebuild-coresim:
+    uses: ./.github/workflows/coresim-prebuild.yml
+    with:
+      upload-artifacts: true
+
   release:
-    needs: prebuild-tuntap
+    needs:
+      - prebuild-tuntap
+      - prebuild-coresim
     runs-on: ubuntu-latest
     outputs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
@@ -77,13 +88,20 @@ jobs:
           done
           find packages/tuntap/prebuilds -type f -name '*.node' | sort
 
+      - name: Download coresim prebuild artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: coresim-prebuild-darwin-arm64
+          path: packages/coresim/prebuilds
+
       - name: Setup Node and install deps (LTS)
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
           # Full install, unscoped: prebuilds are already in place above, so tuntap's
-          # node-gyp-build install hook finds a matching prebuild and is a cheap no-op
-          # rather than a full compile.
+          # node-gyp-build install hook finds a matching prebuild and is a cheap no-op rather
+          # than a full compile; coresim's own install script no-ops entirely on this
+          # (non-macOS) runner regardless, since it just ships the darwin-arm64 prebuild above.
           install-command: npm ci
           run-build: 'true'
 
