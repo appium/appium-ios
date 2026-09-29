@@ -85,7 +85,8 @@ to (and doesn't) support other browsers.
 ## CI
 
 `.github/workflows/remote-debugger-ci.yml` only triggers on changes under `packages/remote-debugger/**`
-(via `on.push.paths`/`on.pull_request.paths`) — for any other PR it doesn't run at all.
+or `packages/coresim/**` (via `on.push.paths`/`on.pull_request.paths` - the latter because the `e2e`
+job's simulator boot goes through `@appium/coresim`) — for any other PR it doesn't run at all.
 
 - `verify-atoms` executes `npm run build:atoms` and fails the build if the regenerated `atoms/`
   differs from what's committed, so `atoms/src/` and `atoms/*.js` can never silently drift apart.
