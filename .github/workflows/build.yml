@@ -22,6 +22,9 @@ jobs:
   prepare_matrix:
     uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
 
+  xcode_matrix:
+    uses: ./.github/workflows/ios-xcode-matrix.yml
+
   prepare_affected_packages:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
@@ -72,15 +75,24 @@ jobs:
   test-e2e:
     needs:
       - prepare_affected_packages
-    name: E2E Tests - ${{ matrix.package_dir }}
+      - xcode_matrix
+    name: E2E Tests - ${{ matrix.package_dir }} (Xcode ${{ matrix.combo.xcodeVersion }})
     if: ${{ github.event_name == 'pull_request' && needs.prepare_affected_packages.outputs.e2e_packages != '[]' }}
     strategy:
       fail-fast: false
       matrix:
         package_dir: ${{ fromJSON(needs.prepare_affected_packages.outputs.e2e_packages) }}
-    runs-on: macos-latest
+        # Same Xcode/iOS-runtime/device-name combinations coresim's integration tests run
+        # against (see ios-xcode-matrix.yml) - keeps every package's real-simulator test suite
+        # aligned instead of each drifting to whatever "macos-latest" happens to ship by default.
+        combo: ${{ fromJSON(needs.xcode_matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.combo.platform }}
     steps:
       - uses: actions/checkout@v7
+      - name: Select Xcode ${{ matrix.combo.xcodeVersion }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.combo.xcodeVersion }}
       - name: Setup, install and build
         uses: ./.github/actions/setup-build
         with:
@@ -91,6 +103,13 @@ jobs:
           install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run E2E tests for ${{ matrix.package_dir }}
+        env:
+          # Consumed by packages/simulator's functional specs (MOBILE_OS_VERSION/MOBILE_DEVICE_NAME
+          # default to values that don't exist on every runner - see PR #17 review discussion).
+          # packages/xcode's e2e tests don't read these; harmless to set regardless.
+          MOBILE_OS_VERSION: ${{ matrix.combo.iosVersion }}
+          MOBILE_DEVICE_NAME: ${{ matrix.combo.deviceName }}
+          XCODE_VERSION: ${{ matrix.combo.xcodeVersion }}
         run: |
           set -o pipefail
           cd "packages/${{ matrix.package_dir }}"

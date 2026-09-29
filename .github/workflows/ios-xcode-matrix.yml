@@ -1,0 +1,29 @@
+name: iOS Xcode/Runtime Matrix (Reusable)
+
+# Single source of truth for the Xcode/iOS-runtime/device-name combinations that every package's
+# real-simulator test suite runs against - coresim's integration tests, and xcode's and
+# simulator's e2e/functional tests (via build.yml). Keeping them in one place means all three
+# packages are always tested against the same simulators instead of drifting out of sync across
+# separate per-workflow copies of this matrix.
+
+on:
+  workflow_call:
+    outputs:
+      matrix:
+        description: JSON array of {xcodeVersion, iosVersion, deviceName, platform} objects
+        value: ${{ jobs.matrix.outputs.matrix }}
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          json='[
+            {"xcodeVersion": "27.0", "iosVersion": "27.0", "deviceName": "iPhone 17", "platform": "xcode-27"},
+            {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "platform": "macos-26"},
+            {"xcodeVersion": "16.4", "iosVersion": "18.5", "deviceName": "iPhone 16", "platform": "macos-15"}
+          ]'
+          echo "matrix=$(echo "$json" | jq -c .)" >> "$GITHUB_OUTPUT"
