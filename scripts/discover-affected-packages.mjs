@@ -7,8 +7,8 @@
 //     (a shared dep's behavior can break a dependent package's unit tests too), OR every
 //     package when a shared root config/tooling file changed (cheap enough to be the safety
 //     net for "something outside any single package might affect everyone" instead of e2e).
-// Excludes packages/tuntap and packages/coresim from unit selection - they have their own
-// dedicated, path-scoped CI (tuntap-ci.yml/coresim-ci.yml) and are never installed here.
+// Excludes packages with their own dedicated, path-scoped CI (tuntap-ci.yml/coresim-ci.yml/
+// remote-debugger-ci.yml) from both e2e and unit selection - they're never installed here.
 // Falls back to running everything (e2e included) only when the diff itself can't be
 // computed at all - there's no changed-file list to scope e2e against in that case, and
 // skipping tests silently is worse than an extra run.
@@ -20,8 +20,9 @@ import {promisify} from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const PACKAGES_DIR = join(process.cwd(), 'packages');
-// Have their own dedicated CI (tuntap-ci.yml/coresim-ci.yml) - never installed/run here.
-const UNIT_TEST_IGNORE_DIRS = new Set(['tuntap', 'coresim']);
+// Have their own dedicated CI (tuntap-ci.yml/coresim-ci.yml/remote-debugger-ci.yml) - never
+// installed/run here.
+const DEDICATED_CI_DIRS = new Set(['tuntap', 'coresim', 'remote-debugger']);
 const baseSha = process.env.BASE_SHA;
 const headSha = process.env.HEAD_SHA || 'HEAD';
 const githubOutput = process.env.GITHUB_OUTPUT;
@@ -66,8 +67,8 @@ async function main() {
     }),
   );
 
-  const e2eDirs = packageDirs.filter((dir) => hasRealE2eScript(pkgByDir.get(dir)));
-  const unitDirs = packageDirs.filter((dir) => !UNIT_TEST_IGNORE_DIRS.has(dir));
+  const e2eDirs = packageDirs.filter((dir) => !DEDICATED_CI_DIRS.has(dir) && hasRealE2eScript(pkgByDir.get(dir)));
+  const unitDirs = packageDirs.filter((dir) => !DEDICATED_CI_DIRS.has(dir));
 
   function selectAll(reason) {
     console.log(`Running tests for all packages: ${reason}`);
