@@ -1,0 +1,117 @@
+name: remote-debugger CI
+
+# Ported from the standalone appium/appium-remote-debugger repo's own unit-test.yml +
+# functional-test.yml + verify-atoms.yml. Path-scoped like coresim-ci.yml/tuntap-ci.yml, since its
+# functional/atoms e2e suites need a real macOS/Xcode/simulator toolchain the rest of the
+# monorepo's CI doesn't - it stays out of build.yml entirely.
+#
+# Unlike the standalone repo's functional-test.yml/verify-atoms.yml, the e2e job here no longer
+# boots the simulator via futureware-tech/simulator-action + `open Simulator.app` -
+# test/functional/rd-fixture.ts already creates/boots/tears down the simulator itself via
+# @appium/coresim, the same way packages/xcode's and packages/simulator's own e2e suites do. That
+# also lets it share the same Xcode/iOS-runtime/device-name matrix as those two (see
+# ios-xcode-matrix.yml) instead of carrying its own separate copy.
+
+on:
+  push:
+    branches: [main]
+    # Also triggered by packages/coresim/** - the e2e job's simulator boot goes through
+    # @appium/coresim (see test/functional/rd-fixture.ts), so a coresim regression can only show
+    # up here.
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
+  pull_request:
+    branches: [main]
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_matrix:
+    uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
+
+  xcode_matrix:
+    uses: ./.github/workflows/ios-xcode-matrix.yml
+
+  unit-test:
+    needs:
+      - node_matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build --workspace packages/remote-debugger
+      - name: Typecheck fixtures
+        run: npm run typecheck:fixtures --workspace packages/remote-debugger
+      - name: Unit tests
+        run: npm test --workspace packages/remote-debugger
+
+  verify-atoms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Install dependencies
+        run: npm install
+      - name: Type-check atoms/src
+        run: npm run typecheck:atoms --workspace packages/remote-debugger
+      - name: Rebuild atoms from atoms/src and check for drift
+        run: |
+          npm run build:atoms --workspace packages/remote-debugger
+          if ! git diff --exit-code -- packages/remote-debugger/atoms; then
+            echo "::error::'packages/remote-debugger/atoms/' does not match what 'npm run build:atoms' produces from 'atoms/src/'. Run it locally and commit the result."
+            exit 1
+          fi
+
+  e2e:
+    needs:
+      - xcode_matrix
+    if: ${{ github.event_name == 'pull_request' }}
+    name: E2E Tests (Xcode ${{ matrix.combo.xcodeVersion }})
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: ${{ fromJSON(needs.xcode_matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.combo.image }}
+    env:
+      PLATFORM_VERSION: ${{ matrix.combo.iosVersion }}
+      DEVICE_NAME: ${{ matrix.combo.deviceName }}
+      CI: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode ${{ matrix.combo.xcodeVersion }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.combo.xcodeVersion }}
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Install and build
+        run: npm ci --foreground-scripts
+      - name: Safari E2E Tests
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 40
+          max_attempts: 2
+          command: npm run test:e2e --workspace packages/remote-debugger
+      - name: Atoms E2E Tests
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 40
+          max_attempts: 2
+          command: npm run test:e2e:atoms --workspace packages/remote-debugger

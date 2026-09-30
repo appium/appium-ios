@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@appium/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "build",
+    "types": ["node"],
+    "checkJs": true,
+    "strict": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["lib", "test"],
+  "exclude": [
+    "test/unit/atoms-src",
+    "test/unit/helpers/atoms-module.ts",
+    "test/unit/helpers/react-fixture.ts",
+    "test/unit/helpers/angular-fixture.ts",
+    "test/unit/frameworks",
+    "test/fixtures"
+  ],
+  "references": [{"path": "../coresim"}]
+}

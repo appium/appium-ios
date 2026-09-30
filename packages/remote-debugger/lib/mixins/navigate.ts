@@ -1,0 +1,275 @@
+import {timing} from '@appium/support';
+import {sleep, withTimeout} from 'asyncbox';
+
+import type {RemoteDebugger} from '../remote-debugger.js';
+import type {AppIdKey, PageIdKey} from '../types.js';
+import {DelayCancellation, checkParams, TimeoutError} from '../utils/index.js';
+import {events} from './events.js';
+import {
+  getAppIdKey,
+  setPageLoading,
+  getPageLoadDelay,
+  getPageLoadStartegy,
+  setPageLoadDelay,
+  getPageReadyTimeout,
+  getPageIdKey,
+  setNavigatingToPage,
+} from './property-accessors.js';
+
+export const DEFAULT_PAGE_READINESS_TIMEOUT_MS = 20 * 1000;
+const PAGE_READINESS_CHECK_INTERVAL_MS = 50;
+
+/**
+ * pageLoadStrategy in WebDriver definitions.
+ */
+const PAGE_LOAD_STRATEGY = Object.freeze({
+  EAGER: 'eager',
+  NONE: 'none',
+  NORMAL: 'normal',
+});
+
+/**
+ * Emits a frame detached event when a frame is detached from the page.
+ * This is typically called by the RPC client when receiving a Page.frameDetached event.
+ */
+export function frameDetached(this: RemoteDebugger): void {
+  this.emit(events.EVENT_FRAMES_DETACHED);
+}
+
+/**
+ * Cancels the current page load operation by unregistering from page readiness
+ * notifications and canceling any pending page load delay.
+ */
+export function cancelPageLoad(this: RemoteDebugger): void {
+  this.log.debug('Unregistering from page readiness notifications');
+  setPageLoading(this, false);
+  getPageLoadDelay(this)?.cancel();
+}
+
+/**
+ * Determines if the current readyState indicates that page loading is completed
+ * based on the configured page load strategy.
+ *
+ * @param readyState - The document readyState value ('loading', 'interactive', or 'complete').
+ * @returns True if the page load is considered complete for the current strategy:
+ *          - 'eager': returns true when readyState is not 'loading'
+ *          - 'none': always returns true
+ *          - 'normal' (default): returns true only when readyState is 'complete'
+ */
+export function isPageLoadingCompleted(this: RemoteDebugger, readyState: string): boolean {
+  const pageLoadStrategy = (getPageLoadStartegy(this) ?? '').toLowerCase();
+  switch (pageLoadStrategy) {
+    case PAGE_LOAD_STRATEGY.EAGER:
+      // This could include 'interactive' or 'complete'
+      return readyState !== 'loading';
+    case PAGE_LOAD_STRATEGY.NONE:
+      return true;
+    case PAGE_LOAD_STRATEGY.NORMAL:
+    default:
+      return readyState === 'complete';
+  }
+}
+
+/**
+ * Waits for the DOM to be ready by periodically checking the page readiness state.
+ * Uses exponential backoff for retry intervals and respects the configured page load
+ * strategy and timeout settings.
+ *
+ * @param startPageLoadTimer - Optional timer instance to use for tracking elapsed time.
+ *                             If not provided, a new timer will be created and started.
+ */
+export async function waitForDom(this: RemoteDebugger, startPageLoadTimer?: timing.Timer): Promise<void> {
+  const readinessTimeoutMs = this.pageLoadMs;
+  this.log.debug(`Waiting up to ${readinessTimeoutMs}ms for the page to be ready`);
+  const timer = startPageLoadTimer ?? new timing.Timer().start();
+
+  let isPageLoading = true;
+  setPageLoading(this, true);
+  setPageLoadDelay(this, sleep({ms: readinessTimeoutMs, cancelError: new DelayCancellation()}));
+  const pageReadinessPromise = (async () => {
+    let retry = 0;
+    while (isPageLoading) {
+      // if we are ready, or we've spend too much time on this
+      const elapsedMs = timer.getDuration().asMilliSeconds;
+      // exponential retry
+      const intervalMs = Math.min(
+        PAGE_READINESS_CHECK_INTERVAL_MS * Math.pow(2, retry),
+        readinessTimeoutMs - elapsedMs,
+      );
+      await sleep(intervalMs);
+      // we can get this called in the middle of trying to find a new app
+      if (!getAppIdKey(this)) {
+        this.log.debug('Not connected to an application. Ignoring page readiess check');
+        return;
+      }
+      if (!isPageLoading) {
+        return;
+      }
+
+      const maxWaitMs = (readinessTimeoutMs - elapsedMs) * 0.95;
+      if (await this.checkPageIsReady(maxWaitMs)) {
+        if (isPageLoading) {
+          this.log.debug(`Page is ready in ${elapsedMs}ms`);
+          isPageLoading = false;
+        }
+        return;
+      }
+      if (elapsedMs > readinessTimeoutMs) {
+        this.log.info(`Timed out after ${readinessTimeoutMs}ms of waiting for the page readiness. Continuing anyway`);
+        isPageLoading = false;
+        return;
+      }
+      retry++;
+    }
+  })();
+  const cancellationPromise = (async () => {
+    try {
+      await getPageLoadDelay(this);
+    } catch {}
+  })();
+
+  try {
+    await Promise.race([cancellationPromise, pageReadinessPromise]);
+  } finally {
+    isPageLoading = false;
+    setPageLoading(this, false);
+    setPageLoadDelay(this, undefined);
+  }
+}
+
+/**
+ * Checks if the current page is ready by executing a JavaScript command to
+ * retrieve the document readyState and evaluating it against the page load strategy.
+ *
+ * @param timeoutMs - Optional timeout in milliseconds for the readyState check.
+ *                    If not provided, uses the configured page ready timeout.
+ * @returns A promise that resolves to true if the page is ready according to
+ *          the page load strategy, false otherwise or if the check times out.
+ */
+export async function checkPageIsReady(this: RemoteDebugger, timeoutMs?: number): Promise<boolean> {
+  const readyCmd = 'document.readyState;';
+  const actualTimeoutMs = timeoutMs ?? getPageReadyTimeout(this);
+  try {
+    const readyState = await withTimeout(
+      this.execute(readyCmd),
+      actualTimeoutMs,
+      new TimeoutError(`Operation timed out after ${actualTimeoutMs}ms`),
+    );
+    this.log.debug(
+      JSON.stringify({
+        readyState,
+        pageLoadStrategy: getPageLoadStartegy(this) ?? PAGE_LOAD_STRATEGY.NORMAL,
+      }),
+    );
+    return this.isPageLoadingCompleted(readyState);
+  } catch (err: any) {
+    if (err instanceof TimeoutError) {
+      this.log.debug(`Page readiness check timed out after ${actualTimeoutMs}ms`);
+    } else {
+      this.log.warn(`Page readiness check has failed. Original error: ${err.message}`);
+    }
+    return false;
+  }
+}
+
+/**
+ * Navigates to a new URL and waits for the page to be ready.
+ * Validates the URL format, waits for the page to be available, sets window.location.href
+ * via Runtime.evaluate (Page.navigate was removed from WebKit Inspector protocol), and
+ * monitors for the Page.loadEventFired event or timeout.
+ *
+ * @param url - The URL to navigate to. Must be a valid URL format.
+ * @throws TypeError if the provided URL is not a valid URL format.
+ */
+export async function navToUrl(this: RemoteDebugger, url: string): Promise<void> {
+  const {appIdKey, pageIdKey} = checkParams({
+    appIdKey: getAppIdKey(this),
+    pageIdKey: getPageIdKey(this),
+  });
+  const rpcClient = this.requireRpcClient();
+
+  try {
+    new URL(url);
+  } catch {
+    throw new TypeError(`'${url}' is not a valid URL`);
+  }
+
+  this.log.debug(`Navigating to new URL: '${url}'`);
+  setNavigatingToPage(this, true);
+  await rpcClient.waitForPage(appIdKey as AppIdKey, pageIdKey as PageIdKey);
+  const readinessTimeoutMs = this.pageLoadMs;
+  let onPageLoaded: (() => void) | undefined;
+  let onPageLoadedTimeout: NodeJS.Timeout | undefined | null;
+  setPageLoadDelay(this, sleep({ms: readinessTimeoutMs, cancelError: new DelayCancellation()}));
+  setPageLoading(this, true);
+  let isPageLoading = true;
+  const start = new timing.Timer().start();
+
+  let pageReadinessResolved = false;
+  const pageReadinessPromise = new Promise<void>((resolve) => {
+    onPageLoadedTimeout = setTimeout(() => {
+      if (isPageLoading) {
+        isPageLoading = false;
+        this.log.info(
+          `Timed out after ${start.getDuration().asMilliSeconds.toFixed(0)}ms of waiting ` +
+            `for the ${url} page readiness. Continuing anyway`,
+        );
+      }
+      pageReadinessResolved = true;
+      return resolve();
+    }, readinessTimeoutMs);
+
+    onPageLoaded = () => {
+      if (isPageLoading) {
+        isPageLoading = false;
+        this.log.debug(`The page ${url} is ready in ${start.getDuration().asMilliSeconds.toFixed(0)}ms`);
+      }
+      if (onPageLoadedTimeout) {
+        clearTimeout(onPageLoadedTimeout);
+        onPageLoadedTimeout = null;
+      }
+      pageReadinessResolved = true;
+      return resolve();
+    };
+
+    // https://chromedevtools.github.io/devtools-protocol/tot/Page/#event-loadEventFired
+    rpcClient.once('Page.loadEventFired', onPageLoaded);
+
+    // Page.navigate was removed from the WebKit Inspector protocol since iOS 26.4
+    // See https://github.com/appium/appium/issues/21976
+    // Fire-and-forget: readiness is tracked separately via the Page.loadEventFired listener
+    // and the timeout above, so a rejection here (e.g. the RPC connection dropping mid-navigation,
+    // which happens routinely around window/tab switches) must not go unhandled - that would
+    // crash the whole process instead of just failing this one navigation.
+    rpcClient
+      .send('Runtime.evaluate', {
+        expression: `window.location.href = ${JSON.stringify(url)};`,
+        appIdKey,
+        pageIdKey,
+      })
+      .catch((err: any) => {
+        this.log.warn(`Failed to set 'window.location.href' to '${url}': ${err.message}`);
+      });
+  });
+  const cancellationPromise = (async () => {
+    try {
+      await getPageLoadDelay(this);
+    } catch {}
+  })();
+
+  try {
+    await Promise.race([cancellationPromise, pageReadinessPromise]);
+  } finally {
+    setPageLoading(this, false);
+    isPageLoading = false;
+    setNavigatingToPage(this, false);
+    setPageLoadDelay(this, undefined);
+    if (onPageLoadedTimeout && pageReadinessResolved) {
+      clearTimeout(onPageLoadedTimeout);
+      onPageLoadedTimeout = null;
+    }
+    if (onPageLoaded) {
+      rpcClient.off('Page.loadEventFired', onPageLoaded);
+    }
+  }
+}
