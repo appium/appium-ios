@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 10.4.0 (2026-09-30)
+
+### Features
+
+* move appium-ios-simulator into the monorepo as packages/simulator ([#17](https://github.com/appium/appium-ios/issues/17)) ([e034ace](https://github.com/appium/appium-ios/commit/e034ace450236e91593d1d7f1e4c60781ed2e8a2))
+
+
 ## [10.3.0](https://github.com/appium/appium-ios-simulator/compare/v10.2.0...v10.3.0) (2026-09-29)
 
 ### Features

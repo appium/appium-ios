@@ -1,6 +1,6 @@
 {
   "name": "@appium/coresim",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Native bindings to CoreSimulator.framework for Apple platform simulator control",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
