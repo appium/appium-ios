@@ -1,6 +1,6 @@
 {
   "name": "appium-remote-debugger",
-  "version": "17.5.0",
+  "version": "17.5.1",
   "description": "Appium proxy for Remote Debugger protocol",
   "keywords": [
     "appium"
@@ -86,7 +86,7 @@
     "sinon": "^22.0.0"
   },
   "optionalDependencies": {
-    "appium-ios-remotexpc": "^5.18.2"
+    "appium-ios-remotexpc": "5.24.0"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",

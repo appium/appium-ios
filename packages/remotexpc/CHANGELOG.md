@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 5.24.0 (2026-10-01)
+
+### Features
+
+* move appium-ios-remotexpc into the monorepo as packages/remotexpc ([#22](https://github.com/appium/appium-ios/issues/22)) ([e448236](https://github.com/appium/appium-ios/commit/e4482360b4e1712d3522b28d3c4f0b4d7b576ca7))
+
+
 ## [5.23.0](https://github.com/appium/appium-ios-remotexpc/compare/v5.22.1...v5.23.0) (2026-10-01)
 
 ### Features
