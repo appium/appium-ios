@@ -47,7 +47,7 @@ async function main() {
 main().then(
   (code) => process.exit(code),
   (err) => {
-    console.error(err);
+    process.stderr.write(`${err?.stack ?? err}\n`);
     process.exit(1);
   },
 );
