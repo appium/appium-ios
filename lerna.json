@@ -27,11 +27,6 @@
         "type": "chore",
         "scope": "deps",
         "section": "Miscellaneous Chores"
-      },
-      {
-        "type": "chore",
-        "scope": "deps-dev",
-        "section": "Miscellaneous Chores"
       }
     ]
   },
