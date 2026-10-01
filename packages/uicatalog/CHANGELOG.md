@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.1.1](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.0...ios-uicatalog@4.1.1) (2026-10-01)
+
+**Note:** Version bump only for package ios-uicatalog
+
+
+
+
+
 ## 4.1.0 (2026-09-25)
 
 ### Features
