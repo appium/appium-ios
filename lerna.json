@@ -25,7 +25,12 @@
       },
       {
         "type": "chore",
-        "scope": "deps",
+        "scope": "deps-dev",
+        "section": "Miscellaneous Chores",
+        "hidden": true
+      },
+      {
+        "type": "chore",
         "section": "Miscellaneous Chores"
       }
     ]
