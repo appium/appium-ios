@@ -1,40 +1,53 @@
 // Runs lerna, ignoring packages whose commits since their last release are all `chore(deps-dev)`.
 // Usage: node scripts/lerna-skip-dev-deps.mjs <lerna args...>
-import {execFileSync, spawnSync} from 'node:child_process';
-import {readdirSync, readFileSync, existsSync} from 'node:fs';
+import {execFile, spawn} from 'node:child_process';
+import {readdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
+import {promisify} from 'node:util';
 
-const git = (...args) => execFileSync('git', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']}).trim();
-const lernaConfig = JSON.parse(readFileSync('lerna.json', 'utf8'));
+const execFileAsync = promisify(execFile);
 
-function devDepOnlyGlobs() {
-  const globs = [];
-  for (const dir of readdirSync('packages')) {
-    const manifest = path.join('packages', dir, 'package.json');
-    if (!existsSync(manifest)) {
-      continue;
-    }
-    const {name, version} = JSON.parse(readFileSync(manifest, 'utf8'));
-    let subjects;
-    try {
-      subjects = git('log', '--format=%s', `${name}@${version}..HEAD`, '--', path.dirname(manifest))
-        .split('\n')
-        .filter(Boolean);
-    } catch {
-      continue; // no release tag yet
-    }
-    if (subjects.length && subjects.every((s) => /^chore\(deps-dev\)/.test(s))) {
-      globs.push(`${path.dirname(manifest)}/**`);
-    }
-  }
-  return globs;
+async function readJson(file) {
+  return JSON.parse(await readFile(file, 'utf8'));
 }
 
-// The CLI flag replaces lerna.json's `ignoreChanges`, so re-add those.
-const ignore = [...(lernaConfig.ignoreChanges ?? []), ...devDepOnlyGlobs()];
-const result = spawnSync(
-  'npx',
-  ['lerna', ...process.argv.slice(2), ...ignore.flatMap((g) => ['--ignore-changes', g])],
-  {stdio: 'inherit'},
+/** @returns {Promise<string|null>} the package's glob if it only has dev-dep commits, else null */
+async function devDepOnlyGlob(dir) {
+  const pkgDir = path.join('packages', dir);
+  let name, version;
+  try {
+    ({name, version} = await readJson(path.join(pkgDir, 'package.json')));
+  } catch {
+    return null; // not a package
+  }
+  let stdout;
+  try {
+    ({stdout} = await execFileAsync('git', ['log', '--format=%s', `${name}@${version}..HEAD`, '--', pkgDir]));
+  } catch {
+    return null; // no release tag yet
+  }
+  const subjects = stdout.split('\n').filter(Boolean);
+  return subjects.length && subjects.every((s) => /^chore\(deps-dev\)/.test(s)) ? `${pkgDir}/**` : null;
+}
+
+async function main() {
+  const [lernaConfig, dirs] = await Promise.all([readJson('lerna.json'), readdir('packages')]);
+  const devDepGlobs = (await Promise.all(dirs.map(devDepOnlyGlob))).filter(Boolean);
+  // The CLI flag replaces lerna.json's `ignoreChanges`, so re-add those.
+  const ignore = [...(lernaConfig.ignoreChanges ?? []), ...devDepGlobs];
+  const lerna = spawn('npx', ['lerna', ...process.argv.slice(2), ...ignore.flatMap((g) => ['--ignore-changes', g])], {
+    stdio: 'inherit',
+  });
+  return new Promise((resolve, reject) => {
+    lerna.on('error', reject);
+    lerna.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+main().then(
+  (code) => process.exit(code),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  },
 );
-process.exit(result.status ?? 1);
