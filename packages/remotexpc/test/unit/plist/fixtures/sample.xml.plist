@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>stringValue</key>
+    <string>Hello, World!</string>
+    <key>integerValue</key>
+    <integer>42</integer>
+    <key>realValue</key>
+    <real>3.14159</real>
+    <key>booleanTrue</key>
+    <true/>
+    <key>booleanFalse</key>
+    <false/>
+    <key>dateValue</key>
+    <date>2023-01-01T12:00:00Z</date>
+    <key>dataValue</key>
+    <data>SGVsbG8sIFdvcmxkIQ==</data>
+    <key>arrayValue</key>
+    <array>
+        <string>Item 1</string>
+        <string>Item 2</string>
+        <integer>3</integer>
+    </array>
+    <key>dictValue</key>
+    <dict>
+        <key>nestedKey</key>
+        <string>Nested Value</string>
+        <key>nestedArray</key>
+        <array>
+            <integer>1</integer>
+            <integer>2</integer>
+        </array>
+    </dict>
+    <key>specialChars</key>
+    <string>&lt;Hello &amp; World&gt;</string>
+</dict>
+</plist>

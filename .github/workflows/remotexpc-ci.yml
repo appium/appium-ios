@@ -1,0 +1,46 @@
+name: remotexpc CI
+
+# Ported from the standalone appium/appium-ios-remotexpc repo's test-validation.yml (lint/format
+# are covered by build.yml's root-level lint job). Path-scoped like tuntap-ci.yml/
+# remote-debugger-ci.yml, since remotexpc depends on packages/tuntap's native addon, which
+# build.yml's scoped installs deliberately skip - it stays out of build.yml entirely.
+# Integration tests need physical devices and are never run in CI.
+
+on:
+  push:
+    branches: [main]
+    # Also triggered by packages/tuntap/** - remotexpc imports it directly, so a tuntap
+    # regression can only show up here.
+    paths: ['packages/remotexpc/**', 'packages/tuntap/**']
+  pull_request:
+    branches: [main]
+    paths: ['packages/remotexpc/**', 'packages/tuntap/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_matrix:
+    uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
+
+  unit-test:
+    needs:
+      - node_matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: npm install
+      - name: Build (including tests)
+        run: npm run build --workspace appium-ios-remotexpc
+      - name: Unit tests
+        run: npm test --workspace appium-ios-remotexpc

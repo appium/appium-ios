@@ -1,0 +1,828 @@
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import type net from 'node:net';
+import path from 'node:path';
+import {type Readable, type Writable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
+
+import {minimatch} from 'minimatch';
+
+import {getLogger} from '../../../lib/logger.js';
+import {DEFAULT_TUNNEL_SERVICE_WAIT_MS, resolveTunnelService} from '../../../lib/tunnel/tunnel-service-resolver.js';
+import {
+  buildClosePayload,
+  buildFopenPayload,
+  buildMkdirPayload,
+  buildRemovePayload,
+  buildRenamePayload,
+  buildStatPayload,
+  cleanupServiceSocket,
+  createRawServiceSocket,
+  fatalizeAfcSocket,
+  nanosecondsToMilliseconds,
+  parseCStringArray,
+  parseKeyValueNullList,
+  writeUInt64LE,
+} from './codec.js';
+import {AFC_FOPEN_TEXTUAL_MODES, MAXIMUM_WRITE_SIZE} from './constants.js';
+import {AfcPacketDemux} from './demux.js';
+import {AfcError, AfcFileMode, AfcOpcode} from './enums.js';
+import {AfcConnectionError} from './errors.js';
+import {PullLocalNameAllocator} from './pull-local-name-allocator.js';
+import {createAfcReadStream, createAfcWriteStream} from './stream-utils.js';
+
+const log = getLogger('AfcService');
+
+const NON_LISTABLE_ENTRIES = ['', '.', '..'];
+
+/**
+ * Callback invoked for each file or directory successfully pulled from the device.
+ *
+ * @param remotePath - The remote file or directory path on the device
+ * @param localPath - The local file or directory path where it was saved
+ * @param isDirectory - True if the path is a directory, false if it is a file
+ *
+ * @remarks
+ * If the callback throws an error, the pull operation will be aborted immediately.
+ *
+ * The `isDirectory` parameter allows callback consumers to distinguish between files
+ * and directories.
+ */
+export type PullRecursiveCallback = (
+  remotePath: string,
+  localPath: string,
+  isDirectory: boolean,
+) => unknown | Promise<unknown>;
+
+/** Options for the pull method. */
+export interface PullOptions {
+  /**
+   * If true, recursively pull directories.
+   * @default false
+   */
+  recursive?: boolean;
+  /** Glob pattern to filter files (e.g., '*.txt', '**\/*.log'). */
+  match?: string;
+  /**
+   * If false, throws error when local file exists.
+   * @default true
+   */
+  overwrite?: boolean;
+  /** Callback invoked for each pulled file or directory. */
+  callback?: PullRecursiveCallback;
+}
+
+export interface StatInfo {
+  st_ifmt: AfcFileMode;
+  st_size: bigint;
+  st_blocks: number;
+  st_mtime: Date;
+  st_birthtime: Date;
+  st_nlink: number;
+  LinkTarget?: string;
+  [k: string]: any;
+}
+
+/**
+ * AFC client over RSD (Remote XPC shim).
+ * After RSDCheckin, speaks raw AFC protocol on the same socket.
+ */
+export class AfcService {
+  static readonly RSD_SERVICE_NAME = 'com.apple.afc.shim.remote';
+
+  private readonly udid?: string;
+  private readonly rsdServiceName: string;
+  private socket: net.Socket | null = null;
+  private demux: AfcPacketDemux | null = null;
+  private silent: boolean = false;
+  /** Set when the AFC byte stream is no longer safe to reuse on this instance. */
+  private connectionError: Error | null = null;
+
+  constructor(udid: string, silent?: boolean, rsdServiceName?: string);
+  constructor(socket: net.Socket, silent?: boolean);
+  constructor(udidOrSocket: string | net.Socket, silent?: boolean, rsdServiceName?: string) {
+    if (typeof udidOrSocket === 'string') {
+      this.udid = udidOrSocket;
+      this.rsdServiceName = rsdServiceName ?? AfcService.RSD_SERVICE_NAME;
+    } else {
+      this.socket = udidOrSocket;
+      this.rsdServiceName = AfcService.RSD_SERVICE_NAME;
+    }
+    this.silent = silent ?? process.env.NODE_ENV !== 'test';
+  }
+
+  /**
+   * Create an AfcService from an existing connected socket in AFC mode.
+   */
+  static fromSocket(socket: net.Socket, silent?: boolean): AfcService {
+    return new AfcService(socket, silent);
+  }
+
+  /**
+   * List directory entries. Returned entries do not include '.' and '..'
+   */
+  async listdir(dirPath: string): Promise<string[]> {
+    const data = await this._doOperation(AfcOpcode.READ_DIR, buildStatPayload(dirPath));
+    const entries = parseCStringArray(data);
+    return entries.filter((x) => !NON_LISTABLE_ENTRIES.includes(x));
+  }
+
+  async stat(filePath: string): Promise<StatInfo> {
+    try {
+      const data = await this._doOperation(AfcOpcode.GET_FILE_INFO, buildStatPayload(filePath));
+      const kv = parseKeyValueNullList(data);
+
+      const out: StatInfo = {
+        st_size: BigInt(kv.st_size),
+        st_blocks: Number.parseInt(kv.st_blocks, 10),
+        st_mtime: new Date(nanosecondsToMilliseconds(kv.st_mtime)),
+        st_birthtime: new Date(nanosecondsToMilliseconds(kv.st_birthtime)),
+        st_nlink: Number.parseInt(kv.st_nlink, 10),
+      } as StatInfo;
+      for (const [k, v] of Object.entries(kv)) {
+        if (!(k in out)) {
+          (out as any)[k] = v;
+        }
+      }
+      return out;
+    } catch (error) {
+      if (!this.silent) {
+        log.error(`Failed to stat file '${filePath}':`, error);
+      }
+      throw error;
+    }
+  }
+
+  async isdir(filePath: string): Promise<boolean> {
+    const st = await this.stat(filePath);
+    return st.st_ifmt === AfcFileMode.S_IFDIR;
+  }
+
+  async exists(filePath: string): Promise<boolean> {
+    try {
+      await this.stat(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async fopen(filePath: string, mode: keyof typeof AFC_FOPEN_TEXTUAL_MODES = 'r'): Promise<bigint> {
+    const afcMode = AFC_FOPEN_TEXTUAL_MODES[mode];
+    if (!afcMode) {
+      const allowedModes = Object.keys(AFC_FOPEN_TEXTUAL_MODES).join(', ');
+      if (!this.silent) {
+        log.error(`Invalid fopen mode '${mode}'. Allowed modes: ${allowedModes}`);
+      }
+      throw new Error(`Invalid fopen mode '${mode}'. Allowed: ${allowedModes}`);
+    }
+
+    log.debug(`Opening file '${filePath}' with mode '${mode}'`);
+    try {
+      const data = await this._doOperation(AfcOpcode.FILE_OPEN, buildFopenPayload(afcMode, filePath));
+      // Response data contains UInt64LE 'handle'
+      const handle = data.readBigUInt64LE(0);
+      log.debug(`File opened successfully, handle: ${handle}`);
+      return handle;
+    } catch (error) {
+      if (!this.silent) {
+        log.error(`Failed to open file '${filePath}' with mode '${mode}':`, error);
+      }
+      throw error;
+    }
+  }
+
+  async fclose(handle: bigint): Promise<void> {
+    await this._doOperation(AfcOpcode.FILE_CLOSE, buildClosePayload(handle));
+  }
+
+  createReadStream(handle: bigint, size: bigint): Readable {
+    return createAfcReadStream(handle, size, this._sendAndWait.bind(this));
+  }
+
+  createWriteStream(handle: bigint, chunkSize?: number): Writable {
+    return createAfcWriteStream(
+      handle,
+      (handlePayload, content) => this._sendAndWait(AfcOpcode.WRITE, handlePayload, content),
+      chunkSize,
+    );
+  }
+
+  async fread(handle: bigint, size: bigint): Promise<Buffer> {
+    log.debug(`Reading ${size} bytes from handle ${handle}`);
+    const stream = this.createReadStream(handle, size);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+    log.debug(`Successfully read ${buffer.length} bytes`);
+    return buffer;
+  }
+
+  async fwrite(handle: bigint, data: Buffer, chunkSize = data.length): Promise<void> {
+    log.debug(`Writing ${data.length} bytes to handle ${handle}`);
+    const effectiveChunkSize = chunkSize;
+    let offset = 0;
+    let chunkCount = 0;
+
+    while (offset < data.length) {
+      const end = Math.min(offset + effectiveChunkSize, data.length);
+      const chunk = data.subarray(offset, end);
+      chunkCount++;
+
+      const {status} = await this._sendAndWait(AfcOpcode.WRITE, writeUInt64LE(handle), chunk);
+      if (status !== AfcError.SUCCESS) {
+        const errorName = AfcError[status] || 'UNKNOWN';
+        if (!this.silent) {
+          log.error(`Write operation failed at offset ${offset} with status ${errorName} (${status})`);
+        }
+        throw new Error(`fwrite chunk failed with ${errorName} (${status}) at offset ${offset}`);
+      }
+      offset = end;
+    }
+
+    log.debug(`Successfully wrote ${data.length} bytes in ${chunkCount} chunks`);
+  }
+
+  async getFileContents(filePath: string): Promise<Buffer> {
+    log.debug(`Reading file contents: ${filePath}`);
+    const resolved = await this._resolvePath(filePath);
+    const st = await this.stat(resolved);
+    if (st.st_ifmt !== AfcFileMode.S_IFREG) {
+      if (!this.silent) {
+        log.error(`Path '${resolved}' is not a regular file (type: ${st.st_ifmt})`);
+      }
+      throw new Error(`'${resolved}' isn't a regular file`);
+    }
+    const h = await this.fopen(resolved, 'r');
+    try {
+      const buf = await this.fread(h, st.st_size);
+      log.debug(`Successfully read ${buf.length} bytes from ${filePath}`);
+      return buf;
+    } finally {
+      await this.fclose(h);
+    }
+  }
+
+  async setFileContents(filePath: string, data: Buffer): Promise<void> {
+    log.debug(`Writing ${data.length} bytes to file: ${filePath}`);
+    const h = await this.fopen(filePath, 'w');
+    try {
+      await this.fwrite(h, data, MAXIMUM_WRITE_SIZE);
+      log.debug(`Successfully wrote file: ${filePath}`);
+    } catch (error) {
+      await this.rmSingle(filePath, true);
+      throw error;
+    } finally {
+      await this.fclose(h);
+    }
+  }
+
+  async readToStream(filePath: string): Promise<Readable> {
+    log.debug(`Creating read stream for: ${filePath}`);
+    const resolved = await this._resolvePath(filePath);
+    const st = await this.stat(resolved);
+    if (st.st_ifmt !== AfcFileMode.S_IFREG) {
+      throw new Error(`'${resolved}' isn't a regular file`);
+    }
+    const handle = await this.fopen(resolved, 'r');
+    const stream = this.createReadStream(handle, st.st_size);
+    stream.once('close', async () => {
+      try {
+        await this.fclose(handle);
+      } catch {}
+    });
+    return stream;
+  }
+
+  async writeFromStream(filePath: string, stream: Readable): Promise<void> {
+    log.debug(`Writing stream to file: ${filePath}`);
+    const handle = await this.fopen(filePath, 'w');
+    const writeStream = this.createWriteStream(handle);
+    try {
+      await pipeline(stream, writeStream);
+      log.debug(`Successfully wrote file: ${filePath}`);
+    } catch (error) {
+      await this.rmSingle(filePath, true);
+      throw error;
+    } finally {
+      await this.fclose(handle);
+    }
+  }
+
+  /**
+   * Pull file(s) or directory from the device to the local filesystem.
+   *
+   * @param remoteSrc - Remote path on the device (file or directory)
+   * @param localDst - Local destination path
+   * @param options - Optional configuration
+   *
+   * @throws {Error} If the remote source path does not exist
+   * @throws {Error} If overwrite is false and local file already exists
+   *
+   * @remarks
+   * When pulling a directory with `recursive: true`, the directory itself will be created
+   * inside the destination. For example, pulling `/Downloads` to `/tmp` will create `/tmp/Downloads`.
+   */
+  async pull(remoteSrc: string, localDst: string, options?: PullOptions): Promise<void> {
+    const {recursive = false, match, overwrite = true, callback: onPullProgress} = options ?? {};
+
+    if (!(await this.exists(remoteSrc))) {
+      throw new Error(`Remote path does not exist: ${remoteSrc}`);
+    }
+
+    const localNames = new PullLocalNameAllocator((localPath) => this._localPathExists(localPath), overwrite);
+
+    const pullSingleFile = async (
+      remoteFilePath: string,
+      localFilePath: string,
+      nameAllocated = false,
+    ): Promise<void> => {
+      log.debug(`Pulling file from '${remoteFilePath}' to '${localFilePath}'`);
+
+      if (!nameAllocated && !overwrite && (await this._localPathExists(localFilePath))) {
+        throw new Error(`Local file already exists: ${localFilePath}`);
+      }
+
+      await this._pullFile(remoteFilePath, localFilePath);
+
+      if (onPullProgress) {
+        await onPullProgress(remoteFilePath, localFilePath, false);
+      }
+    };
+
+    const isDir = await this.isdir(remoteSrc);
+
+    if (!isDir) {
+      const remoteBaseName = path.posix.basename(remoteSrc);
+
+      if (match && !minimatch(remoteBaseName, match)) {
+        return;
+      }
+
+      const localDstIsDirectory = await this._isLocalDirectory(localDst);
+      const targetPath = localDstIsDirectory
+        ? path.join(localDst, await localNames.allocate(localDst, remoteBaseName))
+        : localDst;
+
+      await pullSingleFile(remoteSrc, targetPath, localDstIsDirectory);
+      return;
+    }
+
+    // Source is a directory, recursive option required
+    if (!recursive) {
+      throw new Error(
+        `Cannot pull directory '${remoteSrc}' without recursive option. Set recursive: true to pull directories.`,
+      );
+    }
+
+    log.debug(`Starting recursive pull from '${remoteSrc}' to '${localDst}'`);
+    await this._pullRecursiveInternal(remoteSrc, localDst, {
+      match,
+      overwrite,
+      callback: onPullProgress,
+      localNames,
+    });
+  }
+
+  /**
+   * Create a directory on the device.
+   *
+   * Creates parent directories automatically and is idempotent (no error if the directory exists).
+   *
+   * @param dirPath - Path of the directory to create.
+   * @returns A promise that resolves when the directory has been created.
+   */
+  async mkdir(dirPath: string): Promise<void> {
+    await this._doOperation(AfcOpcode.MAKE_DIR, buildMkdirPayload(dirPath));
+    log.debug(`Successfully created directory: ${dirPath}`);
+  }
+
+  async rmSingle(filePath: string, force = false): Promise<boolean> {
+    log.debug(`Removing single path: ${filePath} (force: ${force})`);
+    try {
+      await this._doOperation(AfcOpcode.REMOVE_PATH, buildRemovePayload(filePath));
+      log.debug(`Successfully removed: ${filePath}`);
+      return true;
+    } catch (error) {
+      if (force) {
+        log.debug(`Failed to remove '${filePath}' (ignored due to force=true):`, error);
+        return false;
+      }
+      if (!this.silent) {
+        log.error(`Failed to remove '${filePath}':`, error);
+      }
+      throw error;
+    }
+  }
+
+  async rm(filePath: string, force = false): Promise<string[]> {
+    if (!(await this.exists(filePath))) {
+      return force ? [] : [filePath];
+    }
+
+    if (!(await this.isdir(filePath))) {
+      if (await this.rmSingle(filePath, force)) {
+        return [];
+      }
+      return [filePath];
+    }
+
+    const failedPaths: string[] = [];
+    for (const entry of await this.listdir(filePath)) {
+      const cur = path.posix.join(filePath, entry);
+      if (await this.isdir(cur)) {
+        const sub = await this.rm(cur, true);
+        failedPaths.push(...sub);
+      } else {
+        if (!(await this.rmSingle(cur, true))) {
+          failedPaths.push(cur);
+        }
+      }
+    }
+
+    try {
+      if (!(await this.rmSingle(filePath, force))) {
+        failedPaths.push(filePath);
+      }
+    } catch (err) {
+      if (failedPaths.length) {
+        failedPaths.push(filePath);
+      } else {
+        throw err;
+      }
+    }
+
+    return failedPaths;
+  }
+
+  async rename(src: string, dst: string): Promise<void> {
+    log.debug(`Renaming '${src}' to '${dst}'`);
+    try {
+      await this._doOperation(AfcOpcode.RENAME_PATH, buildRenamePayload(src, dst));
+      log.debug(`Successfully renamed '${src}' to '${dst}'`);
+    } catch (error) {
+      if (!this.silent) {
+        log.error(`Failed to rename '${src}' to '${dst}':`, error);
+      }
+      throw error;
+    }
+  }
+
+  async push(localSrc: string, remoteDst: string): Promise<void> {
+    log.debug(`Pushing file from '${localSrc}' to '${remoteDst}'`);
+    const readStream = fs.createReadStream(localSrc, {
+      highWaterMark: MAXIMUM_WRITE_SIZE,
+    });
+    await this.writeFromStream(remoteDst, readStream);
+    log.debug(`Successfully pushed file to '${remoteDst}'`);
+  }
+
+  /**
+   * Recursively list `root` and everything below it. Untraversable directories are skipped
+   * rather than aborting the walk: the media sandbox exposes directories it refuses to read
+   * (e.g. `/PhotoData/UBF` answers GET_FILE_INFO but fails READ_DIR with PERM_DENIED).
+   */
+  async walk(root: string): Promise<Array<{dir: string; dirs: string[]; files: string[]}>> {
+    const out: Array<{dir: string; dirs: string[]; files: string[]}> = [];
+    let entries: string[];
+    try {
+      entries = await this.listdir(root);
+    } catch (error) {
+      log.debug(`Skipping '${root}' during walk, cannot list it:`, error);
+      return out;
+    }
+    const dirs: string[] = [];
+    const files: string[] = [];
+    for (const e of entries) {
+      const p = path.posix.join(root, e);
+      let isDir: boolean;
+      try {
+        isDir = await this.isdir(p);
+      } catch (error) {
+        // Unstattable entry: report it, but do not try to descend into it.
+        log.debug(`Cannot stat '${p}' during walk, treating it as a file:`, error);
+        isDir = false;
+      }
+      if (isDir) {
+        dirs.push(e);
+      } else {
+        files.push(e);
+      }
+    }
+    out.push({dir: root, dirs, files});
+    for (const d of dirs) {
+      out.push(...(await this.walk(path.posix.join(root, d))));
+    }
+    return out;
+  }
+
+  /**
+   * Close the underlying socket
+   */
+  close(): void {
+    log.debug('Closing AFC service connection');
+    this.demux?.stop();
+    this.demux = null;
+    const socket = this.socket;
+    this.socket = null;
+    this.connectionError = null;
+    if (!socket || socket.destroyed) {
+      return;
+    }
+    try {
+      cleanupServiceSocket(socket);
+      socket.destroy();
+    } catch (error) {
+      log.debug('Error while closing socket (ignored):', error);
+    }
+  }
+
+  /**
+   * Re-establish the AFC connection, discarding any existing (possibly dead) socket.
+   * AfcService does not auto-reconnect once a connection is marked dead, so a caller that
+   * keeps a long-lived instance idle (e.g. across a multi-minute wait) can call this to
+   * recover instead of creating a new instance.
+   *
+   * Only supported for UDID-backed instances; a socket-backed instance
+   * (`AfcService.fromSocket`) cannot re-dial and will throw.
+   */
+  async reconnect(): Promise<void> {
+    this.close();
+    await this._connect();
+  }
+
+  /**
+   * Private primitive to pull a single file from device to local filesystem.
+   *
+   * @param remoteSrc - Remote file path on the device (must be a file)
+   * @param localDst - Local destination file path
+   */
+  private async _pullFile(remoteSrc: string, localDst: string): Promise<void> {
+    log.debug(`Pulling file from '${remoteSrc}' to '${localDst}'`);
+
+    const resolved = await this._resolvePath(remoteSrc);
+    const st = await this.stat(resolved);
+
+    if (st.st_ifmt !== AfcFileMode.S_IFREG) {
+      throw new Error(`'${resolved}' isn't a regular file`);
+    }
+
+    const handle = await this.fopen(resolved, 'r');
+    try {
+      const stream = this.createReadStream(handle, st.st_size);
+      const writeStream = fs.createWriteStream(localDst);
+      await pipeline(stream, writeStream);
+      log.debug(`Successfully pulled file to '${localDst}' (${st.st_size} bytes)`);
+    } finally {
+      await this.fclose(handle);
+    }
+  }
+
+  /**
+   * Recursively pull directory contents from device to local filesystem.
+   *
+   * @remarks
+   * This method is intended for directories only. Caller must validate that remoteSrcDir
+   * is a directory before invoking.
+   */
+  private async _pullRecursiveInternal(
+    remoteSrcDir: string,
+    localDstDir: string,
+    options?: Omit<PullOptions, 'recursive'> & {
+      localNames: PullLocalNameAllocator;
+    },
+    relativePath = '',
+  ): Promise<void> {
+    const {match, callback: onPullProgress, localNames} = options ?? {};
+
+    if (!localNames) {
+      throw new Error('PullLocalNameAllocator is required for recursive pull');
+    }
+
+    let localDirPath: string;
+    if (!relativePath) {
+      const localDstIsDirectory = await this._isLocalDirectory(localDstDir);
+
+      if (!localDstIsDirectory) {
+        const stat = await fsp.stat(localDstDir).catch((err: NodeJS.ErrnoException): null => {
+          if (err.code === 'ENOENT') {
+            return null;
+          }
+          throw err;
+        });
+        if (stat?.isFile()) {
+          throw new Error(`Local destination exists and is a file, not a directory: ${localDstDir}`);
+        }
+      }
+
+      const remoteBaseName = path.posix.basename(remoteSrcDir);
+      localDirPath = localDstIsDirectory
+        ? path.join(localDstDir, await localNames.allocate(localDstDir, remoteBaseName))
+        : localDstDir;
+    } else {
+      localDirPath = localDstDir;
+    }
+
+    // For subdirectories, only create dirs if they contain matching files
+    let dirCreated = !relativePath;
+    const ensureLocalDir = async () => {
+      if (!dirCreated) {
+        await fsp.mkdir(localDirPath, {recursive: true});
+        dirCreated = true;
+        if (onPullProgress) {
+          await onPullProgress(remoteSrcDir, localDirPath, true);
+        }
+      }
+    };
+    // For root directory (empty relativePath), always create it
+    if (!relativePath) {
+      await fsp.mkdir(localDirPath, {recursive: true});
+      if (onPullProgress) {
+        await onPullProgress(remoteSrcDir, localDirPath, true);
+      }
+    }
+
+    for (const entry of await this.listdir(remoteSrcDir)) {
+      const entryPath = path.posix.join(remoteSrcDir, entry);
+      const entryRelativePath = relativePath ? path.posix.join(relativePath, entry) : entry;
+      const localEntryName = await localNames.allocate(localDirPath, entry);
+
+      if (await this.isdir(entryPath)) {
+        await this._pullRecursiveInternal(
+          entryPath,
+          path.join(localDirPath, localEntryName),
+          options,
+          entryRelativePath,
+        );
+      } else {
+        if (match && !minimatch(entryRelativePath, match)) {
+          continue;
+        }
+
+        await ensureLocalDir();
+
+        const targetPath = path.join(localDirPath, localEntryName);
+        await this._pullFile(entryPath, targetPath);
+
+        if (onPullProgress) {
+          await onPullProgress(entryPath, targetPath, false);
+        }
+      }
+    }
+  }
+
+  /**
+   * Helper to check if a local filesystem path exists and is a directory.
+   */
+  private async _isLocalDirectory(localPath: string): Promise<boolean> {
+    try {
+      const stats = await fsp.stat(localPath);
+      return stats.isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Helper to check if a local path (file or directory) exists.
+   */
+  private async _localPathExists(localPath: string): Promise<boolean> {
+    try {
+      await fsp.access(localPath, fsp.constants.F_OK);
+      return true;
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Connect to RSD port and perform RSDCheckin.
+   * Keeps the underlying socket for raw AFC I/O.
+   */
+  private _assertConnectionAlive(): void {
+    if (this.connectionError) {
+      throw this.connectionError;
+    }
+  }
+
+  private _markConnectionDead(error: Error): void {
+    if (this.connectionError) {
+      return;
+    }
+    this.connectionError =
+      error instanceof AfcConnectionError ? error : new AfcConnectionError(error.message, {cause: error});
+    const sock = this.socket;
+    this.socket = null;
+    if (sock && !sock.destroyed) {
+      fatalizeAfcSocket(sock, this.connectionError);
+    } else if (sock) {
+      cleanupServiceSocket(sock, this.connectionError);
+    }
+  }
+
+  private async _withAfcConnection<T>(fn: () => Promise<T>): Promise<T> {
+    this._assertConnectionAlive();
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof AfcConnectionError) {
+        this._markConnectionDead(err);
+      }
+      throw err;
+    }
+  }
+
+  private _getDemux(): AfcPacketDemux {
+    if (!this.demux) {
+      this.demux = new AfcPacketDemux(
+        async () => await this._connect(),
+        (err) => this._markConnectionDead(err),
+      );
+    }
+    return this.demux;
+  }
+
+  private async _sendAndWait(
+    op: AfcOpcode,
+    headerPayload: Buffer = Buffer.alloc(0),
+    content: Buffer = Buffer.alloc(0),
+  ): Promise<{status: AfcError; data: Buffer}> {
+    return await this._withAfcConnection(async () => this._getDemux().sendAndWait(op, headerPayload, content));
+  }
+
+  private async _connect(): Promise<net.Socket> {
+    this._assertConnectionAlive();
+    if (this.socket && !this.socket.destroyed) {
+      return this.socket;
+    }
+
+    const previousSocket = this.socket;
+    if (previousSocket) {
+      if (!previousSocket.destroyed) {
+        cleanupServiceSocket(previousSocket);
+        previousSocket.destroy();
+      }
+      this.demux?.resetForNewSocket();
+    }
+    this.socket = null;
+
+    if (!this.udid) {
+      throw new AfcConnectionError('Pre-connected AFC socket is no longer usable');
+    }
+
+    const resolved = await resolveTunnelService(this.udid, this.rsdServiceName, {
+      waitMs: DEFAULT_TUNNEL_SERVICE_WAIT_MS,
+    });
+
+    this.socket = await createRawServiceSocket(resolved.host, resolved.port, {
+      timeoutMs: 30000,
+    });
+    this._getDemux().ensureReaderStarted(this.socket);
+    log.debug('RSD handshake complete; switching to raw AFC');
+
+    return this.socket;
+  }
+
+  private async _resolvePath(filePath: string): Promise<string> {
+    const info = await this.stat(filePath);
+    if (info.st_ifmt === AfcFileMode.S_IFLNK && info.LinkTarget) {
+      const target = info.LinkTarget;
+      if (target.startsWith('/')) {
+        return target;
+      }
+      return path.posix.join(path.posix.dirname(filePath), target);
+    }
+    return filePath;
+  }
+
+  /**
+   * Send a single-operation request and parse result.
+   * Throws if status != SUCCESS.
+   * Returns response DATA buffer when applicable.
+   */
+  private async _doOperation(op: AfcOpcode, payload: Buffer = Buffer.alloc(0)): Promise<Buffer> {
+    const {status, data} = await this._sendAndWait(op, payload);
+
+    if (status !== AfcError.SUCCESS) {
+      const errorName = AfcError[status] || 'UNKNOWN';
+      const opName = AfcOpcode[op] || op.toString();
+
+      if (status === AfcError.OBJECT_NOT_FOUND) {
+        throw new Error(`AFC error: OBJECT_NOT_FOUND for operation ${opName}`);
+      }
+
+      if (!this.silent) {
+        log.error(`AFC operation ${opName} failed with status ${errorName} (${status})`);
+      }
+      throw new Error(`AFC operation ${opName} failed with ${errorName} (${status})`);
+    }
+    return data;
+  }
+}
+
+export default AfcService;
