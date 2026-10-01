@@ -4,7 +4,7 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {readdirSync, readFileSync, existsSync} from 'node:fs';
 import path from 'node:path';
 
-const git = (...args) => execFileSync('git', args, {encoding: 'utf8'}).trim();
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']}).trim();
 const lernaConfig = JSON.parse(readFileSync('lerna.json', 'utf8'));
 
 function devDepOnlyGlobs() {
