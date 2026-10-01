@@ -12,7 +12,7 @@ async function readJson(file) {
 }
 
 /** @returns {Promise<string|null>} the package's glob if it only has dev-dep commits, else null */
-async function devDepOnlyGlob(dir) {
+async function devDepOnlyGlob(dir, ignoreChanges) {
   const pkgDir = path.join('packages', dir);
   let name, version;
   try {
@@ -22,7 +22,16 @@ async function devDepOnlyGlob(dir) {
   }
   let stdout;
   try {
-    ({stdout} = await execFileAsync('git', ['log', '--format=%s', `${name}@${version}..HEAD`, '--', pkgDir]));
+    // Skip commits touching only paths lerna itself ignores (e.g. docs, tests)
+    const excludes = ignoreChanges.map((g) => `:(exclude,glob)${g}`);
+    ({stdout} = await execFileAsync('git', [
+      'log',
+      '--format=%s',
+      `${name}@${version}..HEAD`,
+      '--',
+      pkgDir,
+      ...excludes,
+    ]));
   } catch {
     return null; // no release tag yet
   }
@@ -32,9 +41,10 @@ async function devDepOnlyGlob(dir) {
 
 async function main() {
   const [lernaConfig, dirs] = await Promise.all([readJson('lerna.json'), readdir('packages')]);
-  const devDepGlobs = (await Promise.all(dirs.map(devDepOnlyGlob))).filter(Boolean);
+  const ignoreChanges = lernaConfig.ignoreChanges ?? [];
+  const devDepGlobs = (await Promise.all(dirs.map((d) => devDepOnlyGlob(d, ignoreChanges)))).filter(Boolean);
   // The CLI flag replaces lerna.json's `ignoreChanges`, so re-add those.
-  const ignore = [...(lernaConfig.ignoreChanges ?? []), ...devDepGlobs];
+  const ignore = [...ignoreChanges, ...devDepGlobs];
   const lerna = spawn('npx', ['lerna', ...process.argv.slice(2), ...ignore.flatMap((g) => ['--ignore-changes', g])], {
     stdio: 'inherit',
   });
