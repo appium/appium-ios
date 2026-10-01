@@ -49,7 +49,7 @@ jobs:
           # GitHub Actions runs this script with `bash -e`, so guard against that explicitly -
           # otherwise the shell exits before the output below is ever printed.
           set +e
-          output="$(printf "n\n" | npx lerna version --exact --no-git-tag-version --no-push --allow-branch '*' 2>&1)"
+          output="$(printf "n\n" | node scripts/lerna-skip-dev-deps.mjs version --exact --no-git-tag-version --no-push --allow-branch '*' 2>&1)"
           set -e
           printf '%s\n' "$output"
 
