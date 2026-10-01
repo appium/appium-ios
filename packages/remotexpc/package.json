@@ -93,7 +93,7 @@
     "@appium/strongbox": "^2.0.0",
     "@appium/support": "^7.2.6",
     "@xmldom/xmldom": "^0.x",
-    "appium-ios-tuntap": "2.2.1",
+    "appium-ios-tuntap": "^2.2.1",
     "async-lock": "^1.4.1",
     "axios": "^1.18.0",
     "commander": "^14.0.1",
