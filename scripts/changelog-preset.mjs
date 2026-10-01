@@ -1,6 +1,7 @@
 // Wraps conventionalcommits: `refactor` commits trigger a minor bump (upstream: only `feat`).
-module.exports = async function createPreset(config) {
-  const { default: createUpstream } = await import("conventional-changelog-conventionalcommits");
+import createUpstream from "conventional-changelog-conventionalcommits";
+
+export default function createPreset(config) {
   const preset = createUpstream(config);
   const upstreamWhatBump = preset.whatBump;
   preset.whatBump = (commits) => {
@@ -12,4 +13,4 @@ module.exports = async function createPreset(config) {
     return result;
   };
   return preset;
-};
+}
