@@ -1,0 +1,5 @@
+{
+  "name": "changelog-preset",
+  "private": true,
+  "main": "index.cjs"
+}
