@@ -39,9 +39,8 @@
     "bump-xcode-version": "node ./scripts/xcode-version-update.mjs --package-version=${npm_package_version} && git add UIKitCatalog/UIKitCatalog.xcodeproj/project.pbxproj",
     "version": "npm run bump-xcode-version"
   },
-  "dependencies": {},
   "devDependencies": {
-    "semver": "^7.8.5"
+    "semver": "7.8.5"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
