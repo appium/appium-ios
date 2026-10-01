@@ -11,6 +11,25 @@ export default defineConfig({
   ],
   overrides: [
     {
+      files: ['packages/remotexpc/**'],
+      rules: {'unicorn/filename-case': ['error', {case: 'kebabCase'}]},
+    },
+    {
+      files: [
+        'packages/remotexpc/src/lib/plist/length-based-splitter.ts',
+        'packages/remotexpc/src/lib/plist/plist-decoder.ts',
+        'packages/remotexpc/src/lib/plist/plist-encoder.ts',
+        'packages/remotexpc/src/lib/usbmux/usbmux-decoder.ts',
+        'packages/remotexpc/src/lib/usbmux/usbmux-encoder.ts',
+        'packages/remotexpc/src/services/ios/afc/stream-utils.ts',
+        'packages/remotexpc/src/services/ios/zipconduit/stream-zip.ts',
+      ],
+      rules: {
+        // These files implement Node stream APIs that require callback signatures.
+        'promise/prefer-await-to-callbacks': 'off',
+      },
+    },
+    {
       // Atom sources run injected into a WebKit page context, never under Node.
       files: ['packages/remote-debugger/atoms/src/**'],
       env: {browser: true, node: false},

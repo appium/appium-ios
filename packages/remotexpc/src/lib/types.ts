@@ -1,0 +1,2193 @@
+/**
+ * Common type definitions for the appium-ios-remotexpc library
+ */
+import {type EventEmitter} from 'node:events';
+import type {Socket} from 'node:net';
+
+import type {ServiceConnection} from '../service-connection.js';
+import type AfcService from '../services/ios/afc/index.js';
+import type {BaseService, Service} from '../services/ios/base-service.js';
+import type {CompanionDeviceEvent, StartForwardingOptions} from '../services/ios/companion-proxy/index.js';
+import type {iOSApplication} from '../services/ios/dvt/instruments/application-listing.js';
+import type {LocationCoordinates} from '../services/ios/dvt/instruments/location-simulation.js';
+import type {NotificationMessage} from '../services/ios/dvt/instruments/notifications.js';
+import {type InstallationProxyService} from '../services/ios/installation-proxy/index.js';
+import {type ProvisioningProfile} from '../services/ios/misagent/provisioning-profile.js';
+import type {ProfileList} from '../services/ios/mobile-config/index.js';
+import type {PowerAssertionOptions} from '../services/ios/power-assertion/index.js';
+import {PowerAssertionType} from '../services/ios/power-assertion/index.js';
+import type {InterfaceOrientation} from '../services/ios/springboard-service/index.js';
+import type {SyslogEntry} from '../services/ios/syslog-service/syslog-entry-parser.js';
+import type {Device} from './usbmux/index.js';
+
+export type {PowerAssertionOptions};
+export {PowerAssertionType};
+
+/**
+ * Options for launching a process
+ */
+export interface ProcessLaunchOptions {
+  /** The bundle identifier of the app to launch */
+  bundleId: string;
+  /** Command line arguments to pass to the process */
+  arguments?: string[];
+  /** Environment variables to set for the process */
+  environment?: Record<string, string>;
+  /** Whether to kill an existing instance of the process */
+  killExisting?: boolean;
+  /** Whether to start the process in a suspended state */
+  startSuspended?: boolean;
+  /** Additional options to pass to the launch command */
+  extraOptions?: Record<string, any>;
+}
+
+/**
+ * Event received from a running process
+ */
+export interface OutputReceivedEvent {
+  /** The process identifier */
+  pid: number;
+  /** The output message content */
+  message: string;
+  /** Timestamp of the event (Mach absolute time) */
+  timestamp?: bigint;
+  /** Parsed Date object if timestamp is available */
+  date?: Date;
+}
+
+/**
+ * UID (Unique Identifier) interface for plist references
+ * Used in NSKeyedArchiver format
+ */
+export interface IPlistUID {
+  value: number;
+}
+
+export type PlistValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | Date
+  | Buffer
+  | IPlistUID
+  | PlistArray
+  | PlistDictionary
+  | null;
+
+/**
+ * Represents an array in a plist
+ */
+export type PlistArray = Array<PlistValue>;
+
+/**
+ * Represents a dictionary in a plist
+ */
+export interface PlistDictionary {
+  [key: string]: PlistValue;
+}
+
+/**
+ * Device information payload returned by lockdownd `GetValue` without a key/domain.
+ * Known fields are optional because availability differs across devices and iOS versions.
+ */
+export interface LockdownDeviceInfo {
+  /** Activation status, for example `Activated`. */
+  ActivationState?: string;
+  /** Baseband status string, for example `NoTelephonyCapabilty`. */
+  BasebandStatus?: string;
+  /** Bluetooth MAC address, for example `20:1a:94:ca:c7:f7`. */
+  BluetoothAddress?: string;
+  /** Numeric board identifier, for example `24`. */
+  BoardId?: number;
+  /** Boot session UUID, for example `A60280C7-...`. */
+  BootSessionID?: string;
+  /** Whether the device is considered bricked. */
+  BrickState?: boolean;
+  /** iOS build version, for example `23D8133`. */
+  BuildVersion?: string;
+  /** CPU architecture, for example `arm64e`. */
+  CPUArchitecture?: string;
+  /** Numeric SoC/chip identifier. */
+  ChipID?: number;
+  /** Device class, for example `iPad` or `iPhone`. */
+  DeviceClass?: string;
+  /** Device color code/string. */
+  DeviceColor?: string;
+  /** User-visible device name, for example `iPad von Galyna`. */
+  DeviceName?: string;
+  /** Numeric die identifier. */
+  DieID?: number;
+  /** Ethernet MAC address when present. */
+  EthernetAddress?: string;
+  /** Bootloader/firmware version, for example `iBoot-...`. */
+  FirmwareVersion?: string;
+  /** Hardware model identifier, for example `J181AP`. */
+  HardwareModel?: string;
+  /** Hardware platform identifier, for example `t8030`. */
+  HardwarePlatform?: string;
+  /** Whether SiDP is present/enabled. */
+  HasSiDP?: boolean;
+  /** Whether a host is currently attached. */
+  HostAttached?: boolean;
+  /** Human-readable iOS version string, for example `26.3.1 (a)`. */
+  HumanReadableProductVersionString?: string;
+  /** Main logic board serial number. */
+  MLBSerialNumber?: string;
+  /** Marketing model number. */
+  ModelNumber?: string;
+  /** Non-volatile RAM dictionary; keys and value shapes may vary by device. */
+  NonVolatileRAM?: PlistDictionary;
+  /** Pair record protection class value. */
+  PairRecordProtectionClass?: number;
+  /** Partitioning type, for example `GUID_partition_scheme`. */
+  PartitionType?: string;
+  /** Whether device is passcode/password protected. */
+  PasswordProtected?: boolean;
+  /** Product family name, usually `iPhone OS`. */
+  ProductName?: string;
+  /** Product type identifier, for example `iPad12,1`. */
+  ProductType?: string;
+  /** Platform version string, for example `26.3.1`. */
+  ProductVersion?: string;
+  /** Whether this is a production SoC. */
+  ProductionSOC?: boolean;
+  /** Lockdown protocol version, usually `2`. */
+  ProtocolVersion?: string;
+  /** Region info code, for example `FD/A`. */
+  RegionInfo?: string;
+  /** Device serial number. */
+  SerialNumber?: string;
+  /** Opaque software behavior blob/dictionary. */
+  SoftwareBehavior?: PlistValue;
+  /** Software bundle version string. */
+  SoftwareBundleVersion?: string;
+  /** Supported family IDs, for example `[1, 2]`. */
+  SupportedDeviceFamilies?: number[];
+  /** Whether telephony is supported. */
+  TelephonyCapability?: boolean;
+  /** Unix timestamp in seconds (float), for example `1774293982.973307`. */
+  TimeIntervalSince1970?: number;
+  /** IANA timezone identifier, for example `Europe/Berlin`. */
+  TimeZone?: string;
+  /** Timezone offset from UTC in seconds, for example `3600`. */
+  TimeZoneOffsetFromUTC?: number;
+  /** Whether a trusted host is currently attached. */
+  TrustedHostAttached?: boolean;
+  /** Device unique chip identifier. */
+  UniqueChipID?: number;
+  /** Device UDID, for example `0000XXXX-...`. */
+  UniqueDeviceID?: string;
+  /** Whether Raptor cert chain is used. */
+  UseRaptorCerts?: boolean;
+  /** Whether 24-hour clock format is enabled. */
+  Uses24HourClock?: boolean;
+  /** Wi-Fi MAC address. */
+  WiFiAddress?: string;
+  /** Wireless board serial number. */
+  WirelessBoardSerialNumber?: string;
+  /** Additional lockdownd fields that vary by device/iOS version. */
+  [key: string]: PlistValue | undefined;
+}
+
+/**
+ * Represents a message that can be sent or received via plist
+ */
+export type PlistMessage = PlistDictionary;
+
+/**
+ * Represents an object with no own properties
+ */
+export type EmptyObject = Record<string, never>;
+
+/**
+ * A 16-byte UUID value in the XPC protocol (`XPC_TYPE_UUID`).
+ *
+ * XPC distinguishes a UUID from arbitrary `data`, and some services reject a
+ * `data` value where a UUID is expected, so UUIDs must be marked explicitly on
+ * encode. Implemented by {@link XPCUUID}.
+ */
+export interface IXPCUUID {
+  /** The raw 16 bytes, in big-endian (RFC 4122 textual) order. */
+  readonly uuidBytes: Buffer;
+}
+
+/**
+ * Represents a value that can be encoded in XPC protocol
+ */
+export type XPCValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | Date
+  | Buffer
+  | Uint8Array
+  | IXPCUUID
+  | XPCArray
+  | XPCDictionary
+  | null;
+
+/**
+ * Represents an array in XPC protocol
+ */
+export type XPCArray = Array<XPCValue>;
+
+/**
+ * Represents a dictionary in XPC protocol
+ */
+export interface XPCDictionary {
+  [key: string]: XPCValue;
+}
+
+/**
+ * Represents a callback function for handling responses
+ */
+export type ResponseCallback<T> = (data: T) => void;
+
+/** RSD service catalog published by tunnel-creation after discover-and-close. */
+export type TunnelServiceCatalog = Record<string, {port: string}>;
+
+export interface TunnelRegistryEntry {
+  /** Unique device identifier */
+  udid: string;
+  /** Numeric device ID */
+  deviceId: number;
+  /** IP address of the tunnel */
+  address: string;
+  /** Remote Service Discovery (RSD) port number */
+  rsdPort: number;
+  /** RSD service name → port map (required once tunnel is ready) */
+  services: TunnelServiceCatalog;
+  /** Epoch ms when the service catalog was last refreshed */
+  catalogUpdatedAt?: number;
+  /** Type of connection (e.g., 'USB', 'Network') */
+  connectionType: string;
+  /** Product identifier of the device */
+  productId: number;
+  /** Timestamp when the tunnel was created (milliseconds since epoch) */
+  createdAt: number;
+  /** Timestamp when the tunnel was last updated (milliseconds since epoch) */
+  lastUpdated: number;
+}
+
+export interface TunnelRegistry {
+  /** Map of UDID to tunnel registry entries */
+  tunnels: Record<string, TunnelRegistryEntry>;
+  /** Metadata about the registry */
+  metadata: {
+    /** ISO 8601 timestamp of last registry update */
+    lastUpdated: string;
+    /** Total number of tunnels in the registry */
+    totalTunnels: number;
+    /** Number of currently active tunnels */
+    activeTunnels: number;
+  };
+}
+
+export interface SocketInfo {
+  /** Device server information */
+  server: Device;
+  /** Port number for the socket connection */
+  port: number;
+  /** Device-specific information */
+  deviceInfo: {
+    /** Unique device identifier */
+    udid: string;
+    /** IP address of the device */
+    address: string;
+    /** Optional Remote Service Discovery (RSD) port number */
+    rsdPort?: number;
+  };
+}
+
+export interface TunnelResult {
+  /** Device information */
+  device: Device;
+  /** Tunnel connection details */
+  tunnel: {
+    /** IP address of the tunnel */
+    Address: string;
+    /** Optional Remote Service Discovery (RSD) port number */
+    RsdPort?: number;
+  };
+  /** Indicates whether the tunnel creation was successful */
+  success: boolean;
+  /** Error message if tunnel creation failed */
+  error?: string;
+}
+
+/**
+ * Represents the instance side of DiagnosticsService
+ */
+export interface DiagnosticsService extends BaseService {
+  /**
+   * Restart the device
+   * @returns Promise that resolves when the restart request is sent
+   */
+  restart(): Promise<PlistDictionary>;
+
+  /**
+   * Shutdown the device
+   * @returns Promise that resolves when the shutdown request is sent
+   */
+  shutdown(): Promise<PlistDictionary>;
+
+  /**
+   * Put the device in sleep mode
+   * @returns Promise that resolves when the sleep request is sent
+   */
+  sleep(): Promise<PlistDictionary>;
+
+  /**
+   * Query IORegistry
+   * @param options Options for the IORegistry query
+   * @returns Object containing the IORegistry information
+   */
+  ioregistry(options?: {
+    plane?: string;
+    name?: string;
+    ioClass?: string;
+    returnRawJson?: boolean;
+    timeout?: number;
+  }): Promise<PlistDictionary[] | Record<string, any>>;
+}
+
+/**
+ * Represents the static side of DiagnosticsService
+ */
+export interface NotificationProxyService extends BaseService {
+  /**
+   * Connect to the notification proxy service
+   * @returns Promise resolving to the ServiceConnection instance
+   */
+  connectToNotificationProxyService(): Promise<ServiceConnection>;
+  /**
+   * Observe a notification
+   * @param notification The notification name to subscribe to
+   * @returns Promise that resolves when the subscription request is sent
+   */
+  observe(notification: string): Promise<EmptyObject>;
+  /**
+   * Post a notification
+   * @param notification The notification name to post
+   * @returns Promise that resolves when the post request is sent
+   */
+  post(notification: string): Promise<EmptyObject>;
+  /**
+   * Expect notifications as an async generator
+   * @param timeout Timeout in milliseconds
+   * @returns AsyncGenerator yielding PlistMessage objects
+   */
+  expectNotifications(timeout?: number): AsyncGenerator<PlistMessage>;
+  /**
+   * Expect a single notification
+   * @param timeout Timeout in milliseconds
+   * @returns Promise resolving to the expected notification
+   */
+  expectNotification(timeout?: number): Promise<PlistMessage>;
+  /**
+   * Close the notification proxy service connection
+   */
+  close(): void;
+}
+
+/**
+ * Represents the instance side of CompanionProxyService (paired Apple Watch access via the phone)
+ */
+export interface CompanionProxyService extends BaseService {
+  /**
+   * List the UDIDs of the watches paired with this phone
+   * @returns Paired watch UDIDs; empty when none are paired
+   * @throws {CompanionProxyError} On any other daemon `Error` reply
+   */
+  list(): Promise<string[]>;
+  /**
+   * Stream watch pair/unpair/attach/detach events on a dedicated connection that is
+   * closed when the consumer stops iterating, on error, on abort, or on `close()`
+   * @param timeout Milliseconds to wait for each event
+   * @param signal Aborting it stops this stream only, settling a pending iteration with the abort reason
+   * @throws {CompanionProxyError} On a daemon `Error` reply or a frame that is not a companion event
+   * @throws {Error} When no event arrives within `timeout` or the connection is closed
+   * @throws {DOMException} The `AbortError` (or `signal.reason`) once `signal` aborts
+   */
+  listen(timeout?: number, signal?: AbortSignal): AsyncGenerator<CompanionDeviceEvent>;
+  /**
+   * Read one registry value for a paired watch
+   * @param companionUdid Watch UDID
+   * @param key Registry key, e.g. `DeviceName`
+   * @throws {CompanionProxyError} On a daemon `Error` reply or a reply without `RetrievedValueDictionary`
+   */
+  getValue(companionUdid: string, key: string): Promise<PlistValue>;
+  /**
+   * Forward a watch TCP port through the phone
+   * @param watchPort TCP port on the watch
+   * @returns Ephemeral phone port proxying to the watch port
+   * @throws {TypeError} When `watchPort` is not an integer in 1..65535
+   * @throws {CompanionProxyError} On a daemon `Error` reply or a reply without `CompanionProxyServicePort`
+   */
+  startForwardingServicePort(watchPort: number, options?: StartForwardingOptions): Promise<number>;
+  /**
+   * Stop forwarding a watch TCP port
+   * @param watchPort TCP port on the watch
+   * @throws {TypeError} When `watchPort` is not an integer in 1..65535
+   * @throws {CompanionProxyError} On a daemon `Error` reply or a reply that is not a success
+   */
+  stopForwardingServicePort(watchPort: number): Promise<void>;
+  /**
+   * Open a raw TCP socket to a phone port returned by startForwardingServicePort
+   * @param companionPort Phone port
+   */
+  connectToForwardedPort(companionPort: number): Promise<Socket>;
+  /**
+   * Close every open listen() stream
+   */
+  close(): void;
+}
+
+/**
+ * Represents the PowerAssertionService for preventing system sleep
+ */
+export interface PowerAssertionService extends BaseService {
+  /**
+   * Create a power assertion to prevent system sleep
+   * @param options Options for creating the power assertion
+   * @returns Promise that resolves when the assertion is created
+   */
+  createPowerAssertion(options: PowerAssertionOptions): Promise<void>;
+
+  /**
+   * Close the connection to the power assertion service
+   * @returns Promise that resolves when the connection is closed
+   */
+  close(): Promise<void>;
+}
+
+/**
+ * Represents the instance side of AmfiService, which controls Developer Mode (iOS 16+)
+ * through the Apple Mobile File Integrity lockdown shim
+ * @remarks
+ * Developer Mode gates dev-signed app launch, debugger attachment, testmanagerd/XCTest,
+ * WebDriverAgent and Developer Disk Image use. Read the current state with
+ * {@link MobileImageMounterService.queryDeveloperModeStatus}.
+ */
+export interface AmfiService extends BaseService {
+  /**
+   * Read the current Developer Mode state through the mobile image mounter shim.
+   * Unlike {@link MobileImageMounterService.queryDeveloperModeStatus}, a failed read throws
+   * instead of reporting "enabled".
+   */
+  isDeveloperModeEnabled(): Promise<boolean>;
+  /**
+   * Make the Developer Mode toggle visible under Settings > Privacy & Security.
+   * Does not change the Developer Mode state.
+   */
+  revealDeveloperModeOption(): Promise<void>;
+  /**
+   * Turn Developer Mode on. Idempotent: when Developer Mode is already on nothing is sent and the
+   * device is left untouched. AMFI itself would accept the action in that state, reboot, and leave
+   * Developer Mode OFF until the prompt is accepted, so the status is always read first.
+   *
+   * Otherwise the device reboots within seconds, which tears down the tunnel; after it comes back a
+   * "Turn on Developer Mode?" alert is shown until acceptDeveloperModePrompt() answers it.
+   * @throws DeviceHasPasscodeSetError when the device has a passcode set
+   * @throws AmfiError for any other rejection reported by the daemon, or when the status read fails
+   */
+  enableDeveloperMode(): Promise<void>;
+  /**
+   * Answer the post-reboot "Turn on Developer Mode?" prompt so the flow can run unattended.
+   * Idempotent: when Developer Mode is already on nothing is sent. During the real post-reboot window
+   * the status still reads off, so the prompt is answered as expected.
+   * @throws AmfiError with code `An unknown error has occured` when Developer Mode is off and no prompt
+   *   is pending on a device without a passcode
+   */
+  acceptDeveloperModePrompt(): Promise<void>;
+}
+
+/**
+ * Represents the static side of MobileConfigService
+ */
+export interface MobileConfigService extends BaseService {
+  /**
+   * Connect to the mobile config service
+   * @returns Promise resolving to the ServiceConnection instance
+   */
+  connectToMobileConfigService(): Promise<ServiceConnection>;
+  /**
+   * Get all profiles of iOS devices
+   * @returns {Promise<ProfileList>}
+   * e.g.
+   * {
+   *   OrderedIdentifiers: [ '2fac1c2b3d684843189b2981c718b0132854a847a' ],
+   *   ProfileManifest: {
+   *     '2fac1c2b3d684843189b2981c718b0132854a847a': {
+   *       Description: 'Charles Proxy CA (7 Dec 2020, MacBook-Pro.local)',
+   *       IsActive: true
+   *     }
+   *   },
+   *   ProfileMetadata: {
+   *     '2fac1c2b3d684843189b2981c718b0132854a847a': {
+   *       PayloadDisplayName: 'Charles Proxy CA (7 Dec 2020, MacBook-Pro.local)',
+   *       PayloadRemovalDisallowed: false,
+   *       PayloadUUID: 'B30005CC-BC73-4E42-8545-8DA6C44A8A71',
+   *       PayloadVersion: 1
+   *     }
+   *   },
+   *   Status: 'Acknowledged'
+   * }
+   */
+  getProfileList(): Promise<ProfileList>;
+  /**
+   * Install profile to iOS device
+   * @param {String} path  must be a certificate file .PEM .CER and more formats
+   * e.g: /Downloads/charles-certificate.pem
+   */
+  installProfileFromPath(path: string): Promise<void>;
+  /**
+   * Install profile to iOS device from buffer
+   * @param {Buffer} payload  must be a certificate file .PEM .CER and more formats
+   */
+  installProfileFromBuffer(payload: Buffer): Promise<void>;
+  /**
+   * Remove profile from iOS device
+   * @param {String} identifier Query identifier list through getProfileList method
+   */
+  removeProfile(identifier: string): Promise<void>;
+}
+
+/**
+ * Represents the static side of DiagnosticsService
+ */
+export interface DiagnosticsServiceConstructor {
+  /**
+   * Service name for Remote Service Discovery
+   */
+  readonly RSD_SERVICE_NAME: string;
+  /**
+   * Creates a new DiagnosticsService instance
+   * @param udid Device UDID
+   */
+  new (udid: string): DiagnosticsService;
+}
+
+/**
+ * DVT (Developer Tools) service interface
+ */
+export interface DVTSecureSocketProxyService extends BaseService {
+  /**
+   * Connect to the DVT service
+   */
+  connect(): Promise<void>;
+
+  /**
+   * Get supported identifiers (capabilities)
+   * @example
+   * const capabilities = dvtService.getSupportedIdentifiers();
+   * // Example output:
+   * // {
+   * //   "com.apple.instruments.server.services.processcontrol.capability.memorylimits": 1,
+   * //   "com.apple.instruments.server.services.coreml.perfrunner": 4,
+   * //   "com.apple.instruments.server.services.processcontrolbydictionary": 4,
+   * //   "com.apple.instruments.server.services.graphics.coreanimation.immediate": 1,
+   * //   // ... more identifiers
+   * // }
+   */
+  getSupportedIdentifiers(): PlistDictionary;
+
+  /**
+   * Create a channel for a specific identifier
+   * @param identifier The channel identifier
+   * @returns The created channel
+   */
+  makeChannel(identifier: string): Promise<any>;
+
+  /**
+   * Close the DVT service connection
+   */
+  close(): Promise<void>;
+}
+
+/**
+ * Location simulation service interface
+ */
+export interface LocationSimulationService {
+  /**
+   * Set the simulated location
+   * @param latitude The latitude
+   * @param longitude The longitude
+   */
+  setLocation(latitude: number, longitude: number): Promise<void>;
+
+  /**
+   * Set the simulated location using the LocationCoordinates type.
+   * @param coordinates The location coordinates
+   */
+  set(coordinates: LocationCoordinates): Promise<void>;
+
+  /**
+   * Clear/stop location simulation
+   *
+   * Note: This method is safe to call even if no location simulation is currently active.
+   */
+  clear(): Promise<void>;
+}
+
+/**
+ * Condition profile information
+ */
+export interface ConditionProfile {
+  identifier: string;
+  description?: string;
+  [key: string]: any;
+}
+
+/**
+ * Condition group information
+ */
+export interface ConditionGroup {
+  identifier: string;
+  profiles: ConditionProfile[];
+  [key: string]: any;
+}
+
+/**
+ * Condition inducer service interface
+ */
+export interface ConditionInducerService {
+  /**
+   * List all available condition inducers and their profiles
+   *
+   * Each group in the response contains information about whether a condition
+   * is currently active via the `isActive` field and which profile is active
+   * via the `activeProfile` field.
+   *
+   * @returns Array of condition groups with their available profiles
+   *
+   * @example
+   * ```typescript
+   * const groups = await conditionInducer.list();
+   * // Example response:
+   * // [
+   * //   {
+   * //     "profiles": [
+   * //       {
+   * //         "name": "100% packet loss",
+   * //         "identifier": "SlowNetwork100PctLoss",
+   * //         "description": "Name: 100% Loss Scenario\nDownlink Bandwidth: 0 Mbps\nDownlink Latency: 0 ms\nDownlink Packet Loss Ratio: 100%\nUplink Bandwidth: 0 Mbps\nUplink Latency: 0 ms\nUplink Packet Loss Ratio: 100%"
+   * //       },
+   * //       // ... more profiles
+   * //     ],
+   * //     "profilesSorted": true,
+   * //     "identifier": "SlowNetworkCondition",
+   * //     "isDestructive": false,
+   * //     "isInternal": false,
+   * //     "activeProfile": "",
+   * //     "name": "Network Link",
+   * //     "isActive": false
+   * //   },
+   * //   // ... more groups
+   * // ]
+   * ```
+   */
+  list(): Promise<ConditionGroup[]>;
+
+  /**
+   * Set a specific condition profile
+   *
+   * Note: If a condition is already active, attempting to set a new one will
+   * throw an error: {'NSLocalizedDescription': 'A condition is already active.'}
+   * You must call disable() first before setting a different condition.
+   *
+   * Available profile identifiers include (but may vary by iOS version):
+   * - Network profiles: SlowNetwork100PctLoss, SlowNetworkVeryBadNetwork,
+   *   SlowNetworkEdgeBad, SlowNetworkEdgeAverage, SlowNetworkEdgeGood,
+   *   SlowNetworkEdge, SlowNetwork2GRural, SlowNetwork2GUrban,
+   *   SlowNetwork3GAverage, SlowNetwork3GGood, SlowNetwork3G,
+   *   SlowNetworkLTE, SlowNetworkWiFi, SlowNetworkWiFi80211AC,
+   *   SlowNetworkDSL, SlowNetworkHighLatencyDNS
+   * - Thermal profiles: ThermalFair, ThermalSerious, ThermalCritical
+   * - GPU profiles: GPUPerformanceStateMin, GPUPerformanceStateMid, GPUPerformanceStateMax
+   * - And others depending on device capabilities
+   *
+   * Use list() to see all available profiles for your device.
+   *
+   * @param profileIdentifier The identifier of the profile to enable
+   * @throws Error if the profile identifier is not found
+   * @throws Error if a condition is already active
+   */
+  set(profileIdentifier: string): Promise<void>;
+
+  /**
+   * Disable the currently active condition
+   *
+   * Note: This method is idempotent - calling it when no condition is active
+   * will not throw an error.
+   */
+  disable(): Promise<void>;
+}
+
+/**
+ * Screenshot service interface
+ */
+export interface ScreenshotService {
+  /**
+   * Capture a screenshot from the device
+   * @returns The screenshot data as a Buffer in PNG format, unscaled with the same dimensions as the device resolution
+   */
+  getScreenshot(): Promise<Buffer>;
+}
+
+/**
+ * Application listing service interface
+ */
+export interface AppListService {
+  /**
+   * Get the list of iOS applications on the device
+   * @returns {Promise<iOSApplication>}
+   * e.g.
+   * [
+   *  {
+   *    ExtensionDictionary: { NSExtensionPointIdentifier: 'com.apple.mlhost.worker', ... },
+   *    Version: '1.0',
+   *    DisplayName: 'ModelMonitoringLighthousePlugin',
+   *    CFBundleIdentifier: 'com.apple.aeroml.ModelMonitoringLighthouse.ModelMonitoringLighthousePlugin',
+   *    BundlePath: '/System/Library/ExtensionKit/Extensions/ModelMonitoringLighthousePlugin.appex',
+   *    ExecutableName: 'ModelMonitoringLighthousePlugin',
+   *    Restricted: 1,
+   *    Type: 'PluginKit',
+   *    PluginIdentifier: 'com.apple.aeroml.ModelMonitoringLighthouse.ModelMonitoringLighthousePlugin',
+   *    PluginUUID: 'AF17A1FE-E454-57C8-B963-0832FD71AB08'
+   *   },
+   *   ...
+   * ]
+   */
+  list(): Promise<iOSApplication[]>;
+}
+/**
+ * Graphics service interface for OpenGL/graphics monitoring
+ */
+export interface GraphicsService {
+  /**
+   * Async iterator for graphics logging
+   * Eg: {
+   *  'Device Utilization %': 27,
+   *  lastRecoveryTime: 0,
+   *  'Renderer Utilization %': 26,
+   *  'Alloc system memory': 99909632,
+   *  'In use system memory (driver)': 0,
+   *  recoveryCount: 0,
+   *  'Tiler Utilization %': 27,
+   *  SplitSceneCount: 0,
+   *  'Allocated PB Size': 2097152,
+   *  XRVideoCardRunTimeStamp: 1088,
+   *  'In use system memory': 28180480,
+   *  TiledSceneBytes: 327680,
+   *  IOGLBundleName: 'Built-In',
+   *  CoreAnimationFramesPerSecond: 0
+   * }
+   */
+  messages(): AsyncGenerator<unknown, void, unknown>;
+}
+
+/**
+ * Network address information
+ */
+export interface NetworkAddress {
+  /** Length of the address structure */
+  len: number;
+  /** Address family (2 = IPv4, 30 = IPv6) */
+  family: number;
+  /** Port number */
+  port: number;
+  /** Parsed IP address string */
+  address: string;
+  /** Flow info (IPv6 only) */
+  flowInfo?: number;
+  /** Scope ID (IPv6 only) */
+  scopeId?: number;
+}
+
+/**
+ * Event emitted when a network interface is detected
+ */
+export interface InterfaceDetectionEvent {
+  type: 0;
+  /** Interface index */
+  interfaceIndex: number;
+  /** Interface name (e.g., 'en0', 'lo0') */
+  name: string;
+}
+
+/**
+ * Event emitted when a network connection is detected
+ */
+export interface ConnectionDetectionEvent {
+  type: 1;
+  /** Local address information */
+  localAddress: NetworkAddress;
+  /** Remote address information */
+  remoteAddress: NetworkAddress;
+  /** Interface index */
+  interfaceIndex: number;
+  /** Process ID owning the connection */
+  pid: number;
+  /** Receive buffer size */
+  recvBufferSize: number;
+  /** Receive buffer used */
+  recvBufferUsed: number;
+  /** Connection serial number */
+  serialNumber: number;
+  /** Connection kind/type */
+  kind: number;
+}
+
+/**
+ * Event emitted when connection statistics are updated
+ */
+export interface ConnectionUpdateEvent {
+  type: 2;
+  /** Received packets count */
+  rxPackets: number;
+  /** Received bytes count */
+  rxBytes: number;
+  /** Transmitted packets count */
+  txPackets: number;
+  /** Transmitted bytes count */
+  txBytes: number;
+  /** Duplicate received packets */
+  rxDups: number;
+  /** Reserved field */
+  rx000: number;
+  /** Retransmitted packets */
+  txRetx: number;
+  /** Minimum round-trip time */
+  minRtt: number;
+  /** Average round-trip time */
+  avgRtt: number;
+  /** Connection serial number (links to ConnectionDetectionEvent) */
+  connectionSerial: number;
+  /** Timestamp */
+  time: number;
+}
+
+/**
+ * Union type for all network monitoring events
+ */
+export type NetworkEvent = InterfaceDetectionEvent | ConnectionDetectionEvent | ConnectionUpdateEvent;
+
+/**
+ * Network monitor service interface for real-time network activity monitoring
+ */
+export interface NetworkMonitorService {
+  /**
+   * Stops the current network monitoring stream.
+   * If no stream is active this call is a no-op.
+   */
+  stop(): Promise<void>;
+
+  /**
+   * Async iterator for network events.
+   * Yields interface detection, connection detection, and connection update events.
+   *
+   * @example
+   * const networkMonitor = device.networkMonitor();
+   * for await (const event of networkMonitor.events()) {
+   *   console.log(event);
+   * }
+   *
+   * // Example output:
+   * // { type: 0, interfaceIndex: 25, name: 'utun5' }
+   * // {
+   * //   type: 1,
+   * //   localAddress: {
+   * //     len: 28,
+   * //     family: 30,
+   * //     port: 50063,
+   * //     address: 'fdc2:1118:d2ac:0:0:0:0:1',
+   * //     flowInfo: 0,
+   * //     scopeId: 0
+   * //   },
+   * //   remoteAddress: {
+   * //     len: 28,
+   * //     family: 30,
+   * //     port: 65334,
+   * //     address: 'fdc2:1118:d2ac:0:0:0:0:2',
+   * //     flowInfo: 0,
+   * //     scopeId: 0
+   * //   },
+   * //   interfaceIndex: 25,
+   * //   pid: -2,
+   * //   recvBufferSize: 397120,
+   * //   recvBufferUsed: 0,
+   * //   serialNumber: 0,
+   * //   kind: 1
+   * // }
+   */
+  events(): AsyncGenerator<NetworkEvent, void, unknown>;
+}
+
+/**
+ * Energy monitor service interface for sampling per-process energy metrics
+ */
+export interface EnergyMonitorService {
+  /**
+   * Start energy sampling for the given PIDs.
+   */
+  startSampling(pids: number[]): Promise<void>;
+  /**
+   * Stop energy sampling for the given PIDs.
+   */
+  stopSampling(pids: number[]): Promise<void>;
+  /**
+   * Take a single energy snapshot for the given PIDs.
+   * Returns a record mapping PID (string key) to its energy metrics.
+   *
+   * {@link startSampling} must be called first — without it the device returns
+   * empty metrics.
+   */
+  sample(pids: number[]): Promise<Record<string, Record<string, number>>>;
+  /**
+   * Continuously yield energy snapshots for the given PIDs.
+   * Stops and cleans up when the generator is returned or throws.
+   *
+   * @example
+   * ```typescript
+   * for await (const snapshot of energy.monitor([1234])) {
+   *   console.log(snapshot);
+   * }
+   * ```
+   */
+  monitor(pids: number[]): AsyncGenerator<Record<string, Record<string, number>>, void, undefined>;
+}
+
+/**
+ * Process information
+ */
+export interface ProcessInfo {
+  /** Process identifier (may be negative for system services) */
+  pid: number;
+
+  /** Process name */
+  name?: string;
+
+  /** Indicates whether the process is an application */
+  isApplication: boolean;
+
+  /** Bundle identifier for application processes */
+  bundleIdentifier?: string;
+
+  /** Full path to the executable */
+  realAppName?: string;
+
+  /** Raw device start timestamp */
+  startDate?: {
+    /** Mach-based timestamp value */
+    'NS.time': number;
+  };
+
+  /** Whether crash analysis should include corpse sampling */
+  shouldAnalyzeWithCorpse?: boolean;
+}
+
+/**
+ * DeviceInfo service interface for accessing device information,
+ * file system, and process management
+ */
+export interface DeviceInfoService {
+  /**
+   * List directory contents
+   * @param path The directory path to list
+   * @returns Array of filenames
+   */
+  ls(path: string): Promise<string[]>;
+
+  /**
+   * Get executable path for a process
+   * @param pid The process identifier
+   * @returns The full path to the executable
+   */
+  execnameForPid(pid: number): Promise<string>;
+
+  /**
+   * Get list of running processes
+   * @returns Array of process information
+   * @example
+   * ```typescript
+   * const processes = await deviceInfo.proclist();
+   * // Example response:
+   * // [
+   * //   {
+   * //     name: 'audioaccessoryd',
+   * //     startDate: { 'NS.time': 786563887.8186979 },
+   * //     isApplication: false,
+   * //     pid: 77,
+   * //     realAppName: '/usr/libexec/audioaccessoryd'
+   * //   },
+   * //   {
+   * //     name: 'dmd',
+   * //     startDate: { 'NS.time': 786563890.2724509 },
+   * //     isApplication: false,
+   * //     pid: -102,
+   * //     realAppName: '/usr/libexec/dmd'
+   * //   },
+   * //   ...
+   * // ]
+   * ```
+   */
+  proclist(): Promise<ProcessInfo[]>;
+
+  /**
+   * Check if a process is running
+   * @param pid The process identifier
+   * @returns true if running, false otherwise
+   */
+  isRunningPid(pid: number): Promise<boolean>;
+
+  /**
+   * Get hardware information
+   * @returns Hardware information object
+   * @example
+   * ```typescript
+   * const hwInfo = await deviceInfo.hardwareInformation();
+   * // Example response:
+   * // {
+   * //   numberOfPhysicalCpus: 6,
+   * //   hwCPUsubtype: 2,
+   * //   numberOfCpus: 6,
+   * //   hwCPUtype: 16777228,
+   * //   hwCPU64BitCapable: 1,
+   * //   ProcessorTraceState: {
+   * //     HWTraceVersion: '{\n  "lib_ver": "libhwtrace @ tag libhwtrace-118.1",\n  "api_ver": 21,\n  ...\n}',
+   * //     Streaming: false,
+   * //     ProdTraceSupported: false,
+   * //     AllocatedBufferSize: 0,
+   * //     HWSupported: false,
+   * //     HWConfigured: false,
+   * //     RequestedBufferSize: 0,
+   * //     DevTraceSupported: false
+   * //   }
+   * // }
+   * ```
+   */
+  hardwareInformation(): Promise<any>;
+
+  /**
+   * Get network information
+   * @returns Network information object
+   * @example
+   * ```typescript
+   * const networkInfo = await deviceInfo.networkInformation();
+   * // Example response:
+   * // {
+   * //   en2: 'Ethernet Adapter (en2)',
+   * //   en0: 'Wi-Fi',
+   * //   en1: 'Ethernet Adapter (en1)',
+   * //   lo0: 'Loopback'
+   * // }
+   * ```
+   */
+  networkInformation(): Promise<any>;
+
+  /**
+   * Get mach time information
+   * @returns Mach time info array containing [machAbsoluteTime, numer, denom, machContinuousTime, systemTime, timezone]
+   * @example
+   * ```typescript
+   * const machTime = await deviceInfo.machTimeInfo();
+   * // Example response:
+   * // [
+   * //   1536005260807,      // machAbsoluteTime
+   * //   125,                // numer
+   * //   3,                  // denom
+   * //   1713684132688,      // machContinuousTime
+   * //   1764942215.065243,  // systemTime
+   * //   'Asia/Kolkata'      // timezone
+   * // ]
+   * ```
+   */
+  machTimeInfo(): Promise<any>;
+
+  /**
+   * Get mach kernel name
+   * @returns Kernel name string
+   * @example
+   * ```typescript
+   * const kernelName = await deviceInfo.machKernelName();
+   * // Example response:
+   * // '/mach.release.t8030'
+   * ```
+   */
+  machKernelName(): Promise<string>;
+
+  /**
+   * Get kernel performance event database
+   * @returns KPEP database object or null
+   * @example
+   * ```typescript
+   * const kpep = await deviceInfo.kpepDatabase();
+   * // Example response:
+   * // {
+   * //   system: {
+   * //     cpu: {
+   * //       config_counters: 1020,
+   * //       marketing_name: 'Apple A13',
+   * //       fixed_counters: 3,
+   * //       aliases: { ... },
+   * //       events: { ... },
+   * //       architecture: 'arm64',
+   * //       power_counters: -32
+   * //     }
+   * //   },
+   * //   internal: false,
+   * //   id: 'cpu_100000c_2_462504d2',
+   * //   name: 'a13',
+   * //   version: [1, 0]
+   * // }
+   * ```
+   */
+  kpepDatabase(): Promise<any | null>;
+
+  /**
+   * Get trace code mappings
+   * @returns Object mapping trace codes (as hex strings) to descriptions
+   * @example
+   * ```typescript
+   * const codes = await deviceInfo.traceCodes();
+   * // Example response:
+   * // {
+   * //   '0x1020000': 'KTrap_DivideError',
+   * //   '0x1020004': 'KTrap_Debug',
+   * //   '0x1020008': 'KTrap_NMI',
+   * //   '0x102000c': 'KTrap_Int3',
+   * //   '0x1020010': 'KTrap_Overflow',
+   * //   '0x1020014': 'KTrap_BoundRange',
+   * //   ...
+   * // }
+   * ```
+   */
+  traceCodes(): Promise<Record<string, string>>;
+
+  /**
+   * Get username for UID
+   * @param uid The user identifier
+   * @returns Username string
+   */
+  nameForUid(uid: number): Promise<string>;
+
+  /**
+   * Get group name for GID
+   * @param gid The group identifier
+   * @returns Group name string
+   */
+  nameForGid(gid: number): Promise<string>;
+
+  /**
+   * Get the ordered list of per-process attribute names supported by the
+   * sysmontap instrument. The order matches the per-process value tuples that
+   * the sysmontap service emits.
+   * @returns Array of process attribute names
+   * @example
+   * ```typescript
+   * const attrs = await deviceInfo.sysmonProcessAttributes();
+   * // ['pid', 'name', 'cpuUsage', 'physFootprint', 'memResidentSize', ...]
+   * ```
+   */
+  sysmonProcessAttributes(): Promise<string[]>;
+
+  /**
+   * Get the ordered list of system attribute names supported by the sysmontap
+   * instrument. The order matches the system value tuple that the sysmontap
+   * service emits.
+   * @returns Array of system attribute names
+   * @example
+   * ```typescript
+   * const attrs = await deviceInfo.sysmonSystemAttributes();
+   * // ['vmPageSize', 'physMemSize', '__vmSwapUsage', 'vmFreeCount', ...]
+   * ```
+   */
+  sysmonSystemAttributes(): Promise<string[]>;
+}
+
+/**
+ * A single process record emitted by the sysmontap instrument.
+ *
+ * Keys correspond to the process attribute names returned by
+ * {@link DeviceInfoService.sysmonProcessAttributes}. Common keys include
+ * `pid`, `name`, `cpuUsage`, `physFootprint`, and `memResidentSize`, but the
+ * exact set depends on the iOS version and the configured attributes.
+ */
+export interface SysmonProcessInfo {
+  [attribute: string]: unknown;
+}
+
+/**
+ * A single system record emitted by the sysmontap instrument.
+ *
+ * Keys correspond to the system attribute names returned by
+ * {@link DeviceInfoService.sysmonSystemAttributes}.
+ */
+export interface SysmonSystemInfo {
+  [attribute: string]: unknown;
+}
+
+/**
+ * A raw sample emitted by the sysmontap instrument.
+ *
+ * Each sample is a dictionary that may contain a `Processes` map (keyed by
+ * pid, with each value being the raw per-process attribute tuple) and/or a
+ * `System` attribute tuple, alongside additional metadata keys such as
+ * `StartMachAbsTime`, `EndMachAbsTime`, `Type`, and `CPUCount`.
+ */
+export interface SysmonSample {
+  /** Map of pid -> raw per-process attribute value tuple. */
+  Processes?: Record<string, unknown[]>;
+  /** Raw system attribute value tuple. */
+  System?: unknown[];
+  [key: string]: unknown;
+}
+
+/**
+ * Configuration options for the sysmontap instrument.
+ */
+export interface SysmontapOptions {
+  /**
+   * Sampling interval in milliseconds. Defaults to 500ms; values below the
+   * minimum (1ms) are clamped.
+   */
+  intervalMs?: number;
+  /**
+   * Override the per-process attributes to collect. When omitted, the full set
+   * reported by the device is requested automatically.
+   */
+  processAttributes?: string[];
+  /**
+   * Override the system attributes to collect. When omitted, the full set
+   * reported by the device is requested automatically.
+   */
+  systemAttributes?: string[];
+}
+
+/**
+ * Sysmontap service interface for streaming process and system resource usage.
+ */
+export interface SysmontapService {
+  /**
+   * Resolve the sampling attributes (querying the device unless overridden) and
+   * build the sampling configuration. Does not start sampling — the
+   * configuration is applied to the device by {@link start}. Called
+   * automatically by {@link start} when not invoked explicitly; call it
+   * directly to customise the interval or attributes before sampling begins.
+   * @param options Optional sampling configuration
+   */
+  configure(options?: SysmontapOptions): Promise<void>;
+
+  /**
+   * Begin sampling. Resolves the configuration with defaults first if
+   * {@link configure} was not already called.
+   *
+   * Only one sampling session is supported per DVT connection: after
+   * {@link stop} the device does not resume sampling on the same connection, so
+   * start a new DVT service to sample again.
+   */
+  start(): Promise<void>;
+
+  /**
+   * Stop sampling and unblock any in-flight iterator.
+   */
+  stop(): Promise<void>;
+
+  /** The process attribute names currently in effect (post-configure). */
+  getProcessAttributes(): string[];
+
+  /** The system attribute names currently in effect (post-configure). */
+  getSystemAttributes(): string[];
+
+  /**
+   * Async iterator yielding raw sysmontap samples as they arrive. Sampling
+   * starts on first iteration and stops when iteration ends. The iterator never
+   * throws on a read failure — it ends the stream instead (e.g. when the DVT
+   * connection is closed).
+   */
+  messages(): AsyncGenerator<SysmonSample, void, unknown>;
+
+  /**
+   * Async iterator yielding labelled per-process snapshots. Each yielded value
+   * is the list of processes from a single sample, with raw value tuples mapped
+   * to objects keyed by the process attribute names.
+   *
+   * Note: the first emitted snapshot typically contains uninitialised
+   * `cpuUsage` values and is commonly skipped by consumers.
+   *
+   * @example
+   * ```typescript
+   * for await (const processes of sysmontap.iterProcesses()) {
+   *   for (const proc of processes) {
+   *     console.log(proc.pid, proc.name, proc.cpuUsage);
+   *   }
+   *   break;
+   * }
+   * ```
+   */
+  iterProcesses(): AsyncGenerator<SysmonProcessInfo[], void, unknown>;
+
+  /**
+   * Async iterator yielding labelled system snapshots — the device-wide metrics
+   * from each system sample, mapped to objects keyed by the system attribute
+   * names. The system-sample counterpart to {@link iterProcesses}.
+   */
+  iterSystem(): AsyncGenerator<SysmonSystemInfo, void, unknown>;
+}
+
+/**
+ * ProcessControl service interface for managing processes
+ */
+export interface ProcessControlService {
+  /**
+   * Send a signal to a process
+   * @param pid The process identifier
+   * @param sig The signal number to send
+   * @returns The response from the device
+   */
+  signal(pid: number, sig: number): Promise<any>;
+
+  /**
+   * Terminate a process
+   * @param pid The process identifier to kill
+   */
+  kill(pid: number): Promise<void>;
+
+  /**
+   * Disable Jetsam memory limits for a specific process.
+   * iOS enforces per-process memory limits via Jetsam. Exceeding these limits
+   * causes the process to be killed. This method exempts the process from
+   * those limits, which is useful during profiling or testing to prevent
+   * the app from being terminated due to instrumentation overhead.
+   *
+   * Note: This method is idempotent — calling it multiple times on the same
+   * process has no additional effect beyond the first successful call.
+   *
+   * @param pid The process identifier
+   */
+  disableMemoryLimitForPid(pid: number): Promise<void>;
+
+  /**
+   * Get the process identifier for a bundle identifier.
+   *
+   * Returns `0` if the bundle identifier is not found on the device
+   * or the app is not currently running.
+   *
+   * @param bundleId The bundle identifier (e.g., 'com.apple.Preferences')
+   * @returns The process identifier (PID), or `0` if not found/not running
+   */
+  getPidForBundleIdentifier(bundleId: string): Promise<number>;
+
+  /**
+   * Launch a process with the specified options
+   * @param options Launch configuration options
+   * @returns The process identifier (PID) of the launched process
+   */
+  launch(options: ProcessLaunchOptions): Promise<number>;
+
+  /**
+   * Monitor output events from running processes
+   * @yields OutputReceivedEvent
+   */
+  outputEvents(): AsyncGenerator<OutputReceivedEvent, void, unknown>;
+}
+
+/**
+ * Notification service monitor memory and app notifications
+ */
+export interface NotificationService {
+  /**
+   * Yields notification from memory and application state changes
+   * @example:
+   * {
+   *   selector: 'applicationStateNotification:',
+   *   data:
+   *     {
+   *       mach_absolute_time: 58061793038,
+   *       execName: '/Applications/Spotlight.app',
+   *       appName: 'Spotlight',
+   *       pid: 327,
+   *       state_description: 'Suspended'
+   *     }
+   * },
+   * {
+   *   selector: 'applicationStateNotification:',
+   *   data:
+   *     {
+   *       mach_absolute_time: 58061827502,
+   *       execName: '/private/var/containers/Bundle/Application/28AF0B11-363A-4242-9164-CF690064402B/MobileCal.app',
+   *       appName: 'MobileCal',
+   *       pid: 449,
+   *       state_description: 'Suspended'
+   *     }
+   * },
+   * {
+   *   selector: 'memoryLevelNotification:',
+   *   data:
+   *     {
+   *       code: 3,
+   *       mach_absolute_time: 101524320437,
+   *       timestamp: [Object],
+   *       pid: -1
+   *     }
+   *
+   * }
+   */
+  messages(): AsyncGenerator<NotificationMessage, void, undefined>;
+}
+
+/**
+ * Activity trace tap service interface for streaming unified-logging entries.
+ */
+export interface ActivityTraceTapService {
+  /** Start the tap and configure the device channel. */
+  start(): Promise<void>;
+  /** Stop the tap and abort any in-flight read. */
+  stop(): Promise<void>;
+  /**
+   * Async generator that yields decoded log/signpost rows as they arrive.
+   * Starts the tap on first iteration; stops on `break`, `return`, or
+   * {@link stop}.
+   */
+  messages(): AsyncGenerator<Record<string, unknown>, void, unknown>;
+}
+
+/**
+ * DVT secure socket proxy plus instrument clients returned from `startDVTService`.
+ */
+export interface DVTInstruments {
+  /** The DVTSecureSocketProxyService instance */
+  dvtService: DVTSecureSocketProxyService;
+  /** The LocationSimulation service instance */
+  locationSimulation: LocationSimulationService;
+  /** The ConditionInducer service instance */
+  conditionInducer: ConditionInducerService;
+  /** The Screenshot service instance */
+  screenshot: ScreenshotService;
+  /** The Application Listing service instance */
+  appListing: AppListService;
+  /** The Graphics service instance */
+  graphics: GraphicsService;
+  /** The DeviceInfo service instance */
+  deviceInfo: DeviceInfoService;
+  /** The Notifications service instance */
+  notification: NotificationService;
+  /** The NetworkMonitor service instance */
+  networkMonitor: NetworkMonitorService;
+  /** The ProcessControl service instance */
+  processControl: ProcessControlService;
+  /** The Sysmontap service instance */
+  sysmontap: SysmontapService;
+  /** The EnergyMonitor service instance */
+  energyMonitor: EnergyMonitorService;
+  /** The ActivityTraceTap service instance */
+  activityTraceTap: ActivityTraceTapService;
+}
+
+/**
+ * Represents the WebInspectorService
+ */
+export interface WebInspectorService extends BaseService {
+  /**
+   * Send a message to the WebInspector service
+   * @param selector The RPC selector (e.g., '_rpc_reportIdentifier:')
+   * @param args The arguments dictionary for the message
+   * @returns Promise that resolves when the message is sent
+   */
+  sendMessage(selector: string, args?: PlistDictionary): Promise<void>;
+
+  /**
+   * Listen to messages from the WebInspector service using async generator
+   * @yields PlistMessage - Messages received from the WebInspector service
+   */
+  listenMessage(): AsyncGenerator<PlistMessage, void, unknown>;
+
+  /**
+   * Stop listening to messages
+   */
+  stopListeningAsync(): Promise<void>;
+
+  /**
+   * Close the connection and clean up resources
+   */
+  close(): Promise<void>;
+
+  /**
+   * Get the connection ID being used for this service
+   * @returns The connection identifier
+   */
+  getConnectionId(): string;
+
+  /**
+   * Request application launch
+   * @param bundleId The bundle identifier of the application to launch
+   */
+  requestApplicationLaunch(bundleId: string): Promise<void>;
+
+  /**
+   * Get connected applications
+   */
+  getConnectedApplications(): Promise<void>;
+
+  /**
+   * Forward get listing for an application
+   * @param appId The application identifier
+   */
+  forwardGetListing(appId: string): Promise<void>;
+
+  /**
+   * Forward automation session request
+   * @param sessionId The session identifier
+   * @param appId The application identifier
+   * @param capabilities Optional session capabilities
+   */
+  forwardAutomationSessionRequest(sessionId: string, appId: string, capabilities?: PlistDictionary): Promise<void>;
+
+  /**
+   * Forward socket setup for inspector connection
+   * @param sessionId The session identifier
+   * @param appId The application identifier
+   * @param pageId The page identifier
+   * @param automaticallyPause Whether to automatically pause (defaults to true)
+   */
+  forwardSocketSetup(sessionId: string, appId: string, pageId: number, automaticallyPause?: boolean): Promise<void>;
+
+  /**
+   * Forward socket data to a page
+   * @param sessionId The session identifier
+   * @param appId The application identifier
+   * @param pageId The page identifier
+   * @param data The data to send (will be JSON stringified)
+   */
+  forwardSocketData(sessionId: string, appId: string, pageId: number, data: any): Promise<void>;
+
+  /**
+   * Forward indicate web view
+   * @param appId The application identifier
+   * @param pageId The page identifier
+   * @param enable Whether to enable indication
+   */
+  forwardIndicateWebView(appId: string, pageId: number, enable: boolean): Promise<void>;
+}
+
+/**
+ * Options for configuring syslog capture
+ */
+export interface SyslogOptions {
+  /** Process ID to filter logs by */
+  pid?: number;
+  /** Whether to enable verbose logging */
+  enableVerboseLogging?: boolean;
+  /**
+   * Use text-relay mode (com.apple.syslog_relay.shim.remote).
+   * After RSDCheckin the device streams \n\x00-delimited text lines with no
+   * further handshake.  When false (default) the binary os_trace_relay
+   * protocol is used instead.
+   */
+  textMode?: boolean;
+}
+
+/**
+ * Represents the instance side of SyslogService
+ */
+export interface SyslogService extends EventEmitter {
+  /**
+   * Starts capturing syslog data from the device
+   * @param service Service information
+   * @param options Configuration options for syslog capture
+   */
+  start(service: Service, options?: SyslogOptions): Promise<void>;
+
+  /**
+   * Stops capturing syslog data
+   * @returns Promise that resolves when capture is stopped
+   */
+  stop(): Promise<void>;
+
+  /**
+   * Restart the device
+   * @param service Service information
+   * @returns Promise that resolves when the restart request is sent
+   */
+  restart(service: Service): Promise<void>;
+
+  /**
+   * Event emitter for 'start' events
+   */
+  on(event: 'start', listener: (response: any) => void): this;
+
+  /**
+   * Event emitter for 'stop' events
+   */
+  on(event: 'stop', listener: () => void): this;
+
+  /**
+   * Event emitter for 'message' events (formatted syslog string)
+   */
+  on(event: 'message', listener: (message: string) => void): this;
+
+  /**
+   * Event emitter for structured syslog entry events
+   */
+  on(event: 'syslogEntry', listener: (entry: SyslogEntry) => void): this;
+
+  /**
+   * Event emitter for 'plist' events
+   */
+  on(event: 'plist', listener: (data: any) => void): this;
+
+  /**
+   * Event emitter for 'error' events
+   */
+  on(event: 'error', listener: (error: Error) => void): this;
+
+  /**
+   * Event emitter for any events
+   */
+  on(event: string, listener: (...args: any[]) => void): this;
+}
+
+/**
+ * Represents the static side of SyslogService
+ */
+export interface SyslogServiceConstructor {
+  /**
+   * Creates a new SyslogService instance
+   * @param udid Device UDID
+   */
+  new (udid: string): SyslogService;
+}
+
+/**
+ * Represents the instance side of MobileImageMounterService
+ */
+export interface MobileImageMounterService extends BaseService {
+  /**
+   * Lookup for mounted images by type
+   * @param imageType Type of image, 'Personalized' by default
+   * @returns Promise resolving to array of signatures of mounted images
+   */
+  lookup(imageType?: string): Promise<Buffer[]>;
+
+  /**
+   * Check if personalized image is mounted
+   * @returns Promise resolving to boolean indicating if personalized image is mounted
+   */
+  isPersonalizedImageMounted(): Promise<boolean>;
+
+  /**
+   * Mount personalized image for device (iOS 17+)
+   * @param imageFilePath The file path of the image (.dmg)
+   * @param buildManifestFilePath The build manifest file path (.plist)
+   * @param trustCacheFilePath The trust cache file path (.trustcache)
+   */
+  mount(
+    imageFilePath: string,
+    buildManifestFilePath: string,
+    trustCacheFilePath: string,
+    infoPlist?: PlistDictionary,
+  ): Promise<void>;
+
+  /**
+   * Unmount image from device
+   * @param mountPath The mount path to unmount, defaults to '/System/Developer'
+   */
+  unmountImage(mountPath?: string): Promise<void>;
+
+  /**
+   * Query developer mode status (iOS 16+)
+   * @returns Promise resolving to boolean indicating if developer mode is enabled
+   */
+  queryDeveloperModeStatus(): Promise<boolean>;
+
+  /**
+   * Query personalization nonce (for personalized images)
+   * @param personalizedImageType Optional personalized image type
+   * @returns Promise resolving to personalization nonce
+   */
+  queryNonce(personalizedImageType?: string): Promise<Buffer>;
+
+  /**
+   * Query personalization identifiers from the device
+   * @returns Promise resolving to personalization identifiers
+   */
+  queryPersonalizationIdentifiers(): Promise<PlistDictionary>;
+
+  /**
+   * Copy devices list
+   * @returns Promise resolving to array of mounted devices
+   */
+  copyDevices(): Promise<any[]>;
+
+  /**
+   * Query personalization manifest for a specific image
+   * @param imageType The image type (e.g., 'DeveloperDiskImage')
+   * @param signature The image signature/hash
+   * @returns Promise resolving to personalization manifest
+   */
+  queryPersonalizationManifest(imageType: string, signature: Buffer): Promise<Buffer>;
+
+  /**
+   * Upload image data to the device (used prior to mounting)
+   * @param imageType The image type
+   * @param image The image buffer data
+   * @param signature The image signature/manifest buffer
+   * @param timeout Optional timeout in milliseconds
+   */
+  uploadImage(imageType: string, image: Buffer, signature: Buffer, timeout?: number): Promise<void>;
+
+  /**
+   * Mount image on the device using a previously uploaded image/manifest
+   * @param imageType The image type
+   * @param signature The image signature/manifest buffer
+   * @param extras Optional additional parameters for mounting
+   */
+  mountImage(imageType: string, signature: Buffer, extras?: Record<string, any>): Promise<void>;
+
+  /**
+   * Clean up resources used by the service instance
+   */
+  cleanup(): Promise<void>;
+}
+
+/**
+ * Represents the static side of MobileImageMounterService
+ */
+export interface MobileImageMounterServiceConstructor {
+  /**
+   * RSD service name for the mobile image mounter service
+   */
+  readonly RSD_SERVICE_NAME: string;
+
+  /**
+   * Creates a new MobileImageMounterService instance
+   * @param udid Device UDID
+   */
+  new (udid: string): MobileImageMounterService;
+}
+
+/**
+ * Represents the instance side of SpringboardService
+ */
+export interface SpringboardService extends BaseService {
+  /**
+   * Gets the icon state
+   * @returns Promise resolving to the icon state
+   * e.g.
+   * [
+   *     {
+   *       displayIdentifier: 'com.apple.MobileSMS',
+   *       displayName: 'Messages',
+   *       iconModDate: 2025-09-03T12:55:46.400Z,
+   *       bundleVersion: '1402.700.63.2.1',
+   *       bundleIdentifier: 'com.apple.MobileSMS'
+   *     },
+   *     {
+   *       displayIdentifier: 'com.apple.measure',
+   *       displayName: 'Measure',
+   *       iconModDate: 2025-09-03T12:55:49.522Z,
+   *       bundleVersion: '175.100.3.0.1',
+   *       bundleIdentifier: 'com.apple.measure'
+   *     },
+   *     ...
+   *  ]
+   */
+  getIconState(): Promise<PlistDictionary>;
+
+  /**
+   * TODO: This does not work currently due to a bug in Apple protocol implementation (maybe?)
+   * Sets the icon state
+   * @param newState where is the payload from getIconState
+   */
+  setIconState(newState: PlistDictionary[]): Promise<void>;
+
+  /**
+   * Gets the icon PNG data for a given bundle ID
+   * @param bundleID The bundle ID of the app
+   * @returns {Promise<Buffer>} which is the PNG data of the app icon
+   */
+  getIconPNGData(bundleID: string): Promise<Buffer>;
+
+  /**
+   * TODO: This does not work currently due to a bug in Apple protocol implementation
+   * Add payload structure when it is fixed
+   * Gets wallpaper info
+   * @param wallpaperName The name of the wallpaper
+   * @returns Promise resolving to the wallpaper info
+   */
+  getWallpaperInfo(wallpaperName: string): Promise<PlistDictionary>;
+
+  /**
+   * Gets homescreen icon metrics
+   * @returns {Promise<PlistDictionary>}
+   * e.g.
+   * {
+   *   homeScreenIconHeight: 64,
+   *   homeScreenIconMaxPages: 15,
+   *   homeScreenWidth: 414,
+   *   homeScreenHeight: 896,
+   *   homeScreenIconDockMaxCount: 4,
+   *   homeScreenIconFolderMaxPages: 15,
+   *   homeScreenIconWidth: 64,
+   *   homeScreenIconRows: 6,
+   *   homeScreenIconColumns: 4,
+   *   homeScreenIconFolderColumns: 3,
+   *   homeScreenIconFolderRows: 3
+   * }
+   */
+  getHomescreenIconMetrics(): Promise<PlistDictionary>;
+
+  /**
+   * Gets the current interface orientation
+   * @returns {Promise<InterfaceOrientation>}
+   * 1 = Portrait
+   * 2 = PortraitUpsideDown
+   * 3 = Landscape
+   * 4 = LandscapeHomeToLeft
+   */
+  getInterfaceOrientation(): Promise<InterfaceOrientation>;
+
+  /**
+   * Gets wallpaper preview image for homescreen and lockscreen
+   * @param wallpaperName
+   * @returns {Promise<Buffer>} which is a wallpaper preview image
+   */
+  getWallpaperPreviewImage(wallpaperName: 'homescreen' | 'lockscreen'): Promise<Buffer>;
+
+  /**
+   * TODO: This does not work currently due to a bug in Apple protocol implementation
+   * Use getWallpaperPreviewImage('homescreen') instead
+   * Gets wallpaper PNG data
+   * @param wallpaperName
+   * @returns {Promise<Buffer>}
+   */
+  getWallpaperPNGData(wallpaperName: string): Promise<Buffer>;
+}
+
+/**
+ * Represents the instance side of HouseArrestService for accessing application containers
+ */
+export interface HouseArrestService extends BaseService {
+  /**
+   * Vend into the application container and return an AfcService.
+   *
+   * @param bundleId The bundle identifier of the application (e.g., 'com.example.app')
+   * @returns Promise resolving to an AfcService for file operations
+   * @throws Error if the application is not installed, not developer-installed, or vending fails
+   */
+  vendContainer(bundleId: string): Promise<AfcService>;
+
+  /**
+   * Vend into the application documents directory and return an AfcService.
+   *
+   * **Important**: VendDocuments only works for apps that have iTunes File Sharing enabled
+   * (UIFileSharingEnabled = YES in Info.plist).
+   * If you get "InstallationLookupFailed" error, use `vendContainer()` instead.
+   *
+   * @param bundleId The bundle identifier of the application (e.g., 'com.example.app')
+   * @returns Promise resolving to an AfcService for file operations
+   * @throws Error if the application is not installed, doesn't support file sharing, or vending fails
+   */
+  vendDocuments(bundleId: string): Promise<AfcService>;
+}
+
+/**
+ * Represents the instance side of MisagentService where provisioning profiles can be managed
+ * @remarks
+ * Provisioning profiles are Apple configuration files (.mobileprovision) that contain:
+ * - Certificates, identifiers, and device information
+ * - App entitlements and permissions
+ * - Expiration dates and platform restrictions
+ */
+export interface MisagentService extends BaseService {
+  /**
+   * Installs a provisioning profile from a file path
+   * @param path The file path of the provisioning profile (.mobileprovision file)
+   */
+  installProfileFromPath(path: string): Promise<void>;
+  /**
+   * Installs a provisioning profile from a buffer
+   * @param payload The buffer containing the provisioning profile data
+   */
+  installProfile(payload: Buffer): Promise<void>;
+  /**
+   * Removes a provisioning profile by its UUID
+   * @param uuid The uuid of the provisioning profile to remove
+   */
+  removeProfile(uuid: string): Promise<void>;
+
+  /**
+   * Fetching all provisioning profiles from the device
+   * This can be used for listing installed provisioning profiles and backing them up
+   * @returns {Promise<ProvisioningProfile[]>}
+   * e.g.
+   *  [
+   *  {
+   *    "AppIDName": "Apple Development: John Doe (ABCDE12345)",
+   *    "ApplicationIdentifierPrefix": [
+   *       "ABCDE12345"
+   *     ],
+   *  "CreationDate": "2023-10-01T12:34:56Z",
+   *   "Platform": [
+   *    "iOS",
+   *    "xrOS",
+   *  ],
+   * IsXcodeManaged": false,
+   * "DeveloperCertificates": [ <Buffer ...> ],
+   * "Entitlements": {
+   *    "application-identifier": "ABCDE12345.com.example.app",
+   *    "get-task-allow": true,
+   *    ...
+   *  },
+   *  "ExpirationDate": "2024-10-01T12:34:56Z",
+   *  "Name": "Apple Development: John Doe (ABCDE12345)",
+   *  "UUID": "12345678-90AB-CDEF-1234-567890ABCDEF",
+   *  "Version": 1,
+   *  ...
+   * },
+   * ]
+   * @example
+   * const profiles = await misagentService.fetchAll();
+   * profiles.forEach(profile => {
+   *   console.log(`Profile: ${profile.plist.Name}`);
+   *   console.log(`UUID: ${profile.plist.UUID}`);
+   *   console.log(`Expires: ${profile.plist.ExpirationDate}`);
+   * });
+   */
+  fetchAll(): Promise<ProvisioningProfile[]>;
+}
+
+/**
+ * Options for pulling crash reports from device to local
+ */
+export interface CrashReportsPullOptions {
+  /**
+   * If true, deletes crash reports from the remote device after pulling to local.
+   * @default false
+   */
+  erase?: boolean;
+  /**
+   * Glob pattern to filter crash reports (e.g., '*.ips', 'Siri*', '**\/*.crash')
+   */
+  match?: string;
+}
+
+/**
+ * Metadata parsed from a crash report header (the single-line JSON header of an
+ * `.ips`/`.panic` file)
+ */
+export interface CrashReportMetadata {
+  /** Name of the process the report was generated for */
+  name?: string;
+  /** Numeric bug type identifier assigned by the OS (e.g. '309' for a crash) */
+  bugType?: string;
+  /** Report creation timestamp as reported by the device */
+  timestamp?: string;
+  /** Unique incident identifier */
+  incidentId?: string;
+  /** OS version the report was generated on */
+  osVersion?: string;
+}
+
+/**
+ * A crash report file read from the device
+ */
+export interface CrashReport {
+  /** Report file name, relative to the crash reports directory */
+  filename: string;
+  /** Raw report contents */
+  raw: string;
+  /** Header metadata, when it could be parsed */
+  metadata?: CrashReportMetadata;
+}
+
+/**
+ * Options for watching crash report creation
+ */
+export interface CrashReportsWatchOptions {
+  /**
+   * Only yield reports whose crashed process name equals this value.
+   * When omitted, every new report is yielded.
+   */
+  processName?: string;
+  /**
+   * Maximum time in ms to wait for a newly announced report file to become readable.
+   * @default 10000
+   */
+  readTimeoutMs?: number;
+  /**
+   * Abort signal to stop watching. When aborted, the generator throws an `AbortError`,
+   * which also settles any pending iteration. Without a signal, the watch can only end
+   * between reports (via `return()`/`break`), not while it is waiting for one.
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * Options for creating and pulling a new sysdiagnose archive
+ */
+export interface SysdiagnoseOptions {
+  /**
+   * Remove the archive from the device after pulling.
+   * @default true
+   */
+  erase?: boolean;
+  /**
+   * Maximum time in ms to wait for the sysdiagnose archive to be created and completed.
+   * When omitted, defaults to a 24h safety cap rather than waiting indefinitely.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * CrashReportsService provides an API to manage crash reports on iOS devices
+ */
+export interface CrashReportsService {
+  /**
+   * List files and folders in the crash report's directory
+   *
+   * Crash reports are primarily stored as .ips files, which contain detailed information about
+   * app crashes, including stack traces, thread states, and device information.
+   * In addition to .ips files, the crash reports directory may contain:
+   * - Sysdiagnose tarballs (comprehensive system diagnostic archives)
+   * - Special directories like /Retired, /Cloud, /Assistant, etc.
+   *
+   * For details on the .ips file format, see:
+   * https://developer.apple.com/documentation/xcode/analyzing-a-crash-report
+   *
+   * @param dirPath Path to list, defaults to "/"
+   * @param depth Listing depth: 1 for immediate children, -1 for infinite
+   * @returns List of file paths (e.g., .ips files, sysdiagnose tarballs, directories like /Retired, /Cloud, etc.)
+   */
+  ls(dirPath?: string, depth?: number): Promise<string[]>;
+
+  /**
+   * Pull crash reports from device to local machine
+   * @param out Local directory path
+   * @param entry Remote path on device, defaults to "/"
+   * @param options Pull options (erase, match pattern)
+   */
+  pull(out: string, entry?: string, options?: CrashReportsPullOptions): Promise<void>;
+
+  /**
+   * Clear all crash reports from the device
+   */
+  clear(): Promise<void>;
+
+  /**
+   * Flush pending crash reports into CrashReports directory
+   */
+  flush(): Promise<void>;
+
+  /**
+   * Monitor creation of new crash reports and yield each one as it is saved.
+   * Runs until the consumer stops iterating.
+   * @param options Watch options (process name filter, per-report read timeout)
+   */
+  watch(options?: CrashReportsWatchOptions): AsyncGenerator<CrashReport, void, void>;
+
+  /**
+   * Monitor the creation of a new sysdiagnose archive and pull it once complete.
+   * The sysdiagnose must be triggered on the device (press Power + VolUp + VolDown for
+   * about 0.215 seconds).
+   * @param out Local directory to pull the sysdiagnose archive into
+   * @param options Sysdiagnose options (erase after pulling, timeout)
+   */
+  getNewSysdiagnose(out: string, options?: SysdiagnoseOptions): Promise<void>;
+
+  /**
+   * Close the service and release resources
+   */
+  close(): void;
+}
+
+/**
+ * Options for sending a DTX message
+ */
+export interface SendMessageOptions {
+  /** Optional message arguments */
+  args?: any | null;
+  /** Whether a reply is expected (default: true) */
+  expectsReply?: boolean;
+}
+
+/**
+ * Testmanagerd DTX service interface for XCTest session management
+ */
+export interface TestmanagerdService extends BaseService {
+  /**
+   * Connect to the testmanagerd service and perform DTX handshake
+   */
+  connect(): Promise<void>;
+
+  /**
+   * Create a communication channel for a specific identifier
+   * @param identifier The channel identifier
+   * @returns The created channel
+   */
+  makeChannel(identifier: string): Promise<any>;
+
+  /**
+   * Send a DTX message on a channel
+   * @param channel The channel code
+   * @param selector The ObjectiveC method selector
+   * @param options Optional message options
+   */
+  sendMessage(channel: number, selector: string | null, options?: SendMessageOptions): Promise<number>;
+
+  /**
+   * Receive a plist message from a channel
+   * @param channel The channel to receive from
+   * @param signal Optional AbortSignal for cancellation
+   * @returns Tuple of [decoded data, auxiliary values]
+   */
+  recvPlist(channel?: number, signal?: AbortSignal): Promise<[any, any[]]>;
+
+  /**
+   * Receive a plist message with a timeout. Returns null on timeout instead
+   * of throwing, and properly cleans up socket listeners to prevent leaks.
+   * @param channel The channel to receive from
+   * @param timeoutMs Timeout in milliseconds
+   * @returns Tuple of [decoded data, auxiliary values], or null on timeout
+   */
+  recvPlistWithTimeout(channel?: number, timeoutMs?: number): Promise<[any, any[]] | null>;
+
+  /**
+   * Send a DTX reply message for the last received message on a channel.
+   * Used for responding to callbacks like _XCT_testRunnerReadyWithCapabilities:.
+   * @param channel The channel code
+   * @param payload Optional archived payload to include in the reply
+   */
+  sendReply(channel: number, payload?: Buffer | null): Promise<void>;
+
+  /** Whether the last received message on this channel expects a reply. */
+  lastMessageExpectsReply(channel: number): boolean;
+
+  /**
+   * Close the testmanagerd service connection
+   */
+  close(): Promise<void>;
+}
+
+/**
+ * All services needed for an XCTest session, created via a single RemoteXPC connection.
+ * Using one connection for service discovery avoids ECONNRESET errors from the tunnel.
+ *
+ * The RemoteXPC connection is closed internally after port discovery. Callers
+ * are responsible for closing execTestmanagerd, controlTestmanagerd, and dvtService.
+ */
+export interface XCTestServices {
+  /** Testmanagerd connection for the exec session (capabilities, test callbacks) */
+  execTestmanagerd: TestmanagerdService;
+  /** Testmanagerd connection for the control session (authorize, test plan) */
+  controlTestmanagerd: TestmanagerdService;
+  /** DVT service for instruments (process control, etc.) */
+  dvtService: DVTSecureSocketProxyService;
+  /** ProcessControl instrument for launching/killing apps */
+  processControl: ProcessControlService;
+  /** Optional InstallationProxy for app lookup (when requested via startXCTestServices) */
+  installationProxy?: InstallationProxyService;
+}

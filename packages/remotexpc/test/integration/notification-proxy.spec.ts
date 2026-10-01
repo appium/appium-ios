@@ -1,0 +1,92 @@
+import assert from 'node:assert/strict';
+import {after, before, describe, it} from 'node:test';
+
+import {logger} from '@appium/support';
+
+import type {NotificationProxyService} from '../../src/lib/types.js';
+import * as Services from '../../src/services.js';
+import {requireDeviceUdid} from './helpers/device.js';
+
+const log = logger.getLogger('NotificationProxyService.test');
+// Set NotificationProxyService logger to info level
+log.level = 'info';
+
+describe('NotificationProxyService', {timeout: 60000}, function () {
+  let notificationProxyService: NotificationProxyService;
+  let udid: string;
+
+  before(async function () {
+    udid = requireDeviceUdid();
+
+    notificationProxyService = await Services.startNotificationProxyService(udid);
+  });
+
+  after(async function () {
+    try {
+      notificationProxyService?.close();
+    } catch {
+      // Ignore cleanup errors in tests
+    }
+  });
+
+  it('expect a single notification', async function () {
+    try {
+      await notificationProxyService.observe('com.apple.springboard.lockstate');
+      const notification = await notificationProxyService.expectNotification();
+      log.debug('Received notification:', notification);
+      assert.ok(typeof notification === 'object' && notification !== null && !Array.isArray(notification));
+    } catch (error) {
+      log.error('Error receiving notification:', (error as Error).message);
+      throw error;
+    }
+  });
+
+  it('expect notifications from generator', async function () {
+    await notificationProxyService.observe('com.apple.springboard.lockstate');
+    const gen = notificationProxyService.expectNotifications();
+    const {value: notification, done} = await gen.next();
+    if (done || !notification) {
+      throw new Error('No notification received.');
+    }
+    for await (const msg of gen) {
+      log.debug('Received notification:', msg);
+      assert.ok(typeof msg === 'object' && msg !== null && !Array.isArray(msg));
+    } // Keep the generator running to receive more notifications
+  });
+
+  it('observe and post notifications', async function () {
+    const notificationName = 'com.apple.springboard.lockstate';
+    await notificationProxyService.observe(notificationName);
+    const gen = notificationProxyService.expectNotifications();
+    const {value: notification, done: done} = await gen.next();
+    if (done || !notification) {
+      throw new Error('No notification received.');
+    }
+    // ObserveNotification/PostNotification have no per-command ack on the wire, so post()
+    // only confirms the request was sent; the relayed notification (if any) shows up
+    // separately via expectNotifications().
+    await notificationProxyService.post(notificationName);
+    const {value: relayed, done: relayedDone} = await gen.next();
+    if (relayedDone || !relayed) {
+      throw new Error('No relayed notification received after post().');
+    }
+    assert.ok(typeof relayed === 'object' && relayed !== null && !Array.isArray(relayed));
+    log.debug('Received relayed notification after post:', relayed);
+  });
+
+  it('error if post called first', async function () {
+    const notificationName = 'com.apple.springboard.lockstate';
+    try {
+      await notificationProxyService.post(notificationName);
+      // If we reach here, the post didn't throw an error as expected
+      throw new Error('Expected post() to throw an error when called before observe()');
+    } catch (error) {
+      // Verify the error is the expected one
+      if (error instanceof Error) {
+        assert.strictEqual(error.message, 'You must call observe() before posting notifications.');
+      } else {
+        throw new Error('Unexpected error type', {cause: error});
+      }
+    }
+  });
+});
