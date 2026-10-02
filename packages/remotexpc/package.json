@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-remotexpc",
-  "version": "5.24.1",
+  "version": "5.24.2",
   "description": "",
   "keywords": [],
   "bugs": {
@@ -98,7 +98,7 @@
     "axios": "^1.18.0",
     "commander": "^14.0.1",
     "minimatch": "^10.2.3",
-    "node-devicectl": "^2.0.0",
+    "node-devicectl": "^2.2.0",
     "path-to-regexp": "^8.4.0"
   },
   "devDependencies": {

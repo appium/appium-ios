@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.24.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.1...appium-ios-remotexpc@5.24.2) (2026-10-02)
+
+### Bug Fixes
+
+* add missing devicectl project reference in remotexpc tsconfig ([#30](https://github.com/appium/appium-ios/issues/30)) ([e4f65ea](https://github.com/appium/appium-ios/commit/e4f65eaa2de0201b2a1643eedf2df94fc231591c))
+
+
 ## [5.24.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.0...appium-ios-remotexpc@5.24.1) (2026-10-02)
 
 ### Miscellaneous Chores

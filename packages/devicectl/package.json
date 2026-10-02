@@ -1,6 +1,6 @@
 {
   "name": "node-devicectl",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Node.js wrapper around Apple's devicectl tool",
   "keywords": [
     "apple",

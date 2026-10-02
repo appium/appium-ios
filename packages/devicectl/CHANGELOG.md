@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 2.2.0 (2026-10-02)
+
+### Features
+
+* move node-devicectl into the monorepo as packages/devicectl ([#21](https://github.com/appium/appium-ios/issues/21)) ([bf39cfd](https://github.com/appium/appium-ios/commit/bf39cfd033b90a153d2c014bed1712161b413235))
+
+
 ## [2.1.1](https://github.com/appium/node-devicectl/compare/v2.1.0...v2.1.1) (2026-10-02)
 
 ### Bug Fixes
