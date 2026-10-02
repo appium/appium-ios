@@ -186,6 +186,25 @@ async function injectGraphicsOrientation(plistPath: string, graphicsOrientation:
   await fs.promises.utimes(plistPath, new Date(), new Date());
 }
 
+/**
+ * Xcode 27's DeviceHub, when running, syncs the host pasteboard into every booted device by default,
+ * overwriting what the pasteboard test sets. It reads this per-device preference at boot, so call before boot.
+ */
+async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
+  const {stdout} = await execFileAsync('xcode-select', ['-p']);
+  if (!fs.existsSync(path.join(stdout.trim(), '..', 'Applications', 'DeviceHub.app'))) {
+    return;
+  }
+  await execFileAsync('defaults', [
+    'write',
+    'com.apple.dt.Devices',
+    'DevicePreferences',
+    '-dict-add',
+    udid,
+    '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
+  ]);
+}
+
 interface RuntimeFixture {
   runtimeIdentifier: string;
   runtimeName: string;
@@ -317,6 +336,7 @@ describe('NativeSimctl integration', () => {
         // createDevice's own async work always resolves the device out of the transient Creating
         // state before the promise settles.
         assert.strictEqual(device.state, SimDeviceState.Shutdown);
+        await disableDeviceHubPasteboardSync(device.udid);
         await sim.bootDevice(device.udid);
         // SimDeviceState reaching Booted only means the OS kernel/launchd has started — data
         // migration and system-app (SpringBoard) startup can still take tens of seconds longer
