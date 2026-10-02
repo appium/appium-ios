@@ -313,11 +313,12 @@ export class TunTap {
    * Throws if the device is not in a usable state (not open or already closed).
    */
   private assertReady(): void {
-    if (!this._isOpen) {
-      throw new TunTapError('Device not open');
-    }
+    // Check closed first: close() also clears _isOpen, which would mask this case.
     if (this._isClosed) {
       throw new TunTapError('Device has been closed');
+    }
+    if (!this._isOpen) {
+      throw new TunTapError('Device not open');
     }
   }
 }
