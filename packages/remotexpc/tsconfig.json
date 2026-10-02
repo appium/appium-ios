@@ -12,5 +12,5 @@
   },
   "include": ["src", "scripts", "test"],
   "exclude": ["build"],
-  "references": [{"path": "../tuntap"}]
+  "references": [{"path": "../tuntap"}, {"path": "../devicectl"}]
 }
