@@ -124,6 +124,9 @@ export interface LegacySimulatorPreferences {
   PasteboardAutomaticSync?: boolean;
 }
 
+/** @deprecated Use LegacySimulatorPreferences instead. */
+export type CommonPreferences = LegacySimulatorPreferences;
+
 export interface StartUiClientOptions {
   /**
    * Defines the window scale value for the UI client window for the current Simulator.
