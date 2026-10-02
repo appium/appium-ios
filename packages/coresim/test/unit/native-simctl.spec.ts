@@ -160,6 +160,14 @@ describe('NativeSimctl (read-only)', {timeout: 30000}, () => {
     await assert.rejects(() => sim.shutdownDevice('00000000-0000-0000-0000-000000000000'), /No simulator device found/);
   });
 
+  it('rejects with a typed, catchable error when renaming an unknown device UDID', async () => {
+    const sim = new NativeSimctl();
+    await assert.rejects(
+      () => sim.renameDevice('00000000-0000-0000-0000-000000000000', 'new-name'),
+      /No simulator device found/,
+    );
+  });
+
   it("resolves a booted device's runtime root path, when one is booted", async () => {
     const sim = new NativeSimctl();
     const booted = (await sim.getDevices()).find((d) => d.state === SimDeviceState.Booted);

@@ -352,6 +352,18 @@ describe('NativeSimctl integration', () => {
         assert.strictEqual(found?.state, SimDeviceState.Booted);
       });
 
+      it('renames the booted device and restores its name', async () => {
+        const nameOf = async () => (await sim.getDevices()).find((d) => d.udid === device!.udid)?.name;
+        const original = await nameOf();
+        await sim.renameDevice(device!.udid, `${original}-renamed`);
+        try {
+          assert.strictEqual(await nameOf(), `${original}-renamed`);
+        } finally {
+          await sim.renameDevice(device!.udid, original!);
+        }
+        assert.strictEqual(await nameOf(), original);
+      });
+
       it('reads getenv from the booted device', async () => {
         const home = await sim.getEnv(device!.udid, 'HOME');
         assert.match(home, /CoreSimulator\/Devices/);

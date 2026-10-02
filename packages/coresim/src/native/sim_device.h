@@ -62,6 +62,9 @@ BOOL Shutdown(id device, NSError** error);
 // -[SimDevice eraseContentsAndSettingsWithError:]
 BOOL Erase(id device, NSError** error);
 
+// -[SimDevice rename:error:]
+BOOL Rename(id device, NSString* name, NSError** error);
+
 // -[SimDevice getenv:error:]
 NSString* Getenv(id device, NSString* name, NSError** error);
 

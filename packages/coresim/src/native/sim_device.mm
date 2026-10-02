@@ -105,6 +105,16 @@ BOOL Shutdown(id device, NSError** error) { return BoolWithError(device, "shutdo
 
 BOOL Erase(id device, NSError** error) { return BoolWithError(device, "eraseContentsAndSettingsWithError:", error); }
 
+BOOL Rename(id device, NSString* name, NSError** error) {
+  static const std::string kSelectorName = "rename:error:";
+  RequireSelector(device, kSelectorName);
+  SEL selector = SelectorNamed(kSelectorName);
+  return SafeInvoke([&] {
+    using Fn = BOOL (*)(id, SEL, NSString*, NSError**);
+    return ((Fn)objc_msgSend)(device, selector, name, error);
+  });
+}
+
 NSString* Getenv(id device, NSString* name, NSError** error) {
   static const std::string kSelectorName = "getenv:error:";
   RequireSelector(device, kSelectorName);

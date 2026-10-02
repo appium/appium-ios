@@ -31,6 +31,7 @@ import {
   getDevices,
   getSupportedDeviceTypes,
   getSupportedRuntimes,
+  renameDevice,
   shutdownAllDevices,
   shutdownDevice,
   waitForBoot,
@@ -188,6 +189,7 @@ Object.assign(NativeSimctl.prototype, {
   shutdownDevice,
   shutdownAllDevices,
   eraseDevice,
+  renameDevice,
 
   // app
   installApp,
