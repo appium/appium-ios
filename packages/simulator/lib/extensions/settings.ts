@@ -441,6 +441,7 @@ async function updateDeviceHubPreferences(
       return true;
     } catch (e: any) {
       this.log.warn(`Cannot update DeviceHub preferences for ${this.udid}: ${e.message}`);
+      this.log.debug(e.stack);
       return false;
     }
   });

@@ -12,6 +12,7 @@ describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
   let update: sinon.SinonStub;
   let parse: sinon.SinonStub;
+  let debug: sinon.SinonStub;
   const sim = {
     udid: 'device-a',
     uiClientBundleId: DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
@@ -20,6 +21,7 @@ describe('DeviceHub preferences', () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    debug = sandbox.stub(sim.log, 'debug');
     sandbox.stub(fs, 'exists').resolves(false);
     sandbox.stub(fs, 'mkdir').resolves();
     parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
@@ -102,8 +104,10 @@ describe('DeviceHub preferences', () => {
   });
 
   it('reports a keyboard-only write failure', async () => {
-    update.onSecondCall().rejects(new Error('write failed'));
+    const error = new Error('write failed');
+    update.onSecondCall().rejects(error);
     assert.equal(await updatePreferences.call(sim as any, {}, {ConnectHardwareKeyboard: false}), false);
+    assert.equal(debug.lastCall.args[0], error.stack);
   });
 
   it('keeps older Xcode versions on the existing Simulator preferences', async () => {
@@ -119,7 +123,9 @@ describe('DeviceHub preferences', () => {
   });
 
   it('reports failure if DeviceHub preferences cannot be updated', async () => {
-    parse.rejects(new Error('unreadable preferences'));
+    const error = new Error('unreadable preferences');
+    parse.rejects(error);
     assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), false);
+    assert.equal(debug.lastCall.args[0], error.stack);
   });
 });
