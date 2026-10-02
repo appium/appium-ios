@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.5.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.1...appium-remote-debugger@17.5.2) (2026-10-02)
+
+### Miscellaneous Chores
+
+* ensure Dependabot preserves version ranges ([#24](https://github.com/appium/appium-ios/issues/24)) ([95e4e1a](https://github.com/appium/appium-ios/commit/95e4e1a4703f8ca833f01ecf2af75f4696d98043))
+
+
 ## [17.5.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.0...appium-remote-debugger@17.5.1) (2026-10-01)
 
 **Note:** Version bump only for package appium-remote-debugger

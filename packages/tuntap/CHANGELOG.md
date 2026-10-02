@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.2](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.1...appium-ios-tuntap@2.2.2) (2026-10-02)
+
+### Miscellaneous Chores
+
+* ensure Dependabot preserves version ranges ([#24](https://github.com/appium/appium-ios/issues/24)) ([95e4e1a](https://github.com/appium/appium-ios/commit/95e4e1a4703f8ca833f01ecf2af75f4696d98043))
+
+
 ## [2.2.1](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.0...appium-ios-tuntap@2.2.1) (2026-09-30)
 
 **Note:** Version bump only for package appium-ios-tuntap
