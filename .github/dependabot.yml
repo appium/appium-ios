@@ -11,6 +11,7 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+    versioning-strategy: increase-if-necessary
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -22,3 +23,4 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+    versioning-strategy: increase-if-necessary
