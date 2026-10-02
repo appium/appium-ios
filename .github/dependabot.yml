@@ -23,4 +23,3 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
-    versioning-strategy: increase-if-necessary

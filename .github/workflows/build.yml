@@ -63,8 +63,8 @@ jobs:
           # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
           # dedicated CI (tuntap-ci.yml) with the toolchain that needs. packages/simulator pulls
           # in packages/coresim's native addon transitively (its own dependency), so that one
-          # still gets built here.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root --foreground-scripts
+          # still gets built here. packages/devicectl has no native code and no in-monorepo deps.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --workspace=packages/devicectl --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run unit tests
         env:
@@ -100,7 +100,9 @@ jobs:
           # Scoped to skip packages/tuntap's native (node-gyp) install - discover-affected-packages.mjs
           # never selects it (no real test:e2e script) and it has its own dedicated CI.
           # packages/simulator pulls in packages/coresim's native addon transitively.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root --foreground-scripts
+          # packages/devicectl's own e2e test only ever runs manually (outside CI - see its own
+          # test/e2e spec), so it's harmless in this matrix even when selected.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --workspace=packages/devicectl --include-workspace-root --foreground-scripts
           run-build: 'true'
       - name: Run E2E tests for ${{ matrix.package_dir }}
         env:
@@ -126,7 +128,7 @@ jobs:
           node-version: lts/*
           # Scoped to skip packages/tuntap's native (node-gyp) install - it has its own
           # dedicated CI (tuntap-ci.yml) with the toolchain that needs.
-          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --include-workspace-root
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --workspace=packages/simulator --workspace=packages/devicectl --include-workspace-root
           run-build: 'false'
       - name: Lint
         run: npm run lint
