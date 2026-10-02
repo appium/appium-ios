@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.5.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.4.2...appium-ios-simulator@10.5.0) (2026-10-02)
+
+### Features
+
+* support simulatorPasteboardAutomaticSync and connect hardware preference for Device Hub ([#25](https://github.com/appium/appium-ios/issues/25)) ([b7a3e57](https://github.com/appium/appium-ios/commit/b7a3e578bc4a25e033a1d47c1e560a4aef45950d))
+
+
 ## [10.4.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.4.1...appium-ios-simulator@10.4.2) (2026-10-02)
 
 ### Miscellaneous Chores
