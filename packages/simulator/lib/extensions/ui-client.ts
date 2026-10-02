@@ -21,6 +21,7 @@ const STARTUP_LOCK = new AsyncLock();
 const CROSS_PROCESS_LOCK_TIMEOUT_SEC = 180;
 // Shorter holds can be coalesced by DeviceHub and go unnoticed.
 const DEVICE_HUB_REFRESH_HOLD_MS = 500;
+const DEVICE_HUB_REFRESH_SUFFIX = ' (refresh)';
 
 type CoreSimulatorWithUiClient = CoreSimulator & HasSettings & HasNativeSimctl;
 
@@ -260,20 +261,37 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
  * Best effort: failures are logged and never fail the run.
  */
 async function refreshDeviceHubPreferences(this: CoreSimulatorWithUiClient): Promise<void> {
+  // The UDID match is case-insensitive since callers may pass a non-canonical one (see getSimulator's checkExistence)
+  const findDevice = async () =>
+    (await this._native.getDevices()).find(({udid}) => udid.toLowerCase() === this.udid.toLowerCase());
   try {
-    // Read the live name so that a stale cached value is never written back. The UDID match is
-    // case-insensitive since callers may pass a non-canonical one (see getSimulator's checkExistence).
-    const device = (await this._native.getDevices()).find(({udid}) => udid.toLowerCase() === this.udid.toLowerCase());
+    // Always the live name, so that a stale cached value is never written back
+    const device = await findDevice();
     if (!device) {
       throw new Error('the Simulator is not listed in its device set');
     }
-    const {udid, name} = device;
+    const {udid, name: liveName} = device;
     this.log.debug(`Refreshing '${this.uiClientBundleId}' preferences of '${this.udid}' by renaming it temporarily`);
-    await this._native.renameDevice(udid, `${name} (refresh)`);
+    if (liveName.endsWith(DEVICE_HUB_REFRESH_SUFFIX)) {
+      // An interrupted refresh left its temporary name behind. Restoring the original one is also the change DeviceHub reacts to
+      await this._native.renameDevice(udid, liveName.slice(0, -DEVICE_HUB_REFRESH_SUFFIX.length));
+      return;
+    }
+    const tempName = `${liveName}${DEVICE_HUB_REFRESH_SUFFIX}`;
+    await this._native.renameDevice(udid, tempName);
     try {
       await new Promise((resolve) => setTimeout(resolve, DEVICE_HUB_REFRESH_HOLD_MS));
     } finally {
-      await this._native.renameDevice(udid, name);
+      // Leave a rename made by someone else during the hold intact
+      let currentName: string | undefined = tempName;
+      try {
+        currentName = (await findDevice())?.name;
+      } catch {
+        // Cannot tell, so restore anyway
+      }
+      if (currentName === tempName) {
+        await this._native.renameDevice(udid, liveName);
+      }
     }
   } catch (e: any) {
     this.log.warn(`Cannot refresh '${this.uiClientBundleId}' preferences of '${this.udid}': ${e.message}`);

@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import fsPromises from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import {describe, it, beforeEach, mock} from 'node:test';
+import {describe, it, beforeEach, afterEach, mock} from 'node:test';
+
+import {util} from '@appium/support';
+import sinon from 'sinon';
 
 let commonPrefs: Record<string, any> = {};
 let prefsUpdated = true;
 const renames: string[] = [];
 let renameFails: ((name: string) => boolean) | undefined;
 let listed: {udid: string; name: string}[] = [];
+let onRename: ((name: string) => void) | undefined;
 
 mock.module('../../lib/extensions/settings.js', {
   namedExports: {
@@ -29,12 +30,17 @@ function makeSim(uiClientBundleId: string) {
     udid: UDID,
     uiClientBundleId,
     _native: {
-      getDevices: async () => listed,
+      getDevices: async () => listed.map((d) => ({...d})),
       renameDevice: async (udid: string, name: string) => {
         renames.push(`${udid}:${name}`);
         if (renameFails?.(name)) {
           throw new Error('rename failed');
         }
+        const device = listed.find((d) => d.udid.toLowerCase() === udid.toLowerCase());
+        if (device) {
+          device.name = name;
+        }
+        onRename?.(name);
       },
     },
     startupTimeout: 1000,
@@ -48,20 +54,45 @@ function makeSim(uiClientBundleId: string) {
 }
 
 describe('ui-client DeviceHub preference refresh', function () {
-  beforeEach(async function () {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(function () {
     commonPrefs = {PasteboardAutomaticSync: false};
     prefsUpdated = true;
     renames.length = 0;
     renameFails = undefined;
+    onRename = undefined;
     listed = [{udid: UDID, name: 'iPhone 17'}];
-    for (const id of [DEVICE_HUB_UI_CLIENT_BUNDLE_ID, SIMULATOR_UI_CLIENT_BUNDLE_ID]) {
-      await fsPromises.rm(path.join(os.tmpdir(), `appium-ios-simulator-ui-client-${id}.lock`), {force: true});
-    }
+    // Never touch the real UI client lock files, which live Appium processes may be holding
+    sandbox = sinon.createSandbox();
+    sandbox.stub(util, 'getLockFileGuard').returns((async (fn: () => Promise<unknown>) => await fn()) as any);
+  });
+  afterEach(function () {
+    sandbox.restore();
   });
 
   it('renames the running Simulator temporarily and restores its name', async function () {
     await run.call(makeSim(DEVICE_HUB_UI_CLIENT_BUNDLE_ID) as any, {});
     assert.deepEqual(renames, [`${UDID}:iPhone 17 (refresh)`, `${UDID}:iPhone 17`]);
+    assert.equal(listed[0].name, 'iPhone 17');
+  });
+
+  it('leaves a rename made by someone else during the hold intact', async function () {
+    onRename = (name) => {
+      if (name.endsWith('(refresh)')) {
+        setTimeout(() => (listed[0].name = 'My Phone'), 100);
+      }
+    };
+    await run.call(makeSim(DEVICE_HUB_UI_CLIENT_BUNDLE_ID) as any, {});
+    assert.deepEqual(renames, [`${UDID}:iPhone 17 (refresh)`]);
+    assert.equal(listed[0].name, 'My Phone');
+  });
+
+  it('recovers the original name left behind by an interrupted refresh', async function () {
+    listed = [{udid: UDID, name: 'iPhone 17 (refresh)'}];
+    await run.call(makeSim(DEVICE_HUB_UI_CLIENT_BUNDLE_ID) as any, {});
+    assert.deepEqual(renames, [`${UDID}:iPhone 17`]);
+    assert.equal(listed[0].name, 'iPhone 17');
   });
 
   it('does nothing for the legacy Simulator UI client', async function () {
