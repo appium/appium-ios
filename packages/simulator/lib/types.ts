@@ -113,10 +113,14 @@ export interface DevicePreferences {
   ConnectHardwareKeyboard?: boolean;
 }
 
-export interface CommonPreferences {
+/**
+ * Global plist keys used by the legacy Simulator UI client.
+ * Supported keys are translated to DeviceHub's own schema by updatePreferences.
+ */
+export interface LegacySimulatorPreferences {
   /** Whether to connect hardware keyboard */
   ConnectHardwareKeyboard?: boolean;
-  /** Whether to synchronize the UI client's pasteboard with the host. */
+  /** Whether to synchronize the legacy Simulator UI client's pasteboard with the host. */
   PasteboardAutomaticSync?: boolean;
 }
 
@@ -138,6 +142,9 @@ export interface RunOptions extends StartUiClientOptions {
   /**
    * Whether to connect the hardware keyboard to the
    * Simulator UI client. Equals to `false` by default.
+   * On Xcode 27+, sets DeviceHub's global Simulate Hardware Keyboard preference.
+   * All sessions using DeviceHub share this setting. Restart the UI client before
+   * starting sessions to apply changes; different values per device are not supported.
    */
   connectHardwareKeyboard?: boolean;
   /**

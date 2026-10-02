@@ -19,7 +19,7 @@ import type {
   CoreSimulator,
   HasSettings,
   DevicePreferences,
-  CommonPreferences,
+  LegacySimulatorPreferences,
   RunOptions,
   LocalizationOptions,
 } from '../types.js';
@@ -319,20 +319,19 @@ export async function setAutoFillPasswords(this: CoreSimulatorWithSettings, isEn
 }
 
 /**
- * Update the common iOS Simulator preferences file with new values.
- * It is necessary to restart the corresponding Simulator before
- * these changes are applied.
+ * Update legacy Simulator preferences and translate supported settings for DeviceHub.
+ * Restart the corresponding UI client before starting sessions to apply cached preferences.
  *
  * @param devicePrefs The mapping, which represents new device preference values
  * for the given Simulator.
- * @param commonPrefs The mapping, which represents new common preference values
- * for all Simulators.
+ * @param commonPrefs Global preferences using legacy Simulator plist keys.
+ * Supported keys are translated to DeviceHub preferences when using that UI client.
  * @return True if the preferences were successfully updated.
  */
 export async function updatePreferences(
   this: CoreSimulatorWithSettings,
   devicePrefs: DevicePreferences = {},
-  commonPrefs: CommonPreferences = {},
+  commonPrefs: LegacySimulatorPreferences = {},
 ): Promise<boolean> {
   if (Object.keys(devicePrefs).length > 0) {
     this.log.debug(`Setting preferences of ${this.udid} Simulator to ${JSON.stringify(devicePrefs)}`);
@@ -384,26 +383,33 @@ export async function updatePreferences(
       return false;
     }
   });
-  if (
-    this.uiClientBundleId !== DEVICE_HUB_UI_CLIENT_BUNDLE_ID ||
-    typeof commonPrefs.PasteboardAutomaticSync !== 'boolean'
-  ) {
+  if (this.uiClientBundleId !== DEVICE_HUB_UI_CLIENT_BUNDLE_ID) {
     return legacyUpdated;
   }
-  const deviceHubUpdated = await updateDeviceHubPasteboardSync.call(
-    this,
-    homeFolderPath,
-    commonPrefs.PasteboardAutomaticSync,
-  );
+  const deviceHubUpdated = await updateDeviceHubPreferences.call(this, homeFolderPath, commonPrefs);
   return legacyUpdated && deviceHubUpdated;
 }
 
-/** DeviceHub stores shared clipboard settings per device in its sandboxed preferences. */
-async function updateDeviceHubPasteboardSync(
+/** DeviceHub uses its own global and per-device preference keys. */
+interface DeviceHubPreferences {
+  alwaysSimulateHardwareKeyboard?: boolean;
+  DevicePreferences?: Record<string, Record<string, any>>;
+}
+
+/** Translate legacy plist keys at the DeviceHub preference boundary. */
+async function updateDeviceHubPreferences(
   this: CoreSimulatorWithSettings,
   homeFolderPath: string,
-  enabled: boolean,
+  legacyPrefs: LegacySimulatorPreferences,
 ): Promise<boolean> {
+  const prefsToUpdate: DeviceHubPreferences = {};
+  if (typeof legacyPrefs.ConnectHardwareKeyboard === 'boolean') {
+    prefsToUpdate.alwaysSimulateHardwareKeyboard = legacyPrefs.ConnectHardwareKeyboard;
+  }
+  const updatePasteboard = typeof legacyPrefs.PasteboardAutomaticSync === 'boolean';
+  if (!updatePasteboard && Object.keys(prefsToUpdate).length === 0) {
+    return true;
+  }
   const plistPath = path.resolve(
     homeFolderPath,
     'Library',
@@ -416,25 +422,25 @@ async function updateDeviceHubPasteboardSync(
   );
   return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
     try {
-      // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
-      const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
-      const udidKey = this.udid.toUpperCase();
-      const existingDevicePrefs = currentPrefs.DevicePreferences?.[udidKey];
-      const prefsToUpdate = {
-        DevicePreferences: {
+      if (updatePasteboard) {
+        // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
+        const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
+        const udidKey = this.udid.toUpperCase();
+        const existingDevicePrefs = currentPrefs.DevicePreferences?.[udidKey];
+        prefsToUpdate.DevicePreferences = {
           [udidKey]: {
             ...(util.isPlainObject(existingDevicePrefs) ? existingDevicePrefs : {}),
-            pasteboardSyncEnabled: enabled,
+            pasteboardSyncEnabled: legacyPrefs.PasteboardAutomaticSync,
           },
-        },
-      };
+        };
+      }
       await fs.mkdir(path.dirname(plistPath), {recursive: true});
       // defaults -dict-add preserves preferences belonging to other devices.
       await new NSUserDefaults(plistPath).update(prefsToUpdate);
-      this.log.debug(`Set DeviceHub shared clipboard for ${this.udid} to ${enabled}`);
+      this.log.debug(`Updated DeviceHub preferences for ${this.udid} with ${JSON.stringify(prefsToUpdate)}`);
       return true;
     } catch (e: any) {
-      this.log.warn(`Cannot update DeviceHub shared clipboard for ${this.udid}: ${e.message}`);
+      this.log.warn(`Cannot update DeviceHub preferences for ${this.udid}: ${e.message}`);
       return false;
     }
   });
@@ -451,9 +457,9 @@ async function updateDeviceHubPasteboardSync(
 export function compileSimulatorPreferences(
   this: CoreSimulatorWithSettings,
   opts: RunOptions = {},
-): [DevicePreferences, CommonPreferences & Record<string, any>] {
+): [DevicePreferences, LegacySimulatorPreferences & Record<string, any>] {
   const {connectHardwareKeyboard, tracePointer, pasteboardAutomaticSync, scaleFactor} = opts;
-  const commonPreferences: CommonPreferences & Record<string, any> = {
+  const commonPreferences: LegacySimulatorPreferences & Record<string, any> = {
     // This option is necessary to make the Simulator window follow
     // the actual XCUIDevice orientation
     RotateWindowWhenSignaledByGuest: true,

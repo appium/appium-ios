@@ -77,6 +77,16 @@ changing this setting so its next launch reads the updated preferences. The libr
 does not restart an already-running DeviceHub, which could disrupt other sessions.
 Disable synchronization on every simulator used for parallel clipboard tests.
 
+### Hardware keyboard
+
+`sim.run({connectHardwareKeyboard: true})` enables hardware keyboard simulation;
+`false` (the default) disables it. On Xcode 27 and newer, this sets DeviceHub's
+**Simulate Hardware Keyboard** preference via `alwaysSimulateHardwareKeyboard`.
+This is a global DeviceHub setting, shared by all devices and sessions. Parallel
+sessions must use the same value; different values per device are not supported.
+Close DeviceHub before starting sessions when changing this setting so its next
+launch reads the updated preference. The library does not restart DeviceHub automatically.
+
 ### Xcode and iOS versions
 
 Check the [Xcode Wikipedia page](https://en.wikipedia.org/wiki/Xcode) for the mapping between

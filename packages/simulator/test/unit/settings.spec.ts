@@ -8,7 +8,7 @@ import sinon from 'sinon';
 import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
 import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults} from '../../lib/utils/index.js';
 
-describe('DeviceHub pasteboard preferences', () => {
+describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
   let update: sinon.SinonStub;
   let parse: sinon.SinonStub;
@@ -62,22 +62,60 @@ describe('DeviceHub pasteboard preferences', () => {
     });
   });
 
-  it('leaves DeviceHub preferences untouched in system mode', async () => {
+  it('leaves the clipboard unchanged while applying the default keyboard preference in system mode', async () => {
     const [device, common] = compileSimulatorPreferences.call(sim as any, {pasteboardAutomaticSync: 'system'});
     await updatePreferences.call(sim as any, device, common);
     assert.equal(parse.called, false);
+    assert.equal(update.callCount, 2);
+    assert.deepEqual(update.lastCall.args[0], {alwaysSimulateHardwareKeyboard: false});
+  });
+
+  for (const enabled of [true, false]) {
+    it(`applies hardware keyboard ${enabled} without changing the clipboard in system mode`, async () => {
+      const [device, common] = compileSimulatorPreferences.call(sim as any, {
+        connectHardwareKeyboard: enabled,
+        pasteboardAutomaticSync: 'system',
+      });
+      assert.equal(await updatePreferences.call(sim as any, device, common), true);
+      assert.deepEqual(update.lastCall.args[0], {alwaysSimulateHardwareKeyboard: enabled});
+      assert.equal(parse.called, false);
+      assert.equal(update.firstCall.args[0].ConnectHardwareKeyboard, enabled);
+    });
+  }
+
+  it('updates the global keyboard and per-device clipboard together', async () => {
+    const [device, common] = compileSimulatorPreferences.call(sim as any, {
+      connectHardwareKeyboard: true,
+      pasteboardAutomaticSync: 'off',
+    });
+    await updatePreferences.call(sim as any, device, common);
+    assert.deepEqual(update.lastCall.args[0], {
+      alwaysSimulateHardwareKeyboard: true,
+      DevicePreferences: {'DEVICE-A': {pasteboardSyncEnabled: false}},
+    });
+  });
+
+  it('skips DeviceHub when no supported preferences are provided', async () => {
+    await updatePreferences.call(sim as any, {}, {});
     assert.equal(update.callCount, 1);
+    assert.equal(parse.called, false);
+  });
+
+  it('reports a keyboard-only write failure', async () => {
+    update.onSecondCall().rejects(new Error('write failed'));
+    assert.equal(await updatePreferences.call(sim as any, {}, {ConnectHardwareKeyboard: false}), false);
   });
 
   it('keeps older Xcode versions on the existing Simulator preferences', async () => {
     await updatePreferences.call(
       {...sim, uiClientBundleId: 'com.apple.iphonesimulator'} as any,
       {},
-      {PasteboardAutomaticSync: false},
+      {PasteboardAutomaticSync: false, ConnectHardwareKeyboard: true},
     );
     assert.equal(parse.called, false);
     assert.equal(update.callCount, 1);
     assert.equal(update.firstCall.args[0].PasteboardAutomaticSync, false);
+    assert.equal(update.firstCall.args[0].ConnectHardwareKeyboard, true);
   });
 
   it('reports failure if DeviceHub preferences cannot be updated', async () => {
