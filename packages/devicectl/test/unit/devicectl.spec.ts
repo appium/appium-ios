@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import {describe, it, beforeEach} from 'node:test';
+import {afterEach, beforeEach, describe, it, mock} from 'node:test';
 
 import {Devicectl} from '../../lib/devicectl.js';
-import {appUrlToFilesystemPath, escapeProcessFilterValue} from '../../lib/mixins/process.js';
+import {appUrlToFilesystemPath, escapeProcessFilterValue, executablePathField} from '../../lib/mixins/process.js';
 
 describe('Devicectl', function () {
   let devicectl: Devicectl;
@@ -86,6 +86,104 @@ describe('Devicectl', function () {
   describe('terminateApp', function () {
     it('should be a function', function () {
       assert.strictEqual(typeof devicectl.terminateApp, 'function');
+    });
+
+    describe('finding the app process', function () {
+      const APP_URL = 'file:///private/var/containers/Bundle/Application/ABC/App.app/';
+      const APP_PATH = '/private/var/containers/Bundle/Application/ABC/App.app';
+      const PROCESSES = JSON.stringify({
+        result: {runningProcesses: [{processIdentifier: 42, executable: `${APP_URL}App`}]},
+      });
+
+      function fakeDevicectl(jsonVersion: number, failures: {processes?: Error; jsonVersion?: Error} = {}) {
+        const filters: string[] = [];
+        const terminated: string[] = [];
+        const calls = {filters, terminated, jsonVersionLookups: 0};
+        mock.method(devicectl, 'execute', async (subcommand: string[], opts: {subcommandOptions: string[]}) => {
+          switch (subcommand.join(' ')) {
+            case 'list devices':
+              calls.jsonVersionLookups++;
+              // only the first lookup fails
+              if (failures.jsonVersion && calls.jsonVersionLookups === 1) {
+                throw failures.jsonVersion;
+              }
+              return {stdout: JSON.stringify({info: {jsonVersion}})};
+            case 'device process terminate':
+              calls.terminated.push(opts.subcommandOptions[1]);
+              return {stdout: '{}'};
+            default:
+              calls.filters.push(opts.subcommandOptions[1]);
+              if (failures.processes) {
+                throw failures.processes;
+              }
+              return {stdout: PROCESSES};
+          }
+        });
+        return calls;
+      }
+
+      beforeEach(function () {
+        mock.method(devicectl, 'listApps', async () => [{url: APP_URL}]);
+      });
+
+      afterEach(function () {
+        mock.restoreAll();
+      });
+
+      it('should filter on ExecutablePath, which Xcode 27 accepts', async function () {
+        const {filters, terminated} = fakeDevicectl(5);
+
+        assert.strictEqual(await devicectl.terminateApp('com.example.app'), true);
+        assert.deepStrictEqual(filters, [`ExecutablePath BEGINSWITH "${APP_PATH}"`]);
+        assert.deepStrictEqual(terminated, ['42']);
+      });
+
+      it('should filter on executable.path before JSON version 5', async function () {
+        const {filters, terminated} = fakeDevicectl(4);
+
+        assert.strictEqual(await devicectl.terminateApp('com.example.app'), true);
+        assert.deepStrictEqual(filters, [`executable.path BEGINSWITH "${APP_PATH}"`]);
+        assert.deepStrictEqual(terminated, ['42']);
+      });
+
+      it('should not retry when devicectl fails', async function () {
+        const {filters} = fakeDevicectl(5, {
+          processes: new Error(
+            "'xcrun devicectl device info processes' failed. Original error: ERROR: The device was not found.",
+          ),
+        });
+
+        await assert.rejects(devicectl.terminateApp('com.example.app'), /The device was not found/);
+        assert.strictEqual(filters.length, 1);
+      });
+
+      it('should look up the JSON version only once', async function () {
+        const calls = fakeDevicectl(5);
+
+        await devicectl.terminateApp('com.example.app');
+        await devicectl.terminateApp('com.example.app');
+        assert.strictEqual(calls.jsonVersionLookups, 1);
+        assert.strictEqual(calls.filters.length, 2);
+      });
+
+      it('should look up the JSON version again after a failed lookup', async function () {
+        const calls = fakeDevicectl(5, {jsonVersion: new Error("'xcrun devicectl list devices' failed.")});
+
+        await assert.rejects(devicectl.terminateApp('com.example.app'), /list devices' failed/);
+        assert.strictEqual(await devicectl.terminateApp('com.example.app'), true);
+        assert.strictEqual(calls.jsonVersionLookups, 2);
+      });
+    });
+
+    describe('executablePathField', function () {
+      it('should be ExecutablePath as of JSON version 5', function () {
+        assert.strictEqual(executablePathField(5), 'ExecutablePath');
+        assert.strictEqual(executablePathField(6), 'ExecutablePath');
+      });
+
+      it('should be executable.path before JSON version 5', function () {
+        assert.strictEqual(executablePathField(4), 'executable.path');
+      });
     });
 
     describe('appUrlToFilesystemPath', function () {

@@ -37,6 +37,7 @@ export class Devicectl {
 
   private readonly preferNonRootWhenSudo: boolean;
   private readonly sudoUser: SudoUser | null;
+  private jsonVersion: number | undefined;
 
   /**
    * Creates a new Devicectl instance
@@ -104,6 +105,20 @@ export class Devicectl {
         cause: e,
       });
     }
+  }
+
+  /**
+   * Retrieves the version of the JSON output (`info.jsonVersion`) from devicectl
+   *
+   * @returns Promise that resolves to the JSON output format version
+   */
+  async getJsonVersion(): Promise<number> {
+    if (this.jsonVersion === undefined) {
+      const {stdout} = await this.execute(['list', 'devices'], {noDevice: true});
+      const jsonVersion: number = JSON.parse(stdout).info.jsonVersion;
+      this.jsonVersion = jsonVersion;
+    }
+    return this.jsonVersion;
   }
 
   private resolveSudoUser(): SudoUser | null {

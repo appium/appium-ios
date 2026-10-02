@@ -1,3 +1,9 @@
+## [2.1.1](https://github.com/appium/node-devicectl/compare/v2.1.0...v2.1.1) (2026-10-02)
+
+### Bug Fixes
+
+* Find app processes on Xcode 27 in terminateApp ([#35](https://github.com/appium/node-devicectl/issues/35)) ([7b7befa](https://github.com/appium/node-devicectl/commit/7b7befa7a9ecad54d279bef8cc41f27ab2cd018e))
+
 ## [2.1.0](https://github.com/appium/node-devicectl/compare/v2.0.1...v2.1.0) (2026-07-25)
 
 ### Features

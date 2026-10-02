@@ -106,8 +106,17 @@ export function escapeProcessFilterValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+/**
+ * Picks the process filter field for the executable path.
+ * Xcode 27 renamed it.
+ */
+export function executablePathField(jsonVersion: number): string {
+  return jsonVersion >= 5 ? 'ExecutablePath' : 'executable.path';
+}
+
 async function listProcessesForAppPath(devicectl: Devicectl, appPath: string): Promise<ProcessInfo[]> {
-  const filter = `executable.path BEGINSWITH "${escapeProcessFilterValue(appPath)}"`;
+  const field = executablePathField(await devicectl.getJsonVersion());
+  const filter = `${field} BEGINSWITH "${escapeProcessFilterValue(appPath)}"`;
   const {stdout} = await devicectl.execute(['device', 'info', 'processes'], {
     subcommandOptions: ['--filter', filter],
   });
