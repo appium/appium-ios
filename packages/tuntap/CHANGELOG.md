@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.3](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.2...appium-ios-tuntap@2.2.3) (2026-10-02)
+
+### Bug Fixes
+
+* report &quot;Device has been closed&quot; after TunTap.close() ([#29](https://github.com/appium/appium-ios/issues/29)) ([9e2f8c8](https://github.com/appium/appium-ios/commit/9e2f8c811e2298dc27366f4a8d6d555185a3f5d6))
+
+
 ## [2.2.2](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.1...appium-ios-tuntap@2.2.2) (2026-10-02)
 
 ### Miscellaneous Chores

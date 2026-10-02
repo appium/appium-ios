@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-remotexpc",
-  "version": "5.24.2",
+  "version": "5.24.3",
   "description": "",
   "keywords": [],
   "bugs": {
@@ -93,7 +93,7 @@
     "@appium/strongbox": "^2.0.0",
     "@appium/support": "^7.2.6",
     "@xmldom/xmldom": "^0.x",
-    "appium-ios-tuntap": "^2.2.2",
+    "appium-ios-tuntap": "^2.2.3",
     "async-lock": "^1.4.1",
     "axios": "^1.18.0",
     "commander": "^14.0.1",
