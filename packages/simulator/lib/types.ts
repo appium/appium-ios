@@ -113,10 +113,19 @@ export interface DevicePreferences {
   ConnectHardwareKeyboard?: boolean;
 }
 
-export interface CommonPreferences {
+/**
+ * Global plist keys used by the legacy Simulator UI client.
+ * Supported keys are translated to DeviceHub's own schema by updatePreferences.
+ */
+export interface LegacySimulatorPreferences {
   /** Whether to connect hardware keyboard */
   ConnectHardwareKeyboard?: boolean;
+  /** Whether to synchronize the legacy Simulator UI client's pasteboard with the host. */
+  PasteboardAutomaticSync?: boolean;
 }
+
+/** @deprecated Use LegacySimulatorPreferences instead. */
+export type CommonPreferences = LegacySimulatorPreferences;
 
 export interface StartUiClientOptions {
   /**
@@ -136,6 +145,9 @@ export interface RunOptions extends StartUiClientOptions {
   /**
    * Whether to connect the hardware keyboard to the
    * Simulator UI client. Equals to `false` by default.
+   * On Xcode 27+, sets DeviceHub's global Simulate Hardware Keyboard preference.
+   * All sessions using DeviceHub share this setting. Restart the UI client before
+   * starting sessions to apply changes; different values per device are not supported.
    */
   connectHardwareKeyboard?: boolean;
   /**
@@ -154,6 +166,8 @@ export interface RunOptions extends StartUiClientOptions {
    * Simulator UI client or respect the system wide preference. 'on', 'off', or 'system' is available.
    * The sync increases launching simulator process time, but it allows system to sync pasteboard
    * with simulators. Follows system-wide preference if the value is 'system'.
+   * On Xcode 27+, controls DeviceHub's per-device Use Shared Clipboard preference.
+   * Restart the UI client before starting sessions to apply changes to cached preferences.
    * Defaults to 'off'.
    */
   pasteboardAutomaticSync?: string;
