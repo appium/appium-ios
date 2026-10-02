@@ -1,0 +1,87 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import {afterEach, beforeEach, describe, it} from 'node:test';
+
+import {fs, plist} from '@appium/support';
+import sinon from 'sinon';
+
+import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
+import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults} from '../../lib/utils/index.js';
+
+describe('DeviceHub pasteboard preferences', () => {
+  let sandbox: sinon.SinonSandbox;
+  let update: sinon.SinonStub;
+  let parse: sinon.SinonStub;
+  const sim = {
+    udid: 'device-a',
+    uiClientBundleId: DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
+    log: {debug() {}, info() {}, warn() {}},
+  };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    sandbox.stub(fs, 'exists').resolves(false);
+    sandbox.stub(fs, 'mkdir').resolves();
+    parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
+    update = sandbox.stub(NSUserDefaults.prototype, 'update').resolves();
+  });
+  afterEach(() => sandbox.restore());
+
+  for (const [mode, enabled] of [
+    ['on', true],
+    ['off', false],
+    ['OFF', false],
+    ['invalid', false],
+  ] as const) {
+    it(`applies ${mode} to the DeviceHub preference for the current device`, async () => {
+      const [device, common] = compileSimulatorPreferences.call(sim as any, {pasteboardAutomaticSync: mode});
+      assert.equal(await updatePreferences.call(sim as any, device, common), true);
+      const call = update.getCalls().find((call) => call.thisValue.plist.includes('/Containers/'))!;
+      assert.equal(
+        call.thisValue.plist,
+        path.join(
+          process.env.HOME!,
+          'Library/Containers/com.apple.dt.Devices/Data/Library/Preferences/com.apple.dt.Devices.plist',
+        ),
+      );
+      assert.equal(call.args[0].DevicePreferences['DEVICE-A'].pasteboardSyncEnabled, enabled);
+    });
+  }
+
+  it('preserves the device’s existing preferences, including when the plist contains data', async () => {
+    parse.resolves({
+      lastSelectedDeviceIdentifier: Buffer.from('device-a'),
+      DevicePreferences: {
+        'DEVICE-A': {zoom: 2, pasteboardSyncEnabled: true},
+        'DEVICE-B': {pasteboardSyncEnabled: true},
+      },
+    });
+    await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false});
+    assert.deepEqual(update.lastCall.args[0], {
+      DevicePreferences: {'DEVICE-A': {zoom: 2, pasteboardSyncEnabled: false}},
+    });
+  });
+
+  it('leaves DeviceHub preferences untouched in system mode', async () => {
+    const [device, common] = compileSimulatorPreferences.call(sim as any, {pasteboardAutomaticSync: 'system'});
+    await updatePreferences.call(sim as any, device, common);
+    assert.equal(parse.called, false);
+    assert.equal(update.callCount, 1);
+  });
+
+  it('keeps older Xcode versions on the existing Simulator preferences', async () => {
+    await updatePreferences.call(
+      {...sim, uiClientBundleId: 'com.apple.iphonesimulator'} as any,
+      {},
+      {PasteboardAutomaticSync: false},
+    );
+    assert.equal(parse.called, false);
+    assert.equal(update.callCount, 1);
+    assert.equal(update.firstCall.args[0].PasteboardAutomaticSync, false);
+  });
+
+  it('reports failure if DeviceHub preferences cannot be updated', async () => {
+    parse.rejects(new Error('unreadable preferences'));
+    assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), false);
+  });
+});

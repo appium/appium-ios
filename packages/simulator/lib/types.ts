@@ -116,6 +116,8 @@ export interface DevicePreferences {
 export interface CommonPreferences {
   /** Whether to connect hardware keyboard */
   ConnectHardwareKeyboard?: boolean;
+  /** Whether to synchronize the UI client's pasteboard with the host. */
+  PasteboardAutomaticSync?: boolean;
 }
 
 export interface StartUiClientOptions {
@@ -154,6 +156,8 @@ export interface RunOptions extends StartUiClientOptions {
    * Simulator UI client or respect the system wide preference. 'on', 'off', or 'system' is available.
    * The sync increases launching simulator process time, but it allows system to sync pasteboard
    * with simulators. Follows system-wide preference if the value is 'system'.
+   * On Xcode 27+, controls DeviceHub's per-device Use Shared Clipboard preference.
+   * Restart the UI client before starting sessions to apply changes to cached preferences.
    * Defaults to 'off'.
    */
   pasteboardAutomaticSync?: string;

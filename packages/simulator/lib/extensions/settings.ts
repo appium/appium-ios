@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import {fs, util} from '@appium/support';
+import {fs, plist, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
 import AsyncLock from 'async-lock';
 import {exec} from 'teen_process';
@@ -23,7 +23,7 @@ import type {
   RunOptions,
   LocalizationOptions,
 } from '../types.js';
-import {NSUserDefaults, generateDefaultsCommandArgs} from '../utils/index.js';
+import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, generateDefaultsCommandArgs} from '../utils/index.js';
 
 declare module '../simulator-xcode-15.js' {
   interface SimulatorXcode15 extends HasSettings {}
@@ -349,7 +349,7 @@ export async function updatePreferences(
   }
   verifyDevicePreferences.bind(this)(devicePrefs);
   const plistPath = path.resolve(homeFolderPath, 'Library', 'Preferences', 'com.apple.iphonesimulator.plist');
-  return await PREFERENCES_PLIST_GUARD.acquire(this.constructor.name, async () => {
+  const legacyUpdated = await PREFERENCES_PLIST_GUARD.acquire(this.constructor.name, async () => {
     const defaults = new NSUserDefaults(plistPath);
     const prefsToUpdate = {...commonPrefs};
     try {
@@ -381,6 +381,60 @@ export async function updatePreferences(
         `Cannot update ${this.udid} Simulator preferences at '${plistPath}'. ` +
           `Try to delete the file manually in order to reset it. Original error: ${e.message}`,
       );
+      return false;
+    }
+  });
+  if (
+    this.uiClientBundleId !== DEVICE_HUB_UI_CLIENT_BUNDLE_ID ||
+    typeof commonPrefs.PasteboardAutomaticSync !== 'boolean'
+  ) {
+    return legacyUpdated;
+  }
+  const deviceHubUpdated = await updateDeviceHubPasteboardSync.call(
+    this,
+    homeFolderPath,
+    commonPrefs.PasteboardAutomaticSync,
+  );
+  return legacyUpdated && deviceHubUpdated;
+}
+
+/** DeviceHub stores shared clipboard settings per device in its sandboxed preferences. */
+async function updateDeviceHubPasteboardSync(
+  this: CoreSimulatorWithSettings,
+  homeFolderPath: string,
+  enabled: boolean,
+): Promise<boolean> {
+  const plistPath = path.resolve(
+    homeFolderPath,
+    'Library',
+    'Containers',
+    DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
+    'Data',
+    'Library',
+    'Preferences',
+    `${DEVICE_HUB_UI_CLIENT_BUNDLE_ID}.plist`,
+  );
+  return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
+    try {
+      // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
+      const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
+      const udidKey = this.udid.toUpperCase();
+      const existingDevicePrefs = currentPrefs.DevicePreferences?.[udidKey];
+      const prefsToUpdate = {
+        DevicePreferences: {
+          [udidKey]: {
+            ...(util.isPlainObject(existingDevicePrefs) ? existingDevicePrefs : {}),
+            pasteboardSyncEnabled: enabled,
+          },
+        },
+      };
+      await fs.mkdir(path.dirname(plistPath), {recursive: true});
+      // defaults -dict-add preserves preferences belonging to other devices.
+      await new NSUserDefaults(plistPath).update(prefsToUpdate);
+      this.log.debug(`Set DeviceHub shared clipboard for ${this.udid} to ${enabled}`);
+      return true;
+    } catch (e: any) {
+      this.log.warn(`Cannot update DeviceHub shared clipboard for ${this.udid}: ${e.message}`);
       return false;
     }
   });

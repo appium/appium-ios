@@ -65,6 +65,18 @@ end-to-end examples of most of it in action.
 [device set](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator)
 instead of the default one under `~/Library/Developer/CoreSimulator/Devices`.
 
+### Pasteboard synchronization
+
+`sim.run({pasteboardAutomaticSync: 'off'})` disables synchronization with the macOS
+clipboard. On Xcode 27 and newer, this sets DeviceHub's **Use Shared Clipboard**
+preference for the selected simulator. Use `on` to enable synchronization or
+`system` to leave the existing preference unchanged.
+
+DeviceHub caches these preferences. Close DeviceHub before starting sessions when
+changing this setting so its next launch reads the updated preferences. The library
+does not restart an already-running DeviceHub, which could disrupt other sessions.
+Disable synchronization on every simulator used for parallel clipboard tests.
+
 ### Xcode and iOS versions
 
 Check the [Xcode Wikipedia page](https://en.wikipedia.org/wiki/Xcode) for the mapping between
