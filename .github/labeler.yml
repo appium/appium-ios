@@ -21,7 +21,6 @@ labels:
     sync: true
     matcher:
       title: '^(?!feat|fix|docs).*?:'
-      files: ['.*/**', './.*', './*', '!**/*.md']
 
   - label: 'semver:breaking'
     sync: true
