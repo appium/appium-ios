@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.24.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.0...appium-ios-remotexpc@5.24.1) (2026-10-02)
+
+### Miscellaneous Chores
+
+* ensure Dependabot preserves version ranges ([#24](https://github.com/appium/appium-ios/issues/24)) ([95e4e1a](https://github.com/appium/appium-ios/commit/95e4e1a4703f8ca833f01ecf2af75f4696d98043))
+
+
 ## 5.24.0 (2026-10-01)
 
 ### Features

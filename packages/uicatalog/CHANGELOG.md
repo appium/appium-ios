@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.1.2](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.1...ios-uicatalog@4.1.2) (2026-10-02)
+
+### Miscellaneous Chores
+
+* ensure Dependabot preserves version ranges ([#24](https://github.com/appium/appium-ios/issues/24)) ([95e4e1a](https://github.com/appium/appium-ios/commit/95e4e1a4703f8ca833f01ecf2af75f4696d98043))
+
+
 ## [4.1.1](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.0...ios-uicatalog@4.1.1) (2026-10-01)
 
 **Note:** Version bump only for package ios-uicatalog

@@ -1,6 +1,6 @@
 {
   "name": "appium-remote-debugger",
-  "version": "17.5.1",
+  "version": "17.5.2",
   "description": "Appium proxy for Remote Debugger protocol",
   "keywords": [
     "appium"
@@ -67,7 +67,7 @@
     "@angular/compiler": "^22.1.1",
     "@angular/core": "^22.1.1",
     "@angular/platform-browser": "^22.1.1",
-    "@appium/coresim": "^1.4.0",
+    "@appium/coresim": "^1.10.2",
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.0.0-rc.1",
     "@types/async-lock": "^1.4.2",
@@ -86,7 +86,7 @@
     "sinon": "^22.0.0"
   },
   "optionalDependencies": {
-    "appium-ios-remotexpc": "5.24.0"
+    "appium-ios-remotexpc": "^5.24.1"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
