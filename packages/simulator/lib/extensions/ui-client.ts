@@ -177,7 +177,7 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
   };
 
   const [devicePreferences, commonPreferences] = compileSimulatorPreferences.bind(this)(runOpts);
-  await updatePreferences.bind(this)(devicePreferences, commonPreferences);
+  const prefsUpdated = await updatePreferences.bind(this)(devicePreferences, commonPreferences);
 
   const timer = new timing.Timer().start();
   const withCrossProcessLock = util.getLockFileGuard(getUiClientLockFilePath(this.uiClientBundleId), {
@@ -219,6 +219,7 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
         if (isServerRunning && uiClientPid) {
           this.log.info(`Both Simulator with UDID '${this.udid}' and the UI client are currently running`);
           if (
+            prefsUpdated &&
             this.uiClientBundleId === DEVICE_HUB_UI_CLIENT_BUNDLE_ID &&
             typeof commonPreferences.PasteboardAutomaticSync === 'boolean'
           ) {
@@ -260,17 +261,19 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
  */
 async function refreshDeviceHubPreferences(this: CoreSimulatorWithUiClient): Promise<void> {
   try {
-    // Read the live name so that a stale cached value is never written back
-    const name = (await this._native.getDevices()).find(({udid}) => udid === this.udid)?.name;
-    if (!name) {
+    // Read the live name so that a stale cached value is never written back. The UDID match is
+    // case-insensitive since callers may pass a non-canonical one (see getSimulator's checkExistence).
+    const device = (await this._native.getDevices()).find(({udid}) => udid.toLowerCase() === this.udid.toLowerCase());
+    if (!device) {
       throw new Error('the Simulator is not listed in its device set');
     }
+    const {udid, name} = device;
     this.log.debug(`Refreshing '${this.uiClientBundleId}' preferences of '${this.udid}' by renaming it temporarily`);
-    await this._native.renameDevice(this.udid, `${name} (refresh)`);
+    await this._native.renameDevice(udid, `${name} (refresh)`);
     try {
       await new Promise((resolve) => setTimeout(resolve, DEVICE_HUB_REFRESH_HOLD_MS));
     } finally {
-      await this._native.renameDevice(this.udid, name);
+      await this._native.renameDevice(udid, name);
     }
   } catch (e: any) {
     this.log.warn(`Cannot refresh '${this.uiClientBundleId}' preferences of '${this.udid}': ${e.message}`);

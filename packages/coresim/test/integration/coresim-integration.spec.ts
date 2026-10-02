@@ -191,13 +191,22 @@ async function injectGraphicsOrientation(plistPath: string, graphicsOrientation:
  * overwriting what the pasteboard test sets. It reads this per-device preference at boot, so call before boot.
  */
 async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
-  const {stdout} = await execFileAsync('xcode-select', ['-p']);
-  if (!fs.existsSync(path.join(stdout.trim(), '..', 'Applications', 'DeviceHub.app'))) {
+  const prefsDir = path.join(
+    os.homedir(),
+    'Library',
+    'Containers',
+    'com.apple.dt.Devices',
+    'Data',
+    'Library',
+    'Preferences',
+  );
+  // No sandbox container means DeviceHub never ran on this machine, so nothing can sync into the device
+  if (!fs.existsSync(prefsDir)) {
     return;
   }
   await execFileAsync('defaults', [
     'write',
-    'com.apple.dt.Devices',
+    path.join(prefsDir, 'com.apple.dt.Devices.plist'),
     'DevicePreferences',
     '-dict-add',
     udid,
