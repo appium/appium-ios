@@ -1,0 +1,80 @@
+version: v1
+
+labels:
+  - label: 'enhancement'
+    sync: true
+    matcher:
+      title: '^feat.*?:'
+
+  - label: 'bug'
+    sync: true
+    matcher:
+      title: '^fix.*?:'
+
+  - label: 'documentation'
+    sync: true
+    matcher:
+      title: '^docs.*?:'
+      files: ['**/*.md']
+
+  - label: 'chore'
+    sync: true
+    matcher:
+      title: '^(chore|ci|refactor|test).*?:'
+      files: ['.*/**', './.*', './*', '**/test/**', '!**/*.md']
+
+  - label: 'semver:breaking'
+    sync: true
+    matcher:
+      title: '^(.+?)!:'
+      commits: '^(.+?)!:'
+
+  - label: 'dependencies'
+    sync: true
+    matcher:
+      files: ['**/package.json', 'package-lock.json']
+
+  - label: '@appium/coresim'
+    sync: true
+    matcher:
+      files: ['packages/coresim/**']
+
+  - label: '@appium/devicectl'
+    sync: true
+    matcher:
+      files: ['packages/devicectl/**']
+
+  - label: '@appium/remote-debugger'
+    sync: true
+    matcher:
+      files: ['packages/remote-debugger/**']
+
+  - label: '@appium/ios-remotexpc'
+    sync: true
+    matcher:
+      files: ['packages/remotexpc/**']
+
+  - label: '@appium/ios-resigner'
+    sync: true
+    matcher:
+      files: ['packages/resigner/**']
+
+  - label: '@appium/ios-simulator'
+    sync: true
+    matcher:
+      files: ['packages/simulator/**']
+
+  - label: '@appium/tuntap'
+    sync: true
+    matcher:
+      files: ['packages/tuntap/**']
+
+  - label: '@appium/ios-uicatalog'
+    sync: true
+    matcher:
+      files: ['packages/uicatalog/**']
+
+  - label: '@appium/xcode'
+    sync: true
+    matcher:
+      files: ['packages/xcode/**']
