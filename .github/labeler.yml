@@ -20,8 +20,7 @@ labels:
   - label: 'chore'
     sync: true
     matcher:
-      title: '^(chore|ci|refactor|test).*?:'
-      files: ['.*/**', './.*', './*', '**/test/**', '!**/*.md']
+      title: '^(?!feat|fix|docs).*?:'
 
   - label: 'semver:breaking'
     sync: true
@@ -34,47 +33,47 @@ labels:
     matcher:
       files: ['**/package.json', 'package-lock.json']
 
-  - label: '@appium/coresim'
+  - label: 'package:coresim'
     sync: true
     matcher:
       files: ['packages/coresim/**']
 
-  - label: '@appium/devicectl'
+  - label: 'package:devicectl'
     sync: true
     matcher:
       files: ['packages/devicectl/**']
 
-  - label: '@appium/remote-debugger'
+  - label: 'package:remote-debugger'
     sync: true
     matcher:
       files: ['packages/remote-debugger/**']
 
-  - label: '@appium/ios-remotexpc'
+  - label: 'package:remotexpc'
     sync: true
     matcher:
       files: ['packages/remotexpc/**']
 
-  - label: '@appium/ios-resigner'
+  - label: 'package:resigner'
     sync: true
     matcher:
       files: ['packages/resigner/**']
 
-  - label: '@appium/ios-simulator'
+  - label: 'package:simulator'
     sync: true
     matcher:
       files: ['packages/simulator/**']
 
-  - label: '@appium/tuntap'
+  - label: 'package:tuntap'
     sync: true
     matcher:
       files: ['packages/tuntap/**']
 
-  - label: '@appium/ios-uicatalog'
+  - label: 'package:uicatalog'
     sync: true
     matcher:
       files: ['packages/uicatalog/**']
 
-  - label: '@appium/xcode'
+  - label: 'package:xcode'
     sync: true
     matcher:
       files: ['packages/xcode/**']
