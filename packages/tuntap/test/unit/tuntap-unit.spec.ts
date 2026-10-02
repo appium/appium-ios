@@ -56,11 +56,19 @@ describe('TunTap Unit Tests', {timeout: 10000}, () => {
     tun.close();
   });
 
-  it('should throw if reading/writing when closed', () => {
+  it('should throw if reading/writing when not open', () => {
     tun = new TunTap();
     const activeTun = tun;
     assert.throws(() => activeTun.read(4096), /Device not open/);
     assert.throws(() => activeTun.write(Buffer.alloc(10)), /Device not open/);
+  });
+
+  it('should throw if reading/writing after close', () => {
+    tun = new TunTap();
+    const activeTun = tun;
+    activeTun.close();
+    assert.throws(() => activeTun.read(4096), /Device has been closed/);
+    assert.throws(() => activeTun.write(Buffer.alloc(10)), /Device has been closed/);
   });
 
   it('should throw if reopening after close', {skip: skipWithoutPrivileges}, () => {
