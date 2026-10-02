@@ -1,11 +1,26 @@
 import assert from 'node:assert/strict';
 import {afterEach, beforeEach, describe, it, mock} from 'node:test';
 
-import {Devicectl} from '../../lib/devicectl.js';
-import {appUrlToFilesystemPath, escapeProcessFilterValue, executablePathField} from '../../lib/mixins/process.js';
+import * as teenProcess from 'teen_process';
+
+import type {Devicectl as DevicectlType} from '../../lib/devicectl.js';
+
+let currentExec: (...args: any[]) => any = async () => ({stdout: '', stderr: ''});
+
+// Must run before `Devicectl` is imported, so its `exec` import resolves to this mock.
+mock.module('teen_process', {
+  namedExports: {
+    SubProcess: teenProcess.SubProcess,
+    exec: (...args: any[]) => currentExec(...args),
+  },
+});
+
+const {Devicectl} = await import('../../lib/devicectl.js');
+const {appUrlToFilesystemPath, escapeProcessFilterValue, executablePathField} =
+  await import('../../lib/mixins/process.js');
 
 describe('Devicectl', function () {
-  let devicectl: Devicectl;
+  let devicectl: DevicectlType;
 
   beforeEach(function () {
     devicectl = new Devicectl('test-device-udid');
@@ -34,10 +49,23 @@ describe('Devicectl', function () {
   });
 
   describe('execute', function () {
-    it('should throw an error when command execution fails', async function () {
-      // This test would need to be mocked in a real implementation
-      // For now, we'll just test that the method exists
-      assert.strictEqual(typeof devicectl.execute, 'function');
+    afterEach(function () {
+      currentExec = async () => ({stdout: '', stderr: ''});
+    });
+
+    it('should wrap a failed command with the attempted command and the original stderr', async function () {
+      currentExec = async () => {
+        const err: any = new Error('boom');
+        err.stderr = 'ERROR: The device was not found.';
+        throw err;
+      };
+
+      await assert.rejects(devicectl.execute(['list', 'devices'], {noDevice: true}), (err: any) => {
+        assert.match(err.message, /xcrun.*devicectl.*list.*devices/);
+        assert.match(err.message, /The device was not found/);
+        assert.strictEqual(err.cause.stderr, 'ERROR: The device was not found.');
+        return true;
+      });
     });
   });
 

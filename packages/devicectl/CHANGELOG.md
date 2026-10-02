@@ -20,7 +20,7 @@
 
 ### ⚠ BREAKING CHANGES
 
-* Consumers using require('node-devicectl') muc import() — the package no longer ships a CommonJS entry
+* Consumers using require('node-devicectl') must use import() — the package no longer ships a CommonJS entry
 
 ### Features
 
@@ -125,4 +125,4 @@
 
 ### Bug Fixes
 
-* Update buidling logic ([#2](https://github.com/appium/node-devicectl/issues/2)) ([2b6dbd5](https://github.com/appium/node-devicectl/commit/2b6dbd50878940e60152e3850b8d7aa480663bb0))
+* Update building logic ([#2](https://github.com/appium/node-devicectl/issues/2)) ([2b6dbd5](https://github.com/appium/node-devicectl/commit/2b6dbd50878940e60152e3850b8d7aa480663bb0))
