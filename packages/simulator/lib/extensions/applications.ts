@@ -99,13 +99,16 @@ export async function launchApp(
   bundleId: string,
   opts: LaunchAppOptions = {},
 ): Promise<void> {
-  const {wait = false, timeoutMs = 10000, environment, terminateExisting} = opts;
+  const {wait = false, timeoutMs = 10000, environment, terminateExisting, activateSuspended} = opts;
   const nativeOptions: Record<string, unknown> = {};
   if (environment) {
     nativeOptions.environment = environment;
   }
   if (terminateExisting) {
     nativeOptions.terminate_running_process = true;
+  }
+  if (activateSuspended) {
+    nativeOptions.activate_suspended = true;
   }
   await this._native.launchApp(this.udid, bundleId, nativeOptions);
   if (!wait) {

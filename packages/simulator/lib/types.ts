@@ -260,6 +260,8 @@ export interface LaunchAppOptions {
   environment?: StringRecord;
   /** Whether to terminate an already-running instance of the app before launching it. */
   terminateExisting?: boolean;
+  /** Whether to launch the app in the background without activating its UI. Defaults to false. */
+  activateSuspended?: boolean;
 }
 
 /** Which of an app's on-disk containers {@link InteractsWithApps.getAppContainer} should resolve. */
