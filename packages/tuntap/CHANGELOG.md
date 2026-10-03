@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.4](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.3...appium-ios-tuntap@2.2.4) (2026-10-03)
+
+### Bug Fixes
+
+* keep TunTapPermissionError from TunTap.removeRoute() ([#32](https://github.com/appium/appium-ios/issues/32)) ([5c99572](https://github.com/appium/appium-ios/commit/5c995726b414fbb527801d5a9b3e3da5b6a7fd9c))
+
+
 ## [2.2.3](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.2...appium-ios-tuntap@2.2.3) (2026-10-02)
 
 ### Bug Fixes
