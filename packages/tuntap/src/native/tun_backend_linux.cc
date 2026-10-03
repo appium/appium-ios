@@ -24,10 +24,11 @@ constexpr const char* kTunDevicePath = "/dev/net/tun";
 
 class LinuxTunBackend : public PosixTunBackend {
  public:
-  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error) override {
+  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) override {
     struct stat statbuf {};
     if (stat(kTunDevicePath, &statbuf) != 0) {
-      error =
+      error.sys_errno = errno;
+      error.message =
           "TUN/TAP device not available: /dev/net/tun does not exist. "
           "Please ensure the TUN/TAP kernel module is loaded (modprobe tun).";
       return false;
@@ -35,9 +36,11 @@ class LinuxTunBackend : public PosixTunBackend {
 
     FileDescriptor temp_fd(open(kTunDevicePath, O_RDWR | O_CLOEXEC));
     if (!temp_fd.is_valid()) {
-      error = std::string("Failed to open ") + kTunDevicePath + ": " + strerror(errno) +
-              ". This usually means you don't have sufficient permissions. "
-              "Try running with sudo or add your user to the 'tun' group.";
+      error.sys_errno = errno;
+      error.message = std::string("Failed to open ") + kTunDevicePath + ": " + strerror(error.sys_errno);
+      if (error.sys_errno == EACCES || error.sys_errno == EPERM) {
+        error.message += ". Try running with sudo or add your user to the 'tun' group.";
+      }
       return false;
     }
 
@@ -51,11 +54,12 @@ class LinuxTunBackend : public PosixTunBackend {
     }
 
     if (ioctl(temp_fd.get(), TUNSETIFF, &ifr) < 0) {
-      error = std::string("Failed to configure TUN device: ") + strerror(errno);
+      error.sys_errno = errno;
+      error.message = std::string("Failed to configure TUN device: ") + strerror(error.sys_errno);
       return false;
     }
 
-    if (!SetNonBlocking(temp_fd.get(), error)) {
+    if (!SetNonBlocking(temp_fd.get(), error.message)) {
       return false;
     }
 

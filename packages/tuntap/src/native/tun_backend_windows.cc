@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -41,23 +42,22 @@ class WindowsTunBackend : public TunPlatformBackend {
   WindowsTunBackend(WindowsTunBackend&&) = delete;
   WindowsTunBackend& operator=(WindowsTunBackend&&) = delete;
 
-  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error) override {
+  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) override {
     auto& api = WintunApi::Instance();
-    if (!api.Load(error)) {
+    if (!api.Load(error.message)) {
       return false;
     }
 
     std::wstring adapter_name = requested_name.empty() ? BuildDefaultAdapterName() : Utf8ToUtf16(requested_name);
     if (adapter_name.empty()) {
-      error = "Failed to encode adapter name as UTF-16";
+      error.message = "Failed to encode adapter name as UTF-16";
       return false;
     }
 
     // Creating or opening a WinTun adapter requires the process to run with
     // administrator privileges (elevated). Without elevation `CreateAdapter`
-    // fails with ERROR_ACCESS_DENIED, which `FormatLastError` surfaces in the
-    // error string below. This mirrors the root (EUID 0) requirement of the
-    // POSIX backends.
+    // fails with ERROR_ACCESS_DENIED, which is reported as EPERM below. This
+    // mirrors the root (EUID 0) requirement of the POSIX backends.
     //
     // Prefer creating a fresh adapter: `WintunCloseAdapter` removes only
     // adapters this process created. One obtained through the `OpenAdapter`
@@ -68,22 +68,25 @@ class WindowsTunBackend : public TunPlatformBackend {
       adapter_ = api.OpenAdapter(adapter_name.c_str());
       if (adapter_ == nullptr) {
         DWORD opened_err = ::GetLastError();
-        error = "Failed to create or open WinTun adapter: create failed with " + FormatLastError(created_err) +
-                "; open failed with " + FormatLastError(opened_err);
+        if (created_err == ERROR_ACCESS_DENIED || opened_err == ERROR_ACCESS_DENIED) {
+          error.sys_errno = EPERM;
+        }
+        error.message = "Failed to create or open WinTun adapter: create failed with " + FormatLastError(created_err) +
+                        "; open failed with " + FormatLastError(opened_err);
         return false;
       }
     }
 
     session_ = api.StartSession(adapter_, kSessionCapacity);
     if (session_ == nullptr) {
-      error = "Failed to start WinTun session: " + FormatLastError(::GetLastError());
+      error.message = "Failed to start WinTun session: " + FormatLastError(::GetLastError());
       CloseAdapterInternal();
       return false;
     }
 
     read_event_ = api.GetReadWaitEvent(session_);
     if (read_event_ == nullptr) {
-      error = "Failed to acquire WinTun read-wait event: " + FormatLastError(::GetLastError());
+      error.message = "Failed to acquire WinTun read-wait event: " + FormatLastError(::GetLastError());
       EndSessionInternal();
       CloseAdapterInternal();
       return false;
@@ -91,7 +94,7 @@ class WindowsTunBackend : public TunPlatformBackend {
 
     interface_name_ = Utf16ToUtf8(adapter_name);
     if (interface_name_.empty()) {
-      error = "Failed to encode adapter name as UTF-8";
+      error.message = "Failed to encode adapter name as UTF-8";
       EndSessionInternal();
       CloseAdapterInternal();
       return false;
