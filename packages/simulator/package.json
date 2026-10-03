@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-simulator",
-  "version": "10.5.0",
+  "version": "10.6.0",
   "description": "iOS Simulator interface for Appium.",
   "keywords": [
     "appium",
@@ -47,7 +47,7 @@
     "test:e2e": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=3600000 \"./build/test/functional/**/*.spec.js\""
   },
   "dependencies": {
-    "@appium/coresim": "^1.10.2",
+    "@appium/coresim": "^1.11.0",
     "@appium/support": "^7.2.7",
     "@xmldom/xmldom": "^0.x",
     "appium-xcode": "^7.2.3",

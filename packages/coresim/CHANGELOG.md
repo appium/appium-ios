@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.11.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.10.2...@appium/coresim@1.11.0) (2026-10-03)
+
+### Features
+
+* apply DeviceHub pasteboard sync changes without rebooting the simulator ([#26](https://github.com/appium/appium-ios/issues/26)) ([5c6eabb](https://github.com/appium/appium-ios/commit/5c6eabbf9cfb900563ed816a6392f48db11ef18e))
+
+
 ## [1.10.2](https://github.com/appium/appium-ios/compare/@appium/coresim@1.10.1...@appium/coresim@1.10.2) (2026-10-02)
 
 ### Miscellaneous Chores
