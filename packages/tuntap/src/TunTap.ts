@@ -108,21 +108,17 @@ export class TunTap {
 
     if (!this._isOpen) {
       try {
-        this._isOpen = this.device.open();
-        if (!this._isOpen) {
-          throw new TunTapDeviceError('Failed to open TUN device');
-        }
+        // Native open() throws on failure; it never returns false.
+        this.device.open();
       } catch (err: unknown) {
         const message = (err as Error).message ?? '';
-        if (
-          message.includes('Permission denied') ||
-          message.includes('Operation not permitted') ||
-          message.includes('sudo')
-        ) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'EACCES' || code === 'EPERM') {
           throw new TunTapPermissionError(message, {cause: err});
         }
         throw new TunTapDeviceError(message, {cause: err});
       }
+      this._isOpen = true;
       openDevices.add(this);
     }
     return this._isOpen;

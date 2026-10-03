@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -41,7 +42,8 @@ class WindowsTunBackend : public TunPlatformBackend {
   WindowsTunBackend(WindowsTunBackend&&) = delete;
   WindowsTunBackend& operator=(WindowsTunBackend&&) = delete;
 
-  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error) override {
+  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error,
+                  int& error_errno) override {
     auto& api = WintunApi::Instance();
     if (!api.Load(error)) {
       return false;
@@ -55,9 +57,8 @@ class WindowsTunBackend : public TunPlatformBackend {
 
     // Creating or opening a WinTun adapter requires the process to run with
     // administrator privileges (elevated). Without elevation `CreateAdapter`
-    // fails with ERROR_ACCESS_DENIED, which `FormatLastError` surfaces in the
-    // error string below. This mirrors the root (EUID 0) requirement of the
-    // POSIX backends.
+    // fails with ERROR_ACCESS_DENIED, which is reported as EPERM below. This
+    // mirrors the root (EUID 0) requirement of the POSIX backends.
     //
     // Prefer creating a fresh adapter: `WintunCloseAdapter` removes only
     // adapters this process created. One obtained through the `OpenAdapter`
@@ -68,6 +69,9 @@ class WindowsTunBackend : public TunPlatformBackend {
       adapter_ = api.OpenAdapter(adapter_name.c_str());
       if (adapter_ == nullptr) {
         DWORD opened_err = ::GetLastError();
+        if (created_err == ERROR_ACCESS_DENIED || opened_err == ERROR_ACCESS_DENIED) {
+          error_errno = EPERM;
+        }
         error = "Failed to create or open WinTun adapter: create failed with " + FormatLastError(created_err) +
                 "; open failed with " + FormatLastError(opened_err);
         return false;

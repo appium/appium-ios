@@ -34,7 +34,10 @@ class TunPlatformBackend {
  public:
   virtual ~TunPlatformBackend() = default;
 
-  virtual bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error) = 0;
+  // On failure, fills `error` and sets `error_errno` to the POSIX errno behind it
+  // (Windows maps the Win32 error), leaving it 0 when there is no OS cause.
+  virtual bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error,
+                          int& error_errno) = 0;
   virtual void CloseDevice() = 0;
   [[nodiscard]] virtual bool IsOpen() const = 0;
 

@@ -1,5 +1,6 @@
 #include <napi.h>
 
+#include <cerrno>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -9,6 +10,36 @@
 #include "native/tunnel_forwarder.h"
 
 namespace {
+
+// Node.js-style `err.code` for the errno behind a backend failure, or nullptr when unmapped.
+const char* ErrnoCode(int error_errno) {
+  switch (error_errno) {
+    case EACCES:
+      return "EACCES";
+    case EBUSY:
+      return "EBUSY";
+    case EINVAL:
+      return "EINVAL";
+    case EMFILE:
+      return "EMFILE";
+    case ENFILE:
+      return "ENFILE";
+    case ENOBUFS:
+      return "ENOBUFS";
+    case ENODEV:
+      return "ENODEV";
+    case ENOENT:
+      return "ENOENT";
+    case ENOMEM:
+      return "ENOMEM";
+    case ENXIO:
+      return "ENXIO";
+    case EPERM:
+      return "EPERM";
+    default:
+      return nullptr;
+  }
+}
 
 class TunDevice : public Napi::ObjectWrap<TunDevice> {
  public:
@@ -88,8 +119,13 @@ Napi::Value TunDevice::Open(const Napi::CallbackInfo& info) {
 
   std::string error;
   std::string assigned_name;
-  if (!backend_->OpenDevice(requested_name_, assigned_name, error)) {
-    Napi::Error::New(env, error).ThrowAsJavaScriptException();
+  int error_errno = 0;
+  if (!backend_->OpenDevice(requested_name_, assigned_name, error, error_errno)) {
+    Napi::Error js_error = Napi::Error::New(env, error);
+    if (const char* code = ErrnoCode(error_errno); code != nullptr) {
+      js_error.Set("code", Napi::String::New(env, code));
+    }
+    js_error.ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 
