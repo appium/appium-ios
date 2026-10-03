@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.7.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.6.0...appium-ios-simulator@10.7.0) (2026-10-03)
+
+### Features
+
+* support duo ([#35](https://github.com/appium/appium-ios/issues/35)) ([aea04e7](https://github.com/appium/appium-ios/commit/aea04e736bb8e698bf8be49e8e6c4d02c19fa73b))
+
+
 ## [10.6.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.5.0...appium-ios-simulator@10.6.0) (2026-10-03)
 
 ### Features
