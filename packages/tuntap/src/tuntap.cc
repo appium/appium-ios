@@ -12,8 +12,8 @@
 namespace {
 
 // Node.js-style `err.code` for the errno behind a backend failure, or nullptr when unmapped.
-const char* ErrnoCode(int error_errno) {
-  switch (error_errno) {
+const char* ErrnoCode(int sys_errno) {
+  switch (sys_errno) {
     case EACCES:
       return "EACCES";
     case EBUSY:
@@ -117,12 +117,11 @@ Napi::Value TunDevice::Open(const Napi::CallbackInfo& info) {
     return Napi::Boolean::New(env, false);
   }
 
-  std::string error;
+  TunError error;
   std::string assigned_name;
-  int error_errno = 0;
-  if (!backend_->OpenDevice(requested_name_, assigned_name, error, error_errno)) {
-    Napi::Error js_error = Napi::Error::New(env, error);
-    if (const char* code = ErrnoCode(error_errno); code != nullptr) {
+  if (!backend_->OpenDevice(requested_name_, assigned_name, error)) {
+    Napi::Error js_error = Napi::Error::New(env, error.message);
+    if (const char* code = ErrnoCode(error.sys_errno); code != nullptr) {
       js_error.Set("code", Napi::String::New(env, code));
     }
     js_error.ThrowAsJavaScriptException();

@@ -30,20 +30,19 @@ class DarwinTunBackend : public PosixTunBackend {
  public:
   static constexpr size_t kUtunHeaderSize = 4;
 
-  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error,
-                  int& error_errno) override {
+  bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) override {
     struct ctl_info ctl_info {};
     struct sockaddr_ctl socket_addr {};
 
     FileDescriptor temp_fd(socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL));
     if (!temp_fd.is_valid()) {
-      error_errno = errno;
-      error = std::string("Failed to create control socket: ") + strerror(error_errno);
+      error.sys_errno = errno;
+      error.message = std::string("Failed to create control socket: ") + strerror(error.sys_errno);
       return false;
     }
     if (fcntl(temp_fd.get(), F_SETFD, FD_CLOEXEC) < 0) {
-      error_errno = errno;
-      error = std::string("Failed to set close-on-exec on control socket: ") + strerror(error_errno);
+      error.sys_errno = errno;
+      error.message = std::string("Failed to set close-on-exec on control socket: ") + strerror(error.sys_errno);
       return false;
     }
 
@@ -52,8 +51,8 @@ class DarwinTunBackend : public PosixTunBackend {
     ctl_info.ctl_name[sizeof(ctl_info.ctl_name) - 1] = '\0';
 
     if (ioctl(temp_fd.get(), CTLIOCGINFO, &ctl_info) < 0) {
-      error_errno = errno;
-      error = std::string("Failed to get utun control info: ") + strerror(error_errno);
+      error.sys_errno = errno;
+      error.message = std::string("Failed to get utun control info: ") + strerror(error.sys_errno);
       return false;
     }
 
@@ -67,23 +66,23 @@ class DarwinTunBackend : public PosixTunBackend {
     if (utun_unit > 0) {
       socket_addr.sc_unit = utun_unit;
       if (connect(temp_fd.get(), reinterpret_cast<struct sockaddr*>(&socket_addr), sizeof(socket_addr)) < 0) {
-        error_errno = errno;
-        error = std::string("Failed to connect to utun with specified unit: ") + strerror(error_errno);
+        error.sys_errno = errno;
+        error.message = std::string("Failed to connect to utun with specified unit: ") + strerror(error.sys_errno);
         return false;
       }
-    } else if (!ConnectFirstAvailableUnit(temp_fd.get(), socket_addr, error, error_errno)) {
+    } else if (!ConnectFirstAvailableUnit(temp_fd.get(), socket_addr, error)) {
       return false;
     }
 
     std::array<char, 20> interface_name{};
     socklen_t interface_name_len = interface_name.size();
     if (getsockopt(temp_fd.get(), SYSPROTO_CONTROL, UTUN_OPT_IFNAME, interface_name.data(), &interface_name_len) < 0) {
-      error_errno = errno;
-      error = std::string("Failed to get utun interface name: ") + strerror(error_errno);
+      error.sys_errno = errno;
+      error.message = std::string("Failed to get utun interface name: ") + strerror(error.sys_errno);
       return false;
     }
 
-    if (!SetNonBlocking(temp_fd.get(), error)) {
+    if (!SetNonBlocking(temp_fd.get(), error.message)) {
       return false;
     }
 
@@ -165,20 +164,19 @@ class DarwinTunBackend : public PosixTunBackend {
     }
   }
 
-  static bool ConnectFirstAvailableUnit(int fd, struct sockaddr_ctl& socket_addr, std::string& error,
-                                        int& error_errno) {
+  static bool ConnectFirstAvailableUnit(int fd, struct sockaddr_ctl& socket_addr, TunError& error) {
     for (socket_addr.sc_unit = 1; socket_addr.sc_unit < 255; socket_addr.sc_unit++) {
       if (connect(fd, reinterpret_cast<struct sockaddr*>(&socket_addr), sizeof(socket_addr)) == 0) {
         return true;
       }
       if (errno != EBUSY) {
-        error_errno = errno;
-        error = std::string("Failed to connect to utun control socket: ") + strerror(error_errno);
+        error.sys_errno = errno;
+        error.message = std::string("Failed to connect to utun control socket: ") + strerror(error.sys_errno);
         return false;
       }
     }
 
-    error = "Could not find an available utun device";
+    error.message = "Could not find an available utun device";
     return false;
   }
 

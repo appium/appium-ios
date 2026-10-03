@@ -25,6 +25,13 @@ enum class ReadPacketStatus : std::uint8_t {
   Error,
 };
 
+// Failure reported by `TunPlatformBackend::OpenDevice`.
+struct TunError {
+  std::string message;
+  // POSIX errno behind the failure (Windows maps the Win32 error), or 0 when there is no OS cause.
+  int sys_errno = 0;
+};
+
 /**
  * Backend abstraction that hides OS-specific TUN device handling from the
  * N-API surface. Each backend owns its native handle (POSIX file descriptor
@@ -34,10 +41,7 @@ class TunPlatformBackend {
  public:
   virtual ~TunPlatformBackend() = default;
 
-  // On failure, fills `error` and sets `error_errno` to the POSIX errno behind it
-  // (Windows maps the Win32 error), leaving it 0 when there is no OS cause.
-  virtual bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, std::string& error,
-                          int& error_errno) = 0;
+  virtual bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) = 0;
   virtual void CloseDevice() = 0;
   [[nodiscard]] virtual bool IsOpen() const = 0;
 
