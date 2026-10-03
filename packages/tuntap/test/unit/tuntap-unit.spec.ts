@@ -1,8 +1,10 @@
 import assert from 'node:assert';
 import {afterEach, describe, it} from 'node:test';
 
-import {TunTap, TunnelForwarder} from '../../src/index.js';
+import {TunTap, TunTapPermissionError, TunnelForwarder} from '../../src/index.js';
 import {hasPrivileges} from '../utils.js';
+
+const NOBODY_UID = 65534;
 
 /**
  * NOTE: Most TunTap tests require elevated privileges (root on POSIX,
@@ -87,6 +89,25 @@ describe('TunTap Unit Tests', {timeout: 10000}, () => {
     await tun.removeRoute('fd01::/64');
     tun.close();
   });
+
+  it(
+    'should throw TunTapPermissionError without effective root',
+    {skip: process.platform === 'win32' ? 'Uses POSIX seteuid' : skipWithoutPrivileges},
+    async () => {
+      tun = new TunTap();
+      const activeTun = tun;
+      activeTun.open();
+      // Drop only the effective UID: the device stays open and the real UID (0) allows restoring it.
+      process.seteuid?.(NOBODY_UID);
+      try {
+        await assert.rejects(() => activeTun.configure('fd00::4', 1500), TunTapPermissionError);
+        await assert.rejects(() => activeTun.addRoute('fd02::/64'), TunTapPermissionError);
+        await assert.rejects(() => activeTun.removeRoute('fd02::/64'), TunTapPermissionError);
+      } finally {
+        process.seteuid?.(0);
+      }
+    },
+  );
 
   it('should not leave open handles after close', {skip: skipWithoutPrivileges}, async () => {
     tun = new TunTap();

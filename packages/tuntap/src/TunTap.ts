@@ -282,6 +282,9 @@ export class TunTap {
     try {
       await this.platformBackend.removeRoute(this.name, destination);
     } catch (err: unknown) {
+      if (err instanceof TunTapError) {
+        throw err;
+      }
       const message = (err as Error).message;
       if (message.includes('not in table') || message.includes('No such process')) {
         return;
