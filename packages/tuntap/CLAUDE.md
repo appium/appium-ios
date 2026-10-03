@@ -67,6 +67,7 @@ src/
     wintun_loader.*      # Resolves wintun.dll entry points at runtime
     tunnel_forwarder.*   # TLS <-> TUN forwarding loops + N-API TunnelForwarder
     tunnel_ssl.*         # OpenSSL client (lockdown cert or TLS-PSK)
+    socket_poll.h        # Shared socket poll loop (TLS connect + forwarder SSL I/O waits)
     ipv6_frame.h         # IPv6 frame length/reassembly helpers
     debug_log.*          # APPIUM_TUNTAP_DEBUG `[fwd]` logging to stderr
     win_delay_load_failure_hook.cc # Names the failing DLL/symbol on Windows delay-load errors
