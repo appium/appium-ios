@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.24.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.4...appium-ios-remotexpc@5.24.5) (2026-10-03)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
 ## [5.24.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.3...appium-ios-remotexpc@5.24.4) (2026-10-03)
 
 **Note:** Version bump only for package appium-ios-remotexpc

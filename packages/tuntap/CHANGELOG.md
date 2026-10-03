@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.5](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.4...appium-ios-tuntap@2.2.5) (2026-10-03)
+
+### Bug Fixes
+
+* classify TunTap.open() errors by errno code instead of message text ([#34](https://github.com/appium/appium-ios/issues/34)) ([2663782](https://github.com/appium/appium-ios/commit/266378211eaf7629d8e154fa3f35eb5a41e77eb5))
+
+
 ## [2.2.4](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.3...appium-ios-tuntap@2.2.4) (2026-10-03)
 
 ### Bug Fixes
