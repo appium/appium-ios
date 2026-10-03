@@ -8,7 +8,7 @@ import {exec} from 'teen_process';
 
 import type {HasNativeSimctl} from '../native/types.js';
 import type {CoreSimulator, HasSettings, KillUiClientOptions, RunOptions, StartUiClientOptions} from '../types.js';
-import {getMacAppPidByPath, getUiClientAppPath} from '../utils/index.js';
+import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, getMacAppPidByPath, getUiClientAppPath} from '../utils/index.js';
 import {compileSimulatorPreferences, updatePreferences} from './settings.js';
 
 const SIMULATOR_SHUTDOWN_TIMEOUT = 15 * 1000;
@@ -19,6 +19,9 @@ const STARTUP_LOCK = new AsyncLock();
 // Serializes the UI client check-then-launch sequence across OS processes (e.g. parallel
 // Appium server processes), since AsyncLock only protects a single Node.js process.
 const CROSS_PROCESS_LOCK_TIMEOUT_SEC = 180;
+// Shorter holds can be coalesced by DeviceHub and go unnoticed.
+const DEVICE_HUB_REFRESH_HOLD_MS = 500;
+const DEVICE_HUB_REFRESH_SUFFIX = ' (refresh)';
 
 type CoreSimulatorWithUiClient = CoreSimulator & HasSettings & HasNativeSimctl;
 
@@ -175,7 +178,7 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
   };
 
   const [devicePreferences, commonPreferences] = compileSimulatorPreferences.bind(this)(runOpts);
-  await updatePreferences.bind(this)(devicePreferences, commonPreferences);
+  const prefsUpdated = await updatePreferences.bind(this)(devicePreferences, commonPreferences);
 
   const timer = new timing.Timer().start();
   const withCrossProcessLock = util.getLockFileGuard(getUiClientLockFilePath(this.uiClientBundleId), {
@@ -216,6 +219,13 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
       } else {
         if (isServerRunning && uiClientPid) {
           this.log.info(`Both Simulator with UDID '${this.udid}' and the UI client are currently running`);
+          if (
+            prefsUpdated &&
+            this.uiClientBundleId === DEVICE_HUB_UI_CLIENT_BUNDLE_ID &&
+            typeof commonPreferences.PasteboardAutomaticSync === 'boolean'
+          ) {
+            await refreshDeviceHubPreferences.call(this);
+          }
           return false;
         }
         if (isServerRunning) {
@@ -243,4 +253,47 @@ export async function run(this: CoreSimulatorWithUiClient, opts: RunOptions = {}
       this.log.info(`Cannot disable Simulator keyboard introduction. Original error: ${e.message}`);
     }
   })();
+}
+
+/**
+ * DeviceHub reads per-device preferences only when the device's observed info changes. A short
+ * rename-and-restore makes the running app re-read them, without rebooting the device or the app.
+ * Best effort: failures are logged and never fail the run.
+ */
+async function refreshDeviceHubPreferences(this: CoreSimulatorWithUiClient): Promise<void> {
+  // The UDID match is case-insensitive since callers may pass a non-canonical one (see getSimulator's checkExistence)
+  const findDevice = async () =>
+    (await this._native.getDevices()).find(({udid}) => udid.toLowerCase() === this.udid.toLowerCase());
+  try {
+    // Always the live name, so that a stale cached value is never written back
+    const device = await findDevice();
+    if (!device) {
+      throw new Error('the Simulator is not listed in its device set');
+    }
+    const {udid, name: liveName} = device;
+    this.log.debug(`Refreshing '${this.uiClientBundleId}' preferences of '${this.udid}' by renaming it temporarily`);
+    if (liveName.endsWith(DEVICE_HUB_REFRESH_SUFFIX)) {
+      // An interrupted refresh left its temporary name behind. Restoring the original one is also the change DeviceHub reacts to
+      await this._native.renameDevice(udid, liveName.slice(0, -DEVICE_HUB_REFRESH_SUFFIX.length));
+      return;
+    }
+    const tempName = `${liveName}${DEVICE_HUB_REFRESH_SUFFIX}`;
+    await this._native.renameDevice(udid, tempName);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, DEVICE_HUB_REFRESH_HOLD_MS));
+    } finally {
+      // Leave a rename made by someone else during the hold intact
+      let currentName: string | undefined = tempName;
+      try {
+        currentName = (await findDevice())?.name;
+      } catch {
+        // Cannot tell, so restore anyway
+      }
+      if (currentName === tempName) {
+        await this._native.renameDevice(udid, liveName);
+      }
+    }
+  } catch (e: any) {
+    this.log.warn(`Cannot refresh '${this.uiClientBundleId}' preferences of '${this.udid}': ${e.message}`);
+  }
 }

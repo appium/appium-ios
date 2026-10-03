@@ -434,6 +434,7 @@ export interface NativeDeviceHandle {
   getBootStatus(): Promise<SimBootInfo | null>;
   shutdown(): Promise<void>;
   erase(): Promise<void>;
+  rename(name: string): Promise<void>;
   getenv(name: string): Promise<string>;
   installApp(path: string, options?: Record<string, unknown>): Promise<void>;
   uninstallApp(bundleId: string, options?: Record<string, unknown>): Promise<void>;

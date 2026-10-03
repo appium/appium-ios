@@ -186,6 +186,34 @@ async function injectGraphicsOrientation(plistPath: string, graphicsOrientation:
   await fs.promises.utimes(plistPath, new Date(), new Date());
 }
 
+/**
+ * Xcode 27's DeviceHub, when running, syncs the host pasteboard into every booted device by default,
+ * overwriting what the pasteboard test sets. It reads this per-device preference at boot, so call before boot.
+ */
+async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
+  const prefsDir = path.join(
+    os.homedir(),
+    'Library',
+    'Containers',
+    'com.apple.dt.Devices',
+    'Data',
+    'Library',
+    'Preferences',
+  );
+  // No sandbox container means DeviceHub never ran on this machine, so nothing can sync into the device
+  if (!fs.existsSync(prefsDir)) {
+    return;
+  }
+  await execFileAsync('defaults', [
+    'write',
+    path.join(prefsDir, 'com.apple.dt.Devices.plist'),
+    'DevicePreferences',
+    '-dict-add',
+    udid,
+    '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
+  ]);
+}
+
 interface RuntimeFixture {
   runtimeIdentifier: string;
   runtimeName: string;
@@ -317,6 +345,7 @@ describe('NativeSimctl integration', () => {
         // createDevice's own async work always resolves the device out of the transient Creating
         // state before the promise settles.
         assert.strictEqual(device.state, SimDeviceState.Shutdown);
+        await disableDeviceHubPasteboardSync(device.udid);
         await sim.bootDevice(device.udid);
         // SimDeviceState reaching Booted only means the OS kernel/launchd has started — data
         // migration and system-app (SpringBoard) startup can still take tens of seconds longer
@@ -350,6 +379,18 @@ describe('NativeSimctl integration', () => {
         // never been observed to regress back out of Booted while that settling happens.
         const found = (await sim.getDevices()).find((d) => d.udid === device!.udid);
         assert.strictEqual(found?.state, SimDeviceState.Booted);
+      });
+
+      it('renames the booted device and restores its name', async () => {
+        const nameOf = async () => (await sim.getDevices()).find((d) => d.udid === device!.udid)?.name;
+        const original = await nameOf();
+        await sim.renameDevice(device!.udid, `${original}-renamed`);
+        try {
+          assert.strictEqual(await nameOf(), `${original}-renamed`);
+        } finally {
+          await sim.renameDevice(device!.udid, original!);
+        }
+        assert.strictEqual(await nameOf(), original);
       });
 
       it('reads getenv from the booted device', async () => {

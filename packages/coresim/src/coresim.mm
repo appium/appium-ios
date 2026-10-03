@@ -685,6 +685,15 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
     });
   }
 
+  Napi::Value Rename(const Napi::CallbackInfo& info) {
+    id device = device_;
+    NSString* name = @(info[0].As<Napi::String>().Utf8Value().c_str());
+    return RunAsyncVoid(info.Env(), [device, name]() {
+      NSError* error = nil;
+      ThrowIfFailed(coresim::Rename(device, name, &error), error);
+    });
+  }
+
   Napi::Value Getenv(const Napi::CallbackInfo& info) {
     id device = device_;
     NSString* name = @(info[0].As<Napi::String>().Utf8Value().c_str());
@@ -1719,6 +1728,7 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::GetBootStatus>("getBootStatus"),
                       InstanceMethod<&NativeDevice::Shutdown>("shutdown"),
                       InstanceMethod<&NativeDevice::Erase>("erase"),
+                      InstanceMethod<&NativeDevice::Rename>("rename"),
                       InstanceMethod<&NativeDevice::Getenv>("getenv"),
                       InstanceMethod<&NativeDevice::InstallApp>("installApp"),
                       InstanceMethod<&NativeDevice::UninstallApp>("uninstallApp"),

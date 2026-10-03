@@ -20,6 +20,7 @@ declare module '../native-simctl.js' {
     shutdownDevice(udid: string): Promise<void>;
     shutdownAllDevices(): Promise<void>;
     eraseDevice(udid: string): Promise<void>;
+    renameDevice(udid: string, name: string): Promise<void>;
   }
 }
 
@@ -197,6 +198,16 @@ export async function shutdownAllDevices(this: NativeSimctl): Promise<void> {
  */
 export async function eraseDevice(this: NativeSimctl, udid: string): Promise<void> {
   return runCatchingAsync(async () => (await this._findDevice(udid)).erase());
+}
+
+/**
+ * Renames a device, in any state — the native equivalent of `xcrun simctl rename`.
+ *
+ * @param udid — UDID of the device to rename
+ * @param name — the new display name
+ */
+export async function renameDevice(this: NativeSimctl, udid: string, name: string): Promise<void> {
+  return runCatchingAsync(async () => (await this._findDevice(udid)).rename(name));
 }
 
 function toDeviceInfo(device: NativeDeviceHandle): SimDeviceInfo {
