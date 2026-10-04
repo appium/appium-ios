@@ -1,5 +1,7 @@
+import path from 'node:path';
+
 import type {SimPermissionService} from '@appium/coresim';
-import {timing, util} from '@appium/support';
+import {fs, plist, timing, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
 import {waitForCondition} from 'asyncbox';
 import {exec} from 'teen_process';
@@ -28,12 +30,17 @@ const SYSTEM_SERVICE_RESTART_TIMEOUT_MS = 15000;
 // revokePermission/resetPermission/getPermission deliberately exclude them, so these two keep going
 // through `xcrun simctl privacy` directly instead.
 const PERMISSIONS_APPLIED_VIA_SIMCTL = ['location', 'location-always'];
+// `notifications` is not a TCC row: SpringBoard keeps it per app in
+// Library/BulletinBoard/VersionedSectionInfo.plist and reads that file only on its own start,
+// hence SERVICES_NEED_SPRINGBOARD_RESTART.
+const NOTIFICATIONS_SERVICE = 'notifications';
+const NOTIFICATIONS_STATUSES: readonly string[] = [STATUS.YES, STATUS.NO, 'critical', STATUS.UNSET];
+const BULLETIN_BOARD_PLIST_WAIT_MS = 30000;
+// `all` applies the given status to every service in SERVICES. `notifications` and
+// `location`/`location-always` have to be listed explicitly.
+const ALL_SERVICES_KEY = 'all';
 // Every service @appium/coresim's SimPermissionService union supports — kept as an explicit list
 // (rather than trusting caller input) so an unsupported name fails with a clear error up front.
-// `notifications` is intentionally NOT supported: unlike every service below, it was never a plain
-// TCC row — the previous AppleSimulatorUtils-backed setter wrote a hand-built legacy bplist into
-// BulletinBoard/SectionInfo.plist (itself marked "Legacy"/"Xcode 9 support" in that project's own
-// source), which has no confirmed modern equivalent. This is a deliberate breaking change.
 const SERVICES: readonly SimPermissionService[] = Object.freeze([
   'calendar',
   'camera',
@@ -155,13 +162,14 @@ async function setAccess(
   const revokePermissions: string[] = [];
   const resetPermissions: string[] = [];
 
-  for (const serviceName in permissionsMapping) {
+  const mapping = expandAllServices(permissionsMapping);
+  for (const serviceName in mapping) {
     if (!PERMISSIONS_APPLIED_VIA_SIMCTL.includes(serviceName)) {
-      nativePermissions[serviceName] = permissionsMapping[serviceName];
+      nativePermissions[serviceName] = mapping[serviceName];
     } else {
       // xcrun simctl privacy expects to be lower case while the previous WIX-based path was upper
       // case. To keep the compatibility, we should convert here to lower case explicitly.
-      switch (permissionsMapping[serviceName]?.toLowerCase()) {
+      switch (mapping[serviceName]?.toLowerCase()) {
         case STATUS.YES:
           grantPermissions.push(serviceName);
           break;
@@ -173,7 +181,7 @@ async function setAccess(
           break;
         default:
           throw this.log.errorWithException(
-            `${serviceName} does not support ${permissionsMapping[serviceName]}. Please specify 'yes', 'no' or 'unset'.`,
+            `${serviceName} does not support ${mapping[serviceName]}. Please specify 'yes', 'no' or 'unset'.`,
           );
       }
     }
@@ -221,8 +229,8 @@ async function setAccess(
         ),
       );
     };
-    const shouldWaitForSystemReadiness = SERVICES_NEED_SPRINGBOARD_RESTART.some(
-      (service) => service in nativePermissions,
+    const shouldWaitForSystemReadiness = Object.keys(nativePermissions).some((name) =>
+      SERVICES_NEED_SPRINGBOARD_RESTART.includes(name.toLowerCase()),
     );
     if (shouldWaitForSystemReadiness) {
       const [didTimeout] = await runAndWaitForSystemReadiness.bind(this)(
@@ -249,6 +257,9 @@ async function setNativePermission(
   serviceName: string,
   status: string,
 ): Promise<void> {
+  if (serviceName.toLowerCase() === NOTIFICATIONS_SERVICE) {
+    return await setNotificationsPermission.call(this, bundleId, status);
+  }
   const service = toPermissionService(serviceName);
   switch (formatStatus(status).toLowerCase()) {
     case STATUS.YES:
@@ -263,6 +274,146 @@ async function setNativePermission(
       return await this._native.resetPermission(this.udid, service, bundleId);
     default:
       throw this.log.errorWithException(`'${status}' is not a supported value for '${serviceName}'`);
+  }
+}
+
+/**
+ * Replaces the `all` key with an explicit entry for every service in `SERVICES`. Explicitly
+ * listed services take precedence over `all`, e.g. `{all: 'yes', camera: 'no'}`.
+ */
+function expandAllServices(permissionsMapping: StringRecord): StringRecord {
+  const allKey = Object.keys(permissionsMapping).find((name) => name.toLowerCase() === ALL_SERVICES_KEY);
+  if (!allKey) {
+    return permissionsMapping;
+  }
+  const {[allKey]: status, ...rest} = permissionsMapping;
+  const explicitServices = new Set(Object.keys(rest).map((name) => name.toLowerCase()));
+  return {
+    ...Object.fromEntries(
+      SERVICES.filter((service) => !explicitServices.has(service)).map((service) => [service, status]),
+    ),
+    ...rest,
+  };
+}
+
+/**
+ * Writes the notifications section of `bundleId` into SpringBoard's BulletinBoard store and
+ * restarts SpringBoard so that it picks the change up. The file is kept immutable while
+ * SpringBoard is being stopped, so that the old process cannot flush its in-memory copy over it.
+ */
+async function setNotificationsPermission(
+  this: CoreSimulatorWithAppPermissions,
+  bundleId: string,
+  status: string,
+): Promise<void> {
+  const normalizedStatus = status.toLowerCase();
+  if (!NOTIFICATIONS_STATUSES.includes(normalizedStatus)) {
+    throw this.log.errorWithException(
+      `'${status}' is not a supported value for '${NOTIFICATIONS_SERVICE}'. ` +
+        `Please specify ${NOTIFICATIONS_STATUSES.map((s) => `'${s}'`).join(', ')}.`,
+    );
+  }
+  const plistPath = path.resolve(this.getDir(), 'Library', 'BulletinBoard', 'VersionedSectionInfo.plist');
+  try {
+    await waitForCondition(async () => await fs.exists(plistPath), {
+      waitMs: BULLETIN_BOARD_PLIST_WAIT_MS,
+      intervalMs: 1000,
+    });
+  } catch {
+    throw new Error(
+      `Cannot set the '${NOTIFICATIONS_SERVICE}' permission for '${bundleId}': '${plistPath}' does not exist. ` +
+        `Make sure the Simulator has been booted at least once.`,
+    );
+  }
+
+  await setImmutable(plistPath, true);
+  try {
+    const content = (await plist.parsePlistFile(plistPath)) as {sectionInfo?: Record<string, Uint8Array>};
+    const sectionInfo = content.sectionInfo ?? {};
+    if (normalizedStatus === STATUS.UNSET) {
+      delete sectionInfo[bundleId];
+    } else {
+      sectionInfo[bundleId] = buildNotificationsSectionInfo(bundleId, normalizedStatus);
+    }
+    content.sectionInfo = sectionInfo;
+    await setImmutable(plistPath, false);
+    await fs.writeFile(plistPath, plist.createPlist(content, false));
+    await setImmutable(plistPath, true);
+    await restartSpringBoard.call(this);
+  } finally {
+    await setImmutable(plistPath, false);
+  }
+}
+
+/**
+ * Builds the NSKeyedArchiver-encoded `BBSectionInfo` of `bundleId`, the same archive
+ * AppleSimulatorUtils writes (SetNotificationsPermission.m). SpringBoard migrates its
+ * `allowsNotifications` flag to the current `authorizationStatus` when it loads the section.
+ */
+function buildNotificationsSectionInfo(bundleId: string, status: string): Buffer {
+  const nil = {UID: 0};
+  return plist.createBinaryPlist({
+    $version: 100000,
+    $objects: [
+      '$null',
+      {
+        suppressFromSettings: false,
+        suppressedSettings: 0,
+        hideWeeApp: false,
+        sectionID: {UID: 2},
+        displayName: {UID: 5},
+        icon: nil,
+        displaysCriticalBulletins: false,
+        subsections: nil,
+        sectionInfoSettings: {UID: 3},
+        $class: {UID: 7},
+        sectionCategory: 0,
+        subsectionPriority: 0,
+        version: {UID: 6},
+        managedSectionInfoSettings: nil,
+        appName: {UID: 5},
+        sectionType: 0,
+        factorySectionID: nil,
+        dataProviderIDs: nil,
+        subsectionID: nil,
+        filters: nil,
+        pathToWeeAppPluginBundle: nil,
+      },
+      bundleId,
+      {
+        pushSettings: 63,
+        showsInNotificationCenter: true,
+        allowsNotifications: status !== STATUS.NO,
+        showsOnExternalDevices: true,
+        contentPreviewSetting: 0,
+        carPlaySetting: 0,
+        $class: {UID: 4},
+        showsInLockScreen: true,
+        alertType: 1,
+        criticalAlertSetting: status === 'critical' ? 2 : 0,
+      },
+      {$classname: 'BBSectionInfoSettings', $classes: ['BBSectionInfoSettings', 'NSObject']},
+      bundleId,
+      0,
+      {$classname: 'BBSectionInfo', $classes: ['BBSectionInfo', 'NSObject']},
+    ],
+    $archiver: 'NSKeyedArchiver',
+    $top: {root: {UID: 1}},
+  });
+}
+
+async function setImmutable(filePath: string, immutable: boolean): Promise<void> {
+  try {
+    await exec('chflags', [immutable ? 'uchg' : 'nouchg', filePath]);
+  } catch {}
+}
+
+async function restartSpringBoard(this: CoreSimulatorWithAppPermissions): Promise<void> {
+  const args = this.devicesSetPath ? ['--set', this.devicesSetPath] : [];
+  try {
+    await exec('xcrun', ['simctl', ...args, 'spawn', this.udid, 'launchctl', 'stop', SPRINGBOARD_BUNDLE_ID]);
+  } catch (err: any) {
+    this.log.warn(`Cannot restart SpringBoard: ${err.stderr || err.message}`);
   }
 }
 
