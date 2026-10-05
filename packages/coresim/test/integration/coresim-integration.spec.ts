@@ -9,6 +9,7 @@ import {after, before, describe, it} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 
+import {plist} from '@appium/support';
 import {waitForCondition} from 'asyncbox';
 
 import {
@@ -144,6 +145,37 @@ async function readTCCGranted(udid: string, tccService: string, bundleId: string
     (await query(
       `SELECT count(*) FROM access WHERE service='${tccService}' AND client='${bundleId}' AND client_type=0 AND auth_value=2`,
     )) > 0
+  );
+}
+
+/**
+ * Reads the notifications settings SpringBoard keeps for `bundleId` in its BulletinBoard store — the
+ * file grantPermission/revokePermission/resetPermission write the `notifications` service to.
+ *
+ * @returns the archived `BBSectionInfoSettings` object, `undefined` if the app has no section
+ */
+async function readNotificationsSettings(udid: string, bundleId: string): Promise<Record<string, unknown> | undefined> {
+  const storePath = path.join(
+    os.homedir(),
+    'Library',
+    'Developer',
+    'CoreSimulator',
+    'Devices',
+    udid,
+    'data',
+    'Library',
+    'BulletinBoard',
+    'VersionedSectionInfo.plist',
+  );
+  const store = (await plist.parsePlistFile(storePath)) as {sectionInfo?: Record<string, Uint8Array>};
+  const section = store.sectionInfo?.[bundleId];
+  if (!section) {
+    return undefined;
+  }
+  const {$objects} = plist.parsePlist(Buffer.from(section)) as {$objects: unknown[]};
+  return $objects.find(
+    (o): o is Record<string, unknown> =>
+      typeof o === 'object' && o !== null && ('authorizationStatus' in o || 'allowsNotifications' in o),
   );
 }
 
@@ -552,6 +584,63 @@ describe('NativeSimctl integration', () => {
           () => sim.grantPermission(device!.udid, 'camera', bundleId, 'limited'),
           /'limited' is only a valid status for the 'photos' service/,
         );
+      });
+
+      it('grants, revokes, and resets notifications, picked up by a restarted SpringBoard', async () => {
+        // A preinstalled app, so that SpringBoard keeps its section.
+        const bundleId = 'com.apple.mobilesafari';
+        const springBoardPid = async () =>
+          (await sim.listProcesses(device!.udid)).find(({name}) => name === 'com.apple.SpringBoard')?.pid;
+        // The section is written with the legacy `allowsNotifications` flag; SpringBoard replaces it
+        // with `authorizationStatus` (1 denied, 2 authorized) only once it has loaded the section.
+        const waitForAuthorizationStatus = async (status: number) =>
+          await waitForCondition(
+            async () => (await readNotificationsSettings(device!.udid, bundleId))?.authorizationStatus === status,
+            {waitMs: 30_000, intervalMs: 500},
+          );
+
+        await sim.resetPermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        await waitForCondition(async () => Number.isInteger(await springBoardPid()), {
+          waitMs: 30_000,
+          intervalMs: 500,
+        });
+        const initialSpringBoardPid = await springBoardPid();
+
+        await sim.grantPermission(device!.udid, 'notifications', bundleId);
+        await waitForAuthorizationStatus(2);
+        const newSpringBoardPid = await springBoardPid();
+        assert.ok(Number.isInteger(newSpringBoardPid));
+        assert.notStrictEqual(newSpringBoardPid, initialSpringBoardPid);
+
+        await sim.revokePermission(device!.udid, 'notifications', bundleId);
+        await waitForAuthorizationStatus(1);
+
+        await sim.grantPermission(device!.udid, 'notifications', bundleId, 'critical');
+        await waitForAuthorizationStatus(2);
+        assert.strictEqual((await readNotificationsSettings(device!.udid, bundleId))?.criticalAlertSetting, 2);
+
+        await sim.resetPermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        // Later tests talk to SpringBoard, so let the last restart settle.
+        await waitForCondition(async () => Number.isInteger(await springBoardPid()), {
+          waitMs: 30_000,
+          intervalMs: 500,
+        });
+      });
+
+      it('rejects "critical" for any service but notifications, and reading the notifications status', async () => {
+        const bundleId = 'io.appium.coresim.doesnotexist';
+
+        await assert.rejects(
+          () => sim.grantPermission(device!.udid, 'camera', bundleId, 'critical'),
+          /'critical' is only a valid status for the 'notifications' service/,
+        );
+        await assert.rejects(
+          () => sim.grantPermission(device!.udid, 'notifications', bundleId, 'limited'),
+          /'limited' is only a valid status for the 'photos' service/,
+        );
+        await assert.rejects(() => sim.getPermission(device!.udid, 'notifications', bundleId), /cannot be read/);
       });
 
       it('adds media to the Photos library', async () => {
@@ -1202,7 +1291,11 @@ describe('NativeSimctl integration', () => {
                 throw err;
               }
             },
-            {waitMs: 30000, intervalMs: 2000, error: 'expected openUrl to eventually succeed once the device settled'},
+            {
+              waitMs: 30000,
+              intervalMs: 2000,
+              error: 'expected openUrl to eventually succeed once the device settled',
+            },
           );
         });
 

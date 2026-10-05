@@ -87,9 +87,10 @@ export type SimPermissionStatus = 'unset' | 'denied' | 'granted' | 'limited';
 
 /**
  * A privacy permission grantable via `NativeSimctl.grantPermission`/`revokePermission`/
- * `resetPermission`. Each is backed by a row in the simulator's own TCC (privacy) database —
- * `location` isn't included since CoreLocation simulation has its own subsystem, not a plain TCC
- * row (see CLAUDE.md).
+ * `resetPermission`. Each except `notifications` is backed by a row in the simulator's own TCC
+ * (privacy) database — `location` isn't included since CoreLocation simulation has its own
+ * subsystem, not a plain TCC row (see CLAUDE.md). `notifications` is SpringBoard's own setting:
+ * changing it restarts SpringBoard, and its status can't be read back via `getPermission`.
  */
 export type SimPermissionService =
   | 'calendar'
@@ -101,6 +102,7 @@ export type SimPermissionService =
   | 'medialibrary'
   | 'microphone'
   | 'motion'
+  | 'notifications'
   | 'photos'
   | 'reminders'
   | 'siri'
@@ -430,6 +432,7 @@ export interface NativeDeviceHandle {
   deviceTypeIdentifier(): string;
   runtimeIdentifier(): string;
   runtimeRootPath(): string;
+  dataPath(): string;
   boot(options?: Record<string, unknown>): Promise<void>;
   getBootStatus(): Promise<SimBootInfo | null>;
   shutdown(): Promise<void>;

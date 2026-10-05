@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import {afterEach, beforeEach, describe, it, mock} from 'node:test';
 
-import {fs, plist, tempDir} from '@appium/support';
-import * as asyncbox from 'asyncbox';
 import sinon from 'sinon';
 import * as teenProcess from 'teen_process';
 
 let currentExec: (...args: any[]) => any = async () => ({stdout: '', stderr: ''});
-let currentWaitForCondition: (...args: any[]) => any = asyncbox.waitForCondition;
 
 mock.module('teen_process', {
   namedExports: {
@@ -16,18 +12,11 @@ mock.module('teen_process', {
     exec: (...args: any[]) => currentExec(...args),
   },
 });
-mock.module('asyncbox', {
-  namedExports: {
-    ...asyncbox,
-    waitForCondition: (...args: any[]) => currentWaitForCondition(...args),
-  },
-});
 
 const {setPermissions} = await import('../../lib/extensions/permissions.js');
 
 const UDID = 'sim-udid';
 const BUNDLE_ID = 'com.example.app';
-const OTHER_BUNDLE_ID = 'com.example.other';
 const TCC_SERVICES = [
   'calendar',
   'camera',
@@ -48,36 +37,15 @@ const TCC_SERVICES = [
 describe('permissions', function () {
   let sandbox: sinon.SinonSandbox;
   let exec: sinon.SinonStub;
-  let dataDir: string;
-  let plistPath: string;
   let sim: any;
 
-  async function readStore(): Promise<{sectionInfoVersionNumber: number; sectionInfo: Record<string, Buffer>}> {
-    return (await plist.parsePlistFile(plistPath)) as any;
-  }
-
-  async function readSection(bundleId: string): Promise<{sectionID: string; displayName: string; settings: any}> {
-    const {sectionInfo} = await readStore();
-    const {$objects} = plist.parsePlist(Buffer.from(sectionInfo[bundleId])) as any;
-    return {sectionID: $objects[2], displayName: $objects[5], settings: $objects[3]};
-  }
-
-  beforeEach(async function () {
+  beforeEach(function () {
     sandbox = sinon.createSandbox();
     exec = sandbox.stub().resolves({stdout: '', stderr: ''});
     currentExec = exec;
-    currentWaitForCondition = asyncbox.waitForCondition;
-    dataDir = await tempDir.openDir();
-    plistPath = path.join(dataDir, 'Library', 'BulletinBoard', 'VersionedSectionInfo.plist');
-    await fs.mkdir(path.dirname(plistPath), {recursive: true});
-    await fs.writeFile(
-      plistPath,
-      plist.createPlist({sectionInfoVersionNumber: 2, sectionInfo: {[OTHER_BUNDLE_ID]: Buffer.from('other')}}, false),
-    );
     sim = {
       udid: UDID,
       log: {debug: sandbox.stub(), warn: sandbox.stub(), errorWithException: (message: string) => new Error(message)},
-      getDir: () => dataDir,
       ps: sandbox.stub().resolves([]),
       _native: {
         grantPermission: sandbox.stub().resolves(),
@@ -87,59 +55,26 @@ describe('permissions', function () {
     };
   });
 
-  afterEach(async function () {
+  afterEach(function () {
     sandbox.restore();
-    await fs.rimraf(dataDir);
   });
 
   describe('notifications', function () {
-    for (const [status, allowsNotifications, criticalAlertSetting] of [
-      ['yes', true, 0],
-      ['YES', true, 0],
-      ['no', false, 0],
-      ['critical', true, 2],
+    for (const [status, method, extraArgs] of [
+      ['yes', 'grantPermission', []],
+      ['YES', 'grantPermission', []],
+      ['critical', 'grantPermission', ['critical']],
+      ['no', 'revokePermission', []],
+      ['unset', 'resetPermission', []],
     ] as const) {
-      it(`writes the BulletinBoard section of the app for '${status}'`, async function () {
+      it(`passes '${status}' to @appium/coresim`, async function () {
         await setPermissions.call(sim, BUNDLE_ID, {notifications: status});
 
-        const {sectionID, displayName, settings} = await readSection(BUNDLE_ID);
-        assert.equal(sectionID, BUNDLE_ID);
-        assert.equal(displayName, BUNDLE_ID);
-        assert.equal(settings.allowsNotifications, allowsNotifications);
-        assert.equal(settings.criticalAlertSetting, criticalAlertSetting);
-        const {sectionInfoVersionNumber, sectionInfo} = await readStore();
-        assert.equal(sectionInfoVersionNumber, 2);
-        assert.equal(Buffer.from(sectionInfo[OTHER_BUNDLE_ID]).toString(), 'other');
-        sinon.assert.notCalled(sim._native.grantPermission);
+        sinon.assert.calledOnce(sim._native[method]);
+        assert.deepEqual(sim._native[method].firstCall.args, [UDID, 'notifications', BUNDLE_ID, ...extraArgs]);
+        sinon.assert.notCalled(exec);
       });
     }
-
-    it(`removes the BulletinBoard section of the app for 'unset'`, async function () {
-      await setPermissions.call(sim, BUNDLE_ID, {notifications: 'yes'});
-      await setPermissions.call(sim, BUNDLE_ID, {notifications: 'unset'});
-
-      const {sectionInfo} = await readStore();
-      assert.deepEqual(Object.keys(sectionInfo), [OTHER_BUNDLE_ID]);
-    });
-
-    it('restarts SpringBoard and leaves the store writable', async function () {
-      sim.devicesSetPath = '/tmp/device-set';
-      await setPermissions.call(sim, BUNDLE_ID, {notifications: 'yes'});
-
-      sinon.assert.calledWithExactly(exec, 'xcrun', [
-        'simctl',
-        '--set',
-        '/tmp/device-set',
-        'spawn',
-        UDID,
-        'launchctl',
-        'stop',
-        'com.apple.SpringBoard',
-      ]);
-      const chflagsCalls = exec.getCalls().filter(({args: [cmd]}) => cmd === 'chflags');
-      assert.ok(chflagsCalls.length > 0);
-      assert.deepEqual(chflagsCalls.at(-1)!.args, ['chflags', ['nouchg', plistPath]]);
-    });
 
     it('waits for SpringBoard and Spotlight to restart', async function () {
       sim.ps.onFirstCall().resolves([
@@ -151,32 +86,20 @@ describe('permissions', function () {
         {name: 'com.apple.Spotlight', pid: 4},
       ]);
 
-      await setPermissions.call(sim, BUNDLE_ID, {notifications: 'yes', camera: 'yes'});
+      await setPermissions.call(sim, BUNDLE_ID, {Notifications: 'yes', camera: 'yes'});
 
       assert.ok(sim.ps.callCount >= 3);
       sinon.assert.notCalled(sim.log.warn);
-      sinon.assert.calledOnceWithExactly(sim._native.grantPermission, UDID, 'camera', BUNDLE_ID);
+      sinon.assert.calledWithExactly(sim._native.grantPermission, UDID, 'notifications', BUNDLE_ID);
+      sinon.assert.calledWithExactly(sim._native.grantPermission, UDID, 'camera', BUNDLE_ID);
     });
 
-    it('rejects unsupported values without touching the store', async function () {
-      const before = await fs.readFile(plistPath);
-
+    it('rejects unsupported values', async function () {
       await assert.rejects(
         setPermissions.call(sim, BUNDLE_ID, {notifications: 'maybe'}),
         /'maybe' is not a supported value for 'notifications'/,
       );
-
-      assert.deepEqual(await fs.readFile(plistPath), before);
-      sinon.assert.notCalled(exec);
-    });
-
-    it('fails with a clear error if the BulletinBoard store does not exist', async function () {
-      await fs.rimraf(plistPath);
-      currentWaitForCondition = async () => {
-        throw new Error('Condition unmet');
-      };
-
-      await assert.rejects(setPermissions.call(sim, BUNDLE_ID, {notifications: 'yes'}), /does not exist/);
+      sinon.assert.notCalled(sim._native.grantPermission);
     });
   });
 
@@ -188,6 +111,7 @@ describe('permissions', function () {
         sim._native.grantPermission.getCalls().map(({args}: sinon.SinonSpyCall) => args),
         TCC_SERVICES.map((service) => [UDID, service, BUNDLE_ID]),
       );
+      sinon.assert.notCalled(sim.ps);
       sinon.assert.notCalled(exec);
     });
 

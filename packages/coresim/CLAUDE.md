@@ -117,6 +117,13 @@ toolchain (`make` and `xcodebuild`).
   writing directly to the simulator's own TCC (privacy) SQLite database**, not by calling
   CoreSimulator's private privacy API — that API requires a process entitlement no ordinary npm
   package can obtain. `location` isn't supported this way since it isn't a plain TCC row.
+- **`notifications` isn't a TCC row either** — SpringBoard keeps it in
+  `Library/BulletinBoard/VersionedSectionInfo.plist`, reads that file only on its own start and
+  rewrites it from memory (notably a few seconds after each start). So the permission commands pause
+  SpringBoard (`SIGSTOP`) while writing the app's section, then `launchctl stop` it with the file kept
+  `uchg`-immutable until the old process is gone. Confirmed empirically on fresh iOS 18.2/26.5
+  devices: without the pause, a write racing SpringBoard's own post-start rewrite was lost in 2–3 of
+  20 operations. Its status can't be read back (`getPermission` rejects).
 - **Several CoreSimulator operations reject if the device isn't in the exact state they expect**
   (e.g. erasing requires `Shutdown`; shutting down an already-`Shutdown` device also rejects) rather
   than being idempotent no-ops — callers need to check state first.

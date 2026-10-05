@@ -619,6 +619,12 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
       return Napi::String::New(info.Env(), coresim::RuntimeRootPath(runtime).UTF8String);
     });
   }
+  Napi::Value DataPath(const Napi::CallbackInfo& info) {
+    return CatchToJs(info.Env(), [&]() -> Napi::Value {
+      NSString* dataPath = coresim::DeviceDataPath(device_);
+      return Napi::String::New(info.Env(), dataPath == nil ? "" : dataPath.UTF8String);
+    });
+  }
 
   // Bridges SimDevice's GCD-completion-block-based bootAsyncWithOptions:completionQueue:
   // completionHandler: — this is what replaces the CLI's bootstatus poll-until-timeout race with
@@ -1724,6 +1730,7 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::DeviceTypeIdentifier>("deviceTypeIdentifier"),
                       InstanceMethod<&NativeDevice::RuntimeIdentifier>("runtimeIdentifier"),
                       InstanceMethod<&NativeDevice::RuntimeRootPath>("runtimeRootPath"),
+                      InstanceMethod<&NativeDevice::DataPath>("dataPath"),
                       InstanceMethod<&NativeDevice::Boot>("boot"),
                       InstanceMethod<&NativeDevice::GetBootStatus>("getBootStatus"),
                       InstanceMethod<&NativeDevice::Shutdown>("shutdown"),

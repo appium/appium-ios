@@ -1,7 +1,5 @@
-import path from 'node:path';
-
 import type {SimPermissionService} from '@appium/coresim';
-import {fs, plist, timing, util} from '@appium/support';
+import {timing, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
 import {waitForCondition} from 'asyncbox';
 import {exec} from 'teen_process';
@@ -20,6 +18,7 @@ const STATUS = Object.freeze({
   NO: 'no',
   YES: 'yes',
   LIMITED: 'limited',
+  CRITICAL: 'critical',
 } as const);
 const SPRINGBOARD_BUNDLE_ID = 'com.apple.SpringBoard';
 const SPOTLIGHT_BUNDLE_ID = 'com.apple.Spotlight';
@@ -30,14 +29,8 @@ const SYSTEM_SERVICE_RESTART_TIMEOUT_MS = 15000;
 // revokePermission/resetPermission/getPermission deliberately exclude them, so these two keep going
 // through `xcrun simctl privacy` directly instead.
 const PERMISSIONS_APPLIED_VIA_SIMCTL = ['location', 'location-always'];
-// `notifications` is not a TCC row: SpringBoard keeps it per app in
-// Library/BulletinBoard/VersionedSectionInfo.plist and reads that file only on its own start,
-// hence SERVICES_NEED_SPRINGBOARD_RESTART.
-const NOTIFICATIONS_SERVICE = 'notifications';
-const NOTIFICATIONS_STATUSES: readonly string[] = [STATUS.YES, STATUS.NO, 'critical', STATUS.UNSET];
-const BULLETIN_BOARD_PLIST_WAIT_MS = 30000;
-// `all` applies the given status to every service in SERVICES. `notifications` and
-// `location`/`location-always` have to be listed explicitly.
+// `all` applies the given status to every service in SERVICES except `notifications`, which
+// restarts SpringBoard. `notifications` and `location`/`location-always` have to be listed explicitly.
 const ALL_SERVICES_KEY = 'all';
 // Every service @appium/coresim's SimPermissionService union supports — kept as an explicit list
 // (rather than trusting caller input) so an unsupported name fails with a clear error up front.
@@ -51,6 +44,7 @@ const SERVICES: readonly SimPermissionService[] = Object.freeze([
   'medialibrary',
   'microphone',
   'motion',
+  'notifications',
   'photos',
   'reminders',
   'siri',
@@ -257,9 +251,6 @@ async function setNativePermission(
   serviceName: string,
   status: string,
 ): Promise<void> {
-  if (serviceName.toLowerCase() === NOTIFICATIONS_SERVICE) {
-    return await setNotificationsPermission.call(this, bundleId, status);
-  }
   const service = toPermissionService(serviceName);
   switch (formatStatus(status).toLowerCase()) {
     case STATUS.YES:
@@ -268,6 +259,10 @@ async function setNativePermission(
       // Only valid for 'photos' ("selected photos" access) — @appium/coresim rejects it for every
       // other service with a typed error, which is left to propagate as-is.
       return await this._native.grantPermission(this.udid, service, bundleId, 'limited');
+    case STATUS.CRITICAL:
+      // Only valid for 'notifications' (critical alerts allowed too) — rejected by @appium/coresim
+      // for every other service the same way as 'limited'.
+      return await this._native.grantPermission(this.udid, service, bundleId, 'critical');
     case STATUS.NO:
       return await this._native.revokePermission(this.udid, service, bundleId);
     case STATUS.UNSET:
@@ -278,8 +273,8 @@ async function setNativePermission(
 }
 
 /**
- * Replaces the `all` key with an explicit entry for every service in `SERVICES`. Explicitly
- * listed services take precedence over `all`, e.g. `{all: 'yes', camera: 'no'}`.
+ * Replaces the `all` key with an explicit entry for every service it covers (see ALL_SERVICES_KEY).
+ * Explicitly listed services take precedence over `all`, e.g. `{all: 'yes', camera: 'no'}`.
  */
 function expandAllServices(permissionsMapping: StringRecord): StringRecord {
   const allKey = Object.keys(permissionsMapping).find((name) => name.toLowerCase() === ALL_SERVICES_KEY);
@@ -290,131 +285,12 @@ function expandAllServices(permissionsMapping: StringRecord): StringRecord {
   const explicitServices = new Set(Object.keys(rest).map((name) => name.toLowerCase()));
   return {
     ...Object.fromEntries(
-      SERVICES.filter((service) => !explicitServices.has(service)).map((service) => [service, status]),
+      SERVICES.filter(
+        (service) => !SERVICES_NEED_SPRINGBOARD_RESTART.includes(service) && !explicitServices.has(service),
+      ).map((service) => [service, status]),
     ),
     ...rest,
   };
-}
-
-/**
- * Writes the notifications section of `bundleId` into SpringBoard's BulletinBoard store and
- * restarts SpringBoard so that it picks the change up. The file is kept immutable while
- * SpringBoard is being stopped, so that the old process cannot flush its in-memory copy over it.
- */
-async function setNotificationsPermission(
-  this: CoreSimulatorWithAppPermissions,
-  bundleId: string,
-  status: string,
-): Promise<void> {
-  const normalizedStatus = status.toLowerCase();
-  if (!NOTIFICATIONS_STATUSES.includes(normalizedStatus)) {
-    throw this.log.errorWithException(
-      `'${status}' is not a supported value for '${NOTIFICATIONS_SERVICE}'. ` +
-        `Please specify ${NOTIFICATIONS_STATUSES.map((s) => `'${s}'`).join(', ')}.`,
-    );
-  }
-  const plistPath = path.resolve(this.getDir(), 'Library', 'BulletinBoard', 'VersionedSectionInfo.plist');
-  try {
-    await waitForCondition(async () => await fs.exists(plistPath), {
-      waitMs: BULLETIN_BOARD_PLIST_WAIT_MS,
-      intervalMs: 1000,
-    });
-  } catch {
-    throw new Error(
-      `Cannot set the '${NOTIFICATIONS_SERVICE}' permission for '${bundleId}': '${plistPath}' does not exist. ` +
-        `Make sure the Simulator has been booted at least once.`,
-    );
-  }
-
-  await setImmutable(plistPath, true);
-  try {
-    const content = (await plist.parsePlistFile(plistPath)) as {sectionInfo?: Record<string, Uint8Array>};
-    const sectionInfo = content.sectionInfo ?? {};
-    if (normalizedStatus === STATUS.UNSET) {
-      delete sectionInfo[bundleId];
-    } else {
-      sectionInfo[bundleId] = buildNotificationsSectionInfo(bundleId, normalizedStatus);
-    }
-    content.sectionInfo = sectionInfo;
-    await setImmutable(plistPath, false);
-    await fs.writeFile(plistPath, plist.createPlist(content, false));
-    await setImmutable(plistPath, true);
-    await restartSpringBoard.call(this);
-  } finally {
-    await setImmutable(plistPath, false);
-  }
-}
-
-/**
- * Builds the NSKeyedArchiver-encoded `BBSectionInfo` of `bundleId`, the same archive
- * AppleSimulatorUtils writes (SetNotificationsPermission.m). SpringBoard migrates its
- * `allowsNotifications` flag to the current `authorizationStatus` when it loads the section.
- */
-function buildNotificationsSectionInfo(bundleId: string, status: string): Buffer {
-  const nil = {UID: 0};
-  return plist.createBinaryPlist({
-    $version: 100000,
-    $objects: [
-      '$null',
-      {
-        suppressFromSettings: false,
-        suppressedSettings: 0,
-        hideWeeApp: false,
-        sectionID: {UID: 2},
-        displayName: {UID: 5},
-        icon: nil,
-        displaysCriticalBulletins: false,
-        subsections: nil,
-        sectionInfoSettings: {UID: 3},
-        $class: {UID: 7},
-        sectionCategory: 0,
-        subsectionPriority: 0,
-        version: {UID: 6},
-        managedSectionInfoSettings: nil,
-        appName: {UID: 5},
-        sectionType: 0,
-        factorySectionID: nil,
-        dataProviderIDs: nil,
-        subsectionID: nil,
-        filters: nil,
-        pathToWeeAppPluginBundle: nil,
-      },
-      bundleId,
-      {
-        pushSettings: 63,
-        showsInNotificationCenter: true,
-        allowsNotifications: status !== STATUS.NO,
-        showsOnExternalDevices: true,
-        contentPreviewSetting: 0,
-        carPlaySetting: 0,
-        $class: {UID: 4},
-        showsInLockScreen: true,
-        alertType: 1,
-        criticalAlertSetting: status === 'critical' ? 2 : 0,
-      },
-      {$classname: 'BBSectionInfoSettings', $classes: ['BBSectionInfoSettings', 'NSObject']},
-      bundleId,
-      0,
-      {$classname: 'BBSectionInfo', $classes: ['BBSectionInfo', 'NSObject']},
-    ],
-    $archiver: 'NSKeyedArchiver',
-    $top: {root: {UID: 1}},
-  });
-}
-
-async function setImmutable(filePath: string, immutable: boolean): Promise<void> {
-  try {
-    await exec('chflags', [immutable ? 'uchg' : 'nouchg', filePath]);
-  } catch {}
-}
-
-async function restartSpringBoard(this: CoreSimulatorWithAppPermissions): Promise<void> {
-  const args = this.devicesSetPath ? ['--set', this.devicesSetPath] : [];
-  try {
-    await exec('xcrun', ['simctl', ...args, 'spawn', this.udid, 'launchctl', 'stop', SPRINGBOARD_BUNDLE_ID]);
-  } catch (err: any) {
-    this.log.warn(`Cannot restart SpringBoard: ${err.stderr || err.message}`);
-  }
 }
 
 /**
