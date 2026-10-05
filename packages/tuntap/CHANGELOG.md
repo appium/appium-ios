@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.6](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.5...appium-ios-tuntap@2.2.6) (2026-10-05)
+
+### Code Refactoring
+
+* share one socket poll loop between TLS connect and forwarder ([#36](https://github.com/appium/appium-ios/issues/36)) ([9df4615](https://github.com/appium/appium-ios/commit/9df46155a357b5865f6f5e5fc1fd5406acd8ad7c))
+
+
 ## [2.2.5](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.4...appium-ios-tuntap@2.2.5) (2026-10-03)
 
 ### Bug Fixes

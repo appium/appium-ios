@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.11.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.11.0...@appium/coresim@1.11.1) (2026-10-05)
+
+### Performance Improvements
+
+* **coresim:** reuse one CIContext across getScreenshot calls ([#44](https://github.com/appium/appium-ios/issues/44)) ([ecf353b](https://github.com/appium/appium-ios/commit/ecf353bad640c43c85cf8fa26cb7759b8a9570a0))
+
+
 ## [1.11.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.10.2...@appium/coresim@1.11.0) (2026-10-03)
 
 ### Features
