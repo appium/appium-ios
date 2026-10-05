@@ -7,7 +7,6 @@
 #include <limits>
 #ifndef _WIN32
 #include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
 
 #include <arpa/inet.h>
@@ -20,20 +19,13 @@
 
 #include "debug_log.h"
 #include "ipv6_frame.h"
+#include "socket_poll.h"
 
 namespace {
 
 constexpr const char* kCdTunnelMagic = "CDTunnel";
 constexpr size_t kCdTunnelHeaderSize = 10;
 constexpr size_t kMaxIngressBuffer = size_t{256} * 1024;
-
-#ifdef _WIN32
-constexpr short kPollIn = POLLRDNORM;
-constexpr short kPollOut = POLLWRNORM;
-#else
-constexpr short kPollIn = POLLIN;
-constexpr short kPollOut = POLLOUT;
-#endif
 
 using Clock = std::chrono::steady_clock;
 using TimePoint = Clock::time_point;
@@ -310,57 +302,6 @@ void DebugSslError(const char* tag, int ssl_error) {
                    reason == nullptr ? "(none)" : reason, socket_error);
 }
 
-bool PollFd(int fd, short events, const std::atomic<bool>* running, TimePoint deadline) {
-  if (fd < 0) {
-    return false;
-  }
-#ifdef _WIN32
-  WSAPOLLFD pfd{};
-  pfd.fd = static_cast<SOCKET>(fd);
-#else
-  struct pollfd pfd {};
-  pfd.fd = fd;
-#endif
-  pfd.events = events;
-  for (;;) {
-    if (running != nullptr && !running->load()) {
-      return false;
-    }
-    const TimePoint now = Clock::now();
-    if (now >= deadline) {
-      return false;
-    }
-    const auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
-    const int timeout_ms = remaining_ms > 200 ? 200 : static_cast<int>(remaining_ms);
-#ifdef _WIN32
-    const int rc = WSAPoll(&pfd, 1, timeout_ms);
-#else
-    const int rc = poll(&pfd, 1, timeout_ms);
-#endif
-    if (rc > 0) {
-      if ((pfd.revents & (POLLERR | POLLHUP
-#ifndef _WIN32
-                          | POLLNVAL
-#endif
-                          )) != 0) {
-        return false;
-      }
-      return (pfd.revents & events) != 0;
-    }
-    if (rc == 0) {
-      continue;
-    }
-#ifdef _WIN32
-    if (WSAGetLastError() == WSAEINTR) {
-#else
-    if (errno == EINTR) {
-#endif
-      continue;
-    }
-    return false;
-  }
-}
-
 }  // namespace
 
 TunnelForwarder::~TunnelForwarder() { Stop(); }
@@ -556,11 +497,11 @@ ssize_t TunnelForwarder::SslReadChunk(uint8_t* buf, size_t max_len, bool only_wh
         return -1;
       }
       fd = SSL_get_fd(ssl);
-      poll_events = (err == SSL_ERROR_WANT_READ) ? kPollIn : kPollOut;
+      poll_events = (err == SSL_ERROR_WANT_READ) ? tuntap::kPollIn : tuntap::kPollOut;
     }
 
     const std::atomic<bool>* running = only_while_running ? &running_ : nullptr;
-    if (!PollFd(fd, poll_events, running, deadline)) {
+    if (tuntap::PollSocket(fd, poll_events, deadline, running) != tuntap::PollResult::Ready) {
       return -1;
     }
   }
@@ -617,11 +558,11 @@ ssize_t TunnelForwarder::SslWriteAll(const uint8_t* data, size_t len, bool only_
         return -1;
       }
       fd = SSL_get_fd(ssl);
-      poll_events = (err == SSL_ERROR_WANT_READ) ? kPollIn : kPollOut;
+      poll_events = (err == SSL_ERROR_WANT_READ) ? tuntap::kPollIn : tuntap::kPollOut;
     }
 
     const std::atomic<bool>* running = only_while_running ? &running_ : nullptr;
-    if (!PollFd(fd, poll_events, running, deadline)) {
+    if (tuntap::PollSocket(fd, poll_events, deadline, running) != tuntap::PollResult::Ready) {
       return -1;
     }
   }

@@ -6,9 +6,10 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
 #endif
+
+#include "socket_poll.h"
 
 #include <chrono>
 #include <cerrno>
@@ -24,14 +25,6 @@
 namespace {
 
 constexpr const char* kAppleTvPskCiphers = "PSK-AES256-CBC-SHA:PSK-AES128-CBC-SHA:PSK-3DES-EDE-CBC-SHA:PSK-RC4-SHA:PSK";
-
-#ifdef _WIN32
-constexpr short kPollIn = POLLRDNORM;
-constexpr short kPollOut = POLLWRNORM;
-#else
-constexpr short kPollIn = POLLIN;
-constexpr short kPollOut = POLLOUT;
-#endif
 
 bool LoadPem(SSL_CTX* ctx, const std::string& pem, bool is_cert, std::string& error) {
   BIO* bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
@@ -119,62 +112,14 @@ std::string DescribeConnectFailure(int ssl_error) {
   return "SSL_connect failed: ssl_error=" + std::to_string(ssl_error) + " system_error=" + std::to_string(system_error);
 }
 
-enum class PollConnectResult : std::uint8_t { Ready, Timeout, Hangup };
-
-PollConnectResult PollConnectFd(int fd, short events, std::chrono::steady_clock::time_point deadline) {
-#ifdef _WIN32
-  WSAPOLLFD pfd{};
-  pfd.fd = static_cast<SOCKET>(fd);
-#else
-  struct pollfd pfd {};
-  pfd.fd = fd;
-#endif
-  pfd.events = events;
-  using Clock = std::chrono::steady_clock;
-  for (;;) {
-    const Clock::time_point now = Clock::now();
-    if (now >= deadline) {
-      return PollConnectResult::Timeout;
-    }
-    const auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
-    const int timeout_ms = remaining_ms > 5000 ? 5000 : static_cast<int>(remaining_ms);
-#ifdef _WIN32
-    const int rc = WSAPoll(&pfd, 1, timeout_ms);
-#else
-    const int rc = poll(&pfd, 1, timeout_ms);
-#endif
-    if (rc > 0) {
-      if ((pfd.revents & (POLLERR | POLLHUP
-#ifndef _WIN32
-                          | POLLNVAL
-#endif
-                          )) != 0) {
-        return PollConnectResult::Hangup;
-      }
-      return (pfd.revents & events) != 0 ? PollConnectResult::Ready : PollConnectResult::Timeout;
-    }
-    if (rc == 0) {
-      continue;
-    }
-#ifdef _WIN32
-    if (WSAGetLastError() == WSAEINTR) {
-#else
-    if (errno == EINTR) {
-#endif
-      continue;
-    }
-    return PollConnectResult::Timeout;
-  }
-}
-
 /** Waits for `events` during SSL_connect; on failure sets `error` naming a timeout or a dropped peer. */
 bool WaitForConnectIo(int fd, short events, const char* direction, std::chrono::steady_clock::time_point deadline,
                       std::string& error) {
-  const PollConnectResult result = PollConnectFd(fd, events, deadline);
-  if (result == PollConnectResult::Ready) {
+  const tuntap::PollResult result = tuntap::PollSocket(fd, events, deadline);
+  if (result == tuntap::PollResult::Ready) {
     return true;
   }
-  error = result == PollConnectResult::Hangup
+  error = result == tuntap::PollResult::Hangup
               ? std::string("SSL_connect failed: connection closed by peer while waiting to ") + direction
               : std::string("SSL_connect timed out waiting to ") + direction;
   return false;
@@ -246,13 +191,13 @@ bool TunnelSslClient::ConnectTls(int timeout_ms, std::string& error) {
     }
     const int err = SSL_get_error(ssl_, rc);
     if (err == SSL_ERROR_WANT_READ) {
-      if (!WaitForConnectIo(owned_fd_, kPollIn, "read", connect_deadline, error)) {
+      if (!WaitForConnectIo(owned_fd_, tuntap::kPollIn, "read", connect_deadline, error)) {
         return false;
       }
       continue;
     }
     if (err == SSL_ERROR_WANT_WRITE) {
-      if (!WaitForConnectIo(owned_fd_, kPollOut, "write", connect_deadline, error)) {
+      if (!WaitForConnectIo(owned_fd_, tuntap::kPollOut, "write", connect_deadline, error)) {
         return false;
       }
       continue;
