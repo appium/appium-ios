@@ -238,10 +238,10 @@ NSData* CaptureScreenshot(id device, NSString* displayId, ScreenshotFormat forma
     return nil;
   }
 
-  // A fresh CIContext per call, matching this operation's one-shot semantics (mirrors
-  // simctl's own screenshot command) rather than the persistent, reused context a
-  // continuous video/streaming path would want (JpegStreamSession — see sim_jpeg_stream.mm).
-  CIContext* context = [CIContext contextWithOptions:nil];
+  // One CIContext shared by every call: creating a context costs more than rendering a frame
+  // through it, and CIContext is safe to use from multiple threads. The rendered pixels are
+  // the same as with a fresh context.
+  static CIContext* context = [CIContext contextWithOptions:nil];
   CGImageRef cgImage = [context createCGImage:ciImage fromRect:ciImage.extent];
   if (cgImage == nil) {
     *error = MakeError(6, @"Failed to render the device's display surface");
