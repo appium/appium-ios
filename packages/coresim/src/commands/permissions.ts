@@ -1,4 +1,5 @@
 import {execFile} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -14,8 +15,12 @@ const execFileAsync = promisify(execFile);
 
 const NOTIFICATIONS_SERVICE = 'notifications';
 const SPRINGBOARD_SERVICE = 'com.apple.SpringBoard';
-const BULLETIN_BOARD_STORE_WAIT_MS = 30000;
+// The `sectionInfoVersionNumber` of the BulletinBoard stores SpringBoard writes (iOS 18 and 26).
+const BULLETIN_BOARD_STORE_VERSION = 2;
 const SPRINGBOARD_RESTART_TIMEOUT_MS = 30000;
+
+// The last pending notifications update of each BulletinBoard store, see withStoreLock.
+const storeUpdates = new Map<string, Promise<void>>();
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -170,7 +175,7 @@ function toTCCIdentifier(service: Exclude<SimPermissionService, 'notifications'>
  * rewrites it from memory from time to time (e.g. a few seconds after it starts). So SpringBoard of
  * a booted device is paused while the app's section is written, then restarted with the store kept
  * immutable until the old process is gone. The new SpringBoard loads the change and terminates
- * every running app.
+ * every running app. A shut down device only gets the file, SpringBoard loads it on boot.
  */
 async function setNotificationsAccess(
   this: NativeSimctl,
@@ -180,46 +185,90 @@ async function setNotificationsAccess(
 ): Promise<void> {
   const device = await this._findDevice(udid);
   const storePath = path.join(device.dataPath(), 'Library', 'BulletinBoard', 'VersionedSectionInfo.plist');
-  try {
-    await waitForCondition(async () => await fs.exists(storePath), {
-      waitMs: BULLETIN_BOARD_STORE_WAIT_MS,
-      intervalMs: 1000,
-    });
-  } catch {
-    throw new Error(`'${storePath}' does not exist. Make sure the Simulator has been booted at least once`);
-  }
+  await withStoreLock(storePath, async () => {
+    const springBoardPid =
+      device.state() === SimDeviceState.Booted ? await pauseSpringBoard.call(this, udid) : undefined;
+    let written = false;
+    try {
+      written = await writeNotificationsSection(storePath, bundleId, status);
+    } finally {
+      if (springBoardPid && !written) {
+        sendSignal(springBoardPid, 'SIGCONT');
+      }
+    }
+    if (!springBoardPid || !written) {
+      return;
+    }
+    await setImmutable(storePath, true);
+    try {
+      try {
+        await stopSpringBoard.call(this, udid);
+      } finally {
+        sendSignal(springBoardPid, 'SIGCONT');
+      }
+      await waitForNewSpringBoard.call(this, udid, springBoardPid);
+    } finally {
+      await setImmutable(storePath, false);
+    }
+  });
+}
 
-  const springBoardPid = device.state() === SimDeviceState.Booted ? await pauseSpringBoard.call(this, udid) : undefined;
+/**
+ * Runs `update` once every earlier update of the same store has settled: concurrent updates for
+ * different apps would otherwise read the same store, and the last write would drop the other app's
+ * section. Only the calls made by this process are serialized.
+ */
+async function withStoreLock(storePath: string, update: () => Promise<void>): Promise<void> {
+  const result = (storeUpdates.get(storePath) ?? Promise.resolve()).then(update);
+  const settled = result.catch(() => {});
+  storeUpdates.set(storePath, settled);
   try {
-    const store = (await plist.parsePlistFile(storePath)) as {sectionInfo?: Record<string, Uint8Array>};
-    const sectionInfo = store.sectionInfo ?? {};
-    if (status === 'unset') {
-      delete sectionInfo[bundleId];
-    } else {
-      sectionInfo[bundleId] = buildNotificationsSectionInfo(bundleId, status);
+    await result;
+  } finally {
+    if (storeUpdates.get(storePath) === settled) {
+      storeUpdates.delete(storePath);
     }
-    store.sectionInfo = sectionInfo;
-    await fs.writeFile(storePath, plist.createPlist(store, false));
+  }
+}
+
+/**
+ * Adds, replaces or (`unset`) removes the app's section. The store is replaced atomically, so a
+ * failed write leaves the previous one intact. A device that has never been booted has no store yet:
+ * it is created with just this section, and SpringBoard adds the rest on boot.
+ *
+ * @returns `false` if there was nothing to write (`unset` without a store)
+ */
+async function writeNotificationsSection(
+  storePath: string,
+  bundleId: string,
+  status: 'granted' | 'denied' | 'critical' | 'unset',
+): Promise<boolean> {
+  let store: {sectionInfoVersionNumber?: number; sectionInfo?: Record<string, Uint8Array>};
+  if (await fs.exists(storePath)) {
+    store = (await plist.parsePlistFile(storePath)) as typeof store;
+  } else if (status === 'unset') {
+    return false;
+  } else {
+    await fs.mkdir(path.dirname(storePath), {recursive: true});
+    store = {sectionInfoVersionNumber: BULLETIN_BOARD_STORE_VERSION};
+  }
+  const sectionInfo = store.sectionInfo ?? {};
+  if (status === 'unset') {
+    delete sectionInfo[bundleId];
+  } else {
+    sectionInfo[bundleId] = buildNotificationsSectionInfo(bundleId, status);
+  }
+  store.sectionInfo = sectionInfo;
+  // In the same directory, so that the rename is atomic.
+  const tmpPath = `${storePath}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(tmpPath, plist.createPlist(store, false), {flag: 'wx'});
+    await fs.rename(tmpPath, storePath);
   } catch (err) {
-    if (springBoardPid) {
-      sendSignal(springBoardPid, 'SIGCONT');
-    }
+    await fs.unlink(tmpPath).catch(() => {});
     throw err;
   }
-  if (!springBoardPid) {
-    return;
-  }
-  await setImmutable(storePath, true);
-  try {
-    try {
-      await stopSpringBoard.call(this, udid);
-    } finally {
-      sendSignal(springBoardPid, 'SIGCONT');
-    }
-    await waitForNewSpringBoard.call(this, udid, springBoardPid);
-  } finally {
-    await setImmutable(storePath, false);
-  }
+  return true;
 }
 
 /**
