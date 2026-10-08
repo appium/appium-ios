@@ -166,6 +166,19 @@ describe('Devicectl', function () {
         assert.deepStrictEqual(terminated, ['42']);
       });
 
+      it('should filter on the decoded path of a percent-encoded app url', async function () {
+        mock.method(devicectl, 'listApps', async () => [
+          {url: 'file:///private/var/containers/Bundle/Application/ABC/My%20App.app/'},
+        ]);
+        const {filters, terminated} = fakeDevicectl(5);
+
+        assert.strictEqual(await devicectl.terminateApp('com.example.app'), true);
+        assert.deepStrictEqual(filters, [
+          'ExecutablePath BEGINSWITH "/private/var/containers/Bundle/Application/ABC/My App.app"',
+        ]);
+        assert.deepStrictEqual(terminated, ['42']);
+      });
+
       it('should filter on executable.path before JSON version 5', async function () {
         const {filters, terminated} = fakeDevicectl(4);
 
@@ -225,6 +238,13 @@ describe('Devicectl', function () {
 
       it('should strip both the file:// prefix and trailing slash', function () {
         assert.strictEqual(appUrlToFilesystemPath('file:///private/var/App.app/'), '/private/var/App.app');
+      });
+
+      it('should decode percent-encoded characters of a file:// URL', function () {
+        assert.strictEqual(
+          appUrlToFilesystemPath('file:///private/var/containers/Bundle/Application/ABC/My%20App%C3%A9.app/'),
+          '/private/var/containers/Bundle/Application/ABC/My Appé.app',
+        );
       });
 
       it('should leave paths without a file:// prefix or trailing slash unchanged', function () {
