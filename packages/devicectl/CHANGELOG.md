@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.1](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.0...node-devicectl@2.2.1) (2026-10-08)
+
+### Bug Fixes
+
+* **devicectl:** decode percent-encoded app urls before filtering processes ([#47](https://github.com/appium/appium-ios/issues/47)) ([8b67a58](https://github.com/appium/appium-ios/commit/8b67a58088d8ced5cb7fd8445b3ea7358c06cf0a))
+
+
 ## 2.2.0 (2026-10-02)
 
 ### Features
