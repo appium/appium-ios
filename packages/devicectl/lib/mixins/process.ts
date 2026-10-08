@@ -97,7 +97,7 @@ export async function terminateApp(
 
 /** Converts a devicectl app URL to a filesystem path for process filters. */
 export function appUrlToFilesystemPath(appUrl: string): string {
-  const path = appUrl.startsWith('file:') ? new URL(appUrl).pathname : appUrl;
+  const path = appUrl.startsWith('file:') ? decodeURIComponent(new URL(appUrl).pathname) : appUrl;
   return path.replace(/\/$/, '') || '/';
 }
 
