@@ -3,6 +3,7 @@ export interface PairRecord {
   privateKey: Buffer;
   remoteUnlockHostKey: string;
   remotePairingUdid?: string;
+  altIRK?: Buffer;
 }
 
 export interface PairingStorageInterface {
@@ -12,6 +13,7 @@ export interface PairingStorageInterface {
     ltsk: Buffer,
     remoteUnlockHostKey?: string,
     remotePairingUdid?: string,
+    altIRK?: Buffer,
   ): Promise<string>;
   load(deviceId: string): Promise<PairRecord | null>;
   getAvailableDeviceIds(): Promise<string[]>;

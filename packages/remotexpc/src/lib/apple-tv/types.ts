@@ -42,6 +42,10 @@ export interface AppleTVDevice {
   port: number;
   model: string;
   version: string;
+  /** Raw `_remotepairing._tcp` TXT identifier the advertised authTag was computed over. */
+  serviceIdentifier?: string;
+  /** Base64 TXT `authTag`, matched offline against a pair record's altIRK. */
+  authTag?: string;
 }
 
 // Configuration options for the pairing process

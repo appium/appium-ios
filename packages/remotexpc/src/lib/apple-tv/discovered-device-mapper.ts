@@ -28,6 +28,8 @@ export function toAppleTVDevice(device: DiscoveredDevice): AppleTVDevice | null 
     port,
     model,
     version,
+    serviceIdentifier: device.metadata.serviceIdentifier,
+    authTag: device.metadata.authTag,
   };
 }
 

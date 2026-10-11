@@ -5,7 +5,6 @@ import {getLogger} from '../../logger.js';
 import {DEFAULT_PAIRING_CONFIG, PairingDataComponentType} from '../constants.js';
 import {encodeAppleTVDeviceInfo} from '../device-info/index.js';
 import {
-  Opack2,
   createEd25519Signature,
   decryptChaCha20Poly1305,
   encryptChaCha20Poly1305,
@@ -18,9 +17,10 @@ import type {NetworkClientInterface} from '../network/types.js';
 import {SRPClient} from '../srp/index.js';
 import {PairingStorage} from '../storage/pairing-storage.js';
 import {createPairVerificationData, createSetupManualPairingData, decodeTLV8ToDict, encodeTLV8} from '../tlv/index.js';
-import type {AppleTVDevice, AppleTVPairingFlowResult, Opack2Dictionary, TLV8Item} from '../types.js';
+import type {AppleTVDevice, AppleTVPairingFlowResult, TLV8Item} from '../types.js';
 import {generateHostId} from '../utils/uuid-generator.js';
 import {INFO_TYPE, PAIRING_MESSAGES, PAIRING_STATES} from './constants.js';
+import {type PairSetupPeerIdentity, extractPeerIdentity} from './peer-identity.js';
 import type {EncryptionKeys, PairingProtocolInterface, PairingRequest, UserInputInterface} from './types.js';
 
 const log = getLogger('PairingProtocol');
@@ -93,9 +93,9 @@ export class PairingProtocol implements PairingProtocolInterface {
       await this.sendM5Message(encryptionKeys.encryptKey, devicePairingID, ltpk, ltsk, srpClient.sessionKey);
 
       // Step 6: Receive M6 completion
-      const remotePairingUdid = await this.receiveM6Completion(encryptionKeys.decryptKey);
+      const peerIdentity = await this.receiveM6Completion(encryptionKeys.decryptKey);
 
-      return this.createPairingResult(device, ltpk, ltsk, remotePairingUdid);
+      return this.createPairingResult(device, ltpk, ltsk, peerIdentity);
     } catch (error) {
       log.error('Pairing flow failed:', error);
       throw error;
@@ -219,7 +219,7 @@ export class PairingProtocol implements PairingProtocolInterface {
    * Attempts to decrypt and validate final pairing state
    * @param decryptKey Decryption key for M6 encrypted data
    */
-  private async receiveM6Completion(decryptKey: Buffer): Promise<string | undefined> {
+  private async receiveM6Completion(decryptKey: Buffer): Promise<PairSetupPeerIdentity> {
     const m6Response = await this.networkClient.receiveResponse();
     log.info('M6 Response received');
 
@@ -228,7 +228,7 @@ export class PairingProtocol implements PairingProtocolInterface {
     } catch (error) {
       log.warn('M6 decryption failed - but pairing may still be successful:', (error as Error).message);
     }
-    return undefined;
+    return {};
   }
 
   /**
@@ -528,9 +528,9 @@ export class PairingProtocol implements PairingProtocolInterface {
    * @param m6Response Network response containing M6 completion message
    * @param decryptKey Decryption key for M6 encrypted data
    */
-  private processM6Response(m6Response: any, decryptKey: Buffer): string | undefined {
+  private processM6Response(m6Response: any, decryptKey: Buffer): PairSetupPeerIdentity {
     if (!m6Response.message?.plain?._0?.event?._0?.pairingData?._0?.data) {
-      return undefined;
+      return {};
     }
 
     const m6DataBase64 = m6Response.message.plain._0.event._0.pairingData._0.data;
@@ -557,32 +557,16 @@ export class PairingProtocol implements PairingProtocolInterface {
       });
       const decryptedTLV = decodeTLV8ToDict(decrypted);
       log.debug('M6 decrypted content types:', Object.keys(decryptedTLV));
-      const remotePairingUdid = this.extractRemotePairingUdid(decryptedTLV);
-      if (remotePairingUdid) {
-        log.debug(`M6 INFO remotepairing_udid: ${remotePairingUdid}`);
+      const peerIdentity = extractPeerIdentity(decryptedTLV);
+      if (peerIdentity.remotePairingUdid) {
+        log.debug(`M6 INFO remotepairing_udid: ${peerIdentity.remotePairingUdid}`);
       }
-      return remotePairingUdid;
+      if (!peerIdentity.altIRK) {
+        log.debug('M6 INFO did not include a usable altIRK; this pair record cannot be matched by authTag');
+      }
+      return peerIdentity;
     }
-    return undefined;
-  }
-
-  private extractRemotePairingUdid(decryptedTLV: Record<number, Buffer | undefined>): string | undefined {
-    const info = decryptedTLV[PairingDataComponentType.INFO];
-    if (!info) {
-      return undefined;
-    }
-
-    const decodedInfo = Opack2.loads(info);
-    if (!this.isOpackDictionary(decodedInfo)) {
-      return undefined;
-    }
-
-    const remotePairingUdid = decodedInfo.remotepairing_udid;
-    return typeof remotePairingUdid === 'string' && remotePairingUdid ? remotePairingUdid.toUpperCase() : undefined;
-  }
-
-  private isOpackDictionary(value: unknown): value is Opack2Dictionary {
-    return typeof value === 'object' && value !== null && !Array.isArray(value) && !Buffer.isBuffer(value);
+    return {};
   }
 
   /**
@@ -612,17 +596,25 @@ export class PairingProtocol implements PairingProtocolInterface {
    * @param device Apple TV device information
    * @param ltpk Long-term public key to save
    * @param ltsk Long-term secret key to save
+   * @param peerIdentity Identity read from M6; its altIRK enables offline authTag matching
    * @returns Path to saved pairing credentials file
    */
   private async createPairingResult(
     device: AppleTVDevice,
     ltpk: Buffer,
     ltsk: Buffer,
-    remotePairingUdid?: string,
+    peerIdentity: PairSetupPeerIdentity,
   ): Promise<AppleTVPairingFlowResult> {
-    const deviceId = this.resolvePairingDeviceId(device, remotePairingUdid);
+    const deviceId = this.resolvePairingDeviceId(device, peerIdentity.remotePairingUdid);
     const storage = new PairingStorage(DEFAULT_PAIRING_CONFIG);
-    const pairingFile = await storage.save(deviceId, ltpk, ltsk, '', remotePairingUdid);
+    const pairingFile = await storage.save(
+      deviceId,
+      ltpk,
+      ltsk,
+      '',
+      peerIdentity.remotePairingUdid,
+      peerIdentity.altIRK,
+    );
     return {deviceId, pairingFile};
   }
 

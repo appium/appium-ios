@@ -20,6 +20,7 @@ import type {VerificationKeys} from '../pairing-protocol/pair-verification-proto
 import {PairingStorage} from '../storage/pairing-storage.js';
 import type {PairRecord} from '../storage/types.js';
 import type {AppleTVDevice} from '../types.js';
+import {type MatchedPairRecord, type PairRecordCandidate, matchDevicesToPairRecords} from './pair-record-matcher.js';
 import {RemotedController} from './remoted-controller.js';
 import type {TcpListenerInfo} from './types.js';
 
@@ -193,13 +194,10 @@ export class AppleTVTunnelService {
       this.logDiscoveredDevices(devices);
     }
 
-    let identifiersToTry = await this.validateAndGetPairRecords(deviceId);
-    if (!deviceId && specificDeviceIdentifier && identifiersToTry.includes(specificDeviceIdentifier)) {
-      identifiersToTry = [specificDeviceIdentifier];
-    }
-    const devicesToProcess = this.selectDevicesToProcess(devices, specificDeviceIdentifier, identifiersToTry);
-
+    const identifiersToTry = await this.validateAndGetPairRecords(deviceId);
     const failedAttempts: {identifier: string; error: string}[] = [];
+    const candidates = await this.loadPairRecordCandidates(identifiersToTry, failedAttempts);
+    const attempts = this.selectConnectionAttempts(devices, candidates, specificDeviceIdentifier);
 
     // Suspend macOS' remoted daemon for the duration of the tunnel handshake.
     // While remoted holds the trusted tunnel for a paired device, the device
@@ -207,26 +205,14 @@ export class AppleTVTunnelService {
     // finally so the daemon never stays suspended after this method returns.
     await this.remoted.suspend();
     try {
-      for (const device of devicesToProcess) {
-        for (const identifier of identifiersToTry) {
-          appleTVLog.debug(`\n--- Attempting connection with pair record: ${identifier} ---`);
-          appleTVLog.debug(`Device: ${device.ip}:${device.port}`);
+      for (const {device, identifier, record} of attempts) {
+        appleTVLog.debug(`\n--- Attempting connection with pair record: ${identifier} ---`);
+        appleTVLog.debug(`Device: ${device.ip}:${device.port}`);
 
-          const pairRecord = await this.storage.load(identifier);
-          if (!pairRecord) {
-            appleTVLog.debug(`Failed to load pair record for ${identifier}`);
-            failedAttempts.push({
-              identifier,
-              error: 'Failed to load pair record',
-            });
-            continue;
-          }
+        const result = await this.attemptDeviceConnection(device, identifier, record, failedAttempts);
 
-          const result = await this.attemptDeviceConnection(device, identifier, pairRecord, failedAttempts);
-
-          if (result) {
-            return result;
-          }
+        if (result) {
+          return result;
         }
       }
     } finally {
@@ -258,31 +244,70 @@ export class AppleTVTunnelService {
   }
 
   /**
-   * Selects devices to process based on the specific device identifier
+   * Loads each pair record once; records that fail to load are recorded as failed attempts and skipped.
    */
-  private selectDevicesToProcess(
+  private async loadPairRecordCandidates(
+    identifiers: string[],
+    failedAttempts: {identifier: string; error: string}[],
+  ): Promise<PairRecordCandidate[]> {
+    const candidates: PairRecordCandidate[] = [];
+    for (const identifier of identifiers) {
+      const record = await this.storage.load(identifier);
+      if (record) {
+        candidates.push({identifier, record});
+        continue;
+      }
+      appleTVLog.debug(`Failed to load pair record for ${identifier}`);
+      failedAttempts.push({identifier, error: 'Failed to load pair record'});
+    }
+    return candidates;
+  }
+
+  /**
+   * Builds the ordered connection attempts: devices matched to a record by authTag first, then
+   * records without an altIRK (saved before it was stored) against every device no record matched.
+   * `specificDeviceIdentifier` may be a discovered device identifier or a pair record id.
+   */
+  private selectConnectionAttempts(
     devices: AppleTVDevice[],
+    candidates: PairRecordCandidate[],
     specificDeviceIdentifier?: string,
-    pairRecordIds: string[] = [],
-  ): AppleTVDevice[] {
-    if (!specificDeviceIdentifier) {
-      return devices;
+  ): MatchedPairRecord[] {
+    const {matches, recordsWithoutAltIRK, devicesWithoutAuthTag} = matchDevicesToPairRecords(devices, candidates);
+    for (const identifier of recordsWithoutAltIRK) {
+      appleTVLog.warn(
+        `Pair record ${identifier} has no altIRK, so it will be tried against every unmatched device; pair that Apple TV again to avoid this.`,
+      );
+    }
+    if (devicesWithoutAuthTag.length > 0) {
+      appleTVLog.debug(`Discovered devices without an authTag: ${devicesWithoutAuthTag.join(', ')}`);
     }
 
-    const filteredDevices = devices.filter((device) => device.identifier === specificDeviceIdentifier);
+    const matchedDevices = new Set(matches.map(({device}) => device));
+    const legacyCandidates = candidates.filter(({identifier}) => recordsWithoutAltIRK.includes(identifier));
+    const legacyAttempts = devices
+      .filter((device) => !matchedDevices.has(device))
+      .flatMap((device) => legacyCandidates.map(({identifier, record}) => ({identifier, record, device})));
+    const attempts = [...matches, ...legacyAttempts];
+    if (attempts.length === 0) {
+      throw new Error(
+        `No discovered device matched a pair record by authTag (${util.pluralize('device', devices.length, true)} discovered, ${devicesWithoutAuthTag.length} without authTag; ${util.pluralize('pair record', candidates.length, true)}).`,
+      );
+    }
 
-    if (filteredDevices.length === 0) {
-      if (pairRecordIds.includes(specificDeviceIdentifier)) {
-        appleTVLog.info(
-          `\nNo discovered device identifier matched ${specificDeviceIdentifier}; trying all discovered devices with the matching pair record.`,
-        );
-        return devices;
-      }
+    if (!specificDeviceIdentifier) {
+      return attempts;
+    }
 
-      appleTVLog.error(`\nDevice with identifier ${specificDeviceIdentifier} not found in discovered devices.`);
-      appleTVLog.error('Available devices:');
-      devices.forEach((device) => {
-        appleTVLog.error(`  - ${device.identifier} (${device.name})`);
+    const filteredAttempts = attempts.filter(
+      ({device, identifier}) =>
+        device.identifier === specificDeviceIdentifier || identifier === specificDeviceIdentifier,
+    );
+    if (filteredAttempts.length === 0) {
+      appleTVLog.error(`\nDevice with identifier ${specificDeviceIdentifier} not found among connection attempts.`);
+      appleTVLog.error('Connection attempts:');
+      attempts.forEach(({device, identifier}) => {
+        appleTVLog.error(`  - ${device.identifier} (${device.name}) with pair record ${identifier}`);
       });
       throw new Error(
         `Device with identifier ${specificDeviceIdentifier} not found. Please check available devices above.`,
@@ -291,7 +316,7 @@ export class AppleTVTunnelService {
 
     appleTVLog.info(`\nFiltered to specific device: ${specificDeviceIdentifier}`);
 
-    return filteredDevices;
+    return filteredAttempts;
   }
 
   /**

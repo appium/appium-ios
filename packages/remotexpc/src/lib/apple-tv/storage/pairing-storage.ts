@@ -12,6 +12,9 @@ import type {PairRecord, PairingStorageInterface} from './types.js';
 
 const log = getLogger('PairingStorage');
 
+// Plist key for the device altIRK received in pair-setup M6
+const PEER_ALT_IRK_KEY = 'peer_alt_irk';
+
 /** Manages persistent storage of pairing credentials as plist files */
 export class PairingStorage implements PairingStorageInterface {
   private readonly box;
@@ -26,10 +29,11 @@ export class PairingStorage implements PairingStorageInterface {
     ltsk: Buffer,
     remoteUnlockHostKey = '',
     remotePairingUdid = '',
+    altIRK?: Buffer,
   ): Promise<string> {
     try {
       const itemName = `${APPLETV_PAIRING_PREFIX}${deviceId}`;
-      const plistContent = this.createPlistContent(ltpk, ltsk, remoteUnlockHostKey, remotePairingUdid);
+      const plistContent = this.createPlistContent(ltpk, ltsk, remoteUnlockHostKey, remotePairingUdid, altIRK);
 
       const item = await this.box.createItemWithValue(itemName, plistContent);
       const itemPath = item.id;
@@ -75,6 +79,7 @@ export class PairingStorage implements PairingStorageInterface {
         remoteUnlockHostKey: (parsed.remote_unlock_host_key as string) || '',
         remotePairingUdid:
           typeof parsed.remote_pairing_udid === 'string' ? parsed.remote_pairing_udid.toUpperCase() : undefined,
+        altIRK: parseOptionalBinaryValue(parsed[PEER_ALT_IRK_KEY]),
       };
     } catch (error) {
       log.error(`Failed to load pair record for ${deviceId}:`, error);
@@ -110,12 +115,14 @@ export class PairingStorage implements PairingStorageInterface {
     privateKey: Buffer,
     remoteUnlockHostKey: string,
     remotePairingUdid: string,
+    altIRK?: Buffer,
   ): string {
     return createXmlPlist({
       private_key: privateKey,
       public_key: publicKey,
       remote_unlock_host_key: remoteUnlockHostKey,
       remote_pairing_udid: remotePairingUdid.toUpperCase(),
+      ...(altIRK ? {[PEER_ALT_IRK_KEY]: altIRK} : {}),
     });
   }
 
@@ -124,4 +131,12 @@ export class PairingStorage implements PairingStorageInterface {
     const item = new BaseItem(`${APPLETV_PAIRING_PREFIX}${sentinel}`, this.box);
     return basename(item.id).slice(0, -sentinel.length);
   }
+}
+
+/** Reads an optional binary plist value stored either as data or as a base64 string. */
+function parseOptionalBinaryValue(value: unknown): Buffer | undefined {
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  return typeof value === 'string' && value ? Buffer.from(value, 'base64') : undefined;
 }
