@@ -17,13 +17,15 @@ describe('simulator display capture', function () {
     sinon.assert.calledOnceWithExactly(enumerate, 'sim-1');
   });
 
-  it('passes the chosen port UUID unchanged to native capture', async function () {
-    const data = Buffer.from('screenshot');
-    const capture = sinon.stub().resolves(data);
-    const simulator = {udid: 'sim-1', _native: {getScreenshot: capture}} as any;
-    assert.equal(await getScreenshot.call(simulator, {displayId: 'inner-port'}), data);
-    sinon.assert.calledOnceWithExactly(capture, 'sim-1', {displayId: 'inner-port'});
-  });
+  for (const displayId of ['inner-port', 3]) {
+    it(`passes display ID ${displayId} unchanged to CoreSim`, async function () {
+      const data = Buffer.from('screenshot');
+      const capture = sinon.stub().resolves(data);
+      const simulator = {udid: 'sim-1', _native: {getScreenshot: capture}} as any;
+      assert.equal(await getScreenshot.call(simulator, {displayId}), data);
+      sinon.assert.calledOnceWithExactly(capture, 'sim-1', {displayId});
+    });
+  }
 
   it('propagates enumeration failures', async function () {
     const error = new Error('No IO client');

@@ -92,10 +92,12 @@ describe('NativeSimctl (read-only)', {timeout: 30000}, () => {
       assert.ok(Number.isInteger(display.screenId));
       assert.ok(display.screenId! > 0);
       assert.match(display.id, /^[0-9A-F-]{36}$/i);
-      const png = await sim.getScreenshot(duo.udid, {displayId: display.id});
+      const png = await sim.getScreenshot(duo.udid, {displayId: display.screenId});
       assert.deepStrictEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     }
     assert.strictEqual(new Set(integrated.map(({screenId}) => screenId)).size, integrated.length);
+    await assert.rejects(sim.getScreenshot(duo.udid), /Multiple default display ports/);
+    await assert.rejects(sim.getScreenshot(duo.udid, {displayId: 0xffffffff}), /Cannot uniquely resolve/);
   });
 
   it('reads getenv from a booted device, when one is booted', async () => {

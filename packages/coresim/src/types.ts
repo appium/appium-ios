@@ -126,10 +126,11 @@ export interface ScreenshotOptions {
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**
-   * Which display to capture, by `id` from `getDisplays()`. Defaults to the primary display
-   * (falling back to the first renderable display if none is primary, e.g. tvOS).
+   * Port UUID from getDisplays(), or a numeric guest screen ID (XCTest/WDA displayID).
+   * Numeric IDs are resolved against the current ports on every call. When omitted,
+   * capture the default display; multiple class-0 ports require an explicit ID.
    */
-  displayId?: string;
+  displayId?: string | number;
   /**
    * JPEG quality as a percentage (0 = smallest/most compressed, 100 = largest/least compressed).
    * Only meaningful with `format: 'jpeg'` — ignored for `'png'`, which is always lossless.

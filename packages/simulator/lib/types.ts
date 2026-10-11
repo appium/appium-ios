@@ -71,10 +71,10 @@ export interface ScreenshotOptions {
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**
-   * Which display to capture, by id. Defaults to the primary display (falling back to the first
-   * renderable display if none is primary, e.g. tvOS).
+   * Port UUID or numeric guest screen ID (XCTest/WDA displayID). Numeric IDs are
+   * resolved by CoreSimulator on each capture. Multiple default displays require an explicit ID.
    */
-  displayId?: string;
+  displayId?: string | number;
   /**
    * JPEG quality as a percentage (0 = smallest/most compressed, 100 = largest/least compressed).
    * Only meaningful with `format: 'jpeg'`. Defaults to near-lossless when omitted.
