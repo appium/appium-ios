@@ -58,7 +58,12 @@ await sim.deleteDevice(device.udid);
   and a real-time JPEG frame stream (`startJpegStream` — configurable fps/quality, no video codec
   involved, meant for callers building their own MJPEG stream out of the frame sequence) —
   optionally with the device's own audio, muxed into the recording or interleaved into the video
-  stream (`audio: true` on `startVideoRecording`/`startVideoStream`). Audio capture requires:
+  stream (`audio: true` on `startVideoRecording`/`startVideoStream`). All four capture APIs accept
+  a port UUID or a numeric XCTest/WDA guest screen ID as `displayId`. Numeric IDs are resolved against the current ports
+  on each screenshot or once at recording/stream startup. Missing or ambiguous IDs reject.
+  Without an ID, a unique class-0 display is selected; if none exists, native selection falls
+  back to the first renderable display. Multiple class-0 displays (such as Duo) require an
+  explicit ID. Audio capture requires:
   - **macOS 14.2+** on the host (Core Audio process taps).
   - The host's **"System Audio Recording Only"** privacy permission (System Settings > Privacy &
     Security > Screen & System Audio Recording). This can't be granted programmatically, and a

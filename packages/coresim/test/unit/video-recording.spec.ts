@@ -10,6 +10,7 @@ import type {NativeSimctl} from '../../src/native-simctl.js';
 function fakeSim(stopImpl: () => Promise<void>): NativeSimctl {
   return {
     _findDevice: async () => ({
+      getDisplays: async () => [],
       startVideoRecording: async () => ({stop: stopImpl}),
     }),
   } as unknown as NativeSimctl;

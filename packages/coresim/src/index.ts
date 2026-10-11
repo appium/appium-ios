@@ -15,6 +15,7 @@ export {
   type JpegFrame,
   type JpegStreamOptions,
   type PushNotificationPayload,
+  type DisplayOptions,
   type ScreenshotOptions,
   type SimBootInfo,
   type SimDeviceInfo,

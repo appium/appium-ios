@@ -1,6 +1,6 @@
 import type {NativeSimctl} from '../native-simctl.js';
-import type {NativeDeviceHandle, ScreenshotOptions, SimDisplayInfo} from '../types.js';
-import {runCatchingAsync} from '../utils/index.js';
+import type {ScreenshotOptions, SimDisplayInfo} from '../types.js';
+import {resolveDisplayPortId, runCatchingAsync, validateDisplayId} from '../utils/index.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -14,7 +14,8 @@ declare module '../native-simctl.js' {
  * (see native/sim_screenshot.mm for how this reads the framebuffer directly, with no temp file or
  * subprocess). Rejects if the resolved display has no renderable surface yet (e.g. not booted), or
  * if `options.displayId` cannot be uniquely resolved. UUID strings select ports directly;
- * numeric IDs are matched against the guest screen IDs from {@link getDisplays}.
+ * numeric IDs are matched against the guest screen IDs from {@link getDisplays} on each capture.
+ * An omitted ID selects the default display; multiple class-0 ports require an explicit ID.
  *
  * @param udid — UDID of the device to capture; must be booted
  * @param options — `format` (defaults to `'png'`), `displayId` (defaults to the primary display),
@@ -49,38 +50,4 @@ export async function getScreenshot(
  */
 export async function getDisplays(this: NativeSimctl, udid: string): Promise<SimDisplayInfo[]> {
   return runCatchingAsync(async () => (await this._findDevice(udid)).getDisplays());
-}
-
-function validateDisplayId(displayId: unknown): void {
-  if (displayId !== undefined && typeof displayId !== 'string' && typeof displayId !== 'number') {
-    throw new TypeError('displayId must be a port UUID string or a numeric guest screen ID');
-  }
-  if (typeof displayId === 'number' && (!Number.isInteger(displayId) || displayId < 0 || displayId > 0xffffffff)) {
-    throw new RangeError('A numeric displayId must be an unsigned 32-bit integer');
-  }
-}
-
-async function resolveDisplayPortId(
-  device: NativeDeviceHandle,
-  displayId: ScreenshotOptions['displayId'],
-): Promise<string | undefined> {
-  if (typeof displayId === 'string') {
-    return displayId;
-  }
-
-  const displays = await device.getDisplays();
-  if (typeof displayId === 'number') {
-    const matches = displays.filter(({screenId}) => screenId === displayId);
-    if (matches.length !== 1 || !matches[0].id) {
-      throw new Error(`Cannot uniquely resolve guest screen ID ${displayId} to a display port`);
-    }
-    return matches[0].id;
-  }
-
-  // Both integrated Duo displays have class 0. Never pick one by port order.
-  const defaults = displays.filter(({isMain}) => isMain);
-  if (defaults.length > 1) {
-    throw new Error('Multiple default display ports are available; specify displayId');
-  }
-  return defaults[0]?.id;
 }

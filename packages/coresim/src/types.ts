@@ -111,7 +111,7 @@ export type SimPermissionService =
  * A device's renderable display, as returned by `NativeSimctl.getDisplays()`.
  */
 export interface SimDisplayInfo {
-  /** Port UUID identifying this display — pass as `getScreenshot`'s `displayId` option to target it. */
+  /** Port UUID identifying this display — pass as a capture API’s `displayId` option to target it. */
   id: string;
   /** Guest screen ID (`SimScreenProperties.screenID`), when available. Matches XCTest displayID. */
   screenId?: number;
@@ -121,16 +121,22 @@ export interface SimDisplayInfo {
   isMain: boolean;
 }
 
-/** Options for `NativeSimctl.getScreenshot`. */
-export interface ScreenshotOptions {
-  /** Image encoding — defaults to `'png'`. */
-  format?: 'png' | 'jpeg';
+/** Display selection shared by screenshot, recording, and streaming APIs. */
+export interface DisplayOptions {
   /**
-   * Port UUID from getDisplays(), or a numeric guest screen ID (XCTest/WDA displayID).
-   * Numeric IDs are resolved against the current ports on every call. When omitted,
-   * capture the default display; multiple class-0 ports require an explicit ID.
+   * Port UUID from `getDisplays()`, or an unsigned 32-bit guest screen ID (XCTest/WDA displayID).
+   * Numeric IDs must match exactly one current port; missing or ambiguous mappings reject.
+   * Resolved on each screenshot capture, or once when starting a recording or stream.
+   * When omitted, selects the unique class-0 display, falling back to the first renderable
+   * display if no class-0 port exists (e.g. tvOS). Multiple class-0 ports require an explicit ID.
    */
   displayId?: string | number;
+}
+
+/** Options for `NativeSimctl.getScreenshot`. */
+export interface ScreenshotOptions extends DisplayOptions {
+  /** Image encoding — defaults to `'png'`. */
+  format?: 'png' | 'jpeg';
   /**
    * JPEG quality as a percentage (0 = smallest/most compressed, 100 = largest/least compressed).
    * Only meaningful with `format: 'jpeg'` — ignored for `'png'`, which is always lossless.
@@ -140,12 +146,7 @@ export interface ScreenshotOptions {
 }
 
 /** Options for `NativeSimctl.startVideoRecording`. */
-export interface VideoRecordingOptions {
-  /**
-   * Which display to record, by `id` from `getDisplays()`. Defaults to the primary display
-   * (falling back to the first renderable display if none is primary, e.g. tvOS).
-   */
-  displayId?: string;
+export interface VideoRecordingOptions extends DisplayOptions {
   /** Video codec — `'h264'` (default) or `'hevc'`. */
   codec?: 'h264' | 'hevc';
   /**
@@ -192,12 +193,7 @@ export interface StopVideoRecordingOptions {
 }
 
 /** Options for `NativeSimctl.startVideoStream`. */
-export interface VideoStreamOptions {
-  /**
-   * Which display to stream, by `id` from `getDisplays()`. Defaults to the primary display
-   * (falling back to the first renderable display if none is primary, e.g. tvOS).
-   */
-  displayId?: string;
+export interface VideoStreamOptions extends DisplayOptions {
   /** Video codec — `'h264'` (default) or `'hevc'`. */
   codec?: 'h264' | 'hevc';
   /**
@@ -216,12 +212,7 @@ export interface VideoStreamOptions {
 }
 
 /** Options for `NativeSimctl.startJpegStream`. */
-export interface JpegStreamOptions {
-  /**
-   * Which display to stream, by `id` from `getDisplays()`. Defaults to the primary display
-   * (falling back to the first renderable display if none is primary, e.g. tvOS).
-   */
-  displayId?: string;
+export interface JpegStreamOptions extends DisplayOptions {
   /**
    * Max frames/sec to poll the framebuffer at — an unchanged frame is never re-encoded, so this
    * is an upper bound, not a guarantee. Must be >= 1. Defaults to 60.

@@ -4,7 +4,7 @@ import {logger} from '@appium/support';
 
 import type {NativeSimctl} from '../native-simctl.js';
 import type {NativeVideoRecordingHandle, StopVideoRecordingOptions, VideoRecordingOptions} from '../types.js';
-import {runCatchingAsync, toTypedError} from '../utils/index.js';
+import {resolveDisplayPortId, runCatchingAsync, toTypedError, validateDisplayId} from '../utils/index.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -48,6 +48,10 @@ const activeRecordings = new Map<string, RecordingState>();
  * mid-recording) doesn't reject it — it's logged here instead — call {@link stopVideoRecording} to
  * observe it as a rejection and release the recording's resources.
  *
+ * UUID strings select ports directly; numeric guest screen IDs are resolved once at startup
+ * against the current ports. Missing or ambiguous mappings reject. An omitted ID selects the
+ * default display; multiple class-0 ports require an explicit ID. See {@link VideoRecordingOptions.displayId}.
+ *
  * @param udid — UDID of the device to record; must be booted
  * @param outputFile — filesystem path to write the video to; resolved against `process.cwd()` if
  *   relative, since the native layer requires an absolute path
@@ -71,18 +75,21 @@ export async function startVideoRecording(
   ) {
     throw new RangeError(`bitrate must be a positive number no greater than ${2 ** 31 - 1}, got ${options.bitrate}`);
   }
+  validateDisplayId(options.displayId);
   const key = udid.toLowerCase();
   if (activeRecordings.has(key)) {
     throw new Error(`A video recording is already in progress for device '${udid}'`);
   }
   const absoluteOutputFile = path.resolve(outputFile);
-  const startPromise = runCatchingAsync(async () =>
-    (await this._findDevice(udid)).startVideoRecording(absoluteOutputFile, options, (err) => {
+  const startPromise = runCatchingAsync(async () => {
+    const device = await this._findDevice(udid);
+    const displayId = await resolveDisplayPortId(device, options.displayId);
+    return device.startVideoRecording(absoluteOutputFile, {...options, displayId}, (err) => {
       // Only ever invoked on the `audio`/`fps` (own-encoder) path — see its own doc comment above.
       // No live consumer to report to (this call already resolved), so logged instead of lost.
       log.error(`Unhandled video recording error for device '${udid}': ${toTypedError(err).stack ?? err}`);
-    }),
-  );
+    });
+  });
   // Marked before the native call resolves, not after, so a concurrent startVideoRecording for the
   // same device is rejected immediately instead of racing this one — rolled back below on failure.
   const state: RecordingState = {start: startPromise};
