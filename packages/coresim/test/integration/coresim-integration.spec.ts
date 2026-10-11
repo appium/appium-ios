@@ -193,16 +193,40 @@ async function springBoardPid(sim: NativeSimctl, udid: string): Promise<number |
 }
 
 /**
- * Waits for a restarted SpringBoard to load the app's section: it's written with the legacy
- * `allowsNotifications` flag, which SpringBoard replaces with `authorizationStatus` (1 denied,
- * 2 authorized) only once it has loaded the section. launchd throttles back-to-back SpringBoard
- * restarts, so this can take a while — 30s wasn't always enough on a loaded CI runner.
+ * The access a notifications section in the BulletinBoard store gives. The section is written with
+ * the legacy `allowsNotifications` flag; a SpringBoard that has loaded it replaces the flag with
+ * `authorizationStatus` (1 denied, 2 authorized) the next time it saves its store. On a loaded CI
+ * runner that save comes anywhere from a second to minutes after the restart, so the tests accept
+ * either form rather than wait for it.
  */
-async function waitForNotificationsAuthorizationStatus(udid: string, bundleId: string, status: number): Promise<void> {
-  await waitForCondition(
-    async () => (await readNotificationsSettings(udid, bundleId))?.authorizationStatus === status,
-    {waitMs: 90_000, intervalMs: 500},
-  );
+function notificationsAccess(settings: Record<string, unknown> | undefined): string | undefined {
+  if (!settings) {
+    return undefined;
+  }
+  const value = 'authorizationStatus' in settings ? settings.authorizationStatus : settings.allowsNotifications;
+  switch (value) {
+    case 2:
+    case true:
+      return 'granted';
+    case 1:
+    case false:
+      return 'denied';
+    default:
+      return `unexpected ${JSON.stringify(value)}`;
+  }
+}
+
+/**
+ * Asserts that SpringBoard runs as a new process — the one grantPermission/revokePermission/
+ * resetPermission start after writing the store of a booted device.
+ *
+ * @returns the new pid
+ */
+async function assertSpringBoardRestarted(sim: NativeSimctl, udid: string, previousPid: number): Promise<number> {
+  const pid = await springBoardPid(sim, udid);
+  assert.ok(Number.isInteger(pid), 'SpringBoard is not running');
+  assert.notStrictEqual(pid, previousPid, 'SpringBoard was not restarted');
+  return pid!;
 }
 
 /** The host-side path to a device's own copy of backboardd's preference file (see sim_orientation.mm). */
@@ -612,7 +636,7 @@ describe('NativeSimctl integration', () => {
         );
       });
 
-      it('grants, revokes, and resets notifications, picked up by a restarted SpringBoard', async () => {
+      it('grants, revokes, and resets notifications of a booted device, restarting SpringBoard', async () => {
         // A preinstalled app, so that SpringBoard keeps its section.
         const bundleId = 'com.apple.mobilesafari';
 
@@ -622,23 +646,25 @@ describe('NativeSimctl integration', () => {
           waitMs: 90_000,
           intervalMs: 500,
         });
-        const initialSpringBoardPid = await springBoardPid(sim, device!.udid);
+        let pid = (await springBoardPid(sim, device!.udid))!;
 
         await sim.grantPermission(device!.udid, 'notifications', bundleId);
-        await waitForNotificationsAuthorizationStatus(device!.udid, bundleId, 2);
-        const newSpringBoardPid = await springBoardPid(sim, device!.udid);
-        assert.ok(Number.isInteger(newSpringBoardPid));
-        assert.notStrictEqual(newSpringBoardPid, initialSpringBoardPid);
+        assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'granted');
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
 
         await sim.revokePermission(device!.udid, 'notifications', bundleId);
-        await waitForNotificationsAuthorizationStatus(device!.udid, bundleId, 1);
+        assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'denied');
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
 
         await sim.grantPermission(device!.udid, 'notifications', bundleId, 'critical');
-        await waitForNotificationsAuthorizationStatus(device!.udid, bundleId, 2);
-        assert.strictEqual((await readNotificationsSettings(device!.udid, bundleId))?.criticalAlertSetting, 2);
+        const critical = await readNotificationsSettings(device!.udid, bundleId);
+        assert.strictEqual(notificationsAccess(critical), 'granted');
+        assert.strictEqual(critical?.criticalAlertSetting, 2);
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
 
         await sim.resetPermission(device!.udid, 'notifications', bundleId);
         assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        await assertSpringBoardRestarted(sim, device!.udid, pid);
         // Later tests talk to SpringBoard, so let the last restart settle.
         await waitForCondition(async () => Number.isInteger(await springBoardPid(sim, device!.udid)), {
           waitMs: 90_000,
@@ -658,7 +684,7 @@ describe('NativeSimctl integration', () => {
 
         await Promise.all(bundleIds.map((bundleId) => sim.grantPermission(device!.udid, 'notifications', bundleId)));
         for (const bundleId of bundleIds) {
-          await waitForNotificationsAuthorizationStatus(device!.udid, bundleId, 2);
+          assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'granted');
         }
 
         await Promise.all(bundleIds.map((bundleId) => sim.resetPermission(device!.udid, 'notifications', bundleId)));
