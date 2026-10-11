@@ -48,9 +48,7 @@ const activeRecordings = new Map<string, RecordingState>();
  * mid-recording) doesn't reject it — it's logged here instead — call {@link stopVideoRecording} to
  * observe it as a rejection and release the recording's resources.
  *
- * UUID strings select ports directly; numeric guest screen IDs are resolved once at startup
- * against the current ports. Missing or ambiguous mappings reject. An omitted ID selects the
- * default display; multiple class-0 ports require an explicit ID. See {@link VideoRecordingOptions.displayId}.
+ * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
  *
  * @param udid — UDID of the device to record; must be booted
  * @param outputFile — filesystem path to write the video to; resolved against `process.cwd()` if

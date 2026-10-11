@@ -125,10 +125,7 @@ export interface SimDisplayInfo {
 export interface DisplayOptions {
   /**
    * Port UUID from `getDisplays()`, or an unsigned 32-bit guest screen ID (XCTest/WDA displayID).
-   * Numeric IDs must match exactly one current port; missing or ambiguous mappings reject.
-   * Resolved on each screenshot capture, or once when starting a recording or stream.
-   * When omitted, selects the unique class-0 display, falling back to the first renderable
-   * display if no class-0 port exists (e.g. tvOS). Multiple class-0 ports require an explicit ID.
+   * See [display selection helpers](./utils/display.ts) for validation and resolution semantics.
    */
   displayId?: string | number;
 }

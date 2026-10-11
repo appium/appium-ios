@@ -12,13 +12,11 @@ declare module '../native-simctl.js' {
 /**
  * Captures a device display as an image — the native equivalent of `simctl io <udid> screenshot`
  * (see native/sim_screenshot.mm for how this reads the framebuffer directly, with no temp file or
- * subprocess). Rejects if the resolved display has no renderable surface yet (e.g. not booted), or
- * if `options.displayId` cannot be uniquely resolved. UUID strings select ports directly;
- * numeric IDs are matched against the guest screen IDs from {@link getDisplays} on each capture.
- * An omitted ID selects the default display; multiple class-0 ports require an explicit ID.
+ * subprocess). Rejects if the resolved display has no renderable surface yet (e.g. not booted).
+ * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
  *
  * @param udid — UDID of the device to capture; must be booted
- * @param options — `format` (defaults to `'png'`), `displayId` (defaults to the primary display),
+ * @param options — `format` (defaults to `'png'`), `displayId`,
  * and `quality` (JPEG only, 0-100 percent)
  * @returns image data encoded as `options.format`
  */

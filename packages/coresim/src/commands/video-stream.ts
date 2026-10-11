@@ -250,9 +250,7 @@ export class VideoStream extends EventEmitter {
  * `startVideoRecording`/`stopVideoRecording` — both, and any number of concurrent streams, can
  * run on the same device at once.
  *
- * UUID strings select ports directly; numeric guest screen IDs are resolved once at startup
- * against the current ports. Missing or ambiguous mappings reject. An omitted ID selects the
- * default display; multiple class-0 ports require an explicit ID. See {@link VideoStreamOptions.displayId}.
+ * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
  *
  * @param udid — UDID of the device to stream; must be booted
  * @param options — `displayId`, `codec`, `fps`, `bitrate`, `audio` — see {@link VideoStreamOptions}

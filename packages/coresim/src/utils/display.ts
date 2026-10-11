@@ -20,7 +20,8 @@ export function validateDisplayId(displayId: unknown): void {
 /**
  * Resolves a validated display selection to the port UUID expected by native capture APIs.
  * UUID strings pass through without enumeration; numeric IDs are matched against a fresh list
- * of guest screen IDs on each call. An omitted ID selects the unique `isMain` (class-0) port.
+ * of guest screen IDs (XCTest/WDA displayID) on each call. An omitted ID selects the unique `isMain` (class-0) port.
+ * If no class-0 port exists, native capture falls back to the first renderable display.
  * Call once at recording/stream startup, or on each screenshot capture.
  *
  * @param device — native handle for the device whose display ports are queried
