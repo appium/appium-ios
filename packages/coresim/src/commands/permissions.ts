@@ -41,8 +41,12 @@ declare module '../native-simctl.js' {
  * simulator's own TCC (privacy) database — see CLAUDE.md for why this bypasses CoreSimulator's own
  * privacy API.
  *
+ * `notifications` isn't a TCC row: it is written to SpringBoard's BulletinBoard store instead. On a
+ * booted device SpringBoard is restarted to load it, which terminates every running app; a shut down
+ * device picks it up on its next boot.
+ *
  * @param udid — UDID of the target device
- * @param service — permission to grant, e.g. `"camera"`, `"contacts"`, `"photos"`
+ * @param service — permission to grant, e.g. `"camera"`, `"contacts"`, `"photos"`, `"notifications"`
  * @param bundleId — bundle identifier of the app the permission applies to
  * @param status — defaults to `'granted'`. `'limited'` ("selected photos" access) is only valid
  * for the `photos` service, `'critical'` (critical alerts allowed too) — for `notifications`.
@@ -70,7 +74,8 @@ export async function grantPermission(
 }
 
 /**
- * Revokes a previously granted privacy permission from the given app.
+ * Revokes a previously granted privacy permission from the given app. For `notifications`, a booted
+ * device's SpringBoard is restarted, see {@link grantPermission}.
  *
  * @param udid — UDID of the target device
  * @param service — permission to revoke (see {@link grantPermission})
@@ -92,7 +97,9 @@ export async function revokePermission(
 }
 
 /**
- * Resets a privacy permission for the given app to its default (unprompted) state.
+ * Resets a privacy permission for the given app to its default (unprompted) state. For
+ * `notifications`, the app's section is removed from SpringBoard's store and a booted device's
+ * SpringBoard is restarted, see {@link grantPermission}.
  *
  * @param udid — UDID of the target device
  * @param service — permission to reset (see {@link grantPermission})
@@ -122,6 +129,7 @@ export async function resetPermission(
  * @param service — permission to check (see {@link grantPermission})
  * @param bundleId — bundle identifier of the app the permission applies to
  * @returns `'unset'` if the app has never been prompted/decided for this permission
+ * @throws {Error} for `notifications`: reading it isn't supported
  */
 export async function getPermission(
   this: NativeSimctl,
@@ -186,27 +194,22 @@ async function setNotificationsAccess(
   const device = await this._findDevice(udid);
   const storePath = path.join(device.dataPath(), 'Library', 'BulletinBoard', 'VersionedSectionInfo.plist');
   await withStoreLock(storePath, async () => {
-    const springBoardPid =
-      device.state() === SimDeviceState.Booted ? await pauseSpringBoard.call(this, udid) : undefined;
+    const springBoard = device.state() === SimDeviceState.Booted ? new SpringBoard(this, udid) : undefined;
+    await springBoard?.pause();
     let written = false;
     try {
       written = await writeNotificationsSection(storePath, bundleId, status);
     } finally {
-      if (springBoardPid && !written) {
-        sendSignal(springBoardPid, 'SIGCONT');
+      if (!written) {
+        springBoard?.resume();
       }
     }
-    if (!springBoardPid || !written) {
+    if (!springBoard || !written) {
       return;
     }
     await setImmutable(storePath, true);
     try {
-      try {
-        await stopSpringBoard.call(this, udid);
-      } finally {
-        sendSignal(springBoardPid, 'SIGCONT');
-      }
-      await waitForNewSpringBoard.call(this, udid, springBoardPid);
+      await springBoard.restart();
     } finally {
       await setImmutable(storePath, false);
     }
@@ -335,56 +338,99 @@ async function setImmutable(filePath: string, immutable: boolean): Promise<void>
 }
 
 /**
- * Asks launchd to stop SpringBoard of the given booted device; launchd starts a new one right away.
+ * SpringBoard of a booted device: the process that owns the BulletinBoard store, see
+ * setNotificationsAccess. The simulator shares the host kernel, so it is signalled directly.
  */
-async function stopSpringBoard(this: NativeSimctl, udid: string): Promise<void> {
-  // Bare name: resolved against the guest runtime's own bin dirs, like in listProcesses.
-  const proc = await this.spawnProcess(udid, 'launchctl', {arguments: ['launchctl', 'stop', SPRINGBOARD_SERVICE]});
-  let stderr = '';
-  proc.stdout.resume();
-  proc.stderr.on('data', (chunk: Buffer) => {
-    stderr += chunk;
-  });
-  const streamError = Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]).then(([err]) => {
-    throw err;
-  });
-  const [[code, signal]] = await Promise.race([
-    Promise.all([once(proc, 'exit'), once(proc.stderr, 'end')]),
-    streamError,
-  ]);
-  if (code !== 0) {
-    const reason = signal ? `signal ${signal}` : `exit code ${code}`;
-    throw new Error(
-      `'launchctl stop ${SPRINGBOARD_SERVICE}' failed with ${reason}${stderr.trim() ? `: ${stderr.trim()}` : ''}`,
-    );
-  }
-}
+class SpringBoard {
+  private pausedPid: number | undefined;
 
-/**
- * Pauses the running SpringBoard so that it cannot rewrite the BulletinBoard store. The simulator
- * shares the host kernel, so its processes are signalled directly. SpringBoard can be in the
- * middle of a restart, hence the retries.
- *
- * @returns the paused process id
- */
-async function pauseSpringBoard(this: NativeSimctl, udid: string): Promise<number> {
-  let pausedPid: number | undefined;
-  try {
-    await waitForCondition(
-      async () => {
-        const pid = await findSpringBoardPid.call(this, udid).catch(() => undefined);
-        if (pid && sendSignal(pid, 'SIGSTOP')) {
-          pausedPid = pid;
-        }
-        return Boolean(pausedPid);
-      },
-      {waitMs: SPRINGBOARD_RESTART_TIMEOUT_MS, intervalMs: 300},
-    );
-  } catch {}
-  if (!pausedPid) {
-    throw new Error(`${SPRINGBOARD_SERVICE} is not running`);
+  constructor(
+    private readonly simctl: NativeSimctl,
+    private readonly udid: string,
+  ) {}
+
+  /**
+   * Pauses the running SpringBoard so that it cannot rewrite the BulletinBoard store. It can be in
+   * the middle of a restart, hence the retries.
+   */
+  async pause(): Promise<void> {
+    try {
+      await waitForCondition(
+        async () => {
+          const pid = await this.pid().catch(() => undefined);
+          if (pid && sendSignal(pid, 'SIGSTOP')) {
+            this.pausedPid = pid;
+          }
+          return Boolean(this.pausedPid);
+        },
+        {waitMs: SPRINGBOARD_RESTART_TIMEOUT_MS, intervalMs: 300},
+      );
+    } catch {}
+    if (!this.pausedPid) {
+      throw new Error(`${SPRINGBOARD_SERVICE} is not running`);
+    }
   }
-  return pausedPid;
+
+  /** Lets the paused SpringBoard run again. */
+  resume(): void {
+    if (this.pausedPid) {
+      sendSignal(this.pausedPid, 'SIGCONT');
+    }
+  }
+
+  /**
+   * Replaces the paused SpringBoard with a new one: asks launchd to stop it (launchd starts a new
+   * one right away), resumes it so that it can exit, then waits for the new process.
+   */
+  async restart(): Promise<void> {
+    const previousPid = this.pausedPid;
+    try {
+      await this.stop();
+    } finally {
+      this.resume();
+      this.pausedPid = undefined;
+    }
+    try {
+      await waitForCondition(
+        async () => {
+          const pid = await this.pid().catch(() => undefined);
+          return Number.isInteger(pid) && pid !== previousPid;
+        },
+        {waitMs: SPRINGBOARD_RESTART_TIMEOUT_MS, intervalMs: 300},
+      );
+    } catch {
+      throw new Error(`${SPRINGBOARD_SERVICE} did not restart within ${SPRINGBOARD_RESTART_TIMEOUT_MS}ms`);
+    }
+  }
+
+  private async pid(): Promise<number | undefined> {
+    return (await this.simctl.listProcesses(this.udid)).find(({name}) => name === SPRINGBOARD_SERVICE)?.pid;
+  }
+
+  private async stop(): Promise<void> {
+    // Bare name: resolved against the guest runtime's own bin dirs, like in listProcesses.
+    const proc = await this.simctl.spawnProcess(this.udid, 'launchctl', {
+      arguments: ['launchctl', 'stop', SPRINGBOARD_SERVICE],
+    });
+    let stderr = '';
+    proc.stdout.resume();
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk;
+    });
+    const streamError = Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]).then(([err]) => {
+      throw err;
+    });
+    const [[code, signal]] = await Promise.race([
+      Promise.all([once(proc, 'exit'), once(proc.stderr, 'end')]),
+      streamError,
+    ]);
+    if (code !== 0) {
+      const reason = signal ? `signal ${signal}` : `exit code ${code}`;
+      throw new Error(
+        `'launchctl stop ${SPRINGBOARD_SERVICE}' failed with ${reason}${stderr.trim() ? `: ${stderr.trim()}` : ''}`,
+      );
+    }
+  }
 }
 
 /**
@@ -399,23 +445,5 @@ function sendSignal(pid: number, name: NodeJS.Signals): boolean {
       return false;
     }
     throw err;
-  }
-}
-
-async function findSpringBoardPid(this: NativeSimctl, udid: string): Promise<number | undefined> {
-  return (await this.listProcesses(udid)).find(({name}) => name === SPRINGBOARD_SERVICE)?.pid;
-}
-
-async function waitForNewSpringBoard(this: NativeSimctl, udid: string, previousPid: number): Promise<void> {
-  try {
-    await waitForCondition(
-      async () => {
-        const pid = await findSpringBoardPid.call(this, udid).catch(() => undefined);
-        return Number.isInteger(pid) && pid !== previousPid;
-      },
-      {waitMs: SPRINGBOARD_RESTART_TIMEOUT_MS, intervalMs: 300},
-    );
-  } catch {
-    throw new Error(`${SPRINGBOARD_SERVICE} did not restart within ${SPRINGBOARD_RESTART_TIMEOUT_MS}ms`);
   }
 }

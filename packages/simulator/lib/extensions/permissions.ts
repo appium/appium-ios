@@ -53,8 +53,8 @@ const SERVICES: readonly SimPermissionService[] = Object.freeze([
 ]);
 
 /**
- * Sets the particular permission to the application bundle. See `xcrun simctl privacy` for more
- * details on the available service names and statuses.
+ * Sets the particular permission to the application bundle. See {@link setPermissions} for the
+ * available service names and statuses.
  *
  * @param bundleId Application bundle identifier.
  * @param permission Service name to be set.
@@ -73,10 +73,22 @@ export async function setPermission(
 /**
  * Sets the permissions for the particular application bundle.
  *
+ * Service names: `calendar`, `camera`, `contacts`, `faceid`, `health`, `homekit`, `location`,
+ * `location-always`, `medialibrary`, `microphone`, `motion`, `notifications`, `photos`, `reminders`,
+ * `siri`, `speech`, `usertracking`, and `all`. Statuses: `yes`, `no`, `unset`; `limited` ("selected
+ * photos" access) is only valid for `photos`, `critical` (critical alerts allowed too) — for
+ * `notifications`.
+ *
+ * - `notifications` is SpringBoard's own setting rather than a TCC one. On a booted device
+ *   SpringBoard is restarted to apply it, which terminates every running app; a shut down device
+ *   picks it up on its next boot.
+ * - `all` applies its status to every service except `notifications` and
+ *   `location`/`location-always`, which have to be listed explicitly. Services listed next to `all`
+ *   keep their own status.
+ *
  * @param bundleId Application bundle identifier.
  * @param permissionsMapping A mapping where keys
  * are service names and values are their corresponding status values.
- * See `xcrun simctl privacy` for more details on available service names and statuses.
  * @throws {Error} If there was an error while changing permissions.
  */
 export async function setPermissions(
@@ -92,7 +104,8 @@ export async function setPermissions(
  * Retrieves current permission status for the given application bundle.
  *
  * @param bundleId Application bundle identifier.
- * @param serviceName One of available service names.
+ * @param serviceName One of available service names (see {@link setPermissions}) except `all`,
+ * `location`/`location-always` and `notifications`, whose status isn't read back.
  * @returns Promise that resolves to the permission status
  * @throws {Error} If there was an error while retrieving permissions.
  */
