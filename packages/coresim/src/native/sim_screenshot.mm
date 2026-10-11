@@ -183,11 +183,27 @@ NSArray<NSDictionary*>* ListDisplays(id device, NSError** error) {
   NSMutableArray<NSDictionary*>* result = [NSMutableArray arrayWithCapacity:candidates.count];
   for (NSDictionary* candidate in candidates) {
     unsigned short displayClass = [candidate[kCandidateDisplayClassKey] unsignedShortValue];
-    [result addObject:@{
+    NSMutableDictionary* display = [@{
       @"id" : candidate[kCandidateUUIDKey],
       @"displayClass" : candidate[kCandidateDisplayClassKey],
       @"isMain" : @(displayClass == 0),
-    }];
+    } mutableCopy];
+    // A Duo has multiple class-0 displays. Use the guest screen ID to associate
+    // a port UUID with XCTest's displayID; class or enumeration order is ambiguous.
+    id descriptor = candidate[kCandidateDescriptorKey];
+    SEL propertiesSelector = SelectorNamed("screenProperties");
+    if ([descriptor respondsToSelector:propertiesSelector]) {
+      id properties = IdGetter(descriptor, "screenProperties");
+      SEL screenIDSelector = SelectorNamed("screenID");
+      if ([properties respondsToSelector:screenIDSelector]) {
+        unsigned int screenID = SafeInvoke([&] {
+          using Fn = unsigned int (*)(id, SEL);
+          return ((Fn)objc_msgSend)(properties, screenIDSelector);
+        });
+        display[@"screenId"] = @(screenID);
+      }
+    }
+    [result addObject:display];
   }
   return result;
 }

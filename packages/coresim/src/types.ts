@@ -113,9 +113,11 @@ export type SimPermissionService =
 export interface SimDisplayInfo {
   /** Port UUID identifying this display — pass as `getScreenshot`'s `displayId` option to target it. */
   id: string;
-  /** Raw `SimDisplayDescriptorState.displayClass` — 0 is always the primary display. */
+  /** Guest screen ID (`SimScreenProperties.screenID`), when available. Matches XCTest displayID. */
+  screenId?: number;
+  /** Raw `SimDisplayDescriptorState.displayClass` — 0 includes both built-in displays on Duo. */
   displayClass: number;
-  /** Whether this is the primary display (`displayClass === 0`). */
+  /** Whether `displayClass === 0`. Multiple integrated displays may have this value. */
   isMain: boolean;
 }
 

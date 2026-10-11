@@ -55,6 +55,17 @@ export interface SpawnedProcess extends EventEmitter {
   kill(signal?: NodeJS.Signals | number): boolean;
 }
 
+/** A renderable CoreSimulator display port. */
+export interface SimulatorDisplayInfo {
+  /** Port UUID accepted by getScreenshot's displayId option. */
+  id: string;
+  /** Guest screen ID, matching XCTest displayID, when CoreSimulator exposes it. */
+  screenId?: number;
+  displayClass: number;
+  /** Class-0 display; multiple integrated displays may have this value. */
+  isMain: boolean;
+}
+
 /** Options for {@link SupportsScreenshot.getScreenshot}. */
 export interface ScreenshotOptions {
   /** Image encoding — defaults to `'png'`. */
@@ -388,6 +399,8 @@ export interface SupportsPasteboard {
 }
 
 export interface SupportsScreenshot {
+  /** Lists display ports of the booted simulator without changing display selection. */
+  getDisplays(): Promise<SimulatorDisplayInfo[]>;
   /**
    * Captures the Simulator's display. The Simulator must be booted.
    *

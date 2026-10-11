@@ -1,5 +1,5 @@
 import type {HasNativeSimctl} from '../native/types.js';
-import type {CoreSimulator, ScreenshotOptions, SupportsScreenshot} from '../types.js';
+import type {CoreSimulator, ScreenshotOptions, SupportsScreenshot, SimulatorDisplayInfo} from '../types.js';
 
 declare module '../simulator-xcode-15.js' {
   interface SimulatorXcode15 extends SupportsScreenshot {}
@@ -18,4 +18,9 @@ export async function getScreenshot(
   options: ScreenshotOptions = {},
 ): Promise<Buffer> {
   return await this._native.getScreenshot(this.udid, options);
+}
+
+/** Lists the simulator's display ports, including guest screen IDs when available. */
+export async function getDisplays(this: CoreSimulatorWithScreenshot): Promise<SimulatorDisplayInfo[]> {
+  return await this._native.getDisplays(this.udid);
 }

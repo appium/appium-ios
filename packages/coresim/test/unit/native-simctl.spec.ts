@@ -77,6 +77,27 @@ describe('NativeSimctl (read-only)', {timeout: 30000}, () => {
     }
   });
 
+  it('exposes distinct guest screen IDs for a booted Duo', async (t) => {
+    const sim = new NativeSimctl();
+    const duo = (await sim.getDevices()).find(
+      (d) => d.state === SimDeviceState.Booted && d.deviceTypeIdentifier.endsWith('.iPhone-Duo'),
+    );
+    if (!duo) {
+      return t.skip('No booted Duo simulator');
+    }
+    const displays = await sim.getDisplays(duo.udid);
+    const integrated = displays.filter(({displayClass}) => displayClass === 0);
+    assert.ok(integrated.length > 1, 'Duo should expose multiple integrated displays');
+    for (const display of integrated) {
+      assert.ok(Number.isInteger(display.screenId));
+      assert.ok(display.screenId! > 0);
+      assert.match(display.id, /^[0-9A-F-]{36}$/i);
+      const png = await sim.getScreenshot(duo.udid, {displayId: display.id});
+      assert.deepStrictEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    assert.strictEqual(new Set(integrated.map(({screenId}) => screenId)).size, integrated.length);
+  });
+
   it('reads getenv from a booted device, when one is booted', async () => {
     const sim = new NativeSimctl();
     const booted = (await sim.getDevices()).find((d) => d.state === SimDeviceState.Booted);
