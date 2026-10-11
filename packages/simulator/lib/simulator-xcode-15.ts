@@ -188,7 +188,6 @@ Object.assign(SimulatorXcode15.prototype, {
 
   // screenshot
   getScreenshot: screenshotExtensions.getScreenshot,
-  getDisplays: screenshotExtensions.getDisplays,
 
   // video recording
   startVideoRecording: videoRecordingExtensions.startVideoRecording,

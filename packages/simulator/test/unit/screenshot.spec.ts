@@ -3,20 +3,9 @@ import {describe, it} from 'node:test';
 
 import sinon from 'sinon';
 
-import {getDisplays, getScreenshot} from '../../lib/extensions/screenshot.js';
+import {getScreenshot} from '../../lib/extensions/screenshot.js';
 
 describe('simulator display capture', function () {
-  it('preserves guest screen IDs and port UUIDs when enumerating', async function () {
-    const displays = [
-      {id: 'inner-port', screenId: 3, displayClass: 0, isMain: true},
-      {id: 'outer-port', screenId: 1, displayClass: 0, isMain: true},
-    ];
-    const enumerate = sinon.stub().resolves(displays);
-    const simulator = {udid: 'sim-1', _native: {getDisplays: enumerate}} as any;
-    assert.deepEqual(await getDisplays.call(simulator), displays);
-    sinon.assert.calledOnceWithExactly(enumerate, 'sim-1');
-  });
-
   for (const displayId of ['inner-port', 3]) {
     it(`passes display ID ${displayId} unchanged to CoreSim`, async function () {
       const data = Buffer.from('screenshot');
@@ -27,9 +16,9 @@ describe('simulator display capture', function () {
     });
   }
 
-  it('propagates enumeration failures', async function () {
-    const error = new Error('No IO client');
-    const simulator = {udid: 'sim-1', _native: {getDisplays: sinon.stub().rejects(error)}} as any;
-    await assert.rejects(getDisplays.call(simulator), (actual) => actual === error);
+  it('propagates CoreSim capture failures', async function () {
+    const error = new Error('Cannot uniquely resolve guest screen ID 3');
+    const simulator = {udid: 'sim-1', _native: {getScreenshot: sinon.stub().rejects(error)}} as any;
+    await assert.rejects(getScreenshot.call(simulator, {displayId: 3}), (actual) => actual === error);
   });
 });
