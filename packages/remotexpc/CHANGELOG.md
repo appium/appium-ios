@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.7...appium-ios-remotexpc@5.25.0) (2026-10-12)
+
+### Features
+
+* **remotexpc:** match Apple TV adverts to pair records by authTag ([#50](https://github.com/appium/appium-ios/issues/50)) ([81f6930](https://github.com/appium/appium-ios/commit/81f69306a1736ffa430cec9b778a2de88e8e44e8))
+
+
 ## [5.24.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.6...appium-ios-remotexpc@5.24.7) (2026-10-08)
 
 **Note:** Version bump only for package appium-ios-remotexpc
