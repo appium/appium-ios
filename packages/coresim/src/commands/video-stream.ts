@@ -4,7 +4,7 @@ import {logger} from '@appium/support';
 
 import type {NativeSimctl} from '../native-simctl.js';
 import type {NativeVideoStreamHandle, VideoAccessUnit, VideoStreamOptions} from '../types.js';
-import {runCatchingAsync, toTypedError} from '../utils/index.js';
+import {resolveDisplayPortId, runCatchingAsync, toTypedError, validateDisplayId} from '../utils/index.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -250,6 +250,8 @@ export class VideoStream extends EventEmitter {
  * `startVideoRecording`/`stopVideoRecording` — both, and any number of concurrent streams, can
  * run on the same device at once.
  *
+ * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
+ *
  * @param udid — UDID of the device to stream; must be booted
  * @param options — `displayId`, `codec`, `fps`, `bitrate`, `audio` — see {@link VideoStreamOptions}
  */
@@ -269,11 +271,13 @@ export async function startVideoStream(
   ) {
     throw new RangeError(`bitrate must be a positive number no greater than ${2 ** 31 - 1}, got ${options.bitrate}`);
   }
+  validateDisplayId(options.displayId);
   const device = await runCatchingAsync(() => this._findDevice(udid));
+  const displayId = await runCatchingAsync(() => resolveDisplayPortId(device, options.displayId));
   const stream = new VideoStream(options.codec === 'hevc' ? 'hevc' : 'h264');
   const handle = await runCatchingAsync(() =>
     device.startVideoStream(
-      options,
+      {...options, displayId},
       (unit) => stream._handleAccessUnit(unit),
       (err) => stream._handleError(err),
     ),

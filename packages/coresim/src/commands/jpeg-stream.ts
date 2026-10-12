@@ -4,7 +4,7 @@ import {logger} from '@appium/support';
 
 import type {NativeSimctl} from '../native-simctl.js';
 import type {JpegFrame, JpegStreamOptions, NativeJpegStreamHandle} from '../types.js';
-import {runCatchingAsync, toTypedError} from '../utils/index.js';
+import {resolveDisplayPortId, runCatchingAsync, toTypedError, validateDisplayId} from '../utils/index.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -197,6 +197,8 @@ export class JpegStream extends EventEmitter {
  * each frame as it arrives. Independent of `startVideoStream`/`startVideoRecording` — any number of
  * concurrent streams/recordings can run on the same device at once.
  *
+ * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
+ *
  * @param udid — UDID of the device to stream; must be booted
  * @param options — `displayId`, `fps`, `quality`, `scale` — see {@link JpegStreamOptions}
  */
@@ -219,11 +221,13 @@ export async function startJpegStream(
   if (options.scale !== undefined && (!Number.isFinite(options.scale) || options.scale <= 0 || options.scale > 100)) {
     throw new RangeError(`scale must be a number greater than 0 and no greater than 100, got ${options.scale}`);
   }
+  validateDisplayId(options.displayId);
   const device = await runCatchingAsync(() => this._findDevice(udid));
+  const displayId = await runCatchingAsync(() => resolveDisplayPortId(device, options.displayId));
   const stream = new JpegStream();
   const handle = await runCatchingAsync(() =>
     device.startJpegStream(
-      options,
+      {...options, displayId},
       (frame) => stream._handleFrame(frame),
       (err) => stream._handleError(err),
     ),

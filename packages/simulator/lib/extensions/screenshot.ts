@@ -10,7 +10,7 @@ type CoreSimulatorWithScreenshot = CoreSimulator & SupportsScreenshot & HasNativ
 /**
  * Captures the Simulator's display. The Simulator must be booted.
  *
- * @param options `format` (defaults to `'png'`), `displayId` (defaults to the primary display),
+ * @param options `format` (defaults to `'png'`), `displayId` (port UUID or numeric guest screen ID),
  * and `quality` (JPEG only, 0-100).
  */
 export async function getScreenshot(
