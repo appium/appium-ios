@@ -60,6 +60,11 @@ export type DisplayId = string | number;
 
 /** Options for {@link SupportsScreenshot.getScreenshot}. */
 export interface ScreenshotOptions {
+  /**
+   * Opt in to CoreSim's one-second numeric display-ID cache. Defaults to `false`.
+   * See [CoreSim screenshot options](../../coresim/src/types.ts) for retry and topology-change semantics.
+   */
+  cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**

@@ -135,6 +135,14 @@ export interface DisplayOptions {
 
 /** Options for `NativeSimctl.getScreenshot`. */
 export interface ScreenshotOptions extends DisplayOptions {
+  /**
+   * Reuse a successfully resolved numeric display ID for up to one second. Defaults to `false`.
+   * Scoped to the CoreSim client and device; UUID strings and default selection are never cached.
+   * A failed cached capture clears the entry and retries once with fresh display resolution.
+   * Useful for repeated screenshots on a stable display configuration. Disable while changing
+   * display topology: a mapping change that leaves the old port usable may remain unseen until expiry.
+   */
+  cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**
