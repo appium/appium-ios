@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.8.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.7.1...appium-ios-simulator@10.8.0) (2026-10-12)
+
+### Features
+
+* support numeric display IDs across capture APIs ([#49](https://github.com/appium/appium-ios/issues/49)) ([ca7649a](https://github.com/appium/appium-ios/commit/ca7649addf546a023bc0d601f784f801b8d99b56))
+
+
 ## [10.7.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.7.0...appium-ios-simulator@10.7.1) (2026-10-05)
 
 **Note:** Version bump only for package appium-ios-simulator

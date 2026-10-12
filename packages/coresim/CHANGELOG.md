@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.12.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.11.1...@appium/coresim@1.12.0) (2026-10-12)
+
+### Features
+
+* support numeric display IDs across capture APIs ([#49](https://github.com/appium/appium-ios/issues/49)) ([ca7649a](https://github.com/appium/appium-ios/commit/ca7649addf546a023bc0d601f784f801b8d99b56))
+
+
 ## [1.11.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.11.0...@appium/coresim@1.11.1) (2026-10-05)
 
 ### Performance Improvements
