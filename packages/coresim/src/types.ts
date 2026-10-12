@@ -136,11 +136,13 @@ export interface DisplayOptions {
 /** Options for `NativeSimctl.getScreenshot`. */
 export interface ScreenshotOptions extends DisplayOptions {
   /**
-   * Reuse a successfully resolved numeric display ID for up to one second. Defaults to `false`.
+   * Reuse a successfully resolved numeric display ID within the current observed boot. Defaults to `false`.
    * Scoped to the CoreSim client and device; UUID strings and default selection are never cached.
    * A failed cached capture clears the entry and retries once with fresh display resolution.
-   * Useful for repeated screenshots on a stable display configuration. Disable while changing
-   * display topology: a mapping change that leaves the old port usable may remain unseen until expiry.
+   * Requires Booted state and an unchanged, readable lastBootedAt marker; otherwise resolves afresh.
+   * The marker is checked before and after capture. Set false to discard a cached selection.
+   * Disable while changing display topology: a mapping change that leaves the old port usable
+   * within the same boot cannot be detected by the boot marker alone.
    */
   cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
@@ -429,6 +431,8 @@ export interface NativeDeviceHandle {
   udid(): string;
   name(): string;
   state(): number;
+  /** Last boot's Unix timestamp in milliseconds, or null if never booted; may throw if unsupported. */
+  lastBootedAt(): number | null;
   deviceTypeIdentifier(): string;
   runtimeIdentifier(): string;
   runtimeRootPath(): string;

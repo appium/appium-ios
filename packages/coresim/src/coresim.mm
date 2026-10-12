@@ -590,6 +590,17 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
       return Napi::Number::New(info.Env(), static_cast<double>(DeviceState(device_)));
     });
   }
+  // The observed boot timestamp is local metadata, like state. Missing/unsupported metadata
+  // disables the optional JS cache; callers must not treat it as a unique session UUID.
+  Napi::Value LastBootedAt(const Napi::CallbackInfo& info) {
+    return CatchToJs(info.Env(), [&]() -> Napi::Value {
+      NSDate* date = DeviceLastBootedAt(device_);
+      if (date == nil) {
+        return info.Env().Null();
+      }
+      return Napi::Number::New(info.Env(), date.timeIntervalSince1970 * 1000.0);
+    });
+  }
   // deviceType/runtime are legitimately nil for a device whose runtime profile is no longer
   // installed (shows as "unavailable" in `simctl list devices`) — not an error, just unknown.
   Napi::Value DeviceTypeIdentifier(const Napi::CallbackInfo& info) {
@@ -1721,6 +1732,7 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::Udid>("udid"),
                       InstanceMethod<&NativeDevice::Name>("name"),
                       InstanceMethod<&NativeDevice::State>("state"),
+                      InstanceMethod<&NativeDevice::LastBootedAt>("lastBootedAt"),
                       InstanceMethod<&NativeDevice::DeviceTypeIdentifier>("deviceTypeIdentifier"),
                       InstanceMethod<&NativeDevice::RuntimeIdentifier>("runtimeIdentifier"),
                       InstanceMethod<&NativeDevice::RuntimeRootPath>("runtimeRootPath"),

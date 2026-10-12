@@ -7,6 +7,8 @@ import type {ScreenshotOptions, SimDisplayInfo} from '../../src/types.js';
 
 function fixture() {
   let ports: SimDisplayInfo[] = [{id: 'port-a', screenId: 1, displayClass: 0, isMain: true}];
+  const state = mock.fn(() => 3);
+  const lastBootedAt = mock.fn((): number | null => 1000);
   const getDisplays = mock.fn(async () => ports);
   const screenshot = mock.fn(async (options?: {displayId?: string}) => {
     if (!ports.some(({id}) => id === options?.displayId)) {
@@ -16,11 +18,18 @@ function fixture() {
   });
   const client = {
     // Like the native addon, return a new handle wrapper for each lookup.
-    _findDevice: async () => ({getDisplays, screenshot}),
+    _findDevice: async () => ({getDisplays, screenshot, state, lastBootedAt}),
   } as unknown as NativeSimctl;
   const capture = (options: ScreenshotOptions = {}, udid = 'device-a') =>
     getScreenshot.call(client, udid, {displayId: 1, cacheDisplayId: true, ...options});
-  return {capture, getDisplays, screenshot, setPorts: (value: SimDisplayInfo[]) => (ports = value)};
+  return {
+    capture,
+    getDisplays,
+    screenshot,
+    state,
+    lastBootedAt,
+    setPorts: (value: SimDisplayInfo[]) => (ports = value),
+  };
 }
 
 describe('opt-in screenshot display cache', () => {
@@ -49,17 +58,94 @@ describe('opt-in screenshot display cache', () => {
     assert.equal(b.getDisplays.mock.callCount(), 1);
   });
 
-  it('expires after one second without extending the TTL on hits', async (t) => {
-    let now = 0;
-    t.mock.method(performance, 'now', () => now);
+  it('retains a mapping beyond the old TTL while the boot marker is unchanged', async (t) => {
+    const now = t.mock.method(performance, 'now', () => 0);
     const f = fixture();
     await f.capture();
-    now = 900;
+    now.mock.mockImplementation(() => 86400000);
     await f.capture();
     assert.equal(f.getDisplays.mock.callCount(), 1);
-    now = 1000;
+  });
+
+  it('refreshes before capture when the boot marker changes, even if the old UUID remains usable', async () => {
+    const f = fixture();
+    await f.capture();
+    f.lastBootedAt.mock.mockImplementation(() => 2000);
     await f.capture();
     assert.equal(f.getDisplays.mock.callCount(), 2);
+    assert.equal(f.screenshot.mock.callCount(), 2);
+  });
+
+  for (const marker of [null, NaN, Infinity, 0]) {
+    it(`disables caching for unavailable/invalid boot marker ${marker}`, async () => {
+      const f = fixture();
+      f.lastBootedAt.mock.mockImplementation(() => marker);
+      await f.capture();
+      await f.capture();
+      assert.equal(f.getDisplays.mock.callCount(), 2);
+    });
+  }
+
+  it('discards an existing cache when boot metadata becomes unreadable', async () => {
+    const f = fixture();
+    await f.capture();
+    f.lastBootedAt.mock.mockImplementation(() => {
+      throw new Error('Unsupported selector');
+    });
+    await f.capture();
+    f.lastBootedAt.mock.mockImplementation(() => 1000);
+    await f.capture();
+    assert.equal(f.getDisplays.mock.callCount(), 3);
+  });
+
+  it('discards an existing cache when the device is not Booted', async () => {
+    const f = fixture();
+    await f.capture();
+    f.state.mock.mockImplementation(() => 1);
+    await f.capture();
+    f.state.mock.mockImplementation(() => 3);
+    await f.capture();
+    assert.equal(f.getDisplays.mock.callCount(), 3);
+  });
+
+  for (const phase of ['resolution', 'capture']) {
+    it(`does not cache a fresh capture spanning a boot change during ${phase}`, async () => {
+      const f = fixture();
+      if (phase === 'resolution') {
+        f.getDisplays.mock.mockImplementation(async () => {
+          f.lastBootedAt.mock.mockImplementation(() => 2000);
+          return [{id: 'port-a', screenId: 1, displayClass: 0, isMain: true}];
+        });
+      } else {
+        f.screenshot.mock.mockImplementation(async () => {
+          f.lastBootedAt.mock.mockImplementation(() => 2000);
+          return Buffer.from('port-a');
+        });
+      }
+      await f.capture();
+      await f.capture();
+      assert.equal(f.getDisplays.mock.callCount(), 2);
+    });
+  }
+
+  it('re-resolves after a successful cached capture if its boot marker changed in flight', async () => {
+    const f = fixture();
+    await f.capture();
+    f.screenshot.mock.mockImplementation(async () => {
+      f.lastBootedAt.mock.mockImplementation(() => 2000);
+      return Buffer.from('port-a');
+    });
+    await f.capture();
+    assert.equal(f.getDisplays.mock.callCount(), 2);
+    assert.equal(f.screenshot.mock.callCount(), 3);
+  });
+
+  it('explicitly disables and clears an existing cached selection', async () => {
+    const f = fixture();
+    await f.capture();
+    await f.capture({cacheDisplayId: false});
+    await f.capture();
+    assert.equal(f.getDisplays.mock.callCount(), 3);
   });
 
   it('refreshes a replaced UUID on a failed hit and retries the same numeric ID', async () => {
