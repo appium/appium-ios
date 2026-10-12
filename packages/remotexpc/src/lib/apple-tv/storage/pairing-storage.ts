@@ -23,17 +23,10 @@ export class PairingStorage implements PairingStorageInterface {
     this.box = strongbox(STRONGBOX_CONTAINER_NAME);
   }
 
-  async save(
-    deviceId: string,
-    ltpk: Buffer,
-    ltsk: Buffer,
-    remoteUnlockHostKey = '',
-    remotePairingUdid = '',
-    altIRK?: Buffer,
-  ): Promise<string> {
+  async save(deviceId: string, record: PairRecord): Promise<string> {
     try {
       const itemName = `${APPLETV_PAIRING_PREFIX}${deviceId}`;
-      const plistContent = this.createPlistContent(ltpk, ltsk, remoteUnlockHostKey, remotePairingUdid, altIRK);
+      const plistContent = this.createPlistContent(record);
 
       const item = await this.box.createItemWithValue(itemName, plistContent);
       const itemPath = item.id;
@@ -110,13 +103,13 @@ export class PairingStorage implements PairingStorageInterface {
     }
   }
 
-  private createPlistContent(
-    publicKey: Buffer,
-    privateKey: Buffer,
-    remoteUnlockHostKey: string,
-    remotePairingUdid: string,
-    altIRK?: Buffer,
-  ): string {
+  private createPlistContent({
+    publicKey,
+    privateKey,
+    remoteUnlockHostKey,
+    remotePairingUdid = '',
+    altIRK,
+  }: PairRecord): string {
     return createXmlPlist({
       private_key: privateKey,
       public_key: publicKey,

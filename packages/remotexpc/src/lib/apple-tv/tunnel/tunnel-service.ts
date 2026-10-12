@@ -274,20 +274,24 @@ export class AppleTVTunnelService {
     specificDeviceIdentifier?: string,
   ): MatchedPairRecord[] {
     const {matches, recordsWithoutAltIRK, devicesWithoutAuthTag} = matchDevicesToPairRecords(devices, candidates);
-    for (const identifier of recordsWithoutAltIRK) {
-      appleTVLog.warn(
-        `Pair record ${identifier} has no altIRK, so it will be tried against every unmatched device; pair that Apple TV again to avoid this.`,
-      );
-    }
     if (devicesWithoutAuthTag.length > 0) {
       appleTVLog.debug(`Discovered devices without an authTag: ${devicesWithoutAuthTag.join(', ')}`);
     }
 
     const matchedDevices = new Set(matches.map(({device}) => device));
+    const unmatchedDevices = devices.filter((device) => !matchedDevices.has(device));
+    // A record without an altIRK only costs extra attempts when more than one device is left to try it on
+    if (unmatchedDevices.length > 1) {
+      for (const identifier of recordsWithoutAltIRK) {
+        appleTVLog.warn(
+          `Pair record ${identifier} has no altIRK, so it will be tried against ${unmatchedDevices.length} unmatched devices; pair that Apple TV again to avoid this.`,
+        );
+      }
+    }
     const legacyCandidates = candidates.filter(({identifier}) => recordsWithoutAltIRK.includes(identifier));
-    const legacyAttempts = devices
-      .filter((device) => !matchedDevices.has(device))
-      .flatMap((device) => legacyCandidates.map(({identifier, record}) => ({identifier, record, device})));
+    const legacyAttempts = unmatchedDevices.flatMap((device) =>
+      legacyCandidates.map(({identifier, record}) => ({identifier, record, device})),
+    );
     const attempts = [...matches, ...legacyAttempts];
     if (attempts.length === 0) {
       throw new Error(

@@ -7,14 +7,7 @@ export interface PairRecord {
 }
 
 export interface PairingStorageInterface {
-  save(
-    deviceId: string,
-    ltpk: Buffer,
-    ltsk: Buffer,
-    remoteUnlockHostKey?: string,
-    remotePairingUdid?: string,
-    altIRK?: Buffer,
-  ): Promise<string>;
+  save(deviceId: string, record: PairRecord): Promise<string>;
   load(deviceId: string): Promise<PairRecord | null>;
   getAvailableDeviceIds(): Promise<string[]>;
 }

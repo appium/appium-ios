@@ -4,27 +4,6 @@ const MASK_64 = (1n << 64n) - 1n;
 
 type SipHashState = [bigint, bigint, bigint, bigint];
 
-function rotateLeft64(value: bigint, bits: bigint): bigint {
-  return ((value << bits) | (value >> (64n - bits))) & MASK_64;
-}
-
-function sipRound(v: SipHashState): void {
-  v[0] = (v[0] + v[1]) & MASK_64;
-  v[1] = rotateLeft64(v[1], 13n);
-  v[1] ^= v[0];
-  v[0] = rotateLeft64(v[0], 32n);
-  v[2] = (v[2] + v[3]) & MASK_64;
-  v[3] = rotateLeft64(v[3], 16n);
-  v[3] ^= v[2];
-  v[0] = (v[0] + v[3]) & MASK_64;
-  v[3] = rotateLeft64(v[3], 21n);
-  v[3] ^= v[0];
-  v[2] = (v[2] + v[1]) & MASK_64;
-  v[1] = rotateLeft64(v[1], 17n);
-  v[1] ^= v[2];
-  v[2] = rotateLeft64(v[2], 32n);
-}
-
 /**
  * SipHash-2-4 of `data` under a 16-byte `key`, returned as an unsigned 64-bit bigint.
  * @throws {RangeError} if the key is not 16 bytes
@@ -90,4 +69,25 @@ export function validateAuthTag(altIRK: Buffer, serviceIdentifier: string, authT
     return false;
   }
   return computeAuthTag(altIRK, serviceIdentifier).equals(authTag);
+}
+
+function rotateLeft64(value: bigint, bits: bigint): bigint {
+  return ((value << bits) | (value >> (64n - bits))) & MASK_64;
+}
+
+function sipRound(v: SipHashState): void {
+  v[0] = (v[0] + v[1]) & MASK_64;
+  v[1] = rotateLeft64(v[1], 13n);
+  v[1] ^= v[0];
+  v[0] = rotateLeft64(v[0], 32n);
+  v[2] = (v[2] + v[3]) & MASK_64;
+  v[3] = rotateLeft64(v[3], 16n);
+  v[3] ^= v[2];
+  v[0] = (v[0] + v[3]) & MASK_64;
+  v[3] = rotateLeft64(v[3], 21n);
+  v[3] ^= v[0];
+  v[2] = (v[2] + v[1]) & MASK_64;
+  v[1] = rotateLeft64(v[1], 17n);
+  v[1] ^= v[2];
+  v[2] = rotateLeft64(v[2], 32n);
 }

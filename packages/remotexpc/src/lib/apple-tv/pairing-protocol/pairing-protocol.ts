@@ -607,14 +607,13 @@ export class PairingProtocol implements PairingProtocolInterface {
   ): Promise<AppleTVPairingFlowResult> {
     const deviceId = this.resolvePairingDeviceId(device, peerIdentity.remotePairingUdid);
     const storage = new PairingStorage(DEFAULT_PAIRING_CONFIG);
-    const pairingFile = await storage.save(
-      deviceId,
-      ltpk,
-      ltsk,
-      '',
-      peerIdentity.remotePairingUdid,
-      peerIdentity.altIRK,
-    );
+    const pairingFile = await storage.save(deviceId, {
+      publicKey: ltpk,
+      privateKey: ltsk,
+      remoteUnlockHostKey: '',
+      remotePairingUdid: peerIdentity.remotePairingUdid,
+      altIRK: peerIdentity.altIRK,
+    });
     return {deviceId, pairingFile};
   }
 

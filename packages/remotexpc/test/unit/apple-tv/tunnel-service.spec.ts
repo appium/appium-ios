@@ -45,11 +45,15 @@ describe('AppleTVTunnelService', function () {
     const connect = sinon.stub().resolves();
     const verify = sinon.stub().rejects(new Error('verify failed'));
     const suspend = sinon.stub().resolves();
+    const warn = sinon.stub();
     const {AppleTVTunnelService} = await mockImport(
       t,
       '../../../src/lib/apple-tv/tunnel/tunnel-service.js',
       import.meta.url,
       {
+        '../../../src/lib/logger.js': {
+          getLogger: () => ({debug() {}, info() {}, warn, error() {}}),
+        },
         '../../../src/lib/apple-tv/network/index.js': {
           NetworkClient: class {
             connect = connect;
@@ -85,7 +89,7 @@ describe('AppleTVTunnelService', function () {
         },
       },
     );
-    return {tunnelService: new AppleTVTunnelService(), connect, verify, suspend};
+    return {tunnelService: new AppleTVTunnelService(), connect, verify, suspend, warn};
   }
 
   async function loadTunnelService(t: TestContext) {
@@ -288,6 +292,39 @@ describe('AppleTVTunnelService', function () {
       verify.args.map(([, identifier]) => identifier),
       ['STALE'],
     );
+  });
+
+  it('warns about a pair record without an altIRK when it is tried against several devices', async function (t) {
+    const mine = advertisedDevice('mine', '10.0.0.2', ALT_IRK);
+    const other = advertisedDevice('other', '10.0.0.1', OTHER_ALT_IRK);
+    const {tunnelService, warn} = await loadTunnelServiceWithRecords(t, {STALE: pairRecord('STALE')});
+
+    await assert.rejects(
+      tunnelService.startTunnel(undefined, undefined, {devices: [mine, other]}),
+      /All authentication attempts failed/,
+    );
+
+    assert.strictEqual(warn.callCount, 1);
+    assert.match(
+      warn.firstCall.args[0],
+      /Pair record STALE has no altIRK, so it will be tried against 2 unmatched devices/,
+    );
+  });
+
+  it('does not warn about a pair record without an altIRK when only one device is left to try', async function (t) {
+    const mine = advertisedDevice('mine', '10.0.0.2', ALT_IRK);
+    const stranger = advertisedDevice('stranger', '10.0.0.9', OTHER_ALT_IRK);
+    const {tunnelService, warn} = await loadTunnelServiceWithRecords(t, {
+      MINE: pairRecord('MINE', ALT_IRK),
+      STALE: pairRecord('STALE'),
+    });
+
+    await assert.rejects(
+      tunnelService.startTunnel(undefined, undefined, {devices: [stranger, mine]}),
+      /All authentication attempts failed/,
+    );
+
+    assert.strictEqual(warn.called, false);
   });
 
   it('does not try a pair record without an altIRK against a device another record matched', async function (t) {
