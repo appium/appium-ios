@@ -55,6 +55,9 @@ export interface SpawnedProcess extends EventEmitter {
   kill(signal?: NodeJS.Signals | number): boolean;
 }
 
+/** Port UUID string or unsigned 32-bit guest screen ID (XCTest/WDA displayID). */
+export type DisplayId = string | number;
+
 /** Options for {@link SupportsScreenshot.getScreenshot}. */
 export interface ScreenshotOptions {
   /** Image encoding — defaults to `'png'`. */
@@ -63,7 +66,7 @@ export interface ScreenshotOptions {
    * Port UUID or numeric guest screen ID (XCTest/WDA displayID). Numeric IDs are
    * resolved by CoreSimulator on each capture. Multiple default displays require an explicit ID.
    */
-  displayId?: string | number;
+  displayId?: DisplayId;
   /**
    * JPEG quality as a percentage (0 = smallest/most compressed, 100 = largest/least compressed).
    * Only meaningful with `format: 'jpeg'`. Defaults to near-lossless when omitted.

@@ -1,4 +1,4 @@
-import type {DisplayOptions, NativeDeviceHandle} from '../types.js';
+import type {DisplayId, NativeDeviceHandle, SimDisplayInfo} from '../types.js';
 
 /**
  * Validates a capture API's display selection without querying the device.
@@ -31,7 +31,7 @@ export function validateDisplayId(displayId: unknown): void {
  */
 export async function resolveDisplayPortId(
   device: NativeDeviceHandle,
-  displayId: DisplayOptions['displayId'],
+  displayId: DisplayId | undefined,
 ): Promise<string | undefined> {
   if (typeof displayId === 'string') {
     return displayId;
@@ -41,7 +41,9 @@ export async function resolveDisplayPortId(
   if (typeof displayId === 'number') {
     const matches = displays.filter(({screenId}) => screenId === displayId);
     if (matches.length !== 1 || !matches[0].id) {
-      throw new Error(`Cannot uniquely resolve guest screen ID ${displayId} to a display port`);
+      throw new Error(
+        `Cannot uniquely resolve guest screen ID ${displayId} to a display port. ${availableDisplayIdsHint(displays)}`,
+      );
     }
     return matches[0].id;
   }
@@ -49,7 +51,17 @@ export async function resolveDisplayPortId(
   // Both integrated Duo displays have class 0. Never pick one by port order.
   const defaults = displays.filter(({isMain}) => isMain);
   if (defaults.length > 1) {
-    throw new Error('Multiple default display ports are available; specify displayId');
+    throw new Error(
+      `Multiple default display ports are available; specify displayId. ${availableDisplayIdsHint(displays)}`,
+    );
   }
   return defaults[0]?.id;
+}
+
+/** Formats the already-fetched screen ID/port UUID pairs for display-selection errors. */
+function availableDisplayIdsHint(displays: SimDisplayInfo[]): string {
+  if (displays.length === 0) {
+    return 'Available display IDs: none';
+  }
+  return `Available display IDs: ${JSON.stringify(displays.map(({id, screenId}) => ({screenId, id})))}`;
 }

@@ -121,13 +121,16 @@ export interface SimDisplayInfo {
   isMain: boolean;
 }
 
+/** Port UUID string or unsigned 32-bit guest screen ID (XCTest/WDA displayID). */
+export type DisplayId = string | number;
+
 /** Display selection shared by screenshot, recording, and streaming APIs. */
 export interface DisplayOptions {
   /**
    * Port UUID from `getDisplays()`, or an unsigned 32-bit guest screen ID (XCTest/WDA displayID).
    * See [display selection helpers](./utils/display.ts) for validation and resolution semantics.
    */
-  displayId?: string | number;
+  displayId?: DisplayId;
 }
 
 /** Options for `NativeSimctl.getScreenshot`. */

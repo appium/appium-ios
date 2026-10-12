@@ -5,7 +5,7 @@ import {startJpegStream} from '../../src/commands/jpeg-stream.js';
 import {getScreenshot} from '../../src/commands/screenshot.js';
 import {startVideoRecording, stopVideoRecording} from '../../src/commands/video-recording.js';
 import {startVideoStream} from '../../src/commands/video-stream.js';
-import type {SimDisplayInfo} from '../../src/types.js';
+import type {DisplayId, SimDisplayInfo} from '../../src/types.js';
 
 const apis = ['screenshot', 'recording', 'video stream', 'JPEG stream'] as const;
 type CaptureApi = (typeof apis)[number];
@@ -28,7 +28,7 @@ function makeFixture(ports: SimDisplayInfo[], api: CaptureApi) {
   }));
   const sim = {_findDevice: find} as any;
   const udid = `display-test-${nextDevice++}`;
-  const capture = async (displayId?: string | number) => {
+  const capture = async (displayId?: DisplayId) => {
     const options = {displayId};
     switch (api) {
       case 'screenshot':
@@ -93,6 +93,36 @@ for (const api of apis) {
       const {capture, screenshot} = fixture(ports);
       await assert.rejects(capture(), /Multiple default display ports/);
       assert.equal(screenshot.mock.callCount(), 0);
+    });
+
+    it('includes screen ID and UUID pairs in missing-ID and ambiguous-default errors', async () => {
+      const {capture, getDisplays} = fixture(ports);
+      for (const displayId of [99, undefined]) {
+        await assert.rejects(capture(displayId), (error: Error) => {
+          assert.ok(error.message.includes('Available display IDs:'));
+          assert.ok(error.message.includes('{"screenId":3,"id":"inner-port"}'));
+          assert.ok(error.message.includes('{"screenId":1,"id":"outer-port"}'));
+          return true;
+        });
+      }
+      assert.equal(getDisplays.mock.callCount(), 2, 'formatting hints must not query ports again');
+    });
+
+    it('reports UUIDs when guest IDs are unavailable, preserving numeric zero', async () => {
+      const {capture} = fixture([
+        {...ports[0], screenId: undefined},
+        {...ports[1], screenId: 0},
+      ]);
+      await assert.rejects(capture(99), (error: Error) => {
+        assert.ok(error.message.includes('{"id":"inner-port"}'));
+        assert.ok(error.message.includes('{"screenId":0,"id":"outer-port"}'));
+        return true;
+      });
+    });
+
+    it('reports that no display IDs are available when enumeration is empty', async () => {
+      const {capture} = fixture([]);
+      await assert.rejects(capture(99), /Available display IDs: none/);
     });
 
     it('selects a unique default port even without guest IDs', async () => {
