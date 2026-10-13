@@ -26,11 +26,6 @@ export class MediaProxyOptionError extends MediaProxyError {
   public override name = 'MediaProxyOptionError';
 }
 
-/** The OpenH264 runtime download was refused, failed, or didn't match its pinned checksum. */
-export class OpenH264DownloadError extends MediaProxyError {
-  public override name = 'OpenH264DownloadError';
-}
-
 /** The stream or a framed payload was malformed (e.g. APST desynchronization). */
 export class MediaProxyProtocolError extends MediaProxyError {
   public override name = 'MediaProxyProtocolError';

@@ -59,7 +59,7 @@ describe('createNativeLoader', () => {
 
 describe('createTranscoder', () => {
   it('validates options before loading the addon', () => {
-    assert.throws(() => createTranscoder({output: {codec: 'mjpeg', quality: 101}}), RangeError);
+    assert.throws(() => createTranscoder({codec: 'mjpeg', quality: 101}), RangeError);
   });
 });
 

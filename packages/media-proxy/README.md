@@ -22,29 +22,28 @@ import {transcode, serveMjpeg} from '@appium/media-proxy';
 const capture = await ScreenStreamCapture.start(display, {displayId: 1});
 
 // H.264 (same shape as coresim's VideoAccessUnit)
-for await (const unit of transcode(capture.accessUnits(), {output: {codec: 'h264', fps: 60}})) {
+for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {
   // unit.data is Annex-B, unit.isKeyFrame, unit.timestampMicros, ...
 }
 
 // MJPEG over HTTP (multipart/x-mixed-replace)
-const frames = transcode(capture.accessUnits(), {output: {codec: 'mjpeg', quality: 80}});
+const frames = transcode(capture.accessUnits(), {codec: 'mjpeg', quality: 80});
 const server = await serveMjpeg(frames, {port: 0});
 console.log(server.url);
 ```
 
-Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`,
-`requestKeyFrame()`, `stats`, `encoderName` and `close()`.
+Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`
+and `close()`.
 
-| Option                   | Default   | Notes                                                       |
-| ------------------------ | --------- | ----------------------------------------------------------- |
-| `output.fps`             | 60        | Finite, >= 1. Upper bound; the input is variable-rate       |
-| `output.bitrate` (h264)  | 4,000,000 | bits/sec, > 0 and <= 2^31-1                                 |
-| `output.quality` (mjpeg) | 80        | 0-100                                                       |
-| `output.scale` (mjpeg)   | 100       | Percent of the source resolution, > 0 and <= 100            |
-| `input.clockRate`        | 90000     | Ticks/sec of `timestamp`, or `'receivedAt'`                 |
-| `hardwareAcceleration`   | `'auto'`  | `'auto'` \| `'off'` \| `'required'`                         |
+| Option               | Default   | Notes                                                 |
+| -------------------- | --------- | ----------------------------------------------------- |
+| `codec`              | required  | `'h264'` or `'mjpeg'`                                 |
+| `fps`                | 60        | Finite, >= 1. Upper bound; the input is variable-rate |
+| `bitrate` (h264)     | 4,000,000 | bits/sec, > 0 and <= 2^31-1                           |
+| `quality` (mjpeg)    | 80        | 0-100                                                 |
+| `scale` (mjpeg)      | 100       | Percent of the source resolution, > 0 and <= 100      |
 
-Output options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
+Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
 `JpegStreamOptions`. Android-only options (`resolution`, `localPort`, audio, ...) are not supported.
 
 ### Framing helpers

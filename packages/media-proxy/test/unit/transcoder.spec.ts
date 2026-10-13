@@ -14,7 +14,7 @@ import type {
 
 interface FakeBackend extends NativeModule {
   config?: NativeConfig;
-  pushes: {chunks: Buffer[]; ts: number; key: boolean; annexB: boolean}[];
+  pushes: {chunks: Buffer[]; ts: number; key: boolean}[];
   emit(unit: Partial<NativeUnit> & {data: Buffer}): void;
   fail(err: Error): void;
   keyFrameRequests: number;
@@ -34,19 +34,8 @@ function fakeBackend(): FakeBackend {
       onUnit = unitCb;
       onError = errorCb;
       const handle: NativeTranscoderHandle = {
-        encoderName: 'fake',
-        hardware: false,
-        push: (chunks, ts, key, annexB) => backend.pushes.push({chunks, ts, key, annexB}),
+        push: (chunks, ts, key) => void backend.pushes.push({chunks, ts, key}),
         requestKeyFrame: () => void backend.keyFrameRequests++,
-        stats: () => ({
-          unitsIn: 0,
-          unitsOut: 0,
-          unitsDropped: 0,
-          decodeMsP50: 0,
-          decodeMsP99: 0,
-          encodeMsP50: 0,
-          encodeMsP99: 0,
-        }),
         close: async () => {
           backend.closed = true;
         },
@@ -59,34 +48,31 @@ function fakeBackend(): FakeBackend {
   return backend;
 }
 
-const h264: TranscoderOptions = {output: {codec: 'h264'}};
-const mjpeg: TranscoderOptions = {output: {codec: 'mjpeg'}};
+const h264: TranscoderOptions = {codec: 'h264'};
+const mjpeg: TranscoderOptions = {codec: 'mjpeg'};
 
 describe('resolveOptions', () => {
-  it('applies the coresim/Android defaults', () => {
-    assert.deepStrictEqual(resolveOptions(h264).config, {
-      inputCodec: 'hevc',
+  it('applies the coresim defaults', () => {
+    assert.deepStrictEqual(resolveOptions(h264), {
       outputCodec: 'h264',
       fps: 60,
       bitrate: 4_000_000,
       quality: 80,
       scale: 100,
-      hardwareAcceleration: 'auto',
     });
-    assert.strictEqual(resolveOptions(mjpeg).config.quality, 80);
+    assert.strictEqual(resolveOptions(mjpeg).quality, 80);
   });
 
   // Same rules as coresim's startVideoStream/startJpegStream, which throw RangeError.
   for (const [name, opts] of Object.entries({
-    'fps < 1': {output: {codec: 'h264', fps: 0.5}},
-    'non-finite fps': {output: {codec: 'mjpeg', fps: Infinity}},
-    'zero bitrate': {output: {codec: 'h264', bitrate: 0}},
-    'bitrate > 2^31-1': {output: {codec: 'h264', bitrate: 2 ** 31}},
-    'zero scale': {output: {codec: 'mjpeg', scale: 0}},
-    'scale > 100': {output: {codec: 'mjpeg', scale: 101}},
-    'negative quality': {output: {codec: 'mjpeg', quality: -1}},
-    'quality > 100': {output: {codec: 'mjpeg', quality: 101}},
-    'bad clock rate': {output: {codec: 'h264'}, input: {clockRate: 0}},
+    'fps < 1': {codec: 'h264', fps: 0.5},
+    'non-finite fps': {codec: 'mjpeg', fps: Infinity},
+    'zero bitrate': {codec: 'h264', bitrate: 0},
+    'bitrate > 2^31-1': {codec: 'h264', bitrate: 2 ** 31},
+    'zero scale': {codec: 'mjpeg', scale: 0},
+    'scale > 100': {codec: 'mjpeg', scale: 101},
+    'negative quality': {codec: 'mjpeg', quality: -1},
+    'quality > 100': {codec: 'mjpeg', quality: 101},
   } as Record<string, unknown>)) {
     it(`rejects ${name}`, () => {
       assert.throws(() => resolveOptions(opts as TranscoderOptions), RangeError);
@@ -94,57 +80,47 @@ describe('resolveOptions', () => {
   }
 
   it('accepts what coresim accepts: no fps cap, fractional values, quality 0', () => {
-    assert.strictEqual(resolveOptions({output: {codec: 'h264', fps: 120.5, bitrate: 1.5}}).config.fps, 120.5);
-    assert.strictEqual(resolveOptions({output: {codec: 'mjpeg', quality: 0, scale: 12.5}}).config.quality, 0);
+    assert.strictEqual(resolveOptions({codec: 'h264', fps: 120.5, bitrate: 1.5}).fps, 120.5);
+    assert.strictEqual(resolveOptions({codec: 'mjpeg', quality: 0, scale: 12.5}).quality, 0);
   });
 
   for (const [name, opts] of Object.entries({
-    'bad codec': {output: {codec: 'vp9'}},
-    'bad input codec': {output: {codec: 'h264'}, input: {codec: 'vp9'}},
-    'bad hw mode': {output: {codec: 'h264'}, hardwareAcceleration: 'sometimes'},
+    'missing options': undefined,
+    'missing codec': {},
+    'bad codec': {codec: 'vp9'},
   } as Record<string, unknown>)) {
     it(`rejects ${name}`, () => {
       assert.throws(() => resolveOptions(opts as TranscoderOptions), MediaProxyOptionError);
     });
   }
-
-  it('requires output', () => {
-    assert.throws(() => resolveOptions({} as TranscoderOptions), MediaProxyOptionError);
-  });
 });
 
 describe('TimestampConverter', () => {
-  it('rebases to the first unit and scales ticks to microseconds', () => {
-    const c = new TimestampConverter(90_000);
-    assert.strictEqual(c.toMicros({timestamp: 1_000_000}), 0);
-    assert.strictEqual(c.toMicros({timestamp: 1_000_000 + 1500}), Math.round((1500 * 1e6) / 90_000));
+  it('rebases to the first unit and scales 90 kHz ticks to microseconds', () => {
+    const c = new TimestampConverter();
+    assert.strictEqual(c.toMicros(1_000_000), 0);
+    assert.strictEqual(c.toMicros(1_000_000 + 1500), Math.round((1500 * 1e6) / 90_000));
   });
 
   it('unwraps the 32-bit RTP counter', () => {
-    const c = new TimestampConverter(90_000);
-    c.toMicros({timestamp: 0xffff_fff0});
-    assert.strictEqual(c.toMicros({timestamp: 0x0000_0010}), Math.round((0x20 * 1e6) / 90_000));
-  });
-
-  it('can derive timing from receivedAt', () => {
-    const c = new TimestampConverter('receivedAt');
-    assert.strictEqual(c.toMicros({timestamp: 0, receivedAt: 5000}), 0);
-    assert.strictEqual(c.toMicros({timestamp: 0, receivedAt: 5016.5}), 16_500);
+    const c = new TimestampConverter();
+    c.toMicros(0xffff_fff0);
+    assert.strictEqual(c.toMicros(0x0000_0010), Math.round((0x20 * 1e6) / 90_000));
   });
 });
 
 describe('Transcoder', () => {
-  it('forwards NAL lists and Annex-B buffers with rebased timestamps', () => {
+  it('forwards NAL lists with rebased timestamps', () => {
     const backend = fakeBackend();
     const t = new Transcoder(h264, backend);
     const nals = [Buffer.from([0x40, 1]), Buffer.from([0x26, 1])];
     t.push({nals, isKeyFrame: true, timestamp: 90_000});
-    t.push({data: Buffer.from([0, 0, 0, 1, 2]), isKeyFrame: false, timestamp: 90_000 + 3000});
+    t.push({nals: [Buffer.from([2, 1])], isKeyFrame: false, timestamp: 90_000 + 3000});
     assert.deepStrictEqual(
-      backend.pushes.map((p) => [p.chunks.length, p.ts, p.key, p.annexB]),
+      backend.pushes.map((p) => [p.chunks.length, p.ts, p.key]),
       [
-        [2, 0, true, false],
-        [1, 33_333, false, true],
+        [2, 0, true],
+        [1, 33_333, false],
       ],
     );
   });
@@ -186,7 +162,7 @@ describe('Transcoder', () => {
     const pending = t.units().next();
     await t.close();
     assert.strictEqual((await pending).done, true);
-    t.push({data: Buffer.alloc(1), isKeyFrame: true, timestamp: 0});
+    t.push({nals: [Buffer.alloc(1)], isKeyFrame: true, timestamp: 0});
     assert.strictEqual(backend.pushes.length, 0);
     assert.ok(backend.closed);
     await t.close();

@@ -16,6 +16,6 @@ describe('native addon', () => {
     if (loadNative().capabilities().encoders.length > 0) {
       return;
     }
-    assert.throws(() => createTranscoder({output: {codec: 'h264'}}), MediaProxyEncoderUnavailableError);
+    assert.throws(() => createTranscoder({codec: 'h264'}), MediaProxyEncoderUnavailableError);
   });
 });

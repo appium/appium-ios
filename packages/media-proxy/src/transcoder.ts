@@ -2,16 +2,15 @@ import {MediaProxyOptionError, wrapNativeError} from './errors.js';
 import {loadNative} from './native.js';
 import {UnitQueue} from './queue.js';
 import type {
-  H264OutputOptions,
-  InputAccessUnit,
+  H264Options,
   JpegFrame,
-  MjpegOutputOptions,
+  MjpegOptions,
+  NalAccessUnit,
   NativeConfig,
   NativeModule,
   NativeTranscoderHandle,
   NativeUnit,
   TranscoderOptions,
-  TranscoderStats,
   VideoAccessUnit,
 } from './types.js';
 
@@ -19,102 +18,59 @@ export const DEFAULT_FPS = 60;
 export const DEFAULT_BITRATE = 4_000_000;
 export const DEFAULT_QUALITY = 80;
 export const DEFAULT_SCALE = 100;
-export const DEFAULT_CLOCK_RATE = 90_000;
+/** RTP video clock; remotexpc doesn't define it, so this is an assumption to confirm on a device. */
+const CLOCK_RATE = 90_000;
 
 const MAX_BITRATE = 2 ** 31 - 1;
 
-export interface ResolvedOptions {
-  config: NativeConfig;
-  clockRate: number | 'receivedAt';
-}
-
-/** Validates `opts` and fills in the defaults shared with coresim/Android. */
-export function resolveOptions(opts: TranscoderOptions): ResolvedOptions {
-  if (!opts?.output) {
-    throw new MediaProxyOptionError('output is required');
-  }
-  const {output} = opts;
-  if (output.codec !== 'h264' && output.codec !== 'mjpeg') {
+/** Validates `opts` and fills in the defaults, with the same rules and error type as coresim. */
+export function resolveOptions(opts: TranscoderOptions): NativeConfig {
+  if (opts?.codec !== 'h264' && opts?.codec !== 'mjpeg') {
     throw new MediaProxyOptionError(
-      `output.codec must be 'h264' or 'mjpeg', got ${String((output as {codec: unknown}).codec)}`,
+      `codec must be 'h264' or 'mjpeg', got ${String((opts as {codec?: unknown})?.codec)}`,
     );
   }
-  const inputCodec = opts.input?.codec ?? 'hevc';
-  if (inputCodec !== 'hevc' && inputCodec !== 'h264') {
-    throw new MediaProxyOptionError(`input.codec must be 'hevc' or 'h264', got ${String(inputCodec)}`);
-  }
-  const clockRate = opts.input?.clockRate ?? DEFAULT_CLOCK_RATE;
-  if (clockRate !== 'receivedAt') {
-    if (!Number.isFinite(clockRate) || clockRate <= 0) {
-      throw new RangeError(`input.clockRate must be a positive number or 'receivedAt', got ${clockRate}`);
-    }
-  }
-  const hardwareAcceleration = opts.hardwareAcceleration ?? 'auto';
-  if (!['auto', 'off', 'required'].includes(hardwareAcceleration)) {
-    throw new MediaProxyOptionError(`hardwareAcceleration must be auto|off|required, got ${hardwareAcceleration}`);
-  }
-  // Same rules and error type as coresim's startVideoStream/startJpegStream.
-  const fps = output.fps ?? DEFAULT_FPS;
+  const fps = opts.fps ?? DEFAULT_FPS;
   if (!Number.isFinite(fps) || fps < 1) {
     throw new RangeError(`fps must be a finite number >= 1, got ${fps}`);
   }
   let bitrate = DEFAULT_BITRATE;
   let quality = DEFAULT_QUALITY;
   let scale = DEFAULT_SCALE;
-  if (output.codec === 'h264') {
-    bitrate = output.bitrate ?? DEFAULT_BITRATE;
+  if (opts.codec === 'h264') {
+    bitrate = opts.bitrate ?? DEFAULT_BITRATE;
     if (!Number.isFinite(bitrate) || bitrate <= 0 || bitrate > MAX_BITRATE) {
       throw new RangeError(`bitrate must be a positive number no greater than ${MAX_BITRATE}, got ${bitrate}`);
     }
   } else {
-    quality = output.quality ?? DEFAULT_QUALITY;
+    quality = opts.quality ?? DEFAULT_QUALITY;
     if (!Number.isFinite(quality) || quality < 0 || quality > 100) {
       throw new RangeError(`quality must be a number between 0 and 100, got ${quality}`);
     }
-    scale = output.scale ?? DEFAULT_SCALE;
+    scale = opts.scale ?? DEFAULT_SCALE;
     if (!Number.isFinite(scale) || scale <= 0 || scale > 100) {
       throw new RangeError(`scale must be a number greater than 0 and no greater than 100, got ${scale}`);
     }
   }
-  return {
-    clockRate,
-    config: {
-      inputCodec,
-      outputCodec: output.codec,
-      fps,
-      bitrate,
-      quality,
-      scale,
-      hardwareAcceleration,
-    },
-  };
+  return {outputCodec: opts.codec, fps, bitrate, quality, scale};
 }
 
-/**
- * Converts input timestamps to microseconds since the first unit, unwrapping the 32-bit RTP
- * counter. With `'receivedAt'` uses the host receive time (ms) instead.
- */
+/** Converts 32-bit RTP timestamps to microseconds since the first unit, unwrapping the counter. */
 export class TimestampConverter {
   private base: number | undefined;
   private last = 0;
   private ticks = 0;
 
-  constructor(private readonly clockRate: number | 'receivedAt') {}
+  constructor(private readonly clockRate: number = CLOCK_RATE) {}
 
-  toMicros(unit: {timestamp: number; receivedAt?: number}): number {
-    if (this.clockRate === 'receivedAt') {
-      const now = unit.receivedAt ?? performance.now();
-      this.base ??= now;
-      return Math.max(0, Math.round((now - this.base) * 1000));
-    }
+  toMicros(timestamp: number): number {
     if (this.base === undefined) {
-      this.base = unit.timestamp;
-      this.last = unit.timestamp;
+      this.base = timestamp;
     } else {
       // Signed 32-bit delta handles wrap-around and small reorderings.
-      this.ticks += (unit.timestamp - this.last) | 0;
-      this.last = unit.timestamp;
+      this.ticks += (timestamp - this.last) | 0;
     }
+    this.last = timestamp;
     return Math.max(0, Math.round((this.ticks * 1_000_000) / this.clockRate));
   }
 }
@@ -135,10 +91,10 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
   /** @internal use {@link createTranscoder}; `backend` is injectable for tests. */
   constructor(opts: TranscoderOptions, backend?: NativeModule) {
     // Validate before touching the addon, so bad options are reported even where it's unavailable.
-    const {config, clockRate} = resolveOptions(opts);
+    const config = resolveOptions(opts);
     const native = backend ?? loadNative();
     this.isVideo = config.outputCodec === 'h264';
-    this.clock = new TimestampConverter(clockRate);
+    this.clock = new TimestampConverter();
     this.queue = new UnitQueue<U>(
       this.isVideo
         ? {
@@ -159,37 +115,16 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
     }
   }
 
-  /** Name of the selected encoder, e.g. `h264_videotoolbox`, `libopenh264`, `mjpeg`. */
-  get encoderName(): string {
-    return this.handle.encoderName;
-  }
-
-  /** Whether the selected encoder is hardware-accelerated. */
-  get hardware(): boolean {
-    return this.handle.hardware;
-  }
-
-  get stats(): TranscoderStats {
-    return this.handle.stats();
-  }
-
   /** Feeds one access unit (non-blocking; the native side queues and may drop to the next keyframe). */
-  push(au: InputAccessUnit): void {
+  push(au: NalAccessUnit): void {
     if (this.closePromise) {
       return;
     }
-    const annexB = 'data' in au;
-    const chunks = annexB ? [au.data] : au.nals;
     try {
-      this.handle.push(chunks, this.clock.toMicros(au), au.isKeyFrame, annexB);
+      this.handle.push(au.nals, this.clock.toMicros(au.timestamp), au.isKeyFrame);
     } catch (err) {
       throw wrapNativeError(err);
     }
-  }
-
-  /** Forces the next H.264 output to be an IDR frame (no-op for MJPEG). */
-  requestKeyFrame(): void {
-    this.handle.requestKeyFrame();
   }
 
   async *units(signal?: AbortSignal): AsyncGenerator<U> {
@@ -237,9 +172,9 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
 }
 
 /** Creates a transcoder; throws `MediaProxyUnavailableError` if the addon can't be loaded here. */
-export function createTranscoder(opts: TranscoderOptions<H264OutputOptions>): Transcoder<VideoAccessUnit>;
-export function createTranscoder(opts: TranscoderOptions<MjpegOutputOptions>): Transcoder<JpegFrame>;
-export function createTranscoder(opts: TranscoderOptions): Transcoder;
+export function createTranscoder(opts: H264Options): Transcoder<VideoAccessUnit>;
+export function createTranscoder(opts: MjpegOptions): Transcoder<JpegFrame>;
+export function createTranscoder(opts: TranscoderOptions): Transcoder<VideoAccessUnit> | Transcoder<JpegFrame>;
 export function createTranscoder(opts: TranscoderOptions): Transcoder<VideoAccessUnit> | Transcoder<JpegFrame> {
   return new Transcoder<VideoAccessUnit | JpegFrame>(opts) as Transcoder<VideoAccessUnit> | Transcoder<JpegFrame>;
 }
@@ -249,17 +184,17 @@ export function createTranscoder(opts: TranscoderOptions): Transcoder<VideoAcces
  * The transcoder is closed when the source ends, errors, or the consumer stops iterating.
  */
 export function transcode(
-  source: AsyncIterable<InputAccessUnit>,
-  opts: TranscoderOptions<H264OutputOptions>,
+  source: AsyncIterable<NalAccessUnit>,
+  opts: H264Options,
   signal?: AbortSignal,
 ): AsyncGenerator<VideoAccessUnit>;
 export function transcode(
-  source: AsyncIterable<InputAccessUnit>,
-  opts: TranscoderOptions<MjpegOutputOptions>,
+  source: AsyncIterable<NalAccessUnit>,
+  opts: MjpegOptions,
   signal?: AbortSignal,
 ): AsyncGenerator<JpegFrame>;
 export async function* transcode(
-  source: AsyncIterable<InputAccessUnit>,
+  source: AsyncIterable<NalAccessUnit>,
   opts: TranscoderOptions,
   signal?: AbortSignal,
 ): AsyncGenerator<OutputUnit> {

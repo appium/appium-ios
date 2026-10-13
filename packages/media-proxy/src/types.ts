@@ -5,30 +5,8 @@
 export interface NalAccessUnit {
   nals: Buffer[];
   isKeyFrame: boolean;
-  /** Raw 32-bit RTP media-clock timestamp. */
+  /** Raw 32-bit RTP media-clock timestamp (90 kHz). */
   timestamp: number;
-  /** Host receive time in ms (`performance.now()`); used when the RTP clock rate is unknown. */
-  receivedAt?: number;
-}
-
-/** An access unit already in Annex-B form (start-code delimited NAL units). */
-export interface AnnexBAccessUnit {
-  data: Buffer;
-  isKeyFrame: boolean;
-  timestamp: number;
-  receivedAt?: number;
-}
-
-export type InputAccessUnit = NalAccessUnit | AnnexBAccessUnit;
-
-export interface TranscoderInputOptions {
-  /** Codec of the incoming stream. Defaults to `'hevc'`. */
-  codec?: 'hevc' | 'h264';
-  /**
-   * Ticks/sec of `timestamp` (defaults to 90000, the RTP video clock), or `'receivedAt'` to
-   * derive timing from the host receive time instead.
-   */
-  clockRate?: number | 'receivedAt';
 }
 
 /** Mirrors coresim's `VideoStreamOptions` (minus `displayId`/`codec`/`audio`). */
@@ -52,24 +30,15 @@ export interface JpegStreamOptions {
   scale?: number;
 }
 
-export interface H264OutputOptions extends VideoStreamOptions {
+export interface H264Options extends VideoStreamOptions {
   codec: 'h264';
 }
 
-export interface MjpegOutputOptions extends JpegStreamOptions {
+export interface MjpegOptions extends JpegStreamOptions {
   codec: 'mjpeg';
 }
 
-export type OutputOptions = H264OutputOptions | MjpegOutputOptions;
-
-export type HardwareAcceleration = 'auto' | 'off' | 'required';
-
-export interface TranscoderOptions<O extends OutputOptions = OutputOptions> {
-  input?: TranscoderInputOptions;
-  output: O;
-  /** Defaults to `'auto'`: prefer hardware codecs, fall back to software. */
-  hardwareAcceleration?: HardwareAcceleration;
-}
+export type TranscoderOptions = H264Options | MjpegOptions;
 
 /**
  * One H.264 unit; same shape as coresim's `VideoAccessUnit` (video track only). Annex-B, 4-byte
@@ -92,17 +61,6 @@ export interface JpegFrame {
   timestampMicros: number;
 }
 
-export interface TranscoderStats {
-  unitsIn: number;
-  unitsOut: number;
-  /** Dropped on input-queue overflow or fps decimation. */
-  unitsDropped: number;
-  decodeMsP50: number;
-  decodeMsP99: number;
-  encodeMsP50: number;
-  encodeMsP99: number;
-}
-
 /** Raw unit from the native side, before the JS layer assigns `sequence`. */
 export interface NativeUnit {
   data: Buffer;
@@ -111,24 +69,18 @@ export interface NativeUnit {
 }
 
 export interface NativeConfig {
-  inputCodec: 'hevc' | 'h264';
   outputCodec: 'h264' | 'mjpeg';
   fps: number;
   bitrate: number;
   quality: number;
   scale: number;
-  hardwareAcceleration: HardwareAcceleration;
-  /** Directory holding the runtime-downloaded OpenH264 library, if enabled. */
-  openh264Path?: string;
 }
 
 export interface NativeTranscoderHandle {
-  readonly encoderName: string;
-  readonly hardware: boolean;
-  /** `annexB`: chunks are start-code delimited; otherwise each chunk is one bare NAL unit. */
-  push(chunks: Buffer[], timestampMicros: number, isKeyFrame: boolean, annexB: boolean): void;
+  /** Each chunk is one bare HEVC NAL unit (no start code). */
+  push(chunks: Buffer[], timestampMicros: number, isKeyFrame: boolean): void;
+  /** Forces the next H.264 output to be an IDR frame (used to resync after an overflow). */
   requestKeyFrame(): void;
-  stats(): TranscoderStats;
   close(): Promise<void>;
 }
 

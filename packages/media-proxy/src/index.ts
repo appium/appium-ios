@@ -4,16 +4,12 @@ export {
   MediaProxyOptionError,
   MediaProxyProtocolError,
   MediaProxyUnavailableError,
-  OpenH264DownloadError,
 } from './errors.js';
-export {SUPPORTED_ARCHS, SUPPORTED_PLATFORMS, loadNative} from './native.js';
 export {
   DEFAULT_BITRATE,
-  DEFAULT_CLOCK_RATE,
   DEFAULT_FPS,
   DEFAULT_QUALITY,
   DEFAULT_SCALE,
-  TimestampConverter,
   Transcoder,
   createTranscoder,
   transcode,
@@ -32,18 +28,12 @@ export {DEFAULT_MJPEG_BOUNDARY, formatMjpegPart, mjpegContentType, mjpegPartHead
 export {serveMjpeg} from './framing/mjpeg-http.js';
 export type {MjpegServer, MjpegServerOptions} from './framing/mjpeg-http.js';
 export type {
-  AnnexBAccessUnit,
-  H264OutputOptions,
-  HardwareAcceleration,
-  InputAccessUnit,
+  H264Options,
   JpegFrame,
   JpegStreamOptions,
-  MjpegOutputOptions,
+  MjpegOptions,
   NalAccessUnit,
-  OutputOptions,
-  TranscoderInputOptions,
   TranscoderOptions,
-  TranscoderStats,
   VideoAccessUnit,
   VideoStreamOptions,
 } from './types.js';
