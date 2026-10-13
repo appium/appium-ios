@@ -270,6 +270,30 @@ describe('AutomationSession', function () {
     });
   });
 
+  describe('screenshots', function () {
+    beforeEach(async function () {
+      await startFullSession();
+    });
+
+    it('should clip a page screenshot to the viewport', async function () {
+      rpcClient.send.resolves({data: 'abc'});
+      await automationSession.screenshot();
+      const [command, opts] = rpcClient.send.firstCall.args;
+      assert.strictEqual(command, 'Automation.takeScreenshot');
+      assert.strictEqual(opts.clipToViewport, true);
+    });
+
+    it('should not clip an element screenshot to the viewport', async function () {
+      rpcClient.send.resolves({data: 'abc'});
+      await automationSession.elementScreenshot({ELEMENT: 'node-1'} as any);
+      const [command, opts] = rpcClient.send.firstCall.args;
+      assert.strictEqual(command, 'Automation.takeScreenshot');
+      assert.strictEqual(opts.nodeHandle, 'node-1');
+      assert.strictEqual(opts.scrollIntoViewIfNeeded, true);
+      assert.strictEqual(opts.clipToViewport, false);
+    });
+  });
+
   describe('navigation', function () {
     beforeEach(async function () {
       await startFullSession();
