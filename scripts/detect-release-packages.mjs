@@ -2,7 +2,8 @@
 /* eslint-disable no-console */
 // Detects which publishable packages the release will publish, so release.yml can skip the
 // expensive native prebuilds (tuntap, coresim) when those packages aren't part of it.
-// Union of: packages lerna would bump (skipped when RECOVER_MISSING_ONLY=true) and packages whose
+// Union of: packages lerna would bump (skipped when RECOVER_MISSING_ONLY=true; includes private ones,
+// e.g. ios-uicatalog, which still trigger the UIKitCatalog app release) and public packages whose
 // current version is missing on npm (what the recovery paths publish).
 // Writes `packages` (JSON names), `any`, `tuntap` and `coresim` to $GITHUB_OUTPUT.
 import {execFile} from 'node:child_process';
@@ -17,7 +18,7 @@ async function listPackages() {
   const manifests = await Promise.all(
     dirs.map((d) => readFile(`packages/${d}/package.json`, 'utf8').then(JSON.parse, () => null)),
   );
-  return manifests.filter((m) => m?.name && m.version && !m.private);
+  return manifests.filter((m) => m?.name && m.version);
 }
 
 async function lernaChanged() {
@@ -43,12 +44,13 @@ async function isMissingOnNpm({name, version}) {
 }
 
 async function main() {
-  const publishable = await listPackages();
+  const packages = await listPackages();
   const changed = process.env.RECOVER_MISSING_ONLY === 'true' ? [] : await lernaChanged();
-  const missing = (await Promise.all(publishable.map(async (p) => ((await isMissingOnNpm(p)) ? p.name : null)))).filter(
+  const npmPackages = packages.filter((p) => !p.private);
+  const missing = (await Promise.all(npmPackages.map(async (p) => ((await isMissingOnNpm(p)) ? p.name : null)))).filter(
     Boolean,
   );
-  const names = new Set([...changed, ...missing].filter((n) => publishable.some((p) => p.name === n)));
+  const names = new Set([...changed, ...missing].filter((n) => packages.some((p) => p.name === n)));
 
   const outputs = {
     packages: JSON.stringify([...names]),
