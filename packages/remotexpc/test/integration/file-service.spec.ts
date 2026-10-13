@@ -169,6 +169,55 @@ describe('CoreDeviceFileService', {timeout: 120000}, function () {
     }
   });
 
+  it('keeps working when a timed-out request drops the connection', async function () {
+    const root = `tmp/file-service-spec-${Date.now()}`;
+    // The session has to exist before the race: `timeoutMs` is the timeout of
+    // whatever the call ends up sending, and on the first call that is
+    // `CreateSession`, which both callers then fail on for an unrelated reason.
+    await service!.listFilePaths('.');
+    try {
+      // The listing times out and its connection is dropped, while the mkdir
+      // behind it in the invocation queue still holds that connection's session
+      // id. The device rejects the stale id with
+      // `com.apple.dt.remoteservices.error 11004`, so the request is sent again
+      // on a session of the new connection.
+      const [listing, mkdir] = await Promise.allSettled([
+        service!.listFilePaths('.', {timeoutMs: 1}),
+        service!.mkdir(root),
+      ]);
+      assert.strictEqual(listing.status, 'rejected');
+      assert.match((listing as PromiseRejectedResult).reason.message, /timed out/);
+      assert.strictEqual(mkdir.status, 'fulfilled', `mkdir failed: ${(mkdir as PromiseRejectedResult).reason}`);
+      assert.deepStrictEqual(await service!.listDirectory(root), []);
+    } finally {
+      await service!.rm(root, {recursive: true}).catch((): undefined => undefined);
+    }
+  });
+
+  it('lists a file whose name is the name of its directory', async function () {
+    const root = `tmp/file-service-spec-${Date.now()}`;
+    try {
+      await service!.mkdir(root);
+      await service!.mkdir(`${root}/P`);
+      await service!.push(Buffer.from('collides'), `${root}/P/P`);
+
+      // Relative to the listed directory, so the file inside `P` is `P` too,
+      // which is what a listed regular file named `P` would look like. Only the
+      // metadata of a node listing tells the two apart.
+      assert.deepStrictEqual(await service!.listFilePaths(`${root}/P`), ['P']);
+      assert.deepStrictEqual(
+        (await service!.listDirectory(`${root}/P`)).map((e) => [e.path, e.isDirectory, Boolean(e.metadata)]),
+        [['P', false, true]],
+      );
+      assert.deepStrictEqual(
+        (await service!.listDirectory(`${root}/P/P`)).map((e) => [e.path, Boolean(e.metadata)]),
+        [[`${root}/P/P`, false]],
+      );
+    } finally {
+      await service!.rm(root, {recursive: true}).catch((): undefined => undefined);
+    }
+  });
+
   it('reports a missing file as a CoreDeviceError', async function () {
     const destination = path.join(tmpDir, 'missing');
     await assert.rejects(service!.pull('tmp/does-not-exist', destination), CoreDeviceError);

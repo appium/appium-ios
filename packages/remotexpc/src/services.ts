@@ -181,9 +181,10 @@ export async function startDeviceControlService(udid: string): Promise<DeviceCon
 /**
  * Start the CoreDevice file service for the given device UDID.
  *
- * Lists and downloads files in one domain of the device (for example an app's
- * data container) over RemoteXPC — the backend of `devicectl device info files`
- * and `devicectl device copy from`. Call `close()` on the result when done.
+ * Lists, downloads, uploads, removes, renames files and creates directories in
+ * one domain of the device (for example an app's data container) over RemoteXPC
+ * — the backend of `devicectl device info files` and `devicectl device copy
+ * from`/`to`. Call `close()` on the result when done.
  *
  * @param sessionOptions The domain (and its identifier and user) that the
  * service's paths are relative to.

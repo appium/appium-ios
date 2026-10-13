@@ -26,8 +26,9 @@ export interface FileServiceRequestOptions {
 
 export interface FileServiceTransferOptions extends FileServiceRequestOptions {
   /**
-   * Maximum time the data channel may stall while a file is transferred.
-   * Defaults to 30 seconds.
+   * Maximum time the data channel may stall while a file is transferred. Time
+   * spent waiting for the local source or destination does not count. Defaults
+   * to `DEFAULT_TRANSFER_IDLE_TIMEOUT_MS`.
    */
   idleTimeoutMs?: number;
 }

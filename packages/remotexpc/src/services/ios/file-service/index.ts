@@ -24,7 +24,9 @@ import {
   DATA_CHANNEL_HEADER_SIZE,
   DEFAULT_FILE_SERVICE_USERNAME,
   DEFAULT_PUSHED_FILE_PERMISSIONS,
+  DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
   DEVICE_ENOTEMPTY,
+  DEVICE_INVALID_SESSION,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
   FILE_SERVICE_COMMAND,
@@ -35,6 +37,7 @@ import {
   PERMISSION_BITS_MASK,
   POSIX_ERROR_DOMAIN,
   PUSHED_FILE_PERMISSION_BITS_MASK,
+  REMOTE_SERVICES_ERROR_DOMAIN,
 } from './constants.js';
 import {
   FileDataDecoder,
@@ -79,7 +82,12 @@ interface FileServiceSession {
 
 /**
  * Client for the CoreDevice file service (`com.apple.coredevice.fileservice.*`),
- * the backend of `devicectl device info files` and `devicectl device copy from`.
+ * the backend of `devicectl device info files` and `devicectl device copy
+ * from`/`to`.
+ *
+ * Lists directories ({@link listDirectory}, {@link listFilePaths}), downloads
+ * and uploads files ({@link pull}, {@link push}) and changes the file system
+ * ({@link rm}, {@link mkdir}, {@link rename}).
  *
  * The control service speaks a `Cmd`-keyed protocol rather than the CoreDevice
  * feature-invocation envelope. A session rooted at one domain (for example an
@@ -116,12 +124,12 @@ export class CoreDeviceFileService extends CoreDeviceService {
   /**
    * Lists a directory with metadata, like `devicectl device info files`.
    *
-   * @param path Directory relative to the session root. Defaults to the root.
-   * @param options Set `recursive` to include everything below `path` instead of
-   * only its direct children.
-   * @returns Files and directories with paths relative to `path`. When `path` is
-   * a regular file, the only entry is that file's path, relative to the session
-   * root and without metadata. The device returns names in Unicode NFD, so a
+   * @param remotePath Directory relative to the session root. Defaults to the root.
+   * @param options Set `recursive` to include everything below `remotePath`
+   * instead of only its direct children.
+   * @returns Files and directories with paths relative to `remotePath`, which is
+   * not itself among them. When `remotePath` is a regular file, the only entry is
+   * that file's path, relative to the session root and without metadata. The device returns names in Unicode NFD, so a
    * name pushed as NFC comes back decomposed.
    */
   async listDirectory(remotePath = '.', options: FileServiceListOptions = {}): Promise<FileServiceEntry[]> {
@@ -139,10 +147,18 @@ export class CoreDeviceFileService extends CoreDeviceService {
   /**
    * Lists the regular files in a directory, without metadata.
    *
-   * @param path Directory relative to the session root. Defaults to the root.
+   * @param remotePath Directory relative to the session root. Defaults to the root.
    * @param options Set `recursive` to include the files in all subdirectories.
-   * @returns File paths relative to `path`. When `path` is a regular file, the
-   * only item is that file's path, relative to the session root.
+   * @returns File paths relative to `remotePath`. When `remotePath` is a regular
+   * file, the only item is that file's path, relative to the session root.
+   *
+   * Those two cases look the same for a directory whose only file has the
+   * directory's own relative path: a directory `P` holding only `P/P` lists as
+   * `['P']`, exactly like the regular file `P` does, so a caller cannot tell
+   * whether to resolve `'P'` against the session root or against `P`.
+   * `RetrieveDirectoryList` sends bare paths with no metadata, so they cannot be
+   * told apart here; {@link listDirectory} can, since it reports a file inside
+   * the directory with metadata and a listed regular file without.
    */
   async listFilePaths(remotePath = '.', options: FileServiceListOptions = {}): Promise<string[]> {
     const {recursive = false, ...requestOptions} = options;
@@ -286,7 +302,13 @@ export class CoreDeviceFileService extends CoreDeviceService {
       assertInWritableAppContainerDirectory(oldPath);
       assertInWritableAppContainerDirectory(newPath);
     }
-    await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.RENAME, {OldPath: oldPath, NewPath: newPath}, options);
+    // Normalized like the paths of rm and push, so one file has one spelling and
+    // a leading `./`, which Rename rejects on some devices, never reaches it
+    await this.runFileSystemOperation(
+      FILE_SYSTEM_OPERATION.RENAME,
+      {OldPath: stripLeadingRoot(oldPath), NewPath: stripLeadingRoot(newPath)},
+      options,
+    );
   }
 
   /**
@@ -359,7 +381,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     options: FileServiceTransferOptions,
     signal: AbortSignal,
   ): Promise<FileServiceFileMetadata> {
-    const {idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS, ...requestOptions} = options;
+    const {idleTimeoutMs = DEFAULT_TRANSFER_IDLE_TIMEOUT_MS, ...requestOptions} = options;
     if (typeof destination !== 'string') {
       assertWritableDestination(destination);
     }
@@ -394,6 +416,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
       output.destroy();
       if (localFile) {
         await fsp.rm(localFile.temporaryPath, {force: true});
+        await removeCreatedDirectories(localFile);
       }
       if (isTransferInFlight) {
         // The device resets the control connection when a transfer is cut short
@@ -415,7 +438,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
       size: declaredSize,
       permissions,
       modifiedAt,
-      idleTimeoutMs = DEFAULT_INVOKE_TIMEOUT_MS,
+      idleTimeoutMs = DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
       ...requestOptions
     } = options;
     const target = stripLeadingRoot(remotePath);
@@ -448,7 +471,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     let isTransferStarted = false;
     try {
       if (upload.size === 0) {
-        upload.stream.destroy();
+        await assertEmptySource(upload.stream, idleTimeoutMs);
         await this.request(FILE_SERVICE_COMMAND.PROPOSE_EMPTY_FILE, fields, requestOptions);
         isFileCreated = true;
       } else {
@@ -496,6 +519,9 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * reply: it first sends it as one or more requests of its own that carry the
    * command's `MessageUUID` and a `FileList`. Each must be answered, or the
    * device stops reading from the connection; the reply to the command follows.
+   *
+   * A request the device rejects is sent again, and answered with the whole
+   * listing again, so what the rejected attempt collected is dropped first.
    */
   private async requestFileList(
     command: string,
@@ -504,16 +530,24 @@ export class CoreDeviceFileService extends CoreDeviceService {
   ): Promise<XPCValue[]> {
     const messageUuid = randomUUID().toUpperCase();
     const fileList: XPCValue[] = [];
-    await this.request(command, {Path: remotePath, MessageUUID: messageUuid}, options, (body, respond) => {
-      if (body.MessageUUID !== messageUuid) {
-        log.debug(`Ignoring an unexpected file service message: ${Object.keys(body).join(', ')}`);
-        return;
-      }
-      if (Array.isArray(body.FileList)) {
-        fileList.push(...body.FileList);
-      }
-      respond({MessageUUID: messageUuid});
-    });
+    await this.request(
+      command,
+      {Path: remotePath, MessageUUID: messageUuid},
+      options,
+      (body, respond) => {
+        if (body.MessageUUID !== messageUuid) {
+          log.debug(`Ignoring an unexpected file service message: ${Object.keys(body).join(', ')}`);
+          return;
+        }
+        if (Array.isArray(body.FileList)) {
+          fileList.push(...body.FileList);
+        }
+        respond({MessageUUID: messageUuid});
+      },
+      () => {
+        fileList.length = 0;
+      },
+    );
     return fileList;
   }
 
@@ -576,14 +610,31 @@ export class CoreDeviceFileService extends CoreDeviceService {
     fields: XPCDictionary,
     options: FileServiceRequestOptions,
     onPeerMessage?: CoreDevicePeerMessageHandler,
+    onAttempt?: () => void,
   ): Promise<XPCDictionary> {
-    const sessionId = await this.ensureSession(options);
-    const reply = await this.sendReceiveOnConnection(
-      {MessageUUID: randomUUID().toUpperCase(), ...fields, Cmd: command, SessionID: sessionId},
-      {actionIdentifier: command, timeoutMs: options.timeoutMs},
-      onPeerMessage,
-    );
-    return assertSuccessfulReply(command, reply);
+    // The session id is resolved before the request waits its turn in the
+    // invocation queue, so the connection it belongs to can be replaced while it
+    // waits (by a timed-out request, or a transfer cut short). The device then
+    // rejects the stale id, and since it rejects the request without running it,
+    // a session on the new connection is created and the request sent once more.
+    for (let isRetry = false; ; isRetry = true) {
+      onAttempt?.();
+      const sessionId = await this.ensureSession(options);
+      try {
+        const reply = await this.sendReceiveOnConnection(
+          {MessageUUID: randomUUID().toUpperCase(), ...fields, Cmd: command, SessionID: sessionId},
+          {actionIdentifier: command, timeoutMs: options.timeoutMs},
+          onPeerMessage,
+        );
+        return assertSuccessfulReply(command, reply);
+      } catch (err) {
+        if (isRetry || !isInvalidSessionError(err)) {
+          throw err;
+        }
+        log.debug(`The file service session is no longer valid, starting a new one: ${(err as Error).message}`);
+        await this.forgetSession(sessionId);
+      }
+    }
   }
 
   /**
@@ -602,6 +653,18 @@ export class CoreDeviceFileService extends CoreDeviceService {
       this.session = session;
     }
     return await this.session.id;
+  }
+
+  /**
+   * Forgets the cached session when it is still the one the device rejected, so
+   * the next request creates a new one. A session another call has meanwhile
+   * created on a newer connection is left alone.
+   */
+  private async forgetSession(sessionId: string): Promise<void> {
+    const rejected = this.session;
+    if (rejected && (await rejected.id.catch((): undefined => undefined)) === sessionId && this.session === rejected) {
+      this.session = undefined;
+    }
   }
 
   private async createSession(options: FileServiceRequestOptions): Promise<string> {
@@ -767,7 +830,7 @@ async function openUploadSource(
   } else if (Buffer.isBuffer(source)) {
     size = source.length;
     stream = Readable.from([source]);
-  } else if (typeof source?.pipe === 'function') {
+  } else if (isReadableStream(source)) {
     size = options.size;
     stream = source;
   } else {
@@ -782,6 +845,37 @@ async function openUploadSource(
     permissions: permissions ?? DEFAULT_PUSHED_FILE_PERMISSIONS,
     modifiedAtSeconds: Math.floor((modifiedAt ?? new Date()).getTime() / 1000),
   };
+}
+
+/**
+ * Consumes a source announced as empty, which `ProposeEmptyFile` sends no bytes
+ * for, and fails when it holds data rather than dropping it silently. Bounded by
+ * `idleTimeoutMs`, so a stream that never ends does not hold the push up.
+ */
+async function assertEmptySource(stream: Readable, idleTimeoutMs: number): Promise<void> {
+  const idleTimer = setTimeout(() => {
+    stream.destroy(new Error(`The source of an empty file did not end within ${idleTimeoutMs}ms`));
+  }, idleTimeoutMs);
+  try {
+    for await (const chunk of stream) {
+      if ((chunk as Buffer).length > 0) {
+        throw new Error('The source has more than the announced 0 bytes');
+      }
+    }
+  } finally {
+    clearTimeout(idleTimer);
+    stream.destroy();
+  }
+}
+
+/**
+ * Whether the value is a readable stream. Every Node stream inherits `pipe` from
+ * the legacy `Stream` class, a `Writable` included, so `read` is what tells a
+ * readable one apart.
+ */
+function isReadableStream(source: unknown): source is Readable {
+  const stream = source as Readable | undefined;
+  return source instanceof Readable || (typeof stream?.read === 'function' && typeof stream?.pipe === 'function');
 }
 
 /**
@@ -946,6 +1040,8 @@ interface LocalDestination {
   path: string;
   /** Where it is written until then. */
   temporaryPath: string;
+  /** Topmost directory that had to be created for it, if any. */
+  createdDirectory?: string;
 }
 
 /**
@@ -960,11 +1056,32 @@ async function openLocalFile(localPath: string): Promise<LocalDestination> {
     // What opening the directory itself for writing would fail with
     throw Object.assign(new Error(`EISDIR: illegal operation on a directory, open '${localPath}'`), {code: 'EISDIR'});
   }
-  await fsp.mkdir(path.dirname(localPath), {recursive: true});
+  const createdDirectory = await fsp.mkdir(path.dirname(localPath), {recursive: true});
   const temporaryPath = path.join(path.dirname(localPath), `.${path.basename(localPath)}.${randomUUID()}.partial`);
   const stream = fs.createWriteStream(temporaryPath);
   await once(stream, 'open');
-  return {stream, path: localPath, temporaryPath};
+  return {stream, path: localPath, temporaryPath, createdDirectory};
+}
+
+/**
+ * Removes the directories {@link openLocalFile} created for a pull that then
+ * failed, deepest first. One that is no longer empty is left in place.
+ */
+async function removeCreatedDirectories({path: localPath, createdDirectory}: LocalDestination): Promise<void> {
+  if (!createdDirectory) {
+    return;
+  }
+  for (let directory = path.dirname(localPath); ; directory = path.dirname(directory)) {
+    try {
+      await fsp.rmdir(directory);
+    } catch {
+      // Something else is in it now, or it is already gone
+      return;
+    }
+    if (directory === createdDirectory || directory === path.dirname(directory)) {
+      return;
+    }
+  }
 }
 
 /**
@@ -976,8 +1093,10 @@ function toSessionRelativePath(remotePath: string): string {
 }
 
 /**
- * Removes a leading `/` or `./`, which the device's `Rename` does not accept
- * (unlike its other commands).
+ * Removes a leading `/` or `./`, so the same file is addressed the same way by
+ * every command, as `rm` and `push` already do. `Rename` has been reported to
+ * reject a leading `./` on some devices; it accepted `a/b`, `/a/b` and `./a/b`
+ * alike on iOS 26.5.2.
  */
 function stripLeadingRoot(remotePath: string): string {
   return remotePath.replace(/^(?:\.?\/)+/, '');
@@ -1009,6 +1128,19 @@ function isDirectoryNotEmptyError(err: unknown): boolean {
     err instanceof CoreDeviceError &&
     asString(underlying?.ErrorDomain) === POSIX_ERROR_DOMAIN &&
     asNumber(underlying?.ErrorCode) === DEVICE_ENOTEMPTY
+  );
+}
+
+/**
+ * Whether the device rejected a request because its session id is not the one
+ * of the connection the request arrived on.
+ */
+function isInvalidSessionError(err: unknown): boolean {
+  const encodedError = asDictionary((err as CoreDeviceError)?.response?.EncodedError);
+  return (
+    err instanceof CoreDeviceError &&
+    asString(encodedError?.ErrorDomain) === REMOTE_SERVICES_ERROR_DOMAIN &&
+    asNumber(encodedError?.ErrorCode) === DEVICE_INVALID_SESSION
   );
 }
 

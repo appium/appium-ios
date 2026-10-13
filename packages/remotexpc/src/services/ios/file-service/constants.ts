@@ -51,6 +51,21 @@ export const DEFAULT_FILE_SERVICE_USERNAME = 'mobile';
 export const END_SESSION_TIMEOUT_MS = 5000;
 
 /**
+ * How long a transfer's data channel may stall by default. Kept separate from
+ * the control channel's invoke timeout, which is unrelated to transfer stalls.
+ */
+export const DEFAULT_TRANSFER_IDLE_TIMEOUT_MS = 30_000;
+
+/** Error domain of the device's own remote service errors. */
+export const REMOTE_SERVICES_ERROR_DOMAIN = 'com.apple.dt.remoteservices.error';
+
+/**
+ * `The provided session ID is not valid`, which the device answers when a
+ * request carries the session id of a connection it no longer holds.
+ */
+export const DEVICE_INVALID_SESSION = 11004;
+
+/**
  * A transfer cut short makes the device hold up its next session, from any
  * client, for about 10 seconds. So when the destination of a pull fails, the
  * rest of the file is read and discarded if no more than this many bytes are left.
