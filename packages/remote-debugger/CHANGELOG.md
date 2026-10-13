@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.5.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.11...appium-remote-debugger@17.5.12) (2026-10-13)
+
+### Bug Fixes
+
+* **remote-debugger:** capture the whole element in element screenshots ([#59](https://github.com/appium/appium-ios/issues/59)) ([f6ad00f](https://github.com/appium/appium-ios/commit/f6ad00fdca567f8ca39383d0d2a94fc10375875c))
+
+
 ## [17.5.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.10...appium-remote-debugger@17.5.11) (2026-10-12)
 
 **Note:** Version bump only for package appium-remote-debugger
