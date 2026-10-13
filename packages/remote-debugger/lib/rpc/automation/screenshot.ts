@@ -8,9 +8,10 @@ export async function screenshot(this: AutomationSession): Promise<string> {
 /** Takes a base64-encoded screenshot, optionally scoped to a single element. Shared with `elements.ts`'s `elementScreenshot` - not part of the public API. */
 export async function takeScreenshot(
   this: AutomationSession,
-  opts: {nodeHandle?: string; scrollIntoViewIfNeeded?: boolean},
+  opts: {nodeHandle?: string; scrollIntoViewIfNeeded?: boolean; clipToViewport?: boolean},
 ): Promise<string> {
-  const params = this.withFrameHandle({handle: this.requireTopLevelHandle(), clipToViewport: true});
+  const {clipToViewport = true} = opts;
+  const params = this.withFrameHandle({handle: this.requireTopLevelHandle(), clipToViewport});
   if (opts.scrollIntoViewIfNeeded) {
     params.scrollIntoViewIfNeeded = true;
   }
