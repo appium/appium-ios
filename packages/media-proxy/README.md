@@ -4,7 +4,7 @@ Cross-platform media transcoder that turns a device's native screen stream into 
 already produced by `@appium/coresim` (simulators) and the Android settings app:
 
 - **H.264**: Annex-B, 4-byte start codes, one picture per unit, no B-frames, SPS/PPS inline on every
-  keyframe (plus an `isConfig` unit at start and after a resolution change).
+  keyframe.
 - **MJPEG**: one standalone JPEG per frame.
 
 The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCapture`
@@ -21,7 +21,7 @@ import {transcode, serveMjpeg} from '@appium/media-proxy';
 
 const capture = await ScreenStreamCapture.start(display, {displayId: 1});
 
-// H.264 (same shape as coresim's VideoAccessUnit, plus `isConfig`)
+// H.264 (same shape as coresim's VideoAccessUnit)
 for await (const unit of transcode(capture.accessUnits(), {output: {codec: 'h264', fps: 60}})) {
   // unit.data is Annex-B, unit.isKeyFrame, unit.timestampMicros, ...
 }
@@ -35,14 +35,17 @@ console.log(server.url);
 Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`,
 `requestKeyFrame()`, `stats`, `encoderName` and `close()`.
 
-| Option                         | Default   | Notes                                           |
-| ------------------------------ | --------- | ----------------------------------------------- |
-| `output.fps`                   | 60        | Upper bound; the input is variable-rate        |
-| `output.bitrate` (h264)        | 4,000,000 | bits/sec                                        |
-| `output.quality` (mjpeg)       | 80        | 1-100                                           |
-| `output.scale`                 | 100       | Percent of the source resolution, (0, 100]      |
-| `input.clockRate`              | 90000     | Ticks/sec of `timestamp`, or `'receivedAt'`     |
-| `hardwareAcceleration`         | `'auto'`  | `'auto'` \| `'off'` \| `'required'`             |
+| Option                   | Default   | Notes                                                       |
+| ------------------------ | --------- | ----------------------------------------------------------- |
+| `output.fps`             | 60        | Finite, >= 1. Upper bound; the input is variable-rate       |
+| `output.bitrate` (h264)  | 4,000,000 | bits/sec, > 0 and <= 2^31-1                                 |
+| `output.quality` (mjpeg) | 80        | 0-100                                                       |
+| `output.scale` (mjpeg)   | 100       | Percent of the source resolution, > 0 and <= 100            |
+| `input.clockRate`        | 90000     | Ticks/sec of `timestamp`, or `'receivedAt'`                 |
+| `hardwareAcceleration`   | `'auto'`  | `'auto'` \| `'off'` \| `'required'`                         |
+
+Output options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
+`JpegStreamOptions`. Android-only options (`resolution`, `localPort`, audio, ...) are not supported.
 
 ### Framing helpers
 

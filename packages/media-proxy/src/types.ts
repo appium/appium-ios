@@ -31,24 +31,33 @@ export interface TranscoderInputOptions {
   clockRate?: number | 'receivedAt';
 }
 
-export interface H264OutputOptions {
-  codec: 'h264';
-  /** Max output frames/sec (upper bound, input is variable-rate). Defaults to 60. */
+/** Mirrors coresim's `VideoStreamOptions` (minus `displayId`/`codec`/`audio`). */
+export interface VideoStreamOptions {
+  /**
+   * Max frames/sec — the input is variable-rate, so this is an upper bound, not a guarantee.
+   * Must be a finite number >= 1. Defaults to 60.
+   */
   fps?: number;
-  /** Target bitrate in bits/sec. Defaults to 4,000,000. */
+  /** Target average bitrate, in bits/sec. Defaults to 4,000,000 (4 Mbps). */
   bitrate?: number;
-  /** Frame scale as a percentage of the source, (0, 100]. Defaults to 100. */
+}
+
+/** Mirrors coresim's `JpegStreamOptions` (minus `displayId`). */
+export interface JpegStreamOptions {
+  /** Max frames/sec; must be a finite number >= 1. Defaults to 60. */
+  fps?: number;
+  /** JPEG quality as a percentage, 0 (smallest) to 100 (largest). Defaults to 80. */
+  quality?: number;
+  /** Frame scale as a percentage of the source, greater than 0 and at most 100. Defaults to 100. */
   scale?: number;
 }
 
-export interface MjpegOutputOptions {
+export interface H264OutputOptions extends VideoStreamOptions {
+  codec: 'h264';
+}
+
+export interface MjpegOutputOptions extends JpegStreamOptions {
   codec: 'mjpeg';
-  /** Max output frames/sec. Defaults to 60. */
-  fps?: number;
-  /** JPEG quality, 1-100. Defaults to 80. */
-  quality?: number;
-  /** Frame scale as a percentage of the source, (0, 100]. Defaults to 100. */
-  scale?: number;
 }
 
 export type OutputOptions = H264OutputOptions | MjpegOutputOptions;
@@ -63,22 +72,20 @@ export interface TranscoderOptions<O extends OutputOptions = OutputOptions> {
 }
 
 /**
- * One H.264 unit; same shape as coresim's `VideoAccessUnit` (video track only) plus Android's
- * `isConfig`. Annex-B, 4-byte start codes. A keyframe carries SPS/PPS inline; `isConfig` units
- * (SPS+PPS only) are additionally emitted on start and after a resolution change.
+ * One H.264 unit; same shape as coresim's `VideoAccessUnit` (video track only). Annex-B, 4-byte
+ * start codes; a keyframe carries SPS/PPS inline, so it is self-decodable alone.
  */
 export interface VideoAccessUnit {
   track: 'video';
   data: Buffer;
   isKeyFrame: boolean;
-  isConfig: boolean;
   /** Monotonically increasing, starting at 0. */
   sequence: number;
   /** Microseconds since the stream started. */
   timestampMicros: number;
 }
 
-/** One standalone JPEG; same shape as coresim's/Android's `JpegFrame`. */
+/** One standalone JPEG; same shape as coresim's `JpegFrame`. */
 export interface JpegFrame {
   data: Buffer;
   sequence: number;
@@ -100,7 +107,6 @@ export interface TranscoderStats {
 export interface NativeUnit {
   data: Buffer;
   isKeyFrame: boolean;
-  isConfig: boolean;
   timestampMicros: number;
 }
 

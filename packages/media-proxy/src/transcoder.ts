@@ -23,14 +23,6 @@ export const DEFAULT_CLOCK_RATE = 90_000;
 
 const MAX_BITRATE = 2 ** 31 - 1;
 
-function requireRange(name: string, value: number, min: number, max: number, integer: boolean): void {
-  if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
-    throw new MediaProxyOptionError(
-      `${name} must be ${integer ? 'an integer' : 'a number'} in [${min}, ${max}], got ${value}`,
-    );
-  }
-}
-
 export interface ResolvedOptions {
   config: NativeConfig;
   clockRate: number | 'receivedAt';
@@ -53,26 +45,36 @@ export function resolveOptions(opts: TranscoderOptions): ResolvedOptions {
   }
   const clockRate = opts.input?.clockRate ?? DEFAULT_CLOCK_RATE;
   if (clockRate !== 'receivedAt') {
-    requireRange('input.clockRate', clockRate, 1, 2 ** 32, false);
+    if (!Number.isFinite(clockRate) || clockRate <= 0) {
+      throw new RangeError(`input.clockRate must be a positive number or 'receivedAt', got ${clockRate}`);
+    }
   }
   const hardwareAcceleration = opts.hardwareAcceleration ?? 'auto';
   if (!['auto', 'off', 'required'].includes(hardwareAcceleration)) {
     throw new MediaProxyOptionError(`hardwareAcceleration must be auto|off|required, got ${hardwareAcceleration}`);
   }
+  // Same rules and error type as coresim's startVideoStream/startJpegStream.
   const fps = output.fps ?? DEFAULT_FPS;
-  requireRange('output.fps', fps, 1, 240, false);
-  const scale = output.scale ?? DEFAULT_SCALE;
-  if (!(Number.isFinite(scale) && scale > 0 && scale <= 100)) {
-    throw new MediaProxyOptionError(`output.scale must be in (0, 100], got ${scale}`);
+  if (!Number.isFinite(fps) || fps < 1) {
+    throw new RangeError(`fps must be a finite number >= 1, got ${fps}`);
   }
   let bitrate = DEFAULT_BITRATE;
   let quality = DEFAULT_QUALITY;
+  let scale = DEFAULT_SCALE;
   if (output.codec === 'h264') {
-    bitrate = (output as H264OutputOptions).bitrate ?? DEFAULT_BITRATE;
-    requireRange('output.bitrate', bitrate, 1, MAX_BITRATE, true);
+    bitrate = output.bitrate ?? DEFAULT_BITRATE;
+    if (!Number.isFinite(bitrate) || bitrate <= 0 || bitrate > MAX_BITRATE) {
+      throw new RangeError(`bitrate must be a positive number no greater than ${MAX_BITRATE}, got ${bitrate}`);
+    }
   } else {
-    quality = (output as MjpegOutputOptions).quality ?? DEFAULT_QUALITY;
-    requireRange('output.quality', quality, 1, 100, true);
+    quality = output.quality ?? DEFAULT_QUALITY;
+    if (!Number.isFinite(quality) || quality < 0 || quality > 100) {
+      throw new RangeError(`quality must be a number between 0 and 100, got ${quality}`);
+    }
+    scale = output.scale ?? DEFAULT_SCALE;
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 100) {
+      throw new RangeError(`scale must be a number greater than 0 and no greater than 100, got ${scale}`);
+    }
   }
   return {
     clockRate,
@@ -226,7 +228,6 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
           track: 'video',
           data: unit.data,
           isKeyFrame: unit.isKeyFrame,
-          isConfig: unit.isConfig,
           sequence,
           timestampMicros: unit.timestampMicros,
         }

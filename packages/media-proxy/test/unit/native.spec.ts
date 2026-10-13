@@ -5,7 +5,6 @@ import {describe, it} from 'node:test';
 import {fileURLToPath} from 'node:url';
 
 import {MediaProxyUnavailableError} from '../../src/errors.js';
-import {MediaProxyOptionError} from '../../src/errors.js';
 import {assertSupportedPlatform, createNativeLoader} from '../../src/native.js';
 import {createTranscoder} from '../../src/transcoder.js';
 
@@ -60,7 +59,7 @@ describe('createNativeLoader', () => {
 
 describe('createTranscoder', () => {
   it('validates options before loading the addon', () => {
-    assert.throws(() => createTranscoder({output: {codec: 'mjpeg', quality: 0}}), MediaProxyOptionError);
+    assert.throws(() => createTranscoder({output: {codec: 'mjpeg', quality: 101}}), RangeError);
   });
 });
 

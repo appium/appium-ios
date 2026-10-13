@@ -53,7 +53,7 @@ function fakeBackend(): FakeBackend {
       };
       return handle;
     },
-    emit: (unit) => onUnit({isKeyFrame: false, isConfig: false, timestampMicros: 0, ...unit}),
+    emit: (unit) => onUnit({isKeyFrame: false, timestampMicros: 0, ...unit}),
     fail: (err) => onError(err),
   };
   return backend;
@@ -76,15 +76,31 @@ describe('resolveOptions', () => {
     assert.strictEqual(resolveOptions(mjpeg).config.quality, 80);
   });
 
+  // Same rules as coresim's startVideoStream/startJpegStream, which throw RangeError.
   for (const [name, opts] of Object.entries({
     'fps < 1': {output: {codec: 'h264', fps: 0.5}},
     'non-finite fps': {output: {codec: 'mjpeg', fps: Infinity}},
+    'zero bitrate': {output: {codec: 'h264', bitrate: 0}},
+    'bitrate > 2^31-1': {output: {codec: 'h264', bitrate: 2 ** 31}},
     'zero scale': {output: {codec: 'mjpeg', scale: 0}},
-    'scale > 100': {output: {codec: 'h264', scale: 101}},
-    'fractional bitrate': {output: {codec: 'h264', bitrate: 1.5}},
-    'quality 0': {output: {codec: 'mjpeg', quality: 0}},
-    'bad codec': {output: {codec: 'vp9'}},
+    'scale > 100': {output: {codec: 'mjpeg', scale: 101}},
+    'negative quality': {output: {codec: 'mjpeg', quality: -1}},
+    'quality > 100': {output: {codec: 'mjpeg', quality: 101}},
     'bad clock rate': {output: {codec: 'h264'}, input: {clockRate: 0}},
+  } as Record<string, unknown>)) {
+    it(`rejects ${name}`, () => {
+      assert.throws(() => resolveOptions(opts as TranscoderOptions), RangeError);
+    });
+  }
+
+  it('accepts what coresim accepts: no fps cap, fractional values, quality 0', () => {
+    assert.strictEqual(resolveOptions({output: {codec: 'h264', fps: 120.5, bitrate: 1.5}}).config.fps, 120.5);
+    assert.strictEqual(resolveOptions({output: {codec: 'mjpeg', quality: 0, scale: 12.5}}).config.quality, 0);
+  });
+
+  for (const [name, opts] of Object.entries({
+    'bad codec': {output: {codec: 'vp9'}},
+    'bad input codec': {output: {codec: 'h264'}, input: {codec: 'vp9'}},
     'bad hw mode': {output: {codec: 'h264'}, hardwareAcceleration: 'sometimes'},
   } as Record<string, unknown>)) {
     it(`rejects ${name}`, () => {
@@ -136,22 +152,20 @@ describe('Transcoder', () => {
   it('assigns monotonically increasing sequence numbers to h264 units', async () => {
     const backend = fakeBackend();
     const t = new Transcoder(h264, backend);
-    backend.emit({data: Buffer.from('cfg'), isConfig: true});
     backend.emit({data: Buffer.from('idr'), isKeyFrame: true, timestampMicros: 10});
     backend.emit({data: Buffer.from('p'), timestampMicros: 20});
     const seen = [];
     for await (const u of t.units()) {
       seen.push(u);
-      if (seen.length === 3) {
+      if (seen.length === 2) {
         break;
       }
     }
     assert.deepStrictEqual(
-      (seen as VideoAccessUnit[]).map((u) => [u.track, u.sequence, u.isConfig, u.isKeyFrame]),
+      (seen as VideoAccessUnit[]).map((u) => [u.track, u.sequence, u.isKeyFrame]),
       [
-        ['video', 0, true, false],
-        ['video', 1, false, true],
-        ['video', 2, false, false],
+        ['video', 0, true],
+        ['video', 1, false],
       ],
     );
     await t.close();

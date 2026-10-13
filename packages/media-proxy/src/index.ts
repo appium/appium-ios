@@ -37,6 +37,7 @@ export type {
   HardwareAcceleration,
   InputAccessUnit,
   JpegFrame,
+  JpegStreamOptions,
   MjpegOutputOptions,
   NalAccessUnit,
   OutputOptions,
@@ -44,4 +45,5 @@ export type {
   TranscoderOptions,
   TranscoderStats,
   VideoAccessUnit,
+  VideoStreamOptions,
 } from './types.js';

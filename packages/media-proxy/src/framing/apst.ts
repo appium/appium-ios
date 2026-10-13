@@ -53,7 +53,7 @@ function writeHeader(
 /** Returns `[header, payload]` so callers can `socket.write` both without concatenating. */
 export function encodeApstFrame(unit: VideoAccessUnit | JpegFrame): [Buffer, Buffer] {
   const isVideo = 'track' in unit;
-  const flags = isVideo ? (unit.isConfig ? FLAG_CONFIG : 0) | (unit.isKeyFrame ? FLAG_KEYFRAME : 0) : 0;
+  const flags = isVideo && unit.isKeyFrame ? FLAG_KEYFRAME : 0;
   return [
     writeHeader(
       isVideo ? ApstTrack.Video : ApstTrack.Jpeg,

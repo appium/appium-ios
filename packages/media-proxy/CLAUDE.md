@@ -25,6 +25,8 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 ## Rules
 
 - `sequence` is assigned in JS; native passes `timestampMicros` (already rebased) through the pipeline.
-- Keep output shapes identical to coresim's `VideoAccessUnit`/`JpegFrame` (+ `isConfig`).
+- Options mirror coresim's `VideoStreamOptions`/`JpegStreamOptions` (names, defaults, `RangeError` rules);
+  don't add Android-only options.
+- Keep output shapes identical to coresim's `VideoAccessUnit`/`JpegFrame` (video track only).
 - Never bundle or link GPL/nonfree FFmpeg components or x264.
 - No dependency on remotexpc or coresim; inputs are structural types.

@@ -18,7 +18,6 @@ const video: VideoAccessUnit = {
   track: 'video',
   data: Buffer.from([0, 0, 0, 1, 0x67, 1, 2]),
   isKeyFrame: true,
-  isConfig: false,
   sequence: 5,
   timestampMicros: 123_456_789,
 };
@@ -37,9 +36,11 @@ describe('APST framing', () => {
     assert.deepStrictEqual(buf.subarray(28), video.data);
   });
 
-  it('round-trips video, config and jpeg frames across arbitrary chunk boundaries', () => {
-    const config: VideoAccessUnit = {...video, isKeyFrame: false, isConfig: true, sequence: 0};
-    const wire = Buffer.concat([config, video, jpeg].map((u) => encodeApstFrameBuffer(u)));
+  it('round-trips video, android config and jpeg frames across arbitrary chunk boundaries', () => {
+    // We never emit CONFIG frames, but the parser must read them from Android's stream.
+    const config = encodeApstFrameBuffer({...video, isKeyFrame: false, sequence: 0});
+    config.writeUInt8(config.readUInt8(6) | 0x01, 6);
+    const wire = Buffer.concat([config, encodeApstFrameBuffer(video), encodeApstFrameBuffer(jpeg)]);
     const parser = new ApstParser();
     const out = [];
     for (let i = 0; i < wire.length; i += 3) {
