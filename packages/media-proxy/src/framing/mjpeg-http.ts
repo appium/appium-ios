@@ -37,6 +37,8 @@ export async function serveMjpeg(
   frames: AsyncIterable<JpegFrame>,
   opts: MjpegServerOptions = {},
 ): Promise<MjpegServer> {
+  // Open the source first so a throwing iterator never leaves a listening server behind.
+  const iterator = frames[Symbol.asyncIterator]();
   const host = opts.host ?? '127.0.0.1';
   const boundary = opts.boundary ?? DEFAULT_MJPEG_BOUNDARY;
   const clients = new Set<Client>();
@@ -63,15 +65,19 @@ export async function serveMjpeg(
     res.on('close', () => clients.delete(client));
   });
   server.on('clientError', (_err, socket) => socket.destroy());
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(opts.port ?? 0, host, () => {
-      server.off('error', reject);
-      resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(opts.port ?? 0, host, () => {
+        server.off('error', reject);
+        resolve();
+      });
     });
-  });
+  } catch (err) {
+    iterator.return?.()?.catch(() => {});
+    throw err;
+  }
 
-  const iterator = frames[Symbol.asyncIterator]();
   let signalClosed!: () => void;
   const closed = new Promise<void>((resolve) => (signalClosed = resolve));
   const pump = (async () => {

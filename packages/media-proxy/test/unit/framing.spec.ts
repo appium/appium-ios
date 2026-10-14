@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import http from 'node:http';
+import type {AddressInfo} from 'node:net';
 import {describe, it} from 'node:test';
 
 import {MediaProxyProtocolError} from '../../src/errors.js';
@@ -206,5 +207,35 @@ describe('serveMjpeg lifecycle', () => {
     await server.close();
     assert.ok(returned, 'source return() was called');
     assert.ok(await settlesWithin(server.done), 'done settled');
+  });
+
+  it('does not listen when opening the source throws', async () => {
+    const frames: AsyncIterable<JpegFrame> = {
+      [Symbol.asyncIterator]: () => {
+        throw new Error('open failed');
+      },
+    };
+    await assert.rejects(serveMjpeg(frames), /open failed/);
+  });
+
+  it('releases the source when listening fails', async () => {
+    const blocker = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => blocker.once('listening', r));
+    const {port} = blocker.address() as AddressInfo;
+    let returned = false;
+    const iterator: AsyncIterableIterator<JpegFrame> = {
+      [Symbol.asyncIterator]: () => iterator,
+      next: () => new Promise(() => {}),
+      return: async () => {
+        returned = true;
+        return {value: undefined, done: true};
+      },
+    };
+    try {
+      await assert.rejects(serveMjpeg({[Symbol.asyncIterator]: () => iterator}, {port}), /EADDRINUSE/);
+      assert.ok(returned, 'source return() was called');
+    } finally {
+      blocker.close();
+    }
   });
 });
