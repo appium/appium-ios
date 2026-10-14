@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.0...appium-ios-remotexpc@5.25.1) (2026-10-14)
+
+### Bug Fixes
+
+* **remotexpc:** parse binary plist dicts that have a &quot;type&quot; key ([#64](https://github.com/appium/appium-ios/issues/64)) ([e8ac890](https://github.com/appium/appium-ios/commit/e8ac890fe68a5c22161e2a9b10de15f124d80068))
+
+
 ## [5.25.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.7...appium-ios-remotexpc@5.25.0) (2026-10-12)
 
 ### Features
