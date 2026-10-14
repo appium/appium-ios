@@ -211,6 +211,29 @@ describe('Plist Module', function () {
     });
   });
 
+  describe('Binary Plist Dictionaries With A "type" Key', function () {
+    it('should parse a root dictionary with a "type" key', function () {
+      const obj = {type: 'WiFi', name: 'en0'};
+      assert.deepStrictEqual(parseBinaryPlist(createBinaryPlist(obj)), obj);
+    });
+
+    it('should parse a root dictionary with "type" and "value" keys', function () {
+      const obj = {type: 'WiFi', value: 'en0'};
+      assert.deepStrictEqual(parseBinaryPlist(createBinaryPlist(obj)), obj);
+    });
+
+    it('should parse a "type" dictionary referenced again after it was resolved', function () {
+      // The writer dedups by identity, so the second reference points back to a lower index.
+      const shared = {type: 'WiFi', name: 'en0'};
+      const obj = {first: shared, inArray: [shared], inDict: {nested: shared}};
+      assert.deepStrictEqual(parseBinaryPlist(createBinaryPlist(obj)), {
+        first: {type: 'WiFi', name: 'en0'},
+        inArray: [{type: 'WiFi', name: 'en0'}],
+        inDict: {nested: {type: 'WiFi', name: 'en0'}},
+      });
+    });
+  });
+
   describe('Unified Plist Functions', function () {
     it('should auto-detect and parse both XML and binary plists', function () {
       // XML parsing
