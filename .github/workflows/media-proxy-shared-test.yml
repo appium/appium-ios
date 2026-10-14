@@ -51,14 +51,19 @@ jobs:
           mode: firewall-free
 
       # Scoped like build.yml: an unscoped `npm ci` also compiles packages/tuntap (which needs
-      # OpenSSL on Windows) and every other workspace's native install.
+      # OpenSSL on Windows) and every other workspace's native install. --ignore-scripts also skips
+      # the root `prepare` (tsc -b over packages/xcode, whose @types are not in a scoped install);
+      # media-proxy is built explicitly below.
       - name: Install npm dependencies
         if: ${{ !contains(inputs.image, 'windows') }}
-        run: sfw npm ci --workspace=packages/media-proxy --include-workspace-root
+        run: sfw npm ci --workspace=packages/media-proxy --include-workspace-root --ignore-scripts
 
       - name: Install npm dependencies
         if: ${{ contains(inputs.image, 'windows') }}
-        run: npm ci --workspace=packages/media-proxy --include-workspace-root
+        run: npm ci --workspace=packages/media-proxy --include-workspace-root --ignore-scripts
+
+      - name: Build TypeScript
+        run: npm run build --workspace packages/media-proxy
 
       - name: Install clang-format
         if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-format-check }}
