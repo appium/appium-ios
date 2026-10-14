@@ -24,7 +24,9 @@ interface FakeBackend extends NativeModule {
 }
 
 /** `echo`: every push immediately produces one unit. `flushOnClose`: close() flushes one last unit. */
-function fakeBackend(opts: {echo?: boolean; flushOnClose?: boolean} = {}): FakeBackend {
+function fakeBackend(
+  opts: {echo?: boolean; flushOnClose?: boolean; failClose?: boolean; failPush?: boolean} = {},
+): FakeBackend {
   let onUnit!: (u: NativeUnit) => void;
   let onError!: (e: Error) => void;
   const backend: FakeBackend = {
@@ -38,6 +40,9 @@ function fakeBackend(opts: {echo?: boolean; flushOnClose?: boolean} = {}): FakeB
       onError = errorCb;
       const handle: NativeTranscoderHandle = {
         push: (chunks, ts, key) => {
+          if (opts.failPush) {
+            throw new Error('push failed');
+          }
           backend.pushes.push({chunks, ts, key});
           if (opts.echo) {
             onUnit({data: chunks[0], isKeyFrame: key, timestampMicros: ts});
@@ -46,6 +51,9 @@ function fakeBackend(opts: {echo?: boolean; flushOnClose?: boolean} = {}): FakeB
         requestKeyFrame: () => void backend.keyFrameRequests++,
         close: async () => {
           backend.closed = true;
+          if (opts.failClose) {
+            throw new Error('close failed');
+          }
           if (opts.flushOnClose) {
             onUnit({data: Buffer.from('flushed'), isKeyFrame: false, timestampMicros: 999});
           }
@@ -325,6 +333,52 @@ describe('pipeThrough() / transcode()', () => {
       }
     }, /device went away/);
     assert.deepStrictEqual(seen, [0]);
+  });
+
+  it('fails the consumer, without an unhandled rejection, when native close rejects', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const t = new Transcoder(mjpeg, fakeBackend({failClose: true}));
+      async function* empty(): AsyncGenerator<NalAccessUnit> {}
+      await assert.rejects(async () => {
+        for await (const _ of pipeThrough(t, empty())) {
+          // no units expected
+        }
+      }, /close failed/);
+      await new Promise((r) => setImmediate(r));
+      assert.deepStrictEqual(unhandled, []);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  it('end() rejects and fails pending consumers when native close rejects', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({failClose: true}));
+    const next = t.units().next();
+    await assert.rejects(t.end(), /close failed/);
+    await assert.rejects(next, /close failed/);
+  });
+
+  it('runs the source cleanup when push() throws', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({failPush: true}));
+    let cleaned = false;
+    async function* source() {
+      try {
+        yield au(0, true);
+        yield au(3000);
+      } finally {
+        cleaned = true;
+      }
+    }
+    await assert.rejects(async () => {
+      for await (const _ of pipeThrough(t, source())) {
+        // no units expected
+      }
+    }, /push failed/);
+    await new Promise((r) => setImmediate(r));
+    assert.ok(cleaned, 'source finally ran');
   });
 
   it('transcode() surfaces the typed error when no encoder is compiled in', async () => {

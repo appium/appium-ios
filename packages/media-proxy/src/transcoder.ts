@@ -152,7 +152,13 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
    */
   end(): Promise<void> {
     this.closePromise ??= (async () => {
-      await this.handle.close();
+      try {
+        await this.handle.close();
+      } catch (err) {
+        const wrapped = wrapNativeError(err);
+        this.queue.fail(wrapped);
+        throw wrapped;
+      }
       this.queue.end({drain: true});
     })();
     return this.closePromise;
@@ -225,14 +231,32 @@ export async function* pipeThrough(
 ): AsyncGenerator<OutputUnit> {
   const iterator = source[Symbol.asyncIterator]();
   let stopped = false;
-  let sourceDone = false;
+  let exhausted = false;
+  let returned = false;
   let failed = false;
   let pumpError: unknown;
+  // Don't await: an idle source may not settle until its next item.
+  const releaseSource = () => {
+    if (!exhausted && !returned) {
+      returned = true;
+      iterator.return?.()?.catch(() => {});
+    }
+  };
   const pump = (async () => {
     try {
       for (;;) {
-        const result = await iterator.next();
-        if (result.done || stopped) {
+        let result: IteratorResult<NalAccessUnit>;
+        try {
+          result = await iterator.next();
+        } catch (err) {
+          exhausted = true;
+          throw err;
+        }
+        if (result.done) {
+          exhausted = true;
+          break;
+        }
+        if (stopped) {
           break;
         }
         transcoder.push(result.value);
@@ -241,9 +265,10 @@ export async function* pipeThrough(
       failed = true;
       pumpError = err;
     }
-    sourceDone = true;
+    releaseSource();
     if (!stopped) {
-      await transcoder.end();
+      // A close failure reaches the consumer through the queue; keep the pump from rejecting.
+      await transcoder.end().catch(() => {});
     }
   })();
   try {
@@ -251,10 +276,7 @@ export async function* pipeThrough(
   } finally {
     stopped = true;
     await transcoder.close();
-    if (!sourceDone) {
-      // Don't await: an idle source may not settle until its next item.
-      iterator.return?.()?.catch(() => {});
-    }
+    releaseSource();
   }
   if (signal?.aborted) {
     return;
