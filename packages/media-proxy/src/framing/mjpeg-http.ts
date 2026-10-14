@@ -19,13 +19,19 @@ export interface MjpegServer {
   /** URL clients (browsers, `<img>`, ffplay) can open. */
   readonly url: string;
   readonly clientCount: number;
+  /**
+   * Settles when the frame source ends (resolves) or fails (rejects with its error), or resolves
+   * on {@link close}. Already handled internally, so ignoring it never raises an unhandled rejection.
+   */
+  readonly done: Promise<void>;
   close(): Promise<void>;
 }
 
 /**
  * Serves `frames` as an MJPEG `multipart/x-mixed-replace` stream to any number of HTTP clients.
  * Each client keeps only the newest unsent frame: a slow client skips frames (every JPEG is
- * independently decodable) rather than building a backlog or stalling the others.
+ * independently decodable) rather than building a backlog or stalling the others. Once the source
+ * has ended or failed, new requests get `410 Gone`.
  */
 export async function serveMjpeg(
   frames: AsyncIterable<JpegFrame>,
@@ -34,10 +40,16 @@ export async function serveMjpeg(
   const host = opts.host ?? '127.0.0.1';
   const boundary = opts.boundary ?? DEFAULT_MJPEG_BOUNDARY;
   const clients = new Set<Client>();
+  let sourceDone = false;
+  let closing = false;
 
   const server = http.createServer((req, res) => {
     if (req.method !== 'GET') {
       res.writeHead(405).end();
+      return;
+    }
+    if (sourceDone) {
+      res.writeHead(410).end();
       return;
     }
     res.writeHead(200, {
@@ -59,25 +71,33 @@ export async function serveMjpeg(
     });
   });
 
-  const stopController = new AbortController();
+  const iterator = frames[Symbol.asyncIterator]();
+  let signalClosed!: () => void;
+  const closed = new Promise<void>((resolve) => (signalClosed = resolve));
   const pump = (async () => {
     try {
-      for await (const frame of frames) {
-        if (stopController.signal.aborted) {
+      for (;;) {
+        const result = await iterator.next();
+        if (result.done || closing) {
           break;
         }
         for (const client of clients) {
-          client.offer(frame);
+          client.offer(result.value);
         }
       }
     } finally {
       // Source ended or failed: finish all responses so clients see a clean end.
+      sourceDone = true;
       for (const client of clients) {
         client.end();
       }
     }
   })();
+  // Either the source settles, or close() was called while it is idle.
+  const done = Promise.race([pump, closed]);
+  // Surfaced through `done`; these keep an unobserved failure from becoming an unhandled rejection.
   pump.catch(() => {});
+  done.catch(() => {});
 
   const {port} = server.address() as AddressInfo;
   return {
@@ -87,8 +107,13 @@ export async function serveMjpeg(
     get clientCount() {
       return clients.size;
     },
+    done,
     async close() {
-      stopController.abort();
+      closing = true;
+      sourceDone = true;
+      signalClosed();
+      // Ask the source to stop; not awaited, as an idle source may not settle until its next item.
+      iterator.return?.()?.catch(() => {});
       for (const client of clients) {
         client.end();
       }

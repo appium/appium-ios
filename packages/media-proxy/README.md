@@ -51,6 +51,7 @@ Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOpti
 - `encodeApstFrame` / `ApstParser`: the Android settings app's "APST" wire protocol, so one client
   can consume both platforms.
 - `formatMjpegPart` / `serveMjpeg`: MJPEG over HTTP; each client keeps only its newest unsent frame.
+  `server.done` rejects if the frame source fails; clients connecting after the source ended get `410`.
 
 ## Licensing
 

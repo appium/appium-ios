@@ -75,43 +75,89 @@ export function encodeApstEndOfStream(track: ApstTrack, sequence: number, timest
   return writeHeader(track, FLAG_EOS, sequence, timestampMicros, 0);
 }
 
-/** Incremental parser; carries a trailing partial frame across `push` calls. */
+interface PendingHeader {
+  track: ApstTrack;
+  flags: number;
+  sequence: number;
+  timestampMicros: number;
+  payloadLength: number;
+}
+
+/**
+ * Incremental parser; carries a trailing partial frame across `push` calls. Chunks are queued and
+ * the header is parsed once, so a large frame arriving in small chunks is copied once, not per chunk.
+ */
 export class ApstParser {
-  private buf: Buffer = Buffer.alloc(0);
+  private chunks: Buffer[] = [];
+  private size = 0;
+  private header: PendingHeader | undefined;
 
   /** @throws {MediaProxyProtocolError} on bad magic/version or an implausible payload length. */
   *push(chunk: Buffer): Generator<ApstFrame> {
-    this.buf = this.buf.length ? Buffer.concat([this.buf, chunk]) : chunk;
+    if (chunk.length > 0) {
+      this.chunks.push(chunk);
+      this.size += chunk.length;
+    }
     for (;;) {
-      if (this.buf.length < APST_HEADER_SIZE) {
+      if (!this.header) {
+        if (this.size < APST_HEADER_SIZE) {
+          return;
+        }
+        this.header = this.parseHeader(this.take(APST_HEADER_SIZE));
+      }
+      if (this.size < this.header.payloadLength) {
         return;
       }
-      if (!this.buf.subarray(0, 4).equals(MAGIC)) {
-        throw new MediaProxyProtocolError('Stream desynchronized: unexpected APST magic bytes');
-      }
-      if (this.buf.readUInt8(4) !== APST_VERSION) {
-        throw new MediaProxyProtocolError(`Unsupported APST version ${this.buf.readUInt8(4)}`);
-      }
-      const payloadLength = this.buf.readUInt32BE(24);
-      if (payloadLength > MAX_PAYLOAD) {
-        throw new MediaProxyProtocolError(`Implausible APST payload length ${payloadLength}`);
-      }
-      const total = APST_HEADER_SIZE + payloadLength;
-      if (this.buf.length < total) {
-        return;
-      }
-      const flags = this.buf.readUInt8(6);
-      const frame: ApstFrame = {
-        track: this.buf.readUInt8(5) as ApstTrack,
-        sequence: Number(this.buf.readBigUInt64BE(8)),
-        timestampMicros: Number(this.buf.readBigUInt64BE(16)),
-        data: Buffer.from(this.buf.subarray(APST_HEADER_SIZE, total)),
+      const {track, flags, sequence, timestampMicros, payloadLength} = this.header;
+      this.header = undefined;
+      yield {
+        track,
+        sequence,
+        timestampMicros,
+        data: this.take(payloadLength),
         isConfig: (flags & FLAG_CONFIG) !== 0,
         isKeyFrame: (flags & FLAG_KEYFRAME) !== 0,
         isEndOfStream: (flags & FLAG_EOS) !== 0,
       };
-      this.buf = this.buf.subarray(total);
-      yield frame;
     }
+  }
+
+  private parseHeader(buf: Buffer): PendingHeader {
+    if (!buf.subarray(0, 4).equals(MAGIC)) {
+      throw new MediaProxyProtocolError('Stream desynchronized: unexpected APST magic bytes');
+    }
+    if (buf.readUInt8(4) !== APST_VERSION) {
+      throw new MediaProxyProtocolError(`Unsupported APST version ${buf.readUInt8(4)}`);
+    }
+    const payloadLength = buf.readUInt32BE(24);
+    if (payloadLength > MAX_PAYLOAD) {
+      throw new MediaProxyProtocolError(`Implausible APST payload length ${payloadLength}`);
+    }
+    return {
+      track: buf.readUInt8(5) as ApstTrack,
+      flags: buf.readUInt8(6),
+      sequence: Number(buf.readBigUInt64BE(8)),
+      timestampMicros: Number(buf.readBigUInt64BE(16)),
+      payloadLength,
+    };
+  }
+
+  /** Removes the first `n` queued bytes into one new buffer (a single copy). */
+  private take(n: number): Buffer {
+    const out = Buffer.allocUnsafe(n);
+    let offset = 0;
+    while (offset < n) {
+      const head = this.chunks[0];
+      const count = Math.min(head.length, n - offset);
+      head.copy(out, offset, 0, count);
+      offset += count;
+      if (count === head.length) {
+        this.chunks.shift();
+      } else {
+        this.chunks[0] = head.subarray(count);
+      }
+    }
+    this.size -= n;
+    return out;
   }
 }

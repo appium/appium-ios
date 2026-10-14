@@ -2,11 +2,13 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
 import {MediaProxyEncoderUnavailableError, MediaProxyOptionError} from '../../src/errors.js';
-import {TimestampConverter, Transcoder, resolveOptions, transcode} from '../../src/transcoder.js';
+import {TimestampConverter, Transcoder, pipeThrough, resolveOptions, transcode} from '../../src/transcoder.js';
 import type {
+  JpegFrame,
   NativeConfig,
   NativeModule,
   NativeTranscoderHandle,
+  NalAccessUnit,
   NativeUnit,
   TranscoderOptions,
   VideoAccessUnit,
@@ -21,7 +23,8 @@ interface FakeBackend extends NativeModule {
   closed: boolean;
 }
 
-function fakeBackend(): FakeBackend {
+/** `echo`: every push immediately produces one unit. `flushOnClose`: close() flushes one last unit. */
+function fakeBackend(opts: {echo?: boolean; flushOnClose?: boolean} = {}): FakeBackend {
   let onUnit!: (u: NativeUnit) => void;
   let onError!: (e: Error) => void;
   const backend: FakeBackend = {
@@ -34,10 +37,18 @@ function fakeBackend(): FakeBackend {
       onUnit = unitCb;
       onError = errorCb;
       const handle: NativeTranscoderHandle = {
-        push: (chunks, ts, key) => void backend.pushes.push({chunks, ts, key}),
+        push: (chunks, ts, key) => {
+          backend.pushes.push({chunks, ts, key});
+          if (opts.echo) {
+            onUnit({data: chunks[0], isKeyFrame: key, timestampMicros: ts});
+          }
+        },
         requestKeyFrame: () => void backend.keyFrameRequests++,
         close: async () => {
           backend.closed = true;
+          if (opts.flushOnClose) {
+            onUnit({data: Buffer.from('flushed'), isKeyFrame: false, timestampMicros: 999});
+          }
         },
       };
       return handle;
@@ -198,8 +209,129 @@ describe('Transcoder', () => {
   });
 });
 
-describe('transcode()', () => {
-  it('is exported', () => {
-    assert.strictEqual(typeof transcode, 'function');
+const au = (ts: number, isKeyFrame = false): NalAccessUnit => ({nals: [Buffer.from([ts])], isKeyFrame, timestamp: ts});
+
+/** Source that yields `items`, then blocks on an idle read; `return()` is recorded but never unblocks it. */
+function idleSource(items: NalAccessUnit[], opts: {returnUnblocks?: boolean} = {}) {
+  let index = 0;
+  let unblock: () => void = () => {};
+  const state = {returned: false};
+  const iterator: AsyncIterableIterator<NalAccessUnit> = {
+    [Symbol.asyncIterator]: () => iterator,
+    async next() {
+      if (index < items.length) {
+        return {value: items[index++], done: false};
+      }
+      await new Promise<void>((resolve) => (unblock = resolve));
+      return {value: undefined, done: true};
+    },
+    async return() {
+      state.returned = true;
+      if (opts.returnUnblocks) {
+        unblock();
+      }
+      return {value: undefined, done: true};
+    },
+  };
+  return {iterator, state};
+}
+
+const settlesWithin = (promise: Promise<unknown>, ms = 1000) =>
+  Promise.race([promise.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
+
+describe('Transcoder.end() / close()', () => {
+  it('end() delivers units flushed by the pipeline, close() discards them', async () => {
+    for (const [method, expected] of [
+      ['end', 2],
+      ['close', 0],
+    ] as const) {
+      const backend = fakeBackend({echo: true, flushOnClose: true});
+      const t = new Transcoder<JpegFrame>(mjpeg, backend);
+      t.push(au(1));
+      await (method === 'end' ? t.end() : t.close());
+      const seen: JpegFrame[] = [];
+      for await (const u of t.units()) {
+        seen.push(u);
+      }
+      assert.strictEqual(seen.length, expected, method);
+    }
+  });
+});
+
+describe('pipeThrough() / transcode()', () => {
+  it('yields every unit of a finite source, including ones not yet consumed when it ends', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({echo: true}));
+    async function* source() {
+      yield au(0, true);
+      yield au(3000);
+      yield au(6000);
+    }
+    const seen = [];
+    for await (const u of pipeThrough(t, source())) {
+      seen.push(u.sequence);
+    }
+    assert.deepStrictEqual(seen, [0, 1, 2]);
+  });
+
+  it('includes units flushed on source end', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({echo: true, flushOnClose: true}));
+    async function* source() {
+      yield au(0, true);
+    }
+    const seen = [];
+    for await (const u of pipeThrough(t, source())) {
+      seen.push(u.sequence);
+    }
+    assert.deepStrictEqual(seen, [0, 1]);
+  });
+
+  it('does not hang when aborted while the source is idle, and asks the source to stop', async () => {
+    const backend = fakeBackend({echo: true});
+    const t = new Transcoder(mjpeg, backend);
+    const {iterator, state} = idleSource([au(0, true)]);
+    const controller = new AbortController();
+    const consume = (async () => {
+      for await (const _ of pipeThrough(t, {[Symbol.asyncIterator]: () => iterator}, controller.signal)) {
+        controller.abort();
+      }
+    })();
+    assert.ok(await settlesWithin(consume), 'consumer finished');
+    assert.ok(state.returned, 'source return() was called');
+    assert.ok(backend.closed);
+  });
+
+  it('stops the source when the consumer breaks early', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({echo: true}));
+    const {iterator, state} = idleSource([au(0, true), au(3000)]);
+    const consume = (async () => {
+      for await (const _ of pipeThrough(t, {[Symbol.asyncIterator]: () => iterator})) {
+        break;
+      }
+    })();
+    assert.ok(await settlesWithin(consume));
+    assert.ok(state.returned);
+  });
+
+  it('yields what was produced, then throws the source error', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({echo: true}));
+    async function* source() {
+      yield au(0, true);
+      throw new Error('device went away');
+    }
+    const seen: number[] = [];
+    await assert.rejects(async () => {
+      for await (const u of pipeThrough(t, source())) {
+        seen.push(u.sequence);
+      }
+    }, /device went away/);
+    assert.deepStrictEqual(seen, [0]);
+  });
+
+  it('transcode() surfaces the typed error when no encoder is compiled in', async () => {
+    const source = (async function* () {
+      yield au(0, true);
+    })();
+    // Real addon (or its absence): either way the first iteration rejects with a MediaProxy error.
+    await assert.rejects(transcode(source, {codec: 'h264'}).next(), (err: Error) => err.name.startsWith('MediaProxy'));
   });
 });

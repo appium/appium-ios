@@ -9,6 +9,7 @@ export class UnitQueue<T> {
   private readonly buffer: T[] = [];
   private waiter: {resolve: (r: IteratorResult<T>) => void; reject: (e: unknown) => void} | undefined;
   private ended = false;
+  private draining = false;
   private error: unknown;
   private resyncing = false;
 
@@ -52,6 +53,7 @@ export class UnitQueue<T> {
       return;
     }
     this.ended = true;
+    this.draining = false;
     this.error = err;
     this.buffer.length = 0;
     if (this.waiter) {
@@ -61,11 +63,19 @@ export class UnitQueue<T> {
     }
   }
 
-  end(): void {
+  /**
+   * Ends the queue. With `drain`, already buffered units are still delivered before `next()`
+   * resolves `done`; otherwise they are discarded.
+   */
+  end(opts: {drain?: boolean} = {}): void {
     if (this.ended) {
       return;
     }
     this.ended = true;
+    if (opts.drain && this.buffer.length > 0) {
+      this.draining = true;
+      return;
+    }
     this.buffer.length = 0;
     if (this.waiter) {
       const {resolve} = this.waiter;
@@ -79,10 +89,13 @@ export class UnitQueue<T> {
     if (signal.aborted) {
       return Promise.resolve({value: undefined, done: true});
     }
-    if (this.ended) {
+    if (this.ended && !this.draining) {
       return this.error ? Promise.reject(this.error) : Promise.resolve({value: undefined, done: true});
     }
     const buffered = this.buffer.shift();
+    if (this.draining && this.buffer.length === 0) {
+      this.draining = false;
+    }
     if (buffered !== undefined) {
       return Promise.resolve({value: buffered, done: false});
     }

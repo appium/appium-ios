@@ -27,4 +27,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
 }  // namespace
 
+// NODE_API_MODULE expands to a static registration function that clang-tidy flags; same as tuntap.
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 NODE_API_MODULE(media_proxy, Init)

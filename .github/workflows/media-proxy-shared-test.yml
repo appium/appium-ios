@@ -50,13 +50,15 @@ jobs:
         with:
           mode: firewall-free
 
+      # Scoped like build.yml: an unscoped `npm ci` also compiles packages/tuntap (which needs
+      # OpenSSL on Windows) and every other workspace's native install.
       - name: Install npm dependencies
         if: ${{ !contains(inputs.image, 'windows') }}
-        run: sfw npm ci
+        run: sfw npm ci --workspace=packages/media-proxy --include-workspace-root
 
       - name: Install npm dependencies
         if: ${{ contains(inputs.image, 'windows') }}
-        run: npm ci
+        run: npm ci --workspace=packages/media-proxy --include-workspace-root
 
       - name: Install clang-format
         if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-format-check }}

@@ -81,6 +81,7 @@ export interface NativeTranscoderHandle {
   push(chunks: Buffer[], timestampMicros: number, isKeyFrame: boolean): void;
   /** Forces the next H.264 output to be an IDR frame (used to resync after an overflow). */
   requestKeyFrame(): void;
+  /** Flushes pending frames through `onUnit`, releases resources, then resolves (no callbacks after). */
   close(): Promise<void>;
 }
 

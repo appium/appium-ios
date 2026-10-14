@@ -146,13 +146,26 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
     }
   }
 
-  /** Idempotent. Pending `units()` iterators complete. */
-  close(): Promise<void> {
+  /**
+   * Finishes the stream: flushes the pipeline, so `units()` yields everything already produced and
+   * then completes. Idempotent; a no-op after {@link close}.
+   */
+  end(): Promise<void> {
     this.closePromise ??= (async () => {
+      await this.handle.close();
+      this.queue.end({drain: true});
+    })();
+    return this.closePromise;
+  }
+
+  /** Stops immediately, discarding unconsumed units. Idempotent; pending `units()` iterators complete. */
+  close(): Promise<void> {
+    if (!this.closePromise) {
+      // Stop consumers first: native close() may still flush units that nobody wants.
       this.stopController.abort();
       this.queue.end();
-      await this.handle.close();
-    })();
+    }
+    this.closePromise ??= this.handle.close();
     return this.closePromise;
   }
 
@@ -180,8 +193,11 @@ export function createTranscoder(opts: TranscoderOptions): Transcoder<VideoAcces
 }
 
 /**
- * Pipes `source` (e.g. remotexpc's `ScreenStreamCapture.accessUnits()`) through a transcoder.
- * The transcoder is closed when the source ends, errors, or the consumer stops iterating.
+ * Pipes `source` (e.g. remotexpc's `ScreenStreamCapture.accessUnits()`) through a transcoder. When
+ * the source finishes, everything already produced is still yielded; if it fails, that error is
+ * thrown after the remaining units. Stopping early (`break`, `signal`) closes the transcoder and asks
+ * the source to stop via `return()`; a source blocked on an idle read can only finish once it
+ * yields or honours its own abort signal, which is not awaited.
  */
 export function transcode(
   source: AsyncIterable<NalAccessUnit>,
@@ -198,21 +214,36 @@ export async function* transcode(
   opts: TranscoderOptions,
   signal?: AbortSignal,
 ): AsyncGenerator<OutputUnit> {
-  const transcoder = createTranscoder(opts);
+  yield* pipeThrough(createTranscoder(opts), source, signal);
+}
+
+/** @internal `transcode()` with an already-created transcoder (injectable backend for tests). */
+export async function* pipeThrough(
+  transcoder: Transcoder<VideoAccessUnit> | Transcoder<JpegFrame>,
+  source: AsyncIterable<NalAccessUnit>,
+  signal?: AbortSignal,
+): AsyncGenerator<OutputUnit> {
+  const iterator = source[Symbol.asyncIterator]();
   let stopped = false;
+  let sourceDone = false;
+  let failed = false;
   let pumpError: unknown;
   const pump = (async () => {
     try {
-      for await (const au of source) {
-        if (stopped || signal?.aborted) {
+      for (;;) {
+        const result = await iterator.next();
+        if (result.done || stopped) {
           break;
         }
-        transcoder.push(au);
+        transcoder.push(result.value);
       }
     } catch (err) {
+      failed = true;
       pumpError = err;
-    } finally {
-      await transcoder.close();
+    }
+    sourceDone = true;
+    if (!stopped) {
+      await transcoder.end();
     }
   })();
   try {
@@ -220,10 +251,16 @@ export async function* transcode(
   } finally {
     stopped = true;
     await transcoder.close();
+    if (!sourceDone) {
+      // Don't await: an idle source may not settle until its next item.
+      iterator.return?.()?.catch(() => {});
+    }
   }
-  // Reached only when the units ended on their own: the source finished or failed.
+  if (signal?.aborted) {
+    return;
+  }
   await pump;
-  if (pumpError) {
+  if (failed) {
     throw pumpError;
   }
 }

@@ -70,6 +70,18 @@ describe('APST framing', () => {
     assert.strictEqual(frame.data.length, 0);
   });
 
+  it('reassembles a large frame delivered in small chunks', () => {
+    const big: JpegFrame = {data: Buffer.alloc(1_000_000, 0xab), sequence: 1, timestampMicros: 1};
+    const wire = encodeApstFrameBuffer(big);
+    const parser = new ApstParser();
+    const out = [];
+    for (let i = 0; i < wire.length; i += 4096) {
+      out.push(...parser.push(wire.subarray(i, i + 4096)));
+    }
+    assert.strictEqual(out.length, 1);
+    assert.ok(out[0].data.equals(big.data));
+  });
+
   it('throws on desynchronization', () => {
     const parser = new ApstParser();
     assert.throws(() => [...parser.push(Buffer.alloc(40, 1))], MediaProxyProtocolError);
@@ -126,5 +138,73 @@ describe('serveMjpeg', () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+describe('serveMjpeg lifecycle', () => {
+  const get = (url: string) =>
+    new Promise<{status: number; ended: Promise<void>}>((resolve, reject) => {
+      http
+        .get(url, (res) => {
+          res.resume();
+          resolve({status: res.statusCode ?? 0, ended: new Promise<void>((r) => res.on('end', () => r()))});
+        })
+        .on('error', reject);
+    });
+  const settlesWithin = (promise: Promise<unknown>, ms = 1000) =>
+    Promise.race([promise.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
+
+  it('answers 410 to clients that connect after the source has ended', async () => {
+    async function* frames(): AsyncGenerator<JpegFrame> {
+      yield jpeg;
+    }
+    const server = await serveMjpeg(frames());
+    try {
+      await server.done;
+      const res = await get(server.url);
+      assert.strictEqual(res.status, 410);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('exposes a source failure through done and ends connected clients', async () => {
+    let fail!: () => void;
+    const gate = new Promise<void>((r) => (fail = r));
+    const frames: AsyncIterable<JpegFrame> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          await gate;
+          throw new Error('no encoder');
+        },
+      }),
+    };
+    const server = await serveMjpeg(frames);
+    try {
+      const res = await get(server.url);
+      assert.strictEqual(res.status, 200);
+      fail();
+      await assert.rejects(server.done, /no encoder/);
+      assert.ok(await settlesWithin(res.ended), 'client response ended');
+      assert.strictEqual((await get(server.url)).status, 410);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('close() asks an idle source to stop and settles done', async () => {
+    let returned = false;
+    const iterator: AsyncIterableIterator<JpegFrame> = {
+      [Symbol.asyncIterator]: () => iterator,
+      next: () => new Promise(() => {}),
+      return: async () => {
+        returned = true;
+        return {value: undefined, done: true};
+      },
+    };
+    const server = await serveMjpeg({[Symbol.asyncIterator]: () => iterator});
+    await server.close();
+    assert.ok(returned, 'source return() was called');
+    assert.ok(await settlesWithin(server.done), 'done settled');
   });
 });
