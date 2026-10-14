@@ -30,3 +30,11 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - Keep output shapes identical to coresim's `VideoAccessUnit`/`JpegFrame` (video track only).
 - Never bundle or link GPL/nonfree FFmpeg components or x264.
 - No dependency on remotexpc or coresim; inputs are structural types.
+
+## Not released yet
+
+The package is `"private": true` and listed in `lerna.json` `ignoreChanges`, so lerna (and the
+`detect-release-packages.mjs` gate built on it) never treats it as changed: merging changes here
+triggers no release run, version bump, tag, or prebuild. To start releasing it: drop `"private"`,
+remove the `ignoreChanges` entry, add it to `PREBUILT` in `scripts/detect-release-packages.mjs`,
+and add a gated `prebuild-media-proxy` job plus artifact merge to `release.yml` (as for tuntap).
