@@ -35,28 +35,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Always build tuntap's native addon for every platform before publishing - matches
-  # appium-ios-tuntap's own publish.js.yml, which unconditionally rebuilds all 6 platforms
-  # on every push to main regardless of whether tuntap itself has a qualifying release this
-  # run. Publishing tuntap via lerna without this would ship a package with no prebuilds.
+  # Figures out which packages this run will publish, so the expensive native prebuilds and the
+  # release job itself only run when needed.
+  detect-packages:
+    runs-on: ubuntu-latest
+    outputs:
+      any: ${{ steps.detect.outputs.any }}
+      tuntap: ${{ steps.detect.outputs.tuntap }}
+      coresim: ${{ steps.detect.outputs.coresim }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, for `lerna changed`
+
+      - name: Setup Node and install deps (no build)
+        uses: ./.github/actions/setup-build
+        with:
+          node-version: lts/*
+          # Scoped to skip packages/tuntap's native (node-gyp) install - lerna only needs
+          # package.json/git metadata.
+          install-command: npm ci --workspace=packages/xcode --workspace=packages/uicatalog --include-workspace-root
+          run-build: 'false'
+
+      - name: Detect packages to release
+        id: detect
+        env:
+          RECOVER_MISSING_ONLY: ${{ inputs.recover_missing_only || false }}
+        run: node scripts/detect-release-packages.mjs
+
+  # Build tuntap's native addon for every platform only when tuntap itself is being published -
+  # publishing it via lerna without this would ship a package with no prebuilds.
   prebuild-tuntap:
+    needs: detect-packages
+    if: ${{ needs.detect-packages.outputs.tuntap == 'true' }}
     uses: ./.github/workflows/tuntap-prebuild.yml
     with:
       upload-artifacts: true
 
-  # Always build coresim's native addon before publishing - matches the standalone appium/coresim
-  # repo's own publish.js.yml, which unconditionally rebuilds its one darwin-arm64 target on every
-  # push to main regardless of whether coresim itself has a qualifying release this run. Publishing
-  # coresim via lerna without this would ship a package with no prebuilds.
+  # Same for coresim's native addon: only built when coresim itself is being published.
   prebuild-coresim:
+    needs: detect-packages
+    if: ${{ needs.detect-packages.outputs.coresim == 'true' }}
     uses: ./.github/workflows/coresim-prebuild.yml
     with:
       upload-artifacts: true
 
   release:
     needs:
+      - detect-packages
       - prebuild-tuntap
       - prebuild-coresim
+    # Prebuild jobs are skipped when their package isn't released; only a failure blocks this.
+    if: ${{ !cancelled() && !failure() && needs.detect-packages.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
@@ -75,12 +106,14 @@ jobs:
           git config user.email "github-actions@github.com"
 
       - name: Download tuntap prebuild artifacts
+        if: ${{ needs.detect-packages.outputs.tuntap == 'true' }}
         uses: actions/download-artifact@v8
         with:
           pattern: tuntap-prebuild-*
           path: tuntap-prebuild-staging
 
       - name: Merge tuntap prebuilds
+        if: ${{ needs.detect-packages.outputs.tuntap == 'true' }}
         run: |
           mkdir -p packages/tuntap/prebuilds
           for dir in tuntap-prebuild-staging/tuntap-prebuild-*/; do
@@ -89,6 +122,7 @@ jobs:
           find packages/tuntap/prebuilds -type f -name '*.node' | sort
 
       - name: Download coresim prebuild artifact
+        if: ${{ needs.detect-packages.outputs.coresim == 'true' }}
         uses: actions/download-artifact@v8
         with:
           name: coresim-prebuild-darwin-arm64
@@ -98,11 +132,12 @@ jobs:
         uses: ./.github/actions/setup-build
         with:
           node-version: lts/*
-          # Full install, unscoped: prebuilds are already in place above, so tuntap's
-          # node-gyp-build install hook finds a matching prebuild and is a cheap no-op rather
-          # than a full compile; coresim's own install script no-ops entirely on this
-          # (non-macOS) runner regardless, since it just ships the darwin-arm64 prebuild above.
-          install-command: npm ci
+          # Full install, unscoped. When tuntap is released its prebuilds are already in place
+          # above, so its node-gyp-build install hook is a cheap no-op; otherwise the hook would
+          # compile it, which is wasted time since it isn't published - hence --ignore-scripts
+          # unless a prebuild was downloaded. coresim's install script no-ops on this
+          # (non-macOS) runner regardless.
+          install-command: ${{ needs.detect-packages.outputs.tuntap == 'true' && 'npm ci' || 'npm ci --ignore-scripts' }}
           run-build: 'true'
 
       - name: Run Lerna publish
