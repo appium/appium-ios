@@ -381,6 +381,29 @@ describe('pipeThrough() / transcode()', () => {
     assert.ok(cleaned, 'source finally ran');
   });
 
+  it('closes the transcoder when the source iterator cannot be created', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(mjpeg, backend);
+    const source: AsyncIterable<NalAccessUnit> = {
+      [Symbol.asyncIterator]: () => {
+        throw new Error('cannot open');
+      },
+    };
+    await assert.rejects(pipeThrough(t, source).next(), /cannot open/);
+    assert.ok(backend.closed);
+  });
+
+  it('still releases the source when native close rejects on early exit', async () => {
+    const t = new Transcoder(mjpeg, fakeBackend({echo: true, failClose: true}));
+    const {iterator, state} = idleSource([au(0, true), au(3000)]);
+    await assert.rejects(async () => {
+      for await (const _ of pipeThrough(t, {[Symbol.asyncIterator]: () => iterator})) {
+        break;
+      }
+    }, /close failed/);
+    assert.ok(state.returned, 'source return() was called');
+  });
+
   it('transcode() surfaces the typed error when no encoder is compiled in', async () => {
     const source = (async function* () {
       yield au(0, true);

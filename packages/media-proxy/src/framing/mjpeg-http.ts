@@ -3,13 +3,19 @@ import type {ServerResponse} from 'node:http';
 import type {AddressInfo} from 'node:net';
 
 import type {JpegFrame} from '../types.js';
-import {DEFAULT_MJPEG_BOUNDARY, formatMjpegPart, mjpegContentType} from './mjpeg-multipart.js';
+import {
+  assertValidMjpegBoundary,
+  DEFAULT_MJPEG_BOUNDARY,
+  formatMjpegPart,
+  mjpegContentType,
+} from './mjpeg-multipart.js';
 
 export interface MjpegServerOptions {
   /** Defaults to 127.0.0.1. */
   host?: string;
   /** 0 (default) picks a free port. */
   port?: number;
+  /** 1-70 chars of `[0-9A-Za-z'+_.-]`; invalid values throw `MediaProxyOptionError`. */
   boundary?: string;
 }
 
@@ -37,10 +43,11 @@ export async function serveMjpeg(
   frames: AsyncIterable<JpegFrame>,
   opts: MjpegServerOptions = {},
 ): Promise<MjpegServer> {
+  const boundary = opts.boundary ?? DEFAULT_MJPEG_BOUNDARY;
+  assertValidMjpegBoundary(boundary);
   // Open the source first so a throwing iterator never leaves a listening server behind.
   const iterator = frames[Symbol.asyncIterator]();
   const host = opts.host ?? '127.0.0.1';
-  const boundary = opts.boundary ?? DEFAULT_MJPEG_BOUNDARY;
   const clients = new Set<Client>();
   let sourceDone = false;
   let closing = false;

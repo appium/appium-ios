@@ -229,7 +229,13 @@ export async function* pipeThrough(
   source: AsyncIterable<NalAccessUnit>,
   signal?: AbortSignal,
 ): AsyncGenerator<OutputUnit> {
-  const iterator = source[Symbol.asyncIterator]();
+  let iterator: AsyncIterator<NalAccessUnit>;
+  try {
+    iterator = source[Symbol.asyncIterator]();
+  } catch (err) {
+    await transcoder.close().catch(() => {});
+    throw err;
+  }
   let stopped = false;
   let exhausted = false;
   let returned = false;
@@ -275,8 +281,11 @@ export async function* pipeThrough(
     yield* transcoder.units(signal);
   } finally {
     stopped = true;
-    await transcoder.close();
-    releaseSource();
+    try {
+      await transcoder.close();
+    } finally {
+      releaseSource();
+    }
   }
   if (signal?.aborted) {
     return;

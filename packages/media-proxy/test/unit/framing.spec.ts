@@ -3,7 +3,7 @@ import http from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {describe, it} from 'node:test';
 
-import {MediaProxyProtocolError} from '../../src/errors.js';
+import {MediaProxyOptionError, MediaProxyProtocolError} from '../../src/errors.js';
 import {
   ApstParser,
   ApstTrack,
@@ -142,6 +142,15 @@ describe('serveMjpeg', () => {
   });
 });
 
+describe('multipart boundary validation', () => {
+  it('rejects malformed boundaries in the exported helpers', () => {
+    assert.throws(() => mjpegContentType('a\r\nb'), MediaProxyOptionError);
+    assert.throws(() => formatMjpegPart(jpeg, ''), MediaProxyOptionError);
+    assert.throws(() => formatMjpegPart(jpeg, 'a b'), MediaProxyOptionError);
+    assert.doesNotThrow(() => formatMjpegPart(jpeg, "Abc-1_2.3+4'5"));
+  });
+});
+
 describe('serveMjpeg lifecycle', () => {
   const get = (url: string) =>
     new Promise<{status: number; ended: Promise<void>}>((resolve, reject) => {
@@ -207,6 +216,20 @@ describe('serveMjpeg lifecycle', () => {
     await server.close();
     assert.ok(returned, 'source return() was called');
     assert.ok(await settlesWithin(server.done), 'done settled');
+  });
+
+  it('rejects an invalid boundary before listening or opening the source', async () => {
+    let opened = false;
+    const frames: AsyncIterable<JpegFrame> = {
+      [Symbol.asyncIterator]: () => {
+        opened = true;
+        throw new Error('should not open');
+      },
+    };
+    for (const boundary of ['', 'a\r\nX-Evil: 1', 'has space', 'a;b', 'x'.repeat(71)]) {
+      await assert.rejects(serveMjpeg(frames, {boundary}), MediaProxyOptionError);
+    }
+    assert.ok(!opened);
   });
 
   it('does not listen when opening the source throws', async () => {
