@@ -302,8 +302,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
       assertInWritableAppContainerDirectory(oldPath);
       assertInWritableAppContainerDirectory(newPath);
     }
-    // Normalized like the paths of rm and push, so one file has one spelling and
-    // a leading `./`, which Rename rejects on some devices, never reaches it
+    // Normalized like the paths of rm and push, so one file has one spelling
     await this.runFileSystemOperation(
       FILE_SYSTEM_OPERATION.RENAME,
       {OldPath: stripLeadingRoot(oldPath), NewPath: stripLeadingRoot(newPath)},
@@ -1094,9 +1093,9 @@ function toSessionRelativePath(remotePath: string): string {
 
 /**
  * Removes a leading `/` or `./`, so the same file is addressed the same way by
- * every command, as `rm` and `push` already do. `Rename` has been reported to
- * reject a leading `./` on some devices; it accepted `a/b`, `/a/b` and `./a/b`
- * alike on iOS 26.5.2.
+ * every command, as `rm` and `push` already do. The device accepts `a/b`,
+ * `/a/b` and `./a/b` alike, for `Rename` as well as its other commands
+ * (checked on iOS 26.5.2).
  */
 function stripLeadingRoot(remotePath: string): string {
   return remotePath.replace(/^(?:\.?\/)+/, '');
