@@ -50,6 +50,10 @@ const SERVICES: readonly SimPermissionService[] = Object.freeze([
   'speech',
   'usertracking',
 ]);
+// Special service name accepted by `setPermissions`: applies the given status to every service in
+// SERVICES (mirrors `xcrun simctl privacy <udid> <action> all <bundleId>` and the documented
+// `{'all': 'yes'}` usage of `mobile: setPermission`). Explicitly listed services take precedence.
+const ALL_SERVICES_KEY = 'all';
 
 /**
  * Sets the particular permission to the application bundle. See `xcrun simctl privacy` for more
@@ -115,6 +119,23 @@ function toPermissionService(serviceName: string): SimPermissionService {
   );
 }
 
+/**
+ * Replaces the special `all` key (case-insensitive) with an entry for every supported service.
+ * Services listed explicitly next to `all` keep their own status.
+ */
+export function expandAllServicesKey(permissionsMapping: StringRecord): StringRecord {
+  const allKey = Object.keys(permissionsMapping).find((key) => key.toLowerCase() === ALL_SERVICES_KEY);
+  if (allKey === undefined) {
+    return permissionsMapping;
+  }
+  const {[allKey]: status, ...explicit} = permissionsMapping;
+  const expanded: StringRecord = {};
+  for (const service of SERVICES) {
+    expanded[service] = status;
+  }
+  return {...expanded, ...explicit};
+}
+
 function formatStatus(status: string): string {
   return status === STATUS.UNSET || status === STATUS.NO ? status.toUpperCase() : status;
 }
@@ -150,6 +171,7 @@ async function setAccess(
   permissionsMapping: StringRecord,
 ): Promise<boolean> {
   const nativePermissions: Record<string, string> = {};
+  permissionsMapping = expandAllServicesKey(permissionsMapping);
 
   const grantPermissions: string[] = [];
   const revokePermissions: string[] = [];
