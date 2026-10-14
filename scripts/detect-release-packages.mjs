@@ -23,7 +23,7 @@ async function listPackages() {
 
 async function lernaChanged() {
   try {
-    const {stdout} = await execFileAsync('node', ['scripts/lerna-skip-dev-deps.mjs', 'changed', '--json']);
+    const {stdout} = await execFileAsync('node', ['scripts/lerna-skip-dev-deps.mjs', 'changed', '--json', '--all']);
     return JSON.parse(stdout).map((p) => p.name);
   } catch (err) {
     // lerna exits non-zero when nothing changed
