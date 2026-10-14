@@ -81,13 +81,40 @@ jobs:
     with:
       upload-artifacts: true
 
-  release:
+  # Prebuilds can take long enough for main to move on. `lerna publish` then fails with EBEHIND,
+  # so a push-triggered run that is no longer at the head of main bows out; the queued run for
+  # the newer commit re-detects and releases everything this one would have.
+  check-head:
     needs:
       - detect-packages
       - prebuild-tuntap
       - prebuild-coresim
-    # Prebuild jobs are skipped when their package isn't released; only a failure blocks this.
     if: ${{ !cancelled() && !failure() && needs.detect-packages.outputs.any == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.head.outputs.stale }}
+    steps:
+      - name: Compare with the current head of main
+        id: head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          stale=false
+          if [ "$EVENT_NAME" = "push" ]; then
+            head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+            if [ "$head_sha" != "$GITHUB_SHA" ]; then
+              stale=true
+              echo "::notice::main moved to ${head_sha} since ${GITHUB_SHA}; skipping, the run for the newer commit will release"
+            fi
+          fi
+          echo "stale=${stale}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs:
+      - detect-packages
+      - check-head
+    if: ${{ !cancelled() && !failure() && needs.check-head.outputs.stale != 'true' && needs.detect-packages.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
