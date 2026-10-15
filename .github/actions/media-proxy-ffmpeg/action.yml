@@ -33,7 +33,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: ${{ steps.target.outputs.dir }}
-        key: media-proxy-ffmpeg-${{ runner.os }}-${{ steps.target.outputs.arch }}-${{ hashFiles('packages/media-proxy/scripts/build-ffmpeg.sh') }}
+        key: media-proxy-ffmpeg-${{ runner.os }}-${{ steps.target.outputs.arch }}-${{ hashFiles('packages/media-proxy/scripts/ci/build-ffmpeg.sh') }}
 
     - name: Install nasm (macOS)
       if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS' && steps.target.outputs.arch == 'x64' }}
@@ -50,7 +50,7 @@ runs:
       shell: bash
       env:
         TARGET_ARCH: ${{ steps.target.outputs.arch }}
-      run: bash packages/media-proxy/scripts/build-ffmpeg.sh
+      run: bash packages/media-proxy/scripts/ci/build-ffmpeg.sh
 
     # Windows: FFmpeg's configure runs under MSYS2 and drives the MSVC toolchain (cl/link from vcvars).
     - name: Install nasm (Windows)
@@ -83,4 +83,4 @@ runs:
       run: |
         # MSYS2's link.exe shadows MSVC's linker.
         rm -f /usr/bin/link.exe
-        bash packages/media-proxy/scripts/build-ffmpeg.sh
+        bash packages/media-proxy/scripts/ci/build-ffmpeg.sh

@@ -3,7 +3,7 @@ import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 // Never builds from source: the addon needs the bundled LGPL FFmpeg shared libs (see
-// scripts/build-ffmpeg.sh), so `npm install` must always succeed and the package throws a typed
+// scripts/ci/build-ffmpeg.sh), so `npm install` must always succeed and the package throws a typed
 // MediaProxyUnavailableError on first use when no matching prebuild exists.
 const platform = process.env.MEDIA_PROXY_TEST_PLATFORM ?? process.platform;
 const arch = process.env.MEDIA_PROXY_TEST_ARCH ?? process.arch;

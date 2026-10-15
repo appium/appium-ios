@@ -39,7 +39,7 @@ Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `uni
 ## Building from source
 
 The addon links a minimal LGPL FFmpeg (HEVC decoder, MJPEG encoder, swscale) pinned in
-`scripts/build-ffmpeg.sh`; there is no system FFmpeg dependency.
+`scripts/ci/build-ffmpeg.sh`; there is no system FFmpeg dependency.
 
 ```sh
 npm run build:ffmpeg   # once per platform/arch (needs nasm on x64; Windows: MSVC under MSYS2)

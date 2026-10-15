@@ -24,7 +24,7 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - `src/native/` — C++. `pipeline.{h,cc}` is pure FFmpeg (worker thread: HEVC decode → swscale → MJPEG encode,
   bounded input queue that drops to the next keyframe); `addon.cc` is the N-API/ThreadSafeFunction wrapper.
   Native errors set `err.name` to a typed error name; `wrapNativeError` re-types them.
-- `scripts/build-ffmpeg.sh` / `bundle-libs.mjs` / `build-prebuilds.mjs` — FFmpeg recipe, lib bundling, prebuild driver.
+- `scripts/ci/` (CI/build only, never shipped; the package `files` list must not include it): `build-ffmpeg.sh`, `bundle-libs.mjs`, `build-prebuilds.mjs`, `lint-cpp.sh`.
   Windows builds FFmpeg with MSVC under MSYS2 (arm64: no asm). Everything link-time lives in `binding.gyp` (`ffmpeg_dir`).
 - `scripts/install.mjs` — never builds; only notes a missing prebuild (FFmpeg libs can't be built at install time).
 

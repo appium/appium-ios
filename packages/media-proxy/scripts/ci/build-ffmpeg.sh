@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Builds the minimal LGPL-only FFmpeg shared libs the addon links against.
 # Output: third_party/ffmpeg/<platform>-<arch>/{include,lib[,bin]} (override with FFMPEG_PREFIX).
-# Usage: scripts/build-ffmpeg.sh   (macOS/Linux; on Windows run under MSYS2 with MSVC on PATH)
+# Usage: scripts/ci/build-ffmpeg.sh   (macOS/Linux; on Windows run under MSYS2 with MSVC on PATH)
 set -euo pipefail
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.1.3}"
 FFMPEG_SHA256="${FFMPEG_SHA256:-7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3}"
 
-PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 case "$(uname -s)" in
   Darwin) PLATFORM=darwin ;;
   Linux) PLATFORM=linux ;;

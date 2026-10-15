@@ -8,7 +8,7 @@ import {copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync} from 'no
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
+const root = fileURLToPath(new URL('../..', import.meta.url));
 const target = `${process.platform}-${process.env.TARGET_ARCH ?? process.arch}`;
 const source = process.env.FFMPEG_PREFIX ?? join(root, 'third_party', 'ffmpeg', target);
 // `--dest <dir>` bundles next to a dev build (build/Release) instead of into prebuilds/.
@@ -16,7 +16,7 @@ const destFlag = process.argv.indexOf('--dest');
 const dest = destFlag >= 0 ? resolve(process.argv[destFlag + 1]) : join(root, 'prebuilds', target);
 
 if (!existsSync(source)) {
-  console.error(`No FFmpeg build for ${target} in ${source}; run scripts/build-ffmpeg.sh first.`);
+  console.error(`No FFmpeg build for ${target} in ${source}; run scripts/ci/build-ffmpeg.sh first.`);
   process.exit(1);
 }
 mkdirSync(dest, {recursive: true});
@@ -59,5 +59,5 @@ if (existsSync(recipe)) {
   copyFileSync(recipe, join(dest, 'ffmpeg-build-info.txt'));
 }
 console.log(
-  `FFmpeg ${readFileSync(join(root, 'scripts', 'build-ffmpeg.sh'), 'utf8').match(/FFMPEG_VERSION:-([\d.]+)/)?.[1]} libs in ${dest}`,
+  `FFmpeg ${readFileSync(join(root, 'scripts', 'ci', 'build-ffmpeg.sh'), 'utf8').match(/FFMPEG_VERSION:-([\d.]+)/)?.[1]} libs in ${dest}`,
 );

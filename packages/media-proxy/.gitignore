@@ -7,6 +7,6 @@ compile_commands.json
 tsconfig.tsbuildinfo
 .idea
 
-# Locally built FFmpeg (see scripts/build-ffmpeg.sh) — never committed.
+# Locally built FFmpeg (see scripts/ci/build-ffmpeg.sh) — never committed.
 third_party/ffmpeg
 /third_party/.build
