@@ -24,6 +24,8 @@ jobs:
     with:
       upload-artifacts: false
 
+  # Pure TS against a fake backend, so one OS is enough; the native paths run on all three in
+  # integration-test. C++ lint/format are OS-independent (no platform-specific sources).
   unit-test:
     needs:
       - node_matrix
@@ -32,14 +34,13 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
-        image: [ubuntu-latest, macos-latest, windows-2022]
     uses: ./.github/workflows/media-proxy-shared-test.yml
     with:
-      image: ${{ matrix.image }}
+      image: ubuntu-latest
       node-version: ${{ matrix.node-version }}
       test-command: test:unit
       test-name: Unit tests
-      run-cpp-format-check: ${{ contains(matrix.image, 'ubuntu') }}
+      run-cpp-format-check: true
       run-cpp-lint: true
 
   integration-test:

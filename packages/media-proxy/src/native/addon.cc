@@ -88,8 +88,9 @@ class Session {
   Napi::Value Close(const Napi::Env& env) {
     if (!closing_) {
       closing_ = true;
-      state_->deferred = Napi::Promise::Deferred::New(env);
-      closePromise_ = Napi::Persistent(state_->deferred->Promise());
+      auto deferred = Napi::Promise::Deferred::New(env);
+      closePromise_ = Napi::Persistent(deferred.Promise());
+      state_->deferred = deferred;
       tsfn_.Ref(env);
       pipeline_->Finish([this] {
         Post(Event::Kind::kDone, {}, {});
@@ -147,8 +148,8 @@ class Session {
         break;
       case Event::Kind::kDone:
         event->state->onError.Reset();
-        if (event->state->deferred) {
-          event->state->deferred->Resolve(env.Undefined());
+        if (auto& deferred = event->state->deferred; deferred.has_value()) {
+          deferred.value().Resolve(env.Undefined());
         }
         break;
     }
