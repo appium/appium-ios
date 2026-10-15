@@ -18,6 +18,7 @@ const STATUS = Object.freeze({
   NO: 'no',
   YES: 'yes',
   LIMITED: 'limited',
+  CRITICAL: 'critical',
 } as const);
 const SPRINGBOARD_BUNDLE_ID = 'com.apple.SpringBoard';
 const SPOTLIGHT_BUNDLE_ID = 'com.apple.Spotlight';
@@ -28,12 +29,11 @@ const SYSTEM_SERVICE_RESTART_TIMEOUT_MS = 15000;
 // revokePermission/resetPermission/getPermission deliberately exclude them, so these two keep going
 // through `xcrun simctl privacy` directly instead.
 const PERMISSIONS_APPLIED_VIA_SIMCTL = ['location', 'location-always'];
+// `all` applies the given status to every service in SERVICES except `notifications`, which
+// restarts SpringBoard. `notifications` and `location`/`location-always` have to be listed explicitly.
+const ALL_SERVICES_KEY = 'all';
 // Every service @appium/coresim's SimPermissionService union supports — kept as an explicit list
 // (rather than trusting caller input) so an unsupported name fails with a clear error up front.
-// `notifications` is intentionally NOT supported: unlike every service below, it was never a plain
-// TCC row — the previous AppleSimulatorUtils-backed setter wrote a hand-built legacy bplist into
-// BulletinBoard/SectionInfo.plist (itself marked "Legacy"/"Xcode 9 support" in that project's own
-// source), which has no confirmed modern equivalent. This is a deliberate breaking change.
 const SERVICES: readonly SimPermissionService[] = Object.freeze([
   'calendar',
   'camera',
@@ -44,6 +44,7 @@ const SERVICES: readonly SimPermissionService[] = Object.freeze([
   'medialibrary',
   'microphone',
   'motion',
+  'notifications',
   'photos',
   'reminders',
   'siri',
@@ -52,8 +53,8 @@ const SERVICES: readonly SimPermissionService[] = Object.freeze([
 ]);
 
 /**
- * Sets the particular permission to the application bundle. See `xcrun simctl privacy` for more
- * details on the available service names and statuses.
+ * Sets the particular permission to the application bundle. See {@link setPermissions} for the
+ * available service names and statuses.
  *
  * @param bundleId Application bundle identifier.
  * @param permission Service name to be set.
@@ -72,10 +73,22 @@ export async function setPermission(
 /**
  * Sets the permissions for the particular application bundle.
  *
+ * Service names: `calendar`, `camera`, `contacts`, `faceid`, `health`, `homekit`, `location`,
+ * `location-always`, `medialibrary`, `microphone`, `motion`, `notifications`, `photos`, `reminders`,
+ * `siri`, `speech`, `usertracking`, and `all`. Statuses: `yes`, `no`, `unset`; `limited` ("selected
+ * photos" access) is only valid for `photos`, `critical` (critical alerts allowed too) — for
+ * `notifications`.
+ *
+ * - `notifications` is SpringBoard's own setting rather than a TCC one. On a booted device
+ *   SpringBoard is restarted to apply it, which terminates every running app; a shut down device
+ *   picks it up on its next boot.
+ * - `all` applies its status to every service except `notifications` and
+ *   `location`/`location-always`, which have to be listed explicitly. Services listed next to `all`
+ *   keep their own status.
+ *
  * @param bundleId Application bundle identifier.
  * @param permissionsMapping A mapping where keys
  * are service names and values are their corresponding status values.
- * See `xcrun simctl privacy` for more details on available service names and statuses.
  * @throws {Error} If there was an error while changing permissions.
  */
 export async function setPermissions(
@@ -91,7 +104,8 @@ export async function setPermissions(
  * Retrieves current permission status for the given application bundle.
  *
  * @param bundleId Application bundle identifier.
- * @param serviceName One of available service names.
+ * @param serviceName One of available service names (see {@link setPermissions}) except `all`,
+ * `location`/`location-always` and `notifications`, whose status isn't read back.
  * @returns Promise that resolves to the permission status
  * @throws {Error} If there was an error while retrieving permissions.
  */
@@ -155,13 +169,14 @@ async function setAccess(
   const revokePermissions: string[] = [];
   const resetPermissions: string[] = [];
 
-  for (const serviceName in permissionsMapping) {
+  const mapping = expandAllServices(permissionsMapping);
+  for (const serviceName in mapping) {
     if (!PERMISSIONS_APPLIED_VIA_SIMCTL.includes(serviceName)) {
-      nativePermissions[serviceName] = permissionsMapping[serviceName];
+      nativePermissions[serviceName] = mapping[serviceName];
     } else {
       // xcrun simctl privacy expects to be lower case while the previous WIX-based path was upper
       // case. To keep the compatibility, we should convert here to lower case explicitly.
-      switch (permissionsMapping[serviceName]?.toLowerCase()) {
+      switch (mapping[serviceName]?.toLowerCase()) {
         case STATUS.YES:
           grantPermissions.push(serviceName);
           break;
@@ -173,7 +188,7 @@ async function setAccess(
           break;
         default:
           throw this.log.errorWithException(
-            `${serviceName} does not support ${permissionsMapping[serviceName]}. Please specify 'yes', 'no' or 'unset'.`,
+            `${serviceName} does not support ${mapping[serviceName]}. Please specify 'yes', 'no' or 'unset'.`,
           );
       }
     }
@@ -221,8 +236,8 @@ async function setAccess(
         ),
       );
     };
-    const shouldWaitForSystemReadiness = SERVICES_NEED_SPRINGBOARD_RESTART.some(
-      (service) => service in nativePermissions,
+    const shouldWaitForSystemReadiness = Object.keys(nativePermissions).some((name) =>
+      SERVICES_NEED_SPRINGBOARD_RESTART.includes(name.toLowerCase()),
     );
     if (shouldWaitForSystemReadiness) {
       const [didTimeout] = await runAndWaitForSystemReadiness.bind(this)(
@@ -257,6 +272,10 @@ async function setNativePermission(
       // Only valid for 'photos' ("selected photos" access) — @appium/coresim rejects it for every
       // other service with a typed error, which is left to propagate as-is.
       return await this._native.grantPermission(this.udid, service, bundleId, 'limited');
+    case STATUS.CRITICAL:
+      // Only valid for 'notifications' (critical alerts allowed too) — rejected by @appium/coresim
+      // for every other service the same way as 'limited'.
+      return await this._native.grantPermission(this.udid, service, bundleId, 'critical');
     case STATUS.NO:
       return await this._native.revokePermission(this.udid, service, bundleId);
     case STATUS.UNSET:
@@ -264,6 +283,27 @@ async function setNativePermission(
     default:
       throw this.log.errorWithException(`'${status}' is not a supported value for '${serviceName}'`);
   }
+}
+
+/**
+ * Replaces the `all` key with an explicit entry for every service it covers (see ALL_SERVICES_KEY).
+ * Explicitly listed services take precedence over `all`, e.g. `{all: 'yes', camera: 'no'}`.
+ */
+function expandAllServices(permissionsMapping: StringRecord): StringRecord {
+  const allKey = Object.keys(permissionsMapping).find((name) => name.toLowerCase() === ALL_SERVICES_KEY);
+  if (!allKey) {
+    return permissionsMapping;
+  }
+  const {[allKey]: status, ...rest} = permissionsMapping;
+  const explicitServices = new Set(Object.keys(rest).map((name) => name.toLowerCase()));
+  return {
+    ...Object.fromEntries(
+      SERVICES.filter(
+        (service) => !SERVICES_NEED_SPRINGBOARD_RESTART.includes(service) && !explicitServices.has(service),
+      ).map((service) => [service, status]),
+    ),
+    ...rest,
+  };
 }
 
 /**

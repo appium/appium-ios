@@ -9,6 +9,7 @@ import {after, before, describe, it} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 
+import {plist} from '@appium/support';
 import {waitForCondition} from 'asyncbox';
 
 import {
@@ -145,6 +146,87 @@ async function readTCCGranted(udid: string, tccService: string, bundleId: string
       `SELECT count(*) FROM access WHERE service='${tccService}' AND client='${bundleId}' AND client_type=0 AND auth_value=2`,
     )) > 0
   );
+}
+
+/**
+ * The host-side path to a device's BulletinBoard store — the file grantPermission/revokePermission/
+ * resetPermission write the `notifications` service to.
+ */
+function bulletinBoardStorePath(udid: string): string {
+  return path.join(
+    os.homedir(),
+    'Library',
+    'Developer',
+    'CoreSimulator',
+    'Devices',
+    udid,
+    'data',
+    'Library',
+    'BulletinBoard',
+    'VersionedSectionInfo.plist',
+  );
+}
+
+/**
+ * Reads the notifications settings SpringBoard keeps for `bundleId` in its BulletinBoard store.
+ *
+ * @returns the archived `BBSectionInfoSettings` object, `undefined` if the app has no section
+ */
+async function readNotificationsSettings(udid: string, bundleId: string): Promise<Record<string, unknown> | undefined> {
+  const store = (await plist.parsePlistFile(bulletinBoardStorePath(udid))) as {
+    sectionInfo?: Record<string, Uint8Array>;
+  };
+  const section = store.sectionInfo?.[bundleId];
+  if (!section) {
+    return undefined;
+  }
+  const {$objects} = plist.parsePlist(Buffer.from(section)) as {$objects: unknown[]};
+  return $objects.find(
+    (o): o is Record<string, unknown> =>
+      typeof o === 'object' && o !== null && ('authorizationStatus' in o || 'allowsNotifications' in o),
+  );
+}
+
+/** SpringBoard's pid on the device, `undefined` while it isn't running (e.g. restarting). */
+async function springBoardPid(sim: NativeSimctl, udid: string): Promise<number | undefined> {
+  return (await sim.listProcesses(udid)).find(({name}) => name === 'com.apple.SpringBoard')?.pid;
+}
+
+/**
+ * The access a notifications section in the BulletinBoard store gives. The section is written with
+ * the legacy `allowsNotifications` flag; a SpringBoard that has loaded it replaces the flag with
+ * `authorizationStatus` (1 denied, 2 authorized) the next time it saves its store. On a loaded CI
+ * runner that save comes anywhere from a second to minutes after the restart, so the tests accept
+ * either form rather than wait for it.
+ */
+function notificationsAccess(settings: Record<string, unknown> | undefined): string | undefined {
+  if (!settings) {
+    return undefined;
+  }
+  const value = 'authorizationStatus' in settings ? settings.authorizationStatus : settings.allowsNotifications;
+  switch (value) {
+    case 2:
+    case true:
+      return 'granted';
+    case 1:
+    case false:
+      return 'denied';
+    default:
+      return `unexpected ${JSON.stringify(value)}`;
+  }
+}
+
+/**
+ * Asserts that SpringBoard runs as a new process — the one grantPermission/revokePermission/
+ * resetPermission start after writing the store of a booted device.
+ *
+ * @returns the new pid
+ */
+async function assertSpringBoardRestarted(sim: NativeSimctl, udid: string, previousPid: number): Promise<number> {
+  const pid = await springBoardPid(sim, udid);
+  assert.ok(Number.isInteger(pid), 'SpringBoard is not running');
+  assert.notStrictEqual(pid, previousPid, 'SpringBoard was not restarted');
+  return pid!;
 }
 
 /** The host-side path to a device's own copy of backboardd's preference file (see sim_orientation.mm). */
@@ -552,6 +634,132 @@ describe('NativeSimctl integration', () => {
           () => sim.grantPermission(device!.udid, 'camera', bundleId, 'limited'),
           /'limited' is only a valid status for the 'photos' service/,
         );
+      });
+
+      it('grants, revokes, and resets notifications of a booted device, restarting SpringBoard', async () => {
+        // A preinstalled app, so that SpringBoard keeps its section.
+        const bundleId = 'com.apple.mobilesafari';
+
+        await sim.resetPermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        await waitForCondition(async () => Number.isInteger(await springBoardPid(sim, device!.udid)), {
+          waitMs: 90_000,
+          intervalMs: 500,
+        });
+        let pid = (await springBoardPid(sim, device!.udid))!;
+
+        await sim.grantPermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'granted');
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
+
+        await sim.revokePermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'denied');
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
+
+        await sim.grantPermission(device!.udid, 'notifications', bundleId, 'critical');
+        const critical = await readNotificationsSettings(device!.udid, bundleId);
+        assert.strictEqual(notificationsAccess(critical), 'granted');
+        assert.strictEqual(critical?.criticalAlertSetting, 2);
+        pid = await assertSpringBoardRestarted(sim, device!.udid, pid);
+
+        await sim.resetPermission(device!.udid, 'notifications', bundleId);
+        assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        await assertSpringBoardRestarted(sim, device!.udid, pid);
+        // Later tests talk to SpringBoard, so let the last restart settle.
+        await waitForCondition(async () => Number.isInteger(await springBoardPid(sim, device!.udid)), {
+          waitMs: 90_000,
+          intervalMs: 500,
+        });
+      });
+
+      it('keeps the notifications of two apps changed concurrently', async () => {
+        // Preinstalled apps that SpringBoard keeps a written section for, but has none for by default
+        // — so a lost write can't be masked by a default section.
+        const bundleIds = ['com.apple.mobilesafari', 'com.apple.Maps'];
+
+        await Promise.all(bundleIds.map((bundleId) => sim.resetPermission(device!.udid, 'notifications', bundleId)));
+        for (const bundleId of bundleIds) {
+          assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        }
+
+        await Promise.all(bundleIds.map((bundleId) => sim.grantPermission(device!.udid, 'notifications', bundleId)));
+        for (const bundleId of bundleIds) {
+          assert.strictEqual(notificationsAccess(await readNotificationsSettings(device!.udid, bundleId)), 'granted');
+        }
+
+        await Promise.all(bundleIds.map((bundleId) => sim.resetPermission(device!.udid, 'notifications', bundleId)));
+        for (const bundleId of bundleIds) {
+          assert.strictEqual(await readNotificationsSettings(device!.udid, bundleId), undefined);
+        }
+        // Later tests talk to SpringBoard, so let the last restart settle.
+        await waitForCondition(async () => Number.isInteger(await springBoardPid(sim, device!.udid)), {
+          waitMs: 90_000,
+          intervalMs: 500,
+        });
+      });
+
+      it('writes notifications of a never-booted device to a newly created store', async () => {
+        // Cheap to create (no boot involved), like the device of the waitForBoot test below.
+        const fresh = await sim.createDevice(
+          `coresim-test-notifications-${Date.now()}`,
+          fixture.deviceTypeIdentifier,
+          fixture.runtimeIdentifier,
+        );
+        const storePath = bulletinBoardStorePath(fresh.udid);
+        const [bundleId, otherBundleId] = ['com.apple.mobilesafari', 'com.apple.Maps'];
+        try {
+          assert.strictEqual(fs.existsSync(storePath), false);
+          // Nothing to remove, so nothing is created.
+          await sim.resetPermission(fresh.udid, 'notifications', bundleId);
+          assert.strictEqual(fs.existsSync(storePath), false);
+
+          // Both find no store; the one that runs second adds its section to the store the first created.
+          await Promise.all([
+            sim.grantPermission(fresh.udid, 'notifications', bundleId),
+            sim.grantPermission(fresh.udid, 'notifications', otherBundleId, 'critical'),
+          ]);
+          const store = (await plist.parsePlistFile(storePath)) as {
+            sectionInfoVersionNumber?: number;
+            sectionInfo?: Record<string, Uint8Array>;
+          };
+          assert.strictEqual(store.sectionInfoVersionNumber, 2);
+          assert.deepStrictEqual(Object.keys(store.sectionInfo ?? {}).sort(), [bundleId, otherBundleId].sort());
+          // No SpringBoard has loaded the sections yet, so they keep the legacy flag.
+          assert.strictEqual((await readNotificationsSettings(fresh.udid, bundleId))?.allowsNotifications, true);
+          assert.strictEqual((await readNotificationsSettings(fresh.udid, otherBundleId))?.criticalAlertSetting, 2);
+
+          // A store that can't be replaced (immutable here) is left as it was, without a temp file next to it.
+          const original = await fs.promises.readFile(storePath);
+          await execFileAsync('chflags', ['uchg', storePath]);
+          try {
+            await assert.rejects(() => sim.revokePermission(fresh.udid, 'notifications', bundleId), /EPERM/);
+          } finally {
+            await execFileAsync('chflags', ['nouchg', storePath]);
+          }
+          assert.deepStrictEqual(await fs.promises.readFile(storePath), original);
+          assert.deepStrictEqual(await fs.promises.readdir(path.dirname(storePath)), [path.basename(storePath)]);
+
+          await sim.revokePermission(fresh.udid, 'notifications', bundleId);
+          assert.strictEqual((await readNotificationsSettings(fresh.udid, bundleId))?.allowsNotifications, false);
+          await sim.resetPermission(fresh.udid, 'notifications', otherBundleId);
+          assert.strictEqual(await readNotificationsSettings(fresh.udid, otherBundleId), undefined);
+        } finally {
+          await sim.deleteDevice(fresh.udid);
+        }
+      });
+
+      it('rejects "critical" for any service but notifications, and reading the notifications status', async () => {
+        const bundleId = 'io.appium.coresim.doesnotexist';
+
+        await assert.rejects(
+          () => sim.grantPermission(device!.udid, 'camera', bundleId, 'critical'),
+          /'critical' is only a valid status for the 'notifications' service/,
+        );
+        await assert.rejects(
+          () => sim.grantPermission(device!.udid, 'notifications', bundleId, 'limited'),
+          /'limited' is only a valid status for the 'photos' service/,
+        );
+        await assert.rejects(() => sim.getPermission(device!.udid, 'notifications', bundleId), /cannot be read/);
       });
 
       it('adds media to the Photos library', async () => {
@@ -1202,7 +1410,11 @@ describe('NativeSimctl integration', () => {
                 throw err;
               }
             },
-            {waitMs: 30000, intervalMs: 2000, error: 'expected openUrl to eventually succeed once the device settled'},
+            {
+              waitMs: 30000,
+              intervalMs: 2000,
+              error: 'expected openUrl to eventually succeed once the device settled',
+            },
           );
         });
 
