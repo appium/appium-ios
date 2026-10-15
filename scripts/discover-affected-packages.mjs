@@ -22,9 +22,9 @@ import {promisify} from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const PACKAGES_DIR = join(process.cwd(), 'packages');
-// Have their own dedicated CI (tuntap-ci.yml/coresim-ci.yml/remote-debugger-ci.yml/remotexpc-ci.yml) - never
+// Have their own dedicated CI (tuntap-ci.yml/coresim-ci.yml/media-proxy-ci.yml/remote-debugger-ci.yml/remotexpc-ci.yml) - never
 // installed/run here.
-const DEDICATED_CI_DIRS = new Set(['tuntap', 'coresim', 'remote-debugger', 'remotexpc']);
+const DEDICATED_CI_DIRS = new Set(['tuntap', 'coresim', 'media-proxy', 'remote-debugger', 'remotexpc']);
 const baseSha = process.env.BASE_SHA;
 const headSha = process.env.HEAD_SHA || 'HEAD';
 const githubOutput = process.env.GITHUB_OUTPUT;

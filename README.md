@@ -7,6 +7,7 @@
 - [`appium-xcode`][]: Interact with Xcode
 - [`ios-uicatalog`][]: Apple iOS UIKitCatalog test app
 - [`appium-ios-tuntap`][]: Native TUN/TAP interface module for Node.js
+- [`@appium/media-proxy`][]: Native media transcoder unifying device screen streams into H.264 / MJPEG
 - [`@appium/coresim`][]: Native bindings to CoreSimulator.framework for Apple platform simulator control
 - [`appium-ios-simulator`][]: iOS Simulator interface for Appium
 - [`appium-ios-remotexpc`][]: Remote XPC, lockdown, usbmux and tunneling services for communicating with iOS devices
@@ -21,6 +22,7 @@ See the main [Appium site](https://appium.io) or [Appium GitHub repository](http
 [`ios-uicatalog`]: https://github.com/appium/appium-ios/tree/main/packages/uicatalog
 [`appium-ios-tuntap`]: https://github.com/appium/appium-ios/tree/main/packages/tuntap
 [`@appium/coresim`]: https://github.com/appium/appium-ios/tree/main/packages/coresim
+[`@appium/media-proxy`]: https://github.com/appium/appium-ios/tree/main/packages/media-proxy
 [`appium-ios-simulator`]: https://github.com/appium/appium-ios/tree/main/packages/simulator
 [`appium-ios-remotexpc`]: https://github.com/appium/appium-ios/tree/main/packages/remotexpc
 [`appium-remote-debugger`]: https://github.com/appium/appium-ios/tree/main/packages/remote-debugger

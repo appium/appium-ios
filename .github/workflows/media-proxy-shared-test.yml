@@ -1,0 +1,105 @@
+name: Reusable media-proxy native test
+
+# Installs at the workspace root (shared lockfile) and scopes test/lint commands to the
+# media-proxy workspace. TS/JS lint and format are covered by build.yml's lint job; only the
+# C++-specific checks (clang-format/clang-tidy) are exposed here.
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Runner image
+        required: true
+        type: string
+      node-version:
+        description: Node.js version
+        required: true
+        type: string
+      test-command:
+        description: Test command to execute (npm script name, run via `-w packages/media-proxy`)
+        required: true
+        type: string
+      test-name:
+        description: Human-readable test name
+        required: true
+        type: string
+      run-cpp-format-check:
+        description: Run C++ format check (clang-format) before tests
+        required: false
+        default: false
+        type: boolean
+      run-cpp-lint:
+        description: Run C++ lint (clang-tidy) before tests
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  test:
+    runs-on: ${{ inputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: SocketDev/action@v1
+        if: ${{ !contains(inputs.image, 'windows') }}
+        with:
+          mode: firewall-free
+
+      # Scoped like build.yml: an unscoped `npm ci` also compiles packages/tuntap (which needs
+      # OpenSSL on Windows) and every other workspace's native install. --ignore-scripts also skips
+      # the root `prepare` (tsc -b over packages/xcode, whose @types are not in a scoped install);
+      # media-proxy is built explicitly below.
+      - name: Install npm dependencies
+        if: ${{ !contains(inputs.image, 'windows') }}
+        run: sfw npm ci --workspace=packages/media-proxy --include-workspace-root --ignore-scripts
+
+      - name: Install npm dependencies
+        if: ${{ contains(inputs.image, 'windows') }}
+        run: npm ci --workspace=packages/media-proxy --include-workspace-root --ignore-scripts
+
+      - name: Build TypeScript
+        run: npm run build --workspace packages/media-proxy
+
+      - name: Install clang-format
+        if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-format-check }}
+        run: sudo apt-get install -y clang-format
+
+      - name: Install clang-tidy
+        if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-lint }}
+        run: sudo apt-get install -y clang-tidy
+
+      - name: Install clang-tidy (macOS)
+        if: ${{ contains(inputs.image, 'macos') && inputs.run-cpp-lint }}
+        run: |
+          brew install llvm@22
+          echo "$(brew --prefix llvm@22)/bin" >> "$GITHUB_PATH"
+
+      - name: Install clang-tidy (Windows)
+        if: ${{ contains(inputs.image, 'windows') && inputs.run-cpp-lint }}
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang-tidy -ErrorAction SilentlyContinue)) {
+            choco install llvm -y --no-progress
+            "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+          clang-tidy --version
+
+      - name: Run C++ format check
+        if: ${{ inputs.run-cpp-format-check }}
+        run: npm run format:cpp:check --workspace packages/media-proxy
+
+      - name: Run C++ lint
+        if: ${{ inputs.run-cpp-lint }}
+        run: npm run lint:cpp --workspace packages/media-proxy
+
+      - name: Build native addon
+        if: ${{ inputs.test-command == 'test:integration' }}
+        run: npm run build:addon --workspace packages/media-proxy
+
+      - name: Run ${{ inputs.test-name }}
+        run: npm run ${{ inputs.test-command }} --workspace packages/media-proxy

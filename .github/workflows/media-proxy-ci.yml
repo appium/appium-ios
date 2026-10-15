@@ -1,0 +1,58 @@
+name: media-proxy CI
+
+# Path-scoped like tuntap-ci.yml: the native build needs a toolchain the rest of the monorepo's CI
+# doesn't, so it stays out of build.yml entirely.
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/media-proxy/**']
+  pull_request:
+    branches: [main]
+    paths: ['packages/media-proxy/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node_matrix:
+    uses: appium/appium-workflows/.github/workflows/node-lts-matrix.yml@main
+
+  prebuild:
+    uses: ./.github/workflows/media-proxy-prebuild.yml
+    with:
+      upload-artifacts: false
+
+  unit-test:
+    needs:
+      - node_matrix
+      - prebuild
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.node_matrix.outputs.versions) }}
+        image: [ubuntu-latest, macos-latest, windows-2022]
+    uses: ./.github/workflows/media-proxy-shared-test.yml
+    with:
+      image: ${{ matrix.image }}
+      node-version: ${{ matrix.node-version }}
+      test-command: test:unit
+      test-name: Unit tests
+      run-cpp-format-check: ${{ contains(matrix.image, 'ubuntu') }}
+      run-cpp-lint: true
+
+  integration-test:
+    needs:
+      - prebuild
+    if: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu-latest, macos-latest, windows-2022]
+    uses: ./.github/workflows/media-proxy-shared-test.yml
+    with:
+      image: ${{ matrix.image }}
+      node-version: lts/*
+      test-command: test:integration
+      test-name: Integration tests
