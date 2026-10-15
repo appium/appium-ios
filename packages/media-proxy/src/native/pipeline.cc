@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <utility>
 
 extern "C" {
@@ -57,8 +58,8 @@ int CodecThreads() {
 }
 
 // libjpeg-style quality (1-100) to the MJPEG encoder's qscale (2 best .. 31 worst).
-int JpegQscale(int quality) {
-  const double t = (100.0 - std::clamp(quality, 1, 100)) / 99.0;
+int JpegQscale(double quality) {
+  const double t = (100.0 - std::clamp(quality, 1.0, 100.0)) / 99.0;
   return kMinJpegQscale + static_cast<int>(std::lround(t * (kMaxJpegQscale - kMinJpegQscale)));
 }
 
@@ -70,7 +71,7 @@ class Pipeline::Impl {
   Impl(const PipelineConfig& config, UnitCallback onUnit)
       : config_(config),
         onUnit_(std::move(onUnit)),
-        minIntervalMicros_(static_cast<int64_t>(1e6 / std::max(config.fps, 1) * kMinIntervalFraction)) {
+        minIntervalMicros_(static_cast<int64_t>(1e6 / std::max(config.fps, 1.0) * kMinIntervalFraction)) {
     if (config.outputCodec != "mjpeg") {
       throw PipelineError{kEncoderUnavailable, "No H.264 encoder is compiled into this build; use mjpeg"};
     }
@@ -158,7 +159,7 @@ class Pipeline::Impl {
 
   // Keeps the aspect ratio; both sides stay even for 4:2:0.
   [[nodiscard]] int ScaledSize(int side) const {
-    const int scaled = side * config_.scale / 100;
+    const auto scaled = static_cast<int>(std::lround(side * config_.scale / 100.0));
     return std::max(2, scaled & ~1);
   }
 
@@ -173,7 +174,7 @@ class Pipeline::Impl {
     encoderCtx_->pix_fmt = AV_PIX_FMT_YUVJ420P;
     encoderCtx_->color_range = AVCOL_RANGE_JPEG;
     encoderCtx_->time_base = {1, 1000000};
-    encoderCtx_->framerate = {config_.fps, 1};
+    encoderCtx_->framerate = av_d2q(config_.fps, 1000000);
     encoderCtx_->flags |= AV_CODEC_FLAG_QSCALE;
     encoderCtx_->global_quality = FF_QP2LAMBDA * JpegQscale(config_.quality);
     encoderCtx_->thread_type = FF_THREAD_SLICE;
@@ -290,6 +291,16 @@ void Pipeline::Run() {
     failed = true;
     onError_(std::move(err));
   };
+  // Nothing may escape the worker: an uncaught exception would terminate the whole process.
+  const auto attempt = [&](const auto& body) {
+    try {
+      body();
+    } catch (PipelineError& err) {
+      fail(std::move(err));
+    } catch (const std::exception& err) {
+      fail({"MediaProxyError", err.what()});
+    }
+  };
   for (;;) {
     Input input;
     {
@@ -307,18 +318,10 @@ void Pipeline::Run() {
     if (failed) {
       continue;
     }
-    try {
-      impl_->Decode(input);
-    } catch (PipelineError& err) {
-      fail(std::move(err));
-    }
+    attempt([&] { impl_->Decode(input); });
   }
   if (!failed) {
-    try {
-      impl_->Flush();
-    } catch (PipelineError& err) {
-      fail(std::move(err));
-    }
+    attempt([&] { impl_->Flush(); });
   }
   DoneCallback done;
   {

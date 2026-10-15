@@ -2,6 +2,8 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
+import {setFlagsFromString} from 'node:v8';
+import {runInNewContext} from 'node:vm';
 
 import {MediaProxyEncoderUnavailableError} from '../../src/errors.js';
 import {createTranscoder, transcode} from '../../src/transcoder.js';
@@ -14,7 +16,7 @@ const FRAME_MICROS = 1e6 / 60;
 
 // The pipeline treats input as a live stream and drops to the next key frame when it falls behind,
 // so tests pace their input like a device instead of pushing everything at once.
-const PACE_MS = 5;
+const PACE_MS = 10;
 
 async function* asyncUnits(startTimestamp: number): AsyncGenerator<NalAccessUnit> {
   for (const au of readHevcFixture(FIXTURE, startTimestamp)) {
@@ -67,6 +69,11 @@ describe('HEVC -> MJPEG', () => {
     assert.ok(low[0].data.length < high[0].data.length, `${low[0].data.length} < ${high[0].data.length}`);
   });
 
+  it('keeps fractional scale values instead of truncating them', async () => {
+    const frames = await run({codec: 'mjpeg', scale: 33.3});
+    assert.deepStrictEqual(jpegSize(frames[0].data), {width: 120, height: 212});
+  });
+
   it('treats fps as an upper bound', async () => {
     const frames = await run({codec: 'mjpeg', fps: 30});
     assert.strictEqual(frames.length, FRAMES / 2);
@@ -89,6 +96,26 @@ describe('HEVC -> MJPEG', () => {
     c.push(readHevcFixture(FIXTURE)[0]);
     await c.close();
     assert.strictEqual((await c.units().next()).done, true);
+  });
+
+  it('lets closed transcoders be garbage collected', async () => {
+    setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc') as () => void;
+    let finalized = 0;
+    const registry = new FinalizationRegistry(() => void finalized++);
+    const count = 10;
+    for (let i = 0; i < count; i++) {
+      const t = createTranscoder({codec: 'mjpeg'});
+      registry.register(t, i);
+      t.push(readHevcFixture(FIXTURE)[0]);
+      await t.close();
+    }
+    for (let attempt = 0; attempt < 50 && finalized < count - 1; attempt++) {
+      await sleep(20);
+      gc();
+    }
+    // The newest one can still be pinned by this frame; before the fix none were ever collected.
+    assert.ok(finalized >= count - 1, `finalized ${finalized}/${count}`);
   });
 
   it('survives garbage input and reports H.264 as unavailable', async () => {

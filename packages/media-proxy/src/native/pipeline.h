@@ -14,10 +14,11 @@ namespace media_proxy {
 
 struct PipelineConfig {
   std::string outputCodec;  // "mjpeg" (h264 arrives with the encoder milestone)
-  int fps = 60;
-  int bitrate = 0;
-  int quality = 80;
-  int scale = 100;
+  // Doubles: the TS layer accepts fractional values (e.g. fps 29.97, scale 33.3).
+  double fps = 60;
+  double bitrate = 0;
+  double quality = 80;
+  double scale = 100;
 };
 
 struct EncodedUnit {

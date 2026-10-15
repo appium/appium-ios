@@ -30,7 +30,7 @@ export function readHevcFixture(path: string, startTimestamp = 0): NalAccessUnit
   let key = false;
   const flush = () => {
     if (nals.length > 0) {
-      units.push({nals, isKeyFrame: key, timestamp: startTimestamp + units.length * RTP_TICKS_PER_FRAME});
+      units.push({nals, isKeyFrame: key, timestamp: (startTimestamp + units.length * RTP_TICKS_PER_FRAME) >>> 0});
     }
     nals = [];
     hasVcl = false;

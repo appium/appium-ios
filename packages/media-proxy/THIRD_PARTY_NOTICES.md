@@ -8,6 +8,7 @@ and licensed under the GNU LGPL v2.1 or later.
 
 - Version: 8.1.3, source https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
   (sha256 `7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`).
+- The licence text ships beside the libraries as `ffmpeg-LICENSE-LGPL-2.1.txt`.
 - The recipe is `scripts/ci/build-ffmpeg.sh` (in the repository, not in the npm package); each prebuild also carries `ffmpeg-build-info.txt` with the
   exact `configure` line. FFmpeg is built unmodified.
 - The libraries are dynamically linked and sit next to the addon, so they can be replaced with a

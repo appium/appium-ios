@@ -83,6 +83,7 @@ async function main() {
   if (await exists(recipe)) {
     await copyFile(recipe, join(dest, 'ffmpeg-build-info.txt'));
   }
+  await copyFile(join(source, 'COPYING.LGPLv2.1'), join(dest, 'ffmpeg-LICENSE-LGPL-2.1.txt'));
   console.log(`FFmpeg libs for ${target} in ${dest}`);
 }
 

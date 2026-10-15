@@ -19,11 +19,14 @@ using media_proxy::PipelineConfig;
 using media_proxy::PipelineError;
 
 constexpr std::array<uint8_t, 4> kStartCode{0, 0, 0, 1};
+// Encoded units waiting for the JS thread; beyond this new ones are dropped so a stalled loop can't grow memory.
+constexpr size_t kMaxPendingUnits = 60;
 
 // JS-thread-only state shared with in-flight events, so late events never touch a dead session.
 struct JsState {
   Napi::FunctionReference onError;
   std::optional<Napi::Promise::Deferred> deferred;
+  std::atomic<size_t> pendingUnits{0};  // the only member the worker thread touches
 };
 
 struct Event {
@@ -43,9 +46,14 @@ class Session {
     tsfn_ = Napi::ThreadSafeFunction::New(env, onUnit, "media-proxy", 0, 1);
     // An abandoned transcoder must not keep the process alive; close() re-refs while it flushes.
     tsfn_.Unref(env);
-    pipeline_ = std::make_unique<Pipeline>(
-        config, [this](EncodedUnit&& unit) { Post(Event::Kind::kUnit, std::move(unit), {}); },
-        [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); });
+    try {
+      pipeline_ = std::make_unique<Pipeline>(
+          config, [this](EncodedUnit&& unit) { PostUnit(std::move(unit)); },
+          [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); });
+    } catch (...) {
+      ReleaseBridge();  // the destructor won't run for a half-built Session
+      throw;
+    }
   }
 
   ~Session() {
@@ -98,9 +106,20 @@ class Session {
     }
   }
 
+  void PostUnit(EncodedUnit&& unit) {
+    if (state_->pendingUnits.load() >= kMaxPendingUnits) {
+      return;
+    }
+    ++state_->pendingUnits;
+    Post(Event::Kind::kUnit, std::move(unit), {});
+  }
+
   void Post(Event::Kind kind, EncodedUnit&& unit, PipelineError&& error) {
     auto* event = new Event{kind, std::move(unit), std::move(error), state_};
     if (tsfn_.NonBlockingCall(event, Deliver) != napi_ok) {
+      if (kind == Event::Kind::kUnit) {
+        --state_->pendingUnits;
+      }
       delete event;
     }
   }
@@ -109,8 +128,13 @@ class Session {
     const std::unique_ptr<Event> event(raw);
     switch (event->kind) {
       case Event::Kind::kUnit: {
+        --event->state->pendingUnits;
+        // Hand the bytes over without a copy; NewOrCopy copies (and frees at once) where external buffers are banned.
+        auto* bytes = new std::vector<uint8_t>(std::move(event->unit.data));
         Napi::Object unit = Napi::Object::New(env);
-        unit.Set("data", Napi::Buffer<uint8_t>::Copy(env, event->unit.data.data(), event->unit.data.size()));
+        unit.Set("data", Napi::Buffer<uint8_t>::NewOrCopy(
+                             env, bytes->data(), bytes->size(),
+                             [](Napi::Env, uint8_t*, std::vector<uint8_t>* owned) { delete owned; }, bytes));
         unit.Set("isKeyFrame", Napi::Boolean::New(env, event->unit.isKeyFrame));
         unit.Set("timestampMicros", Napi::Number::New(env, static_cast<double>(event->unit.timestampMicros)));
         onUnit.Call({unit});
@@ -119,8 +143,10 @@ class Session {
       case Event::Kind::kError:
         event->state->onError.Call(
             {media_proxy::MakeTypedError(env, event->error.name.c_str(), event->error.message).Value()});
+        event->state->onError.Reset();  // one error per pipeline; dropping the root breaks the GC cycle
         break;
       case Event::Kind::kDone:
+        event->state->onError.Reset();
         if (event->state->deferred) {
           event->state->deferred->Resolve(env.Undefined());
         }
@@ -136,7 +162,9 @@ class Session {
   std::unique_ptr<Pipeline> pipeline_;  // last: destroyed (and joined) first
 };
 
-int ReadInt(const Napi::Object& config, const char* key) { return config.Get(key).As<Napi::Number>().Int32Value(); }
+double ReadNumber(const Napi::Object& config, const char* key) {
+  return config.Get(key).As<Napi::Number>().DoubleValue();
+}
 
 Napi::Value Capabilities(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -158,10 +186,10 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
   const auto config = info[0].As<Napi::Object>();
   PipelineConfig pipelineConfig;
   pipelineConfig.outputCodec = config.Get("outputCodec").As<Napi::String>().Utf8Value();
-  pipelineConfig.fps = ReadInt(config, "fps");
-  pipelineConfig.bitrate = ReadInt(config, "bitrate");
-  pipelineConfig.quality = ReadInt(config, "quality");
-  pipelineConfig.scale = ReadInt(config, "scale");
+  pipelineConfig.fps = ReadNumber(config, "fps");
+  pipelineConfig.bitrate = ReadNumber(config, "bitrate");
+  pipelineConfig.quality = ReadNumber(config, "quality");
+  pipelineConfig.scale = ReadNumber(config, "scale");
 
   std::shared_ptr<Session> session;
   try {

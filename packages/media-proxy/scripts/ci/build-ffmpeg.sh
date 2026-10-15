@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Builds the minimal LGPL-only FFmpeg shared libs the addon links against.
-# Output: third_party/ffmpeg/<platform>-<arch>/{include,lib[,bin]} (override with FFMPEG_PREFIX).
-# Usage: scripts/ci/build-ffmpeg.sh   (macOS/Linux; on Windows run under MSYS2 with MSVC on PATH)
+# Builds the minimal LGPL-only FFmpeg shared libs into third_party/ffmpeg/<platform>-<arch> (or $FFMPEG_PREFIX).
+# Env: TARGET_ARCH (x64|arm64). On Windows run under MSYS2 with MSVC on PATH.
 set -euo pipefail
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.1.3}"
@@ -76,7 +75,8 @@ case "$PLATFORM" in
     fi
     ;;
   linux)
-    ARGS+=(--extra-ldflags="-Wl,-rpath,\$ORIGIN")
+    # '$$ORIGIN': make turns $$ into $, and the quotes keep the shell from expanding it.
+    ARGS+=(--extra-ldflags="-Wl,-rpath,'\$\$ORIGIN'")
     ;;
   win32)
     # MSVC toolchain (cl/link on PATH, e.g. from vcvars) driven from MSYS2.
@@ -95,6 +95,11 @@ fi
 ./configure "${ARGS[@]}"
 make -j"$JOBS"
 make install
+cp COPYING.LGPLv2.1 "$PREFIX/"
+if [ "$PLATFORM" = linux ]; then
+  readelf -d "$PREFIX/lib/libavcodec.so" | grep -E 'RUNPATH|RPATH' | grep -q 'ORIGIN' \
+    || { echo "libavcodec.so has no \$ORIGIN rpath" >&2; exit 1; }
+fi
 if [ "$PLATFORM" = win32 ]; then
   # MSVC builds install the import libs (avcodec.lib, ...) next to the DLLs; link.exe looks in lib/.
   for f in "$PREFIX"/bin/*.lib; do cp "$f" "$PREFIX/lib/"; done
