@@ -81,6 +81,29 @@ class FakeFileServiceTransport extends EventEmitter {
     this.emitMessage(body, {streamId: Http2Constants.REPLY_CHANNEL, flags: REPLY_FLAGS, id: BigInt(id)});
   }
 
+  /** Sends the listing the way the device does, as its own requests that must be answered. */
+  private emitListing(body: XPCDictionary): void {
+    for (const fileList of this.listing) {
+      const peerId = this.peerMessageId;
+      this.peerMessageId += 2;
+      this.emitMessage(
+        {MessageUUID: body.MessageUUID, FileList: fileList},
+        {streamId: Http2Constants.ROOT_CHANNEL, flags: PEER_REQUEST_FLAGS, id: BigInt(peerId)},
+      );
+    }
+  }
+
+  private replyWithStaleSession(id: number): void {
+    this.reply(id, {
+      Response: 3,
+      EncodedError: {
+        ErrorDomain: 'com.apple.dt.remoteservices.error',
+        ErrorCode: 11004,
+        NSLocalizedDescription: 'The provided session ID is not valid',
+      },
+    });
+  }
+
   private respond({streamId, id, body}: SentMessage): void {
     if (streamId === Http2Constants.REPLY_CHANNEL) {
       const pending = this.pendingListing;
@@ -91,14 +114,7 @@ class FakeFileServiceTransport extends EventEmitter {
       return;
     }
     if (this.isSessionIdChecked && body.SessionID !== undefined && body.SessionID !== this.sessionId) {
-      this.reply(id, {
-        Response: 3,
-        EncodedError: {
-          ErrorDomain: 'com.apple.dt.remoteservices.error',
-          ErrorCode: 11004,
-          NSLocalizedDescription: 'The provided session ID is not valid',
-        },
-      });
+      this.replyWithStaleSession(id);
       return;
     }
     switch (body.Cmd) {
@@ -118,22 +134,8 @@ class FakeFileServiceTransport extends EventEmitter {
         }
         if (this.rejectListingAfterFileList) {
           this.rejectListingAfterFileList = false;
-          for (const fileList of this.listing) {
-            const peerId = this.peerMessageId;
-            this.peerMessageId += 2;
-            this.emitMessage(
-              {MessageUUID: body.MessageUUID, FileList: fileList},
-              {streamId: Http2Constants.ROOT_CHANNEL, flags: PEER_REQUEST_FLAGS, id: BigInt(peerId)},
-            );
-          }
-          this.reply(id, {
-            Response: 3,
-            EncodedError: {
-              ErrorDomain: 'com.apple.dt.remoteservices.error',
-              ErrorCode: 11004,
-              NSLocalizedDescription: 'The provided session ID is not valid',
-            },
-          });
+          this.emitListing(body);
+          this.replyWithStaleSession(id);
           return;
         }
         if (this.listing.length === 0) {
@@ -141,14 +143,7 @@ class FakeFileServiceTransport extends EventEmitter {
           return;
         }
         this.pendingListing = {id, acksLeft: this.listing.length};
-        for (const fileList of this.listing) {
-          const peerId = this.peerMessageId;
-          this.peerMessageId += 2;
-          this.emitMessage(
-            {MessageUUID: body.MessageUUID, FileList: fileList},
-            {streamId: Http2Constants.ROOT_CHANNEL, flags: PEER_REQUEST_FLAGS, id: BigInt(peerId)},
-          );
-        }
+        this.emitListing(body);
         return;
       case 'RetrieveFile':
         this.reply(id, this.fileReply);
@@ -308,7 +303,7 @@ describe('CoreDeviceFileService', function () {
     await second;
 
     assert.strictEqual(fresh.requests().filter(({body}) => body.Cmd === 'CreateSession').length, 1);
-    assert.deepStrictEqual(
+    assert.strictEqual(
       fresh.requests().filter(({body}) => body.Cmd === 'FileSystemOperation' && body.SessionID === 'SESSION-2').length,
       2,
     );
@@ -578,6 +573,27 @@ describe('CoreDeviceFileService', function () {
       assert.strictEqual(operation.body.NewPath, 'tmp/b.mov');
     });
 
+    it('refuses to rename the session root', async function () {
+      const fake = new FakeFileServiceTransport();
+      const service = new TestFileService(fake, {domain: 'temporary'});
+
+      for (const [oldPath, newPath] of [
+        ['', 'a'],
+        ['.', 'a'],
+        ['/', 'a'],
+        ['./', 'a'],
+        ['a', '.'],
+        ['a', './'],
+      ]) {
+        await assert.rejects(
+          service.rename(oldPath, newPath),
+          /root of a file service session cannot be renamed/,
+          `${oldPath} -> ${newPath}`,
+        );
+      }
+      assert.strictEqual(fake.sent.length, 0);
+    });
+
     it('refuses to rename outside the writable app container directories', async function () {
       const service = new TestFileService(new FakeFileServiceTransport());
 
@@ -708,6 +724,33 @@ describe('CoreDeviceFileService', function () {
       assert.strictEqual(stream.destroyed, true);
     });
 
+    it('does not resend a RetrieveFile whose data channel is already open', async function () {
+      let connections = 0;
+      server.removeAllListeners('connection');
+      server.on('connection', (socket) => {
+        connections++;
+        socket.once('data', () => socket.end(Buffer.from('not a header at all, but long enough to parse!')));
+      });
+      const service = newService();
+      await service.listFilePaths();
+      // Every further request now carries a session id this connection rejects
+      service.fake.isSessionIdChecked = true;
+      service.fake.sessionId = 'SESSION-2';
+
+      await assert.rejects(service.pull('a', path.join(tmpDir, 'stale.mov')), /session ID is not valid/);
+
+      // Resending would ask for a file id of the new session over a data channel
+      // opened for the old connection. The dead session is still dropped, so the
+      // next request starts a new one instead of failing the same way.
+      await service.listFilePaths();
+
+      assert.deepStrictEqual(
+        service.fake.requests().map(({body}) => String(body.Cmd)),
+        ['CreateSession', 'RetrieveDirectoryList', 'RetrieveFile', 'CreateSession', 'RetrieveDirectoryList'],
+      );
+      assert.strictEqual(connections, 1);
+    });
+
     it('removes a partial local file when the transfer fails', async function () {
       server.removeAllListeners('connection');
       server.on('connection', (socket) => {
@@ -722,58 +765,44 @@ describe('CoreDeviceFileService', function () {
       assert.strictEqual(service.fake.closeCalls, 1);
     });
 
-    it('removes the directories it created for a failed pull', async function () {
+    it('leaves the directories it created for a failed pull in place', async function () {
       server.removeAllListeners('connection');
       server.on('connection', (socket) => {
         socket.once('data', () => socket.end(Buffer.from('not a header at all, but long enough to parse!')));
       });
       const service = newService();
       const created = path.join(tmpDir, 'made', 'up');
-      const destination = path.join(created, 'broken.mov');
 
-      await assert.rejects(service.pull('a', destination), /invalid magic/);
+      await assert.rejects(service.pull('a', path.join(created, 'broken.mov')), /invalid magic/);
 
-      assert.strictEqual(fs.existsSync(destination), false);
-      assert.strictEqual(fs.existsSync(created), false);
-      assert.strictEqual(fs.existsSync(path.join(tmpDir, 'made')), false);
-      // The directory that was already there stays
-      assert.strictEqual(fs.existsSync(tmpDir), true);
-    });
-
-    it('keeps a directory it created for a failed pull that is no longer empty', async function () {
-      const created = path.join(tmpDir, 'busy');
-      const destination = path.join(created, 'broken.mov');
-      server.removeAllListeners('connection');
-      server.on('connection', (socket) => {
-        socket.once('data', () => {
-          // Runs while the pull is in flight, after the directory was created
-          fs.writeFileSync(path.join(created, 'someone-elses.txt'), 'x');
-          socket.end(Buffer.from('not a header at all, but long enough to parse!'));
-        });
-      });
-      const service = newService();
-
-      await assert.rejects(service.pull('a', destination), /invalid magic/);
-
-      assert.strictEqual(fs.existsSync(destination), false);
+      // Removing them would race a concurrent pull into the same new directory
       assert.strictEqual(fs.existsSync(created), true);
-      assert.strictEqual(fs.existsSync(path.join(created, 'someone-elses.txt')), true);
+      assert.deepStrictEqual(await fs.promises.readdir(created), []);
     });
 
-    it('keeps a directory of a failed pull that it did not create', async function () {
+    it('does not disturb a concurrent pull into the same new directory', async function () {
       server.removeAllListeners('connection');
       server.on('connection', (socket) => {
         socket.once('data', () => socket.end(Buffer.from('not a header at all, but long enough to parse!')));
       });
-      const service = newService();
-      const existing = path.join(tmpDir, 'already-here');
-      await fs.promises.mkdir(existing);
-      const destination = path.join(existing, 'broken.mov');
-
-      await assert.rejects(service.pull('a', destination), /invalid magic/);
-
-      assert.strictEqual(fs.existsSync(destination), false);
-      assert.strictEqual(fs.existsSync(existing), true);
+      // The second pull is started while the first is failing, which is when a
+      // cleanup of the created directories pulls the ground out from under it.
+      const unrelated: string[] = [];
+      for (let delay = 0; delay < 40; delay++) {
+        const fresh = path.join(tmpDir, `concurrent-${delay}`, 'new');
+        const first = newService();
+        const second = newService();
+        const pullA = first.pull('a', path.join(fresh, 'a.mov')).catch((err: Error) => err.message);
+        for (let tick = 0; tick < delay; tick++) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        const pullB = second.pull('b', path.join(fresh, 'b.mov')).catch((err: Error) => err.message);
+        const [, resultB] = await Promise.all([pullA, pullB]);
+        if (!/invalid magic/.test(String(resultB))) {
+          unrelated.push(`delay ${delay}: ${resultB}`);
+        }
+      }
+      assert.deepStrictEqual(unrelated, []);
     });
 
     it('fails before asking the device when the destination cannot be written', async function () {
@@ -1103,6 +1132,15 @@ describe('CoreDeviceFileService', function () {
         ['ProposeEmptyFile'],
       );
       assert.deepStrictEqual(renames(service), [[temporaryPathOf(service), 'tmp/empty.txt']]);
+    });
+
+    it('refuses a source stream that has already been destroyed', async function () {
+      const service = newService();
+      const dead = Readable.from([Buffer.from('x')]);
+      dead.destroy();
+
+      await assert.rejects(service.push(dead, 'tmp/x.txt', {size: 1}), /source stream has already been destroyed/);
+      assert.deepStrictEqual(proposals(service), []);
     });
 
     it('refuses a writable stream as the source', async function () {

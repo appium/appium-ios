@@ -75,6 +75,14 @@ const log = getLogger('CoreDeviceFileService');
 /** How often the data channel's idle timeout is checked. */
 const WATCHDOG_INTERVAL_MS = 250;
 
+interface FileServiceRequestHooks {
+  onPeerMessage?: CoreDevicePeerMessageHandler;
+  /** Runs before every attempt, to drop what a rejected one collected. */
+  onAttempt?: () => void;
+  /** Whether a request rejected for a stale session may be sent again. */
+  isResendable?: boolean;
+}
+
 interface FileServiceSession {
   transport: RemoteXpcFramedTransport;
   id: Promise<string>;
@@ -129,8 +137,9 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * instead of only its direct children.
    * @returns Files and directories with paths relative to `remotePath`, which is
    * not itself among them. When `remotePath` is a regular file, the only entry is
-   * that file's path, relative to the session root and without metadata. The device returns names in Unicode NFD, so a
-   * name pushed as NFC comes back decomposed.
+   * that file's path, relative to the session root and without metadata. The
+   * device returns names in Unicode NFD, so a name pushed as NFC comes back
+   * decomposed.
    */
   async listDirectory(remotePath = '.', options: FileServiceListOptions = {}): Promise<FileServiceEntry[]> {
     const {recursive = false, ...requestOptions} = options;
@@ -236,7 +245,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
   async rm(remotePath: string, options: FileServiceRemoveOptions = {}): Promise<void> {
     const {recursive = false, ...requestOptions} = options;
     const target = toSessionRelativePath(remotePath);
-    if (target === '' || target === '.') {
+    if (isSessionRoot(target)) {
       throw new TypeError('The root of a file service session cannot be removed');
     }
     // A recursive listing leaves out the contents of a directory that a symbolic
@@ -298,6 +307,10 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * @throws {CoreDeviceError} If `oldPath` does not exist or the rename is not allowed.
    */
   async rename(oldPath: string, newPath: string, options: FileServiceRequestOptions = {}): Promise<void> {
+    // Normalizing below turns a path that is only a root into an empty one
+    if (isSessionRoot(oldPath) || isSessionRoot(newPath)) {
+      throw new TypeError('The root of a file service session cannot be renamed');
+    }
     if (this.sessionOptions.domain === 'appDataContainer') {
       assertInWritableAppContainerDirectory(oldPath);
       assertInWritableAppContainerDirectory(newPath);
@@ -392,7 +405,10 @@ export class CoreDeviceFileService extends CoreDeviceService {
     try {
       // devicectl connects the data channel before it asks for the file.
       socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS, signal);
-      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions);
+      // The data channel above was opened for the current connection
+      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions, {
+        isResendable: false,
+      });
       if (isDirectoryMode(reply.FilePermissions)) {
         throw new CoreDeviceError(`'${remotePath}' is a directory, not a file`, reply);
       }
@@ -415,7 +431,6 @@ export class CoreDeviceFileService extends CoreDeviceService {
       output.destroy();
       if (localFile) {
         await fsp.rm(localFile.temporaryPath, {force: true});
-        await removeCreatedDirectories(localFile);
       }
       if (isTransferInFlight) {
         // The device resets the control connection when a transfer is cut short
@@ -480,6 +495,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
           FILE_SERVICE_COMMAND.PROPOSE_FILE,
           {...fields, FileSize: BigInt(upload.size)},
           requestOptions,
+          // The data channel above was opened for the current connection
+          {isResendable: false},
         );
         // The device answers without a file ID when it will not create the file there
         if (reply.NewFileID === undefined) {
@@ -529,11 +546,8 @@ export class CoreDeviceFileService extends CoreDeviceService {
   ): Promise<XPCValue[]> {
     const messageUuid = randomUUID().toUpperCase();
     const fileList: XPCValue[] = [];
-    await this.request(
-      command,
-      {Path: remotePath, MessageUUID: messageUuid},
-      options,
-      (body, respond) => {
+    await this.request(command, {Path: remotePath, MessageUUID: messageUuid}, options, {
+      onPeerMessage: (body, respond) => {
         if (body.MessageUUID !== messageUuid) {
           log.debug(`Ignoring an unexpected file service message: ${Object.keys(body).join(', ')}`);
           return;
@@ -543,10 +557,10 @@ export class CoreDeviceFileService extends CoreDeviceService {
         }
         respond({MessageUUID: messageUuid});
       },
-      () => {
+      onAttempt: () => {
         fileList.length = 0;
       },
-    );
+    });
     return fileList;
   }
 
@@ -608,14 +622,17 @@ export class CoreDeviceFileService extends CoreDeviceService {
     command: string,
     fields: XPCDictionary,
     options: FileServiceRequestOptions,
-    onPeerMessage?: CoreDevicePeerMessageHandler,
-    onAttempt?: () => void,
+    {onPeerMessage, onAttempt, isResendable = true}: FileServiceRequestHooks = {},
   ): Promise<XPCDictionary> {
     // The session id is resolved before the request waits its turn in the
     // invocation queue, so the connection it belongs to can be replaced while it
     // waits (by a timed-out request, or a transfer cut short). The device then
     // rejects the stale id, and since it rejects the request without running it,
     // a session on the new connection is created and the request sent once more.
+    //
+    // `isResendable` is false for a request whose data channel is already open:
+    // resending it would ask the device for a file id of the new session over a
+    // connection opened for the old one, which is untested behaviour.
     for (let isRetry = false; ; isRetry = true) {
       onAttempt?.();
       const sessionId = await this.ensureSession(options);
@@ -627,11 +644,16 @@ export class CoreDeviceFileService extends CoreDeviceService {
         );
         return assertSuccessfulReply(command, reply);
       } catch (err) {
-        if (isRetry || !isInvalidSessionError(err)) {
+        if (!isInvalidSessionError(err)) {
+          throw err;
+        }
+        // Drop the session either way: keeping it would fail every later request
+        // on this instance the same way, resendable or not.
+        await this.forgetSession(sessionId);
+        if (isRetry || !isResendable) {
           throw err;
         }
         log.debug(`The file service session is no longer valid, starting a new one: ${(err as Error).message}`);
-        await this.forgetSession(sessionId);
       }
     }
   }
@@ -830,6 +852,11 @@ async function openUploadSource(
     size = source.length;
     stream = Readable.from([source]);
   } else if (isReadableStream(source)) {
+    // Mirrors the pull side's check of the destination, and fails before the
+    // device is asked for anything instead of inside the upload
+    if (source.destroyed) {
+      throw new TypeError('The source stream has already been destroyed');
+    }
     size = options.size;
     stream = source;
   } else {
@@ -1039,13 +1066,16 @@ interface LocalDestination {
   path: string;
   /** Where it is written until then. */
   temporaryPath: string;
-  /** Topmost directory that had to be created for it, if any. */
-  createdDirectory?: string;
 }
 
 /**
  * Opens a temporary file next to `localPath` for writing, creating its parent
  * directories. It is renamed to `localPath` once the download is complete.
+ *
+ * A failed pull leaves those directories behind. Removing them races with a
+ * concurrent pull into the same new directory, which has run its own `mkdir`
+ * but not yet opened its temporary file, and would then fail with `ENOENT` or
+ * `EINVAL` on a remote file that is perfectly fine.
  *
  * @throws {Error} With code `EISDIR` if `localPath` is a directory.
  */
@@ -1055,32 +1085,11 @@ async function openLocalFile(localPath: string): Promise<LocalDestination> {
     // What opening the directory itself for writing would fail with
     throw Object.assign(new Error(`EISDIR: illegal operation on a directory, open '${localPath}'`), {code: 'EISDIR'});
   }
-  const createdDirectory = await fsp.mkdir(path.dirname(localPath), {recursive: true});
+  await fsp.mkdir(path.dirname(localPath), {recursive: true});
   const temporaryPath = path.join(path.dirname(localPath), `.${path.basename(localPath)}.${randomUUID()}.partial`);
   const stream = fs.createWriteStream(temporaryPath);
   await once(stream, 'open');
-  return {stream, path: localPath, temporaryPath, createdDirectory};
-}
-
-/**
- * Removes the directories {@link openLocalFile} created for a pull that then
- * failed, deepest first. One that is no longer empty is left in place.
- */
-async function removeCreatedDirectories({path: localPath, createdDirectory}: LocalDestination): Promise<void> {
-  if (!createdDirectory) {
-    return;
-  }
-  for (let directory = path.dirname(localPath); ; directory = path.dirname(directory)) {
-    try {
-      await fsp.rmdir(directory);
-    } catch {
-      // Something else is in it now, or it is already gone
-      return;
-    }
-    if (directory === createdDirectory || directory === path.dirname(directory)) {
-      return;
-    }
-  }
+  return {stream, path: localPath, temporaryPath};
 }
 
 /**
@@ -1141,6 +1150,12 @@ function isInvalidSessionError(err: unknown): boolean {
     asString(encodedError?.ErrorDomain) === REMOTE_SERVICES_ERROR_DOMAIN &&
     asNumber(encodedError?.ErrorCode) === DEVICE_INVALID_SESSION
   );
+}
+
+/** Whether the path addresses the session root itself rather than something in it. */
+function isSessionRoot(remotePath: string): boolean {
+  const target = toSessionRelativePath(remotePath);
+  return target === '' || target === '.';
 }
 
 function isDirectChild(relativePath: string): boolean {
