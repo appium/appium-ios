@@ -166,11 +166,10 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
 
   /** Stops immediately, discarding unconsumed units. Idempotent; pending `units()` iterators complete. */
   close(): Promise<void> {
-    if (!this.closePromise) {
-      // Stop consumers first: native close() may still flush units that nobody wants.
-      this.stopController.abort();
-      this.queue.end();
-    }
+    // Stop consumers first, even if end() already started: native close() may still flush units
+    // nobody wants, and a draining queue must be discarded.
+    this.stopController.abort();
+    this.queue.end();
     this.closePromise ??= this.handle.close();
     return this.closePromise;
   }

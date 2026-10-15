@@ -354,6 +354,34 @@ describe('pipeThrough() / transcode()', () => {
     }
   });
 
+  it('close() after end() still stops consumers and discards buffered output', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(mjpeg, backend);
+    backend.emit({data: Buffer.from('a')});
+    await t.end();
+    await t.close();
+    assert.strictEqual((await t.units().next()).done, true);
+  });
+
+  it('close() while end() is still flushing releases a pending consumer', async () => {
+    let finishClose!: () => void;
+    const backend = fakeBackend();
+    const create = backend.createTranscoder.bind(backend);
+    backend.createTranscoder = (config, onUnit, onError) => {
+      const handle = create(config, onUnit, onError);
+      handle.close = () => new Promise<void>((r) => (finishClose = r));
+      return handle;
+    };
+    const t = new Transcoder(mjpeg, backend);
+    const next = t.units().next();
+    const ending = t.end();
+    const closing = t.close();
+    assert.ok(await settlesWithin(next.then(() => true)), 'consumer released');
+    assert.strictEqual((await next).done, true);
+    finishClose();
+    await Promise.all([ending, closing]);
+  });
+
   it('end() rejects and fails pending consumers when native close rejects', async () => {
     const t = new Transcoder(mjpeg, fakeBackend({failClose: true}));
     const next = t.units().next();

@@ -65,10 +65,15 @@ export class UnitQueue<T> {
 
   /**
    * Ends the queue. With `drain`, already buffered units are still delivered before `next()`
-   * resolves `done`; otherwise they are discarded.
+   * resolves `done`; otherwise they are discarded (also if called again while draining).
    */
   end(opts: {drain?: boolean} = {}): void {
     if (this.ended) {
+      // A non-draining end cancels a drain already in progress.
+      if (!opts.drain && this.draining) {
+        this.draining = false;
+        this.buffer.length = 0;
+      }
       return;
     }
     this.ended = true;
