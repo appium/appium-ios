@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.1...appium-ios-remotexpc@5.25.2) (2026-10-15)
+
+### Bug Fixes
+
+* **remotexpc:** detach plist layer from DVT and testmanagerd DTX sockets ([#67](https://github.com/appium/appium-ios/issues/67)) ([a13cdad](https://github.com/appium/appium-ios/commit/a13cdad333a6acc47735a8ebe6ef607e41394130))
+
+
 ## [5.25.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.0...appium-ios-remotexpc@5.25.1) (2026-10-14)
 
 ### Bug Fixes
