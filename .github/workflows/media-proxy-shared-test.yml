@@ -65,6 +65,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build --workspace packages/media-proxy
 
+      # The addon links FFmpeg, and clang-tidy needs its headers.
+      - name: Build FFmpeg
+        if: ${{ inputs.run-cpp-lint || inputs.test-command == 'test:integration' }}
+        uses: ./.github/actions/media-proxy-ffmpeg
+
       - name: Install clang-format
         if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-format-check }}
         run: sudo apt-get install -y clang-format

@@ -8,5 +8,5 @@
     "outDir": "./lib"
   },
   "include": ["src", "scripts", "test"],
-  "exclude": ["build", "lib"]
+  "exclude": ["build", "lib", "scripts/bench.mjs"]
 }

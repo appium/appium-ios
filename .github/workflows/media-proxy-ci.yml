@@ -6,10 +6,10 @@ name: media-proxy CI
 on:
   push:
     branches: [main]
-    paths: ['packages/media-proxy/**']
+    paths: ['packages/media-proxy/**', '.github/actions/media-proxy-ffmpeg/**']
   pull_request:
     branches: [main]
-    paths: ['packages/media-proxy/**']
+    paths: ['packages/media-proxy/**', '.github/actions/media-proxy-ffmpeg/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

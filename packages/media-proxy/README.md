@@ -10,9 +10,12 @@ already produced by `@appium/coresim` (simulators) and the Android settings app:
 The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCapture`
 (iOS 27+ real devices). Supported platforms: darwin, linux, win32 on x64 and arm64.
 
-> **Status:** the TypeScript API, APST/MJPEG framing helpers, CI and packaging are in place. The
-> FFmpeg-backed native pipeline is still being built, so `createTranscoder()` currently throws
-> `MediaProxyEncoderUnavailableError`.
+> **Status:** HEVC → MJPEG works on a bundled LGPL FFmpeg (software decode). H.264 output is not
+> built yet: `codec: 'h264'` throws `MediaProxyEncoderUnavailableError`. The package is not released.
+
+The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
+it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
+real time therefore drops frames; pace it like a device does.
 
 ## Usage
 
@@ -21,10 +24,8 @@ import {transcode, serveMjpeg} from '@appium/media-proxy';
 
 const capture = await ScreenStreamCapture.start(display, {displayId: 1});
 
-// H.264 (same shape as coresim's VideoAccessUnit)
-for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {
-  // unit.data is Annex-B, unit.isKeyFrame, unit.timestampMicros, ...
-}
+// H.264 (same shape as coresim's VideoAccessUnit) - not available yet
+// for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {}
 
 // MJPEG over HTTP (multipart/x-mixed-replace)
 const frames = transcode(capture.accessUnits(), {codec: 'mjpeg', quality: 80});
@@ -32,8 +33,23 @@ const server = await serveMjpeg(frames, {port: 0});
 console.log(server.url);
 ```
 
-Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`
-and `close()`.
+Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`, `end()`
+(flush, then finish) and `close()` (stop now).
+
+## Building from source
+
+The addon links a minimal LGPL FFmpeg (HEVC decoder, MJPEG encoder, swscale) pinned in
+`scripts/build-ffmpeg.sh`; there is no system FFmpeg dependency.
+
+```sh
+npm run build:ffmpeg   # once per platform/arch (needs nasm on x64; Windows: MSVC under MSYS2)
+npm run build:addon    # links it and copies the libs next to the addon
+npm run test:integration
+node scripts/bench.mjs clip.h265 --seconds 10   # real-time fps / latency report
+```
+
+`npm run build:prebuilds` produces `prebuilds/<platform>-<arch>/` with the addon plus the FFmpeg
+libs it needs (and `ffmpeg-build-info.txt`, the exact `configure` line).
 
 | Option               | Default   | Notes                                                 |
 | -------------------- | --------- | ----------------------------------------------------- |
@@ -57,7 +73,7 @@ Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOpti
 
 The package is Apache-2.0. The native addon links FFmpeg built **LGPL-only** (no `--enable-gpl`, no
 `--enable-nonfree`), shipped as shared libraries next to the addon so it can be relinked. See
-`THIRD_PARTY_NOTICES.md`. x264 is never bundled. A software H.264 fallback (planned) uses Cisco's OpenH264,
+`THIRD_PARTY_NOTICES.md`. x264 is never bundled. A software H.264 fallback (planned) will use Cisco's OpenH264,
 which must be downloaded at runtime (not redistributed) to be covered by Cisco's patent grant.
 
 Note that HEVC and H.264 are patent-encumbered formats; hardware codecs rely on the platform's

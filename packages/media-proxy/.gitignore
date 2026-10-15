@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 
 # Locally built FFmpeg (see scripts/build-ffmpeg.sh) — never committed.
 third_party/ffmpeg
+/third_party/.build

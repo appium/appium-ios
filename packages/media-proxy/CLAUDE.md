@@ -6,8 +6,10 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 ## Commands
 
 - `npm run build` — `tsc -b` (also runs on `npm install` via `prepare`)
-- `npm run build:addon` — `node-gyp rebuild` (local addon in `build/Release`, picked up by node-gyp-build)
-- `npm run build:prebuilds` — `prebuildify --napi --strip` (CI)
+- `npm run build:ffmpeg` — builds the pinned LGPL FFmpeg into `third_party/ffmpeg/<platform>-<arch>` (needed before any native build)
+- `npm run build:addon` — `node-gyp rebuild` + copies the FFmpeg libs into `build/Release` (picked up by node-gyp-build)
+- `npm run build:prebuilds [-- --arch x64]` — prebuildify + bundles the FFmpeg libs into `prebuilds/<platform>-<arch>` (CI)
+- `node scripts/bench.mjs clip.h265` — real-time fps/latency report
 - `npm run test:unit` — pure TS, fake native backend, no addon needed
 - `npm run test:integration` — needs the addon (`build:addon` first)
 - `npm run format:cpp:check` / `lint:cpp` — clang-format / clang-tidy over `src/native`
@@ -19,7 +21,11 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - `src/native.ts` — lazy memoized loader; throws `MediaProxyUnavailableError` (never at import).
 - `src/queue.ts` — bounded queue; on overflow drops until the next keyframe (H.264) like coresim's.
 - `src/framing/` — APST (mirrors the Android settings app's streaming-protocol) and MJPEG multipart/HTTP.
-- `src/native/` — C++. Native errors set `err.name` to a typed error name; `wrapNativeError` re-types them.
+- `src/native/` — C++. `pipeline.{h,cc}` is pure FFmpeg (worker thread: HEVC decode → swscale → MJPEG encode,
+  bounded input queue that drops to the next keyframe); `addon.cc` is the N-API/ThreadSafeFunction wrapper.
+  Native errors set `err.name` to a typed error name; `wrapNativeError` re-types them.
+- `scripts/build-ffmpeg.sh` / `bundle-libs.mjs` / `build-prebuilds.mjs` — FFmpeg recipe, lib bundling, prebuild driver.
+  Windows builds FFmpeg with MSVC under MSYS2 (arm64: no asm). Everything link-time lives in `binding.gyp` (`ffmpeg_dir`).
 - `scripts/install.mjs` — never builds; only notes a missing prebuild (FFmpeg libs can't be built at install time).
 
 ## Rules
@@ -28,7 +34,8 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - Options mirror coresim's `VideoStreamOptions`/`JpegStreamOptions` (names, defaults, `RangeError` rules);
   don't add Android-only options.
 - Keep output shapes identical to coresim's `VideoAccessUnit`/`JpegFrame` (video track only).
-- Never bundle or link GPL/nonfree FFmpeg components or x264.
+- Never bundle or link GPL/nonfree FFmpeg components or x264. Only enable the FFmpeg components the pipeline uses.
+- Input is a live stream: never add unbounded buffering or blocking pushes; tests pace their input.
 - No dependency on remotexpc or coresim; inputs are structural types.
 
 ## Not released yet
