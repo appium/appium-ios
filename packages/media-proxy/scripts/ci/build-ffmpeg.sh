@@ -95,6 +95,10 @@ fi
 ./configure "${ARGS[@]}"
 make -j"$JOBS"
 make install
+if [ "$PLATFORM" = win32 ]; then
+  # MSVC builds install the import libs (avcodec.lib, ...) next to the DLLs; link.exe looks in lib/.
+  for f in "$PREFIX"/bin/*.lib; do cp "$f" "$PREFIX/lib/"; done
+fi
 echo "$FFMPEG_VERSION" >"$PREFIX/.built-$FFMPEG_VERSION"
 {
   echo "FFmpeg $FFMPEG_VERSION (LGPL-2.1+, --disable-gpl --disable-nonfree), source: https://ffmpeg.org/releases/$TARBALL"
