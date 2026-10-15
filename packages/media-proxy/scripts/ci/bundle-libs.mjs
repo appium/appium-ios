@@ -1,25 +1,15 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-// Copies the FFmpeg runtime libs next to the addon (prebuilds/<platform>-<arch>/), where the
-// addon's rpath ($ORIGIN / @loader_path) and the Windows DLL search order find them.
-// Real files only: npm drops symlinks from tarballs.
-import {execFileSync} from 'node:child_process';
-import {copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync} from 'node:fs';
+// Copies the FFmpeg runtime libs next to the addon, where its rpath and the Windows DLL search find them.
+// Real files only (npm drops symlinks). `--dest <dir>` targets a dev build instead of prebuilds/.
+import {access, copyFile, mkdir, readdir} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parseArgs} from 'node:util';
 
-const root = fileURLToPath(new URL('../..', import.meta.url));
-const target = `${process.platform}-${process.env.TARGET_ARCH ?? process.arch}`;
-const source = process.env.FFMPEG_PREFIX ?? join(root, 'third_party', 'ffmpeg', target);
-// `--dest <dir>` bundles next to a dev build (build/Release) instead of into prebuilds/.
-const destFlag = process.argv.indexOf('--dest');
-const dest = destFlag >= 0 ? resolve(process.argv[destFlag + 1]) : join(root, 'prebuilds', target);
+import {run} from './run.mjs';
 
-if (!existsSync(source)) {
-  console.error(`No FFmpeg build for ${target} in ${source}; run scripts/ci/build-ffmpeg.sh first.`);
-  process.exit(1);
-}
-mkdirSync(dest, {recursive: true});
+const PACKAGE_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 // Versioned runtime names only (libavcodec.62.dylib, libavcodec.so.62, avcodec-62.dll), not dev symlinks.
 /** @type {Record<string, {dir: string, pattern: RegExp}>} */
@@ -28,36 +18,75 @@ const RUNTIME_BY_PLATFORM = {
   linux: {dir: 'lib', pattern: /^lib(avcodec|avutil|swscale)\.so\.\d+$/},
   win32: {dir: 'bin', pattern: /^(avcodec|avutil|swscale)-\d+\.dll$/},
 };
-const RUNTIME = RUNTIME_BY_PLATFORM[process.platform];
-if (!RUNTIME) {
-  console.error(`Unsupported platform: ${process.platform}`);
-  process.exit(1);
+const EXPECTED_LIB_COUNT = 3;
+
+/** @param {string} path */
+const exists = (path) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
+/** @param {{dest?: string}} options */
+function resolvePaths({dest}) {
+  const target = `${process.platform}-${process.env.TARGET_ARCH ?? process.arch}`;
+  return {
+    target,
+    source: process.env.FFMPEG_PREFIX ?? join(PACKAGE_ROOT, 'third_party', 'ffmpeg', target),
+    dest: dest ? resolve(dest) : join(PACKAGE_ROOT, 'prebuilds', target),
+  };
 }
 
-const libs = readdirSync(join(source, RUNTIME.dir)).filter((name) => RUNTIME.pattern.test(name));
-if (libs.length !== 3) {
-  console.error(
-    `Expected avcodec, avutil and swscale in ${join(source, RUNTIME.dir)}, found: ${libs.join(', ') || 'none'}`,
-  );
-  process.exit(1);
+/** @param {string} source */
+async function findRuntimeLibs(source) {
+  const runtime = RUNTIME_BY_PLATFORM[process.platform];
+  if (!runtime) {
+    throw new Error(`Unsupported platform: ${process.platform}`);
+  }
+  const dir = join(source, runtime.dir);
+  const libs = (await readdir(dir)).filter((name) => runtime.pattern.test(name));
+  if (libs.length !== EXPECTED_LIB_COUNT) {
+    throw new Error(`Expected avcodec, avutil and swscale in ${dir}, found: ${libs.join(', ') || 'none'}`);
+  }
+  return libs.map((name) => ({name, path: join(dir, name)}));
 }
-for (const name of libs) {
+
+/**
+ * @param {{name: string, path: string}} lib
+ * @param {string} dest
+ */
+async function bundleLib({name, path}, dest) {
   const out = join(dest, name);
-  copyFileSync(join(source, RUNTIME.dir, name), out); // follows symlinks
+  await copyFile(path, out); // follows symlinks
   if (process.platform === 'darwin') {
-    execFileSync('strip', ['-x', out]);
-    execFileSync('codesign', ['--force', '--sign', '-', out]); // strip invalidates the signature
+    await run('strip', ['-x', out]);
+    await run('codesign', ['--force', '--sign', '-', out]); // strip invalidates the signature
   } else if (process.platform === 'linux') {
-    execFileSync('strip', ['--strip-unneeded', out]);
+    await run('strip', ['--strip-unneeded', out]);
   }
   console.log(`bundled ${name}`);
 }
 
-// Ship the exact build recipe next to the binaries (LGPL: users can rebuild and relink).
-const recipe = join(source, '.built-info');
-if (existsSync(recipe)) {
-  copyFileSync(recipe, join(dest, 'ffmpeg-build-info.txt'));
+async function main() {
+  const {values} = parseArgs({options: {dest: {type: 'string'}}});
+  const {target, source, dest} = resolvePaths(values);
+  if (!(await exists(source))) {
+    throw new Error(`No FFmpeg build for ${target} in ${source}; run scripts/ci/build-ffmpeg.sh first.`);
+  }
+  const libs = await findRuntimeLibs(source);
+  await mkdir(dest, {recursive: true});
+  for (const lib of libs) {
+    await bundleLib(lib, dest);
+  }
+  // The exact configure line ships with the binaries so the LGPL libs can be rebuilt and relinked.
+  const recipe = join(source, '.built-info');
+  if (await exists(recipe)) {
+    await copyFile(recipe, join(dest, 'ffmpeg-build-info.txt'));
+  }
+  console.log(`FFmpeg libs for ${target} in ${dest}`);
 }
-console.log(
-  `FFmpeg ${readFileSync(join(root, 'scripts', 'ci', 'build-ffmpeg.sh'), 'utf8').match(/FFMPEG_VERSION:-([\d.]+)/)?.[1]} libs in ${dest}`,
-);
+
+main().catch((err) => {
+  process.stderr.write(`${err?.stack ?? err}\n`);
+  process.exit(1);
+});
