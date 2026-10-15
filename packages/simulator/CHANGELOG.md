@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.9.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.8.0...appium-ios-simulator@10.9.0) (2026-10-15)
+
+### Features
+
+* restore the notifications permission and the &#x60;all&#x60; permissions key ([#38](https://github.com/appium/appium-ios/issues/38)) ([d374250](https://github.com/appium/appium-ios/commit/d374250c24a99d8f91b6d83a77afcc771e00c9b1))
+
+
 ## [10.8.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.7.1...appium-ios-simulator@10.8.0) (2026-10-12)
 
 ### Features
