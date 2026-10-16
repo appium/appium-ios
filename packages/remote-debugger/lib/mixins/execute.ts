@@ -284,8 +284,7 @@ async function executeScriptAtom(
     returnByValue: true,
     ...keys,
   });
-  // as the atom: no timer for a value that is not a finite number
-  const settled = Number.isFinite(timeoutMs) ? await withNodeTimeout(wait, timeoutMs as number) : await wait;
+  const settled = typeof timeoutMs === 'number' ? await withNodeTimeout(wait, timeoutMs) : await wait;
   // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
   if (settled?.error) {
     throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);

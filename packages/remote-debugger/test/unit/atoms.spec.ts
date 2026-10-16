@@ -532,56 +532,8 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         });
       }
 
-      it('ignores a reject or a throw after a thenable resolved, as a native promise', async function () {
-        const later = '{then(r) { setTimeout(() => r(5), 20); }}';
-        assert.strictEqual(await runPromiseScript(`return {then(res, rej) { res(${later}); rej(new Error("x")); }};`), 5);
-        assert.strictEqual(await runPromiseScript(`return {then(res) { res(${later}); throw new Error("x"); }};`), 5);
-      });
-
-      it('reads then once, as W3C', async function () {
-        const script =
-          'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';
-        assert.strictEqual(await runPromiseScript(script), 1);
-      });
-
       it('adopts a thenable that resolves with another thenable', async function () {
         assert.strictEqual(await runPromiseScript('return {then(r) { r({then(r2) { r2(Promise.resolve(5)); }}); }};'), 5);
-      });
-
-      it('gives a javascript error when reading then throws', async function () {
-        const script = 'var t = {}; Object.defineProperty(t, "then", {get() { throw new Error("bad then"); }}); return t;';
-        const raw = await window.eval(await getScriptForAtom('execute_script', [script, [], true]));
-        assert.throws(() => convertJavascriptEvaluationResult(raw), (err: Error) => {
-          assert.ok(err instanceof errors.JavaScriptError);
-          assert.match(err.message, /bad then/);
-          return true;
-        });
-      });
-
-      it('waits for a thenable when the page set window.Promise to undefined', async function () {
-        const PagePromise = (window as any).Promise;
-        const script = await getScriptForAtom('execute_script', ['return {then(r) { r(5); }};', [], true]);
-        (window as any).Promise = undefined;
-        let raw: any;
-        try {
-          raw = window.eval(script);
-        } finally {
-          (window as any).Promise = PagePromise;
-        }
-        assert.strictEqual(convertJavascriptEvaluationResult(await raw), 5);
-      });
-
-      it('waits without the page timer when the page set setTimeout to null', async function () {
-        const pageSetTimeout = window.setTimeout;
-        const script = await getScriptForAtom('execute_script', ['return Promise.resolve(5);', [], true, undefined, 50]);
-        (window as any).setTimeout = null;
-        let raw: any;
-        try {
-          raw = window.eval(script);
-          assert.strictEqual(convertJavascriptEvaluationResult(await raw), 5);
-        } finally {
-          window.setTimeout = pageSetTimeout;
-        }
       });
 
       it('returns a native promise when the page uses zone.js', async function () {

@@ -29,68 +29,36 @@ export function executeScriptAwaitingPromise(
   } catch (ex) {
     return finish(wrapError(ex as Error));
   }
-  let then: AnyThen | undefined;
   try {
-    then = readThen(result);
-  } catch (ex) {
-    return finish(rejectionResponse(ex));
-  }
-  if (!then) {
-    try {
+    if (!isThenable(result)) {
       return finish(wrapResponse(result));
-    } catch (ex) {
-      return finish(serializationError(ex));
     }
+  } catch (ex) {
+    return finish(serializationError(ex));
   }
-  const firstThen = then;
+  const thenable = result;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
   // zone.js replaced window.Promise and the native then().
-  return (async () => finish(await awaitScriptResult(result, firstThen, win, timeout)))();
+  return (async () => finish(await awaitScriptResult(thenable, win, timeout)))();
 }
 
-type AnyThen = (onValue: (value: unknown) => void, onReason: (reason: unknown) => void) => unknown;
-
-/** `then` of a thenable, read once (W3C); undefined for any other value. */
-function readThen(value: unknown): AnyThen | undefined {
-  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
-    return undefined;
-  }
-  const then = (value as {then?: unknown}).then;
-  return typeof then === 'function' ? (then as AnyThen) : undefined;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof (value as {then?: unknown}).then === 'function'
+  );
 }
 
-/** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
-function serializationError(ex: unknown): ResponseObject {
-  return typeof ex === 'object' && ex !== null ? wrapError(ex as Error) : rejectionResponse(ex);
-}
-
-function rejectionResponse(reason: unknown): ResponseObject {
-  return wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)));
-}
-
-/**
- * Never rejects: settles with the response for the value, rejection, timeout or unload. Page
- * globals that the page replaced (Promise, setTimeout, addEventListener) do not break it.
- */
-function awaitScriptResult(
-  thenable: unknown,
-  firstThen: AnyThen,
-  win: Window,
-  timeout?: number,
-): Promise<ResponseObject> {
-  // native, also when the page replaced window.Promise
-  const NativePromise = (async () => {})().constructor as PromiseConstructor;
-  return new NativePromise((resolve) => {
+/** Never rejects: settles with the response for the value, rejection, timeout or unload. */
+function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?: number): Promise<ResponseObject> {
+  return new Promise((resolve) => {
     let timeoutId: ReturnType<Window['setTimeout']> | undefined;
     const settle = (ret: ResponseObject) => {
-      try {
-        for (const event of PAGE_LEAVE_EVENTS) {
-          win.removeEventListener(event, onunload, true);
-        }
-        win.clearTimeout(timeoutId);
-      } catch {
-        // replaced by the page
+      for (const event of PAGE_LEAVE_EVENTS) {
+        win.removeEventListener(event, onunload, true);
       }
+      win.clearTimeout(timeoutId);
       resolve(ret);
     };
     // Runtime.awaitPromise never answers after the page goes.
@@ -104,69 +72,48 @@ function awaitScriptResult(
         ),
       );
     }
-    try {
-      for (const event of PAGE_LEAVE_EVENTS) {
-        win.addEventListener(event, onunload, true);
-      }
-    } catch {
-      // replaced by the page: no unload answer
+    for (const event of PAGE_LEAVE_EVENTS) {
+      win.addEventListener(event, onunload, true);
     }
 
     if (typeof timeout === 'number') {
       const startTime = Date.now();
-      try {
-        timeoutId = win.setTimeout(
-          () => {
-            settle(
-              wrapError(
-                new BotError(
-                  ErrorCode.SCRIPT_TIMEOUT,
-                  `Timed out waiting for the promise returned by the script after ${Date.now() - startTime} ms`,
-                ),
+      timeoutId = win.setTimeout(
+        () => {
+          settle(
+            wrapError(
+              new BotError(
+                ErrorCode.SCRIPT_TIMEOUT,
+                `Timed out waiting for the promise returned by the script after ${Date.now() - startTime} ms`,
               ),
-            );
-          },
-          Math.min(Math.max(0, timeout), MAX_TIMEOUT_MS),
-        );
-      } catch {
-        // replaced by the page: the Node timer ends the wait
-      }
+            ),
+          );
+        },
+        Math.min(Math.max(0, timeout), MAX_TIMEOUT_MS),
+      );
     }
 
-    const onReason = (reason: unknown) => settle(rejectionResponse(reason));
-    // As PromiseResolve: `then` read once, a thenable value adopted again. Handled at once: no
-    // unhandled rejection in the page.
-    const adopt = (value: unknown, then?: AnyThen) => {
-      // as PromiseResolve: the first call wins, later calls and throws are ignored
-      let called = false;
-      const once =
-        <T>(fn: (arg: T) => void) =>
-        (arg: T) => {
-          if (!called) {
-            called = true;
-            fn(arg);
-          }
-        };
-      try {
-        const next = then ?? readThen(value);
-        if (next) {
-          next.call(value, once(adopt), once(onReason));
-          return;
+    // Handled at once: no unhandled rejection in the page.
+    Promise.resolve(thenable).then(
+      (value) => {
+        let ret: ResponseObject;
+        try {
+          ret = wrapResponse(value);
+        } catch (ex) {
+          ret = serializationError(ex);
         }
-      } catch (ex) {
-        once(onReason)(ex);
-        return;
-      }
-      let ret: ResponseObject;
-      try {
-        ret = wrapResponse(value);
-      } catch (ex) {
-        ret = serializationError(ex);
-      }
-      settle(ret);
-    };
-    adopt(thenable, firstThen);
+        settle(ret);
+      },
+      (reason) => settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)))),
+    );
   });
+}
+
+/** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
+function serializationError(ex: unknown): ResponseObject {
+  return typeof ex === 'object' && ex !== null
+    ? wrapError(ex as Error)
+    : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(ex)));
 }
 
 function getRejectionMessage(reason: unknown): string {

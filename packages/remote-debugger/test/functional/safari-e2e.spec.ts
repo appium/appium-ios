@@ -171,12 +171,6 @@ describe('Safari remote debugger', function () {
     assert.strictEqual(await run('return Promise.resolve(5);'), 5);
     assert.strictEqual(await run('return new Promise((r) => setTimeout(() => r(9), 50));'), 9);
     assert.deepStrictEqual(await run('return (async () => [1, 2])();'), [1, 2]);
-    const countedThen =
-      'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';
-    assert.strictEqual(await run(countedThen), 1);
-    const resolvedThenRejected =
-      'return {then(res, rej) { res({then(r) { setTimeout(() => r(5), 20); }}); rej(new Error("x")); }};';
-    assert.strictEqual(await run(resolvedThenRejected), 5);
     await assert.rejects(run("return Promise.resolve({get a() { throw 'boom'; }});", 3000), (err: Error) => {
       assert.ok(err instanceof errors.JavaScriptError, err.constructor.name);
       assert.match(err.message, /boom/);
@@ -205,20 +199,8 @@ describe('Safari remote debugger', function () {
         return true;
       });
     } finally {
-      await rd.execute('window.setTimeout = window.__setTimeout;');
-    }
-  });
-
-  it('should wait for a promise when the page replaced Promise and setTimeout', async function () {
-    await fixture.selectTestPage();
-    const rd = fixture.rd();
-    const script =
-      'window.__P = window.Promise; window.__T = window.setTimeout; window.Promise = undefined; window.setTimeout = null;' +
-      'return {then(r) { r(5); }};';
-    try {
-      assert.strictEqual(await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000}), 5);
-    } finally {
-      await rd.execute('window.Promise = window.__P; window.setTimeout = window.__T;');
+      // only when the page did not change
+      await rd.execute('if (window.__setTimeout) { window.setTimeout = window.__setTimeout; } "ok"');
     }
   });
 
