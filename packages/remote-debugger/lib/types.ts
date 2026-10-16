@@ -33,6 +33,17 @@ export type AppDict = StringRecord<AppInfo>;
 
 export type EventListener = (error?: Error, event?: StringRecord, method?: string) => any;
 
+/** Options applied only to the current JavaScript evaluation. */
+export interface ScriptExecutionOptions {
+  /**
+   * Evaluate in a WebKit user-gesture context. Defaults to false.
+   * This can affect popup blocking and other user-activation checks; enable it
+   * only for an intentional interaction, such as a click, rather than every script.
+   * It does not make synthetic DOM events trusted.
+   */
+  emulateUserGesture?: boolean;
+}
+
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */
   bundleId?: string;

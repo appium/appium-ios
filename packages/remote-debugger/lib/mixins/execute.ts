@@ -5,7 +5,7 @@ import {retryInterval} from 'asyncbox';
 import {getScriptForAtom} from '../atoms.js';
 import type {AtomName} from '../atoms.js';
 import type {RemoteDebugger} from '../remote-debugger.js';
-import type {AppIdKey, PageIdKey} from '../types.js';
+import type {AppIdKey, PageIdKey, ScriptExecutionOptions} from '../types.js';
 import {checkParams, simpleStringify, convertJavascriptEvaluationResult, RESPONSE_LOG_LENGTH} from '../utils/index.js';
 import {getAppIdKey, getPageIdKey, getGarbageCollectOnExecute} from './property-accessors.js';
 
@@ -19,6 +19,7 @@ const RPC_RESPONSE_TIMEOUT_MS = 5000;
  * @param atom - Name of the Selenium atom to execute (see atoms/ directory).
  * @param args - Arguments to pass to the atom function. Defaults to empty array.
  * @param frames - Frame context array for frame-specific execution. Defaults to empty array.
+ * @param options - Options for this evaluation only; user-gesture emulation defaults to false.
  * @returns A promise that resolves to the result received from the atom execution.
  */
 export async function executeAtom<R = any>(
@@ -26,10 +27,11 @@ export async function executeAtom<R = any>(
   atom: AtomName,
   args: any[] = [],
   frames: string[] = [],
+  options: ScriptExecutionOptions = {},
 ): Promise<R> {
   this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
   const script = await getScriptForAtom(atom, args, frames);
-  const value = await this.execute<R>(script);
+  const value = await this.execute<R>(script, undefined, options);
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
   );
@@ -151,6 +153,7 @@ export async function executeAtomAsync<R = any>(
  *
  * @param command - The JavaScript command string to execute.
  * @param override - Deprecated and unused parameter.
+ * @param options - Options for this evaluation only; user-gesture emulation defaults to false.
  * @returns A promise that resolves to the result of the JavaScript evaluation,
  *          converted to a usable format.
  */
@@ -159,6 +162,7 @@ export async function execute<R = any>(
   command: string,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for API compatibility
   override?: boolean,
+  options: ScriptExecutionOptions = {},
 ): Promise<R> {
   const {appIdKey, pageIdKey} = checkParams({
     appIdKey: getAppIdKey(this),
@@ -174,6 +178,7 @@ export async function execute<R = any>(
   this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
   const res = await rpcClient.send('Runtime.evaluate', {
     expression: command,
+    emulateUserGesture: options.emulateUserGesture ?? false,
     returnByValue: true,
     appIdKey,
     pageIdKey,
