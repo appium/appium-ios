@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {describe, it} from 'node:test';
+import {afterEach, beforeEach, describe, it} from 'node:test';
 
 import {errors} from '@appium/base-driver';
 import sinon from 'sinon';
@@ -92,6 +92,53 @@ describe('execute', function () {
         const {ctx, send} = makeCtx(JSON.stringify({status: 0, value: null}));
         await executeAtom.call(ctx, 'execute_script', ['return;', []], [], {timeoutMs: 500});
         assert.match(send.firstCall.args[1].expression, /\("return;",\[\],true,undefined,500\)$/);
+      });
+
+      describe('Node timer for the wait', function () {
+        let clock: sinon.SinonFakeTimers;
+        beforeEach(function () {
+          clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+        });
+        afterEach(function () {
+          clock.restore();
+        });
+        // wait until the given call is sent, without fake timers
+        async function sent(send: sinon.SinonStub, count: number) {
+          while (send.callCount < count) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        }
+
+        it('gives a script timeout when the page does not answer in time', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          const pending = executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []], [], {
+            timeoutMs: 300,
+          });
+          const rejected = assert.rejects(pending, errors.ScriptTimeoutError);
+          await sent(send, 2);
+          await clock.tickAsync(1299);
+          assert.strictEqual(clock.countTimers(), 1);
+          await clock.tickAsync(1);
+          await rejected;
+        });
+
+        it('keeps the page answer and clears the timer', async function () {
+          const {ctx} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+          const value = await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
+            timeoutMs: 300,
+          });
+          assert.strictEqual(value, 5);
+          assert.strictEqual(clock.countTimers(), 0);
+        });
+
+        it('has no timer without timeoutMs', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          void executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []]);
+          await sent(send, 2);
+          assert.strictEqual(clock.countTimers(), 0);
+        });
       });
 
       it('gives the gesture to the script evaluation only and the timeout to the atom only', async function () {

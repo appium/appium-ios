@@ -18,6 +18,10 @@ import {
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
 
 /* Runtime.awaitPromise gave no atom response: the page changed */
+/* Same limit as the atom */
+const MAX_PROMISE_TIMEOUT_MS = 60 * 60 * 1000;
+/* Lets the page timer, with its exact message, answer first */
+const NODE_TIMEOUT_MARGIN_MS = 1000;
 const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
 
 /**
@@ -275,11 +279,12 @@ async function executeScriptAtom(
   }
 
   this.log.debug('Waiting for the promise returned by the script');
-  const settled = await this.requireRpcClient(true).send('Runtime.awaitPromise', {
+  const wait = this.requireRpcClient(true).send('Runtime.awaitPromise', {
     promiseObjectId,
     returnByValue: true,
     ...keys,
   });
+  const settled = typeof timeoutMs === 'number' ? await withNodeTimeout(wait, timeoutMs) : await wait;
   // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
   if (settled?.error) {
     throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
@@ -288,6 +293,23 @@ async function executeScriptAtom(
     throw new errors.UnknownError(PAGE_CHANGED_MESSAGE);
   }
   return convertJavascriptEvaluationResult(settled);
+}
+
+/** W3C: the remote end ends the wait, also when the page timer cannot fire. */
+async function withNodeTimeout<T>(wait: Promise<T>, timeoutMs: number): Promise<T> {
+  const ms = Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) + NODE_TIMEOUT_MARGIN_MS;
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${ms} ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([wait, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** `Runtime.evaluate` in the page; returns the raw result. */
