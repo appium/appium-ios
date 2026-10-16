@@ -75,9 +75,13 @@ async function main(): Promise<void> {
       break;
     }
     case 'worker-terminate': {
-      const worker = new Worker(fileURLToPath(import.meta.url), {argv: ['close-and-hang']});
-      await new Promise((resolve) => worker.once('message', resolve)); // close() has started
-      await worker.terminate();
+      // Terminate at varying points of the drain: the crash this guards against needed a particular overlap.
+      for (let delayMs = 0; delayMs < 50; delayMs += 5) {
+        const worker = new Worker(fileURLToPath(import.meta.url), {argv: ['close-and-hang']});
+        await new Promise((resolve) => worker.once('message', resolve)); // close() has started
+        await sleep(delayMs);
+        await worker.terminate();
+      }
       console.log('done');
       break;
     }

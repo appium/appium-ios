@@ -37,6 +37,8 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - Never bundle or link GPL/nonfree FFmpeg components or x264. Only enable the FFmpeg components the pipeline uses.
 - JS callbacks are held weakly by the native session; the handle's `callbacks` array owns them (keeps abandoned
   transcoders collectable). Env teardown shuts sessions down via a cleanup hook (releasing a tsfn from a finalizer deadlocks).
+- `addon.cc` `Deliver` (thread-safe-function callback) uses raw N-API only: during worker termination calls fail and
+  node-addon-api aborts the process building its C++ Error. Never throw or use `Napi::` throwing wrappers there.
 - `MEDIA_PROXY_FFMPEG_LOG=<av log level>` turns FFmpeg's logging back on (off by default).
 - Input is a live stream: never add unbounded buffering or blocking pushes; tests pace their input.
 - No dependency on remotexpc or coresim; inputs are structural types.

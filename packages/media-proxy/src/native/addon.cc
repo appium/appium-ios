@@ -4,7 +4,6 @@
 #include <array>
 #include <atomic>
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -28,8 +27,8 @@ constexpr size_t kMaxPendingUnits = 60;
 struct JsState {
   Napi::FunctionReference onUnit;
   Napi::FunctionReference onError;
-  std::optional<Napi::Promise::Deferred> deferred;
-  std::shared_ptr<void> keepAlive;  // the Session itself, held while close() drains so GC can't abort it
+  napi_deferred deferred = nullptr;  // resolved on the JS thread when close() finishes
+  std::shared_ptr<void> keepAlive;   // the Session itself, held while close() drains so GC can't abort it
   std::atomic<size_t> pendingUnits{0};
 };
 
@@ -104,9 +103,11 @@ class Session : public std::enable_shared_from_this<Session> {
   Napi::Value Close(const Napi::Env& env) {
     if (!closing_) {
       closing_ = true;
-      auto deferred = Napi::Promise::Deferred::New(env);
-      closePromise_ = Napi::Persistent(deferred.Promise());
-      state_->deferred = deferred;
+      napi_value promise = nullptr;
+      if (napi_create_promise(env, &state_->deferred, &promise) != napi_ok) {
+        throw Napi::Error::New(env, "Could not create the close() promise");
+      }
+      closePromise_ = Napi::Persistent(Napi::Promise(env, promise));
       state_->keepAlive = shared_from_this();
       tsfn_.Ref(env);
       pipeline_->Finish([this] {
@@ -155,39 +156,74 @@ class Session : public std::enable_shared_from_this<Session> {
     }
   }
 
+  // Runs on the JS thread, called from C. Raw N-API on purpose: while a worker is being terminated these calls
+  // fail, and node-addon-api would abort the process building its C++ Error for the failure. A failure just
+  // drops the event (a pending JS exception is left for Node to report).
   static void Deliver(Napi::Env env, Napi::Function /*bridge*/, Event* raw) {
     const std::unique_ptr<Event> event(raw);
     JsState& state = *event->state;
     switch (event->kind) {
-      case Event::Kind::kUnit: {
+      case Event::Kind::kUnit:
         --state.pendingUnits;
-        const Napi::Function onUnit = state.onUnit.Value();
-        if (onUnit.IsEmpty()) {
-          break;  // the transcoder was garbage collected
-        }
-        // Hand the bytes over without a copy; NewOrCopy copies (and frees at once) where external buffers are banned.
-        auto* bytes = new std::vector<uint8_t>(std::move(event->unit.data));
-        Napi::Object unit = Napi::Object::New(env);
-        unit.Set("data", Napi::Buffer<uint8_t>::NewOrCopy(
-                             env, bytes->data(), bytes->size(),
-                             [](Napi::Env, uint8_t*, std::vector<uint8_t>* owned) { delete owned; }, bytes));
-        unit.Set("isKeyFrame", Napi::Boolean::New(env, event->unit.isKeyFrame));
-        unit.Set("timestampMicros", Napi::Number::New(env, static_cast<double>(event->unit.timestampMicros)));
-        onUnit.Call({unit});
+        DeliverUnit(env, state, *event);
         break;
-      }
       case Event::Kind::kError:
-        if (const Napi::Function onError = state.onError.Value(); !onError.IsEmpty()) {
-          onError.Call({media_proxy::MakeTypedError(env, event->error.name.c_str(), event->error.message).Value()});
-        }
+        DeliverError(env, state, *event);
         break;
       case Event::Kind::kDone:
-        if (auto& deferred = state.deferred; deferred.has_value()) {
-          deferred.value().Resolve(env.Undefined());
+        if (state.deferred != nullptr) {
+          napi_value undefined = nullptr;
+          if (napi_get_undefined(env, &undefined) == napi_ok) {
+            napi_resolve_deferred(env, state.deferred, undefined);
+          }
+          state.deferred = nullptr;
         }
         state.keepAlive.reset();  // may destroy the Session (and join its finished worker) right here
         break;
     }
+  }
+
+  static void CallWithArgument(napi_env env, napi_ref callbackRef, napi_value argument) {
+    napi_value callback = nullptr;
+    napi_value global = nullptr;
+    napi_value ignored = nullptr;
+    if (napi_get_reference_value(env, callbackRef, &callback) != napi_ok || callback == nullptr) {
+      return;  // the transcoder was garbage collected
+    }
+    if (napi_get_global(env, &global) == napi_ok) {
+      napi_call_function(env, global, callback, 1, &argument, &ignored);
+    }
+  }
+
+  static void DeliverUnit(napi_env env, JsState& state, Event& event) {
+    napi_value unit = nullptr;
+    napi_value data = nullptr;
+    napi_value isKeyFrame = nullptr;
+    napi_value timestamp = nullptr;
+    const std::vector<uint8_t>& bytes = event.unit.data;
+    if (napi_create_object(env, &unit) != napi_ok ||
+        napi_create_buffer_copy(env, bytes.size(), bytes.data(), nullptr, &data) != napi_ok ||
+        napi_get_boolean(env, event.unit.isKeyFrame, &isKeyFrame) != napi_ok ||
+        napi_create_double(env, static_cast<double>(event.unit.timestampMicros), &timestamp) != napi_ok ||
+        napi_set_named_property(env, unit, "data", data) != napi_ok ||
+        napi_set_named_property(env, unit, "isKeyFrame", isKeyFrame) != napi_ok ||
+        napi_set_named_property(env, unit, "timestampMicros", timestamp) != napi_ok) {
+      return;
+    }
+    CallWithArgument(env, state.onUnit, unit);
+  }
+
+  static void DeliverError(napi_env env, JsState& state, Event& event) {
+    napi_value message = nullptr;
+    napi_value name = nullptr;
+    napi_value error = nullptr;
+    if (napi_create_string_utf8(env, event.error.message.c_str(), NAPI_AUTO_LENGTH, &message) != napi_ok ||
+        napi_create_string_utf8(env, event.error.name.c_str(), NAPI_AUTO_LENGTH, &name) != napi_ok ||
+        napi_create_error(env, nullptr, message, &error) != napi_ok ||
+        napi_set_named_property(env, error, "name", name) != napi_ok) {
+      return;
+    }
+    CallWithArgument(env, state.onError, error);
   }
 
   napi_env env_;
