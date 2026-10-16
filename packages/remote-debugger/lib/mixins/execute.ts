@@ -284,7 +284,8 @@ async function executeScriptAtom(
     returnByValue: true,
     ...keys,
   });
-  const settled = typeof timeoutMs === 'number' ? await withNodeTimeout(wait, timeoutMs) : await wait;
+  // as the atom: no timer for a value that is not a finite number
+  const settled = Number.isFinite(timeoutMs) ? await withNodeTimeout(wait, timeoutMs as number) : await wait;
   // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
   if (settled?.error) {
     throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
@@ -297,12 +298,12 @@ async function executeScriptAtom(
 
 /** W3C: the remote end ends the wait, also when the page timer cannot fire. */
 async function withNodeTimeout<T>(wait: Promise<T>, timeoutMs: number): Promise<T> {
-  const ms = Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) + NODE_TIMEOUT_MARGIN_MS;
+  const limitMs = Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS);
   let timer: NodeJS.Timeout | undefined;
   const timedOut = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${ms} ms`)),
-      ms,
+      () => reject(new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`)),
+      limitMs + NODE_TIMEOUT_MARGIN_MS,
     );
   });
   try {

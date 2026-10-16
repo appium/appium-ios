@@ -132,6 +132,30 @@ describe('execute', function () {
           assert.strictEqual(clock.countTimers(), 0);
         });
 
+        it('gives the script timeout, not the margin, in the message', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          const pending = executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []], [], {
+            timeoutMs: 300,
+          });
+          const rejected = assert.rejects(pending, /after 300 ms/);
+          await sent(send, 2);
+          await clock.tickAsync(1300);
+          await rejected;
+        });
+
+        it('has no timer for a timeout that is not a finite number, as the atom', async function () {
+          const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+          send.onCall(1).callsFake(async () => {
+            await clock.tickAsync(10);
+            return JSON.stringify({status: 0, value: 5});
+          });
+          const value = await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
+            timeoutMs: Number.NaN,
+          });
+          assert.strictEqual(value, 5);
+        });
+
         it('has no timer without timeoutMs', async function () {
           const {ctx, send} = makeCtx(promiseObject);
           send.onCall(1).returns(new Promise(() => {}));

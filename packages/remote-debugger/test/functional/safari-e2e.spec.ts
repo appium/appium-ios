@@ -188,7 +188,11 @@ describe('Safari remote debugger', function () {
     const rd = fixture.rd();
     const script = 'window.__setTimeout = window.setTimeout; window.setTimeout = () => 0; return new Promise(() => {});';
     try {
-      await assert.rejects(rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 300}), errors.ScriptTimeoutError);
+      await assert.rejects(rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 300}), (err: Error) => {
+        assert.ok(err instanceof errors.ScriptTimeoutError);
+        assert.match(err.message, /after 300 ms/);
+        return true;
+      });
     } finally {
       await rd.execute('window.setTimeout = window.__setTimeout;');
     }
