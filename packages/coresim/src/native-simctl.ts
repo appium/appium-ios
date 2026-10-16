@@ -89,6 +89,22 @@ import {getPkgRoot, PACKAGE_NAME, runCatchingAsync} from './utils/index.js';
 
 const require = createRequire(import.meta.url);
 
+export interface NativeSimctlOptions {
+  /** Defaults to `xcode-select -p` (the active Xcode's Developer dir). */
+  developerDir?: string;
+  /**
+   * Defaults to the default device set (`~/Library/Developer/CoreSimulator/Devices`), same as
+   * `simctl --set <path>`.
+   */
+  deviceSetPath?: string;
+  /**
+   * The versions of SpringBoard's notifications store (`sectionInfoVersionNumber`) the runtimes in
+   * use may have, the oldest first. Defaults to all the known ones; callers that know their Xcode
+   * narrow it. A store of any other version is refused.
+   */
+  bulletinBoardVersions?: readonly number[];
+}
+
 /**
  * Drives `CoreSimulator.framework` directly — no `simctl`/`xcrun` subprocess — for the operations
  * `node-simctl`'s `Simctl` class exposes over the CLI. Devices are addressed by UDID; each call
@@ -107,33 +123,32 @@ const require = createRequire(import.meta.url);
  * './native-simctl.js'` augmentation so `NativeSimctl`'s emitted type includes methods it doesn't
  * textually define.
  */
-export interface NativeSimctlOptions {
-  /**
-   * The versions of SpringBoard's notifications store (`sectionInfoVersionNumber`) the runtimes in
-   * use may have, the oldest first. Defaults to all the known ones; callers that know their Xcode
-   * narrow it. A store of any other version is refused.
-   */
-  bulletinBoardVersions?: readonly number[];
-}
-
 export class NativeSimctl {
   private cachedServiceContext: Promise<NativeServiceContextHandle> | undefined;
 
+  /** @internal Read by the command mixins. */
+  readonly _options: Readonly<NativeSimctlOptions>;
+
   /**
-   * @param developerDir — defaults to `xcode-select -p` (the active Xcode's Developer dir).
-   * @param deviceSetPath — defaults to the default device set
-   * (`~/Library/Developer/CoreSimulator/Devices`), same as `simctl --set <path>`. Constructing a
-   * NativeSimctl must never throw — the platform check and the native sharedServiceContext call
-   * both happen lazily in the `_serviceContext` getter below, so only a method that actually needs
-   * the simulator (getDevices(), createDevice(), ...) can raise.
+   * Constructing a NativeSimctl must never throw — the platform check and the native
+   * sharedServiceContext call both happen lazily in the `_serviceContext` getter below, so only a
+   * method that actually needs the simulator (getDevices(), createDevice(), ...) can raise.
+   *
    * @param options — see {@link NativeSimctlOptions}.
    */
-  constructor(
-    private readonly developerDir?: string,
-    private readonly deviceSetPath?: string,
-    /** @internal Read by the command mixins. */
-    readonly _options: NativeSimctlOptions = {},
-  ) {}
+  constructor(options?: NativeSimctlOptions);
+  /**
+   * @deprecated Pass {@link NativeSimctlOptions} instead.
+   * @param developerDir — see {@link NativeSimctlOptions.developerDir}.
+   * @param deviceSetPath — see {@link NativeSimctlOptions.deviceSetPath}.
+   */
+  constructor(developerDir?: string, deviceSetPath?: string);
+  constructor(optionsOrDeveloperDir?: NativeSimctlOptions | string, deviceSetPath?: string) {
+    this._options =
+      typeof optionsOrDeveloperDir === 'object' && optionsOrDeveloperDir !== null
+        ? {...optionsOrDeveloperDir}
+        : {developerDir: optionsOrDeveloperDir, deviceSetPath};
+  }
 
   /** @returns `CFBundleVersion` of the loaded `CoreSimulator.framework` (e.g. `"1171.6"`). */
   static async frameworkVersion(): Promise<string> {
@@ -155,7 +170,7 @@ export class NativeSimctl {
   async _serviceContext(): Promise<NativeServiceContextHandle> {
     if (!this.cachedServiceContext) {
       this.cachedServiceContext = runCatchingAsync(() =>
-        loadNative().sharedServiceContext(this.developerDir ?? defaultDeveloperDir()),
+        loadNative().sharedServiceContext(this._options.developerDir ?? defaultDeveloperDir()),
       ).catch((err: unknown) => {
         this.cachedServiceContext = undefined;
         throw err;
@@ -167,7 +182,7 @@ export class NativeSimctl {
   /** @internal Not part of the public API — exposed only so `src/commands/*.ts` mixins can call it. */
   async _deviceSet(): Promise<NativeDeviceSetHandle> {
     const context = await this._serviceContext();
-    const deviceSetPath = this.deviceSetPath;
+    const deviceSetPath = this._options.deviceSetPath;
     return runCatchingAsync(() =>
       deviceSetPath ? context.deviceSetWithPath(deviceSetPath) : context.defaultDeviceSet(),
     );

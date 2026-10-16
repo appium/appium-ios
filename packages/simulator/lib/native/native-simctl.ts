@@ -13,5 +13,5 @@ export function createNativeSimctl(
   deviceSetPath?: string | null,
   bulletinBoardVersions?: readonly number[],
 ): NativeSimctl {
-  return new NativeSimctl(undefined, deviceSetPath ?? undefined, {bulletinBoardVersions});
+  return new NativeSimctl({deviceSetPath: deviceSetPath ?? undefined, bulletinBoardVersions});
 }
