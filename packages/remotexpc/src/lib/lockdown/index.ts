@@ -544,8 +544,13 @@ export async function createLockdownServiceForTunnel(udid: string): Promise<Lock
   const {host, port: lockdownPort} = await resolveTunnelService(udid, LOCKDOWN_REMOTE_UNTRUSTED);
 
   const conn = await ServiceConnection.createUsingTCP(host, String(lockdownPort));
-  await rsdHandshakeLockdownPlistService(conn);
-  return new LockdownService(conn.getSocket(), udid, false);
+  try {
+    await rsdHandshakeLockdownPlistService(conn);
+  } catch (err) {
+    conn.close();
+    throw err;
+  }
+  return new LockdownService(conn.detachSocket(), udid, false);
 }
 
 /**
