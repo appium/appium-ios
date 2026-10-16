@@ -514,6 +514,26 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         });
       }
 
+      it('reads then once, as W3C', async function () {
+        const script =
+          'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';
+        assert.strictEqual(await runPromiseScript(script), 1);
+      });
+
+      it('adopts a thenable that resolves with another thenable', async function () {
+        assert.strictEqual(await runPromiseScript('return {then(r) { r({then(r2) { r2(Promise.resolve(5)); }}); }};'), 5);
+      });
+
+      it('gives a javascript error when reading then throws', async function () {
+        const script = 'var t = {}; Object.defineProperty(t, "then", {get() { throw new Error("bad then"); }}); return t;';
+        const raw = await window.eval(await getScriptForAtom('execute_script', [script, [], true]));
+        assert.throws(() => convertJavascriptEvaluationResult(raw), (err: Error) => {
+          assert.ok(err instanceof errors.JavaScriptError);
+          assert.match(err.message, /bad then/);
+          return true;
+        });
+      });
+
       it('waits for a thenable when the page set window.Promise to undefined', async function () {
         const PagePromise = (window as any).Promise;
         const script = await getScriptForAtom('execute_script', ['return {then(r) { r(5); }};', [], true]);

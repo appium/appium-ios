@@ -26,31 +26,53 @@ export function executeScriptAwaitingPromise(
     const compiled = new (win as unknown as {Function: FunctionConstructor}).Function(script);
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     result = compiled.apply(null, unwrappedArgs);
-    if (!isThenable(result)) {
-      return finish(wrapResponse(result));
-    }
   } catch (ex) {
     return finish(wrapError(ex as Error));
   }
-  const thenable = result;
+  let then: AnyThen | undefined;
+  try {
+    then = readThen(result);
+  } catch (ex) {
+    return finish(rejectionResponse(ex));
+  }
+  if (!then) {
+    try {
+      return finish(wrapResponse(result));
+    } catch (ex) {
+      return finish(wrapError(ex as Error));
+    }
+  }
+  const firstThen = then;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
   // zone.js replaced window.Promise and the native then().
-  return (async () => finish(await awaitScriptResult(thenable, win, timeout)))();
+  return (async () => finish(await awaitScriptResult(result, firstThen, win, timeout)))();
 }
 
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return (
-    value !== null &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    typeof (value as {then?: unknown}).then === 'function'
-  );
+type AnyThen = (onValue: (value: unknown) => void, onReason: (reason: unknown) => void) => unknown;
+
+/** `then` of a thenable, read once (W3C); undefined for any other value. */
+function readThen(value: unknown): AnyThen | undefined {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return undefined;
+  }
+  const then = (value as {then?: unknown}).then;
+  return typeof then === 'function' ? (then as AnyThen) : undefined;
+}
+
+function rejectionResponse(reason: unknown): ResponseObject {
+  return wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)));
 }
 
 /**
  * Never rejects: settles with the response for the value, rejection, timeout or unload. Page
  * globals that the page replaced (Promise, setTimeout, addEventListener) do not break it.
  */
-function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?: number): Promise<ResponseObject> {
+function awaitScriptResult(
+  thenable: unknown,
+  firstThen: AnyThen,
+  win: Window,
+  timeout?: number,
+): Promise<ResponseObject> {
   // native, also when the page replaced window.Promise
   const NativePromise = (async () => {})().constructor as PromiseConstructor;
   return new NativePromise((resolve) => {
@@ -106,20 +128,29 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
       }
     }
 
-    // Handled at once: no unhandled rejection in the page. An async function adopts the thenable
-    // without window.Promise.
-    (async () => thenable)().then(
-      (value) => {
-        let ret: ResponseObject;
-        try {
-          ret = wrapResponse(value);
-        } catch (ex) {
-          ret = wrapError(ex as Error);
+    const onReason = (reason: unknown) => settle(rejectionResponse(reason));
+    // As PromiseResolve: `then` read once, a thenable value adopted again. Handled at once: no
+    // unhandled rejection in the page.
+    const adopt = (value: unknown, then?: AnyThen) => {
+      try {
+        const next = then ?? readThen(value);
+        if (next) {
+          next.call(value, (v: unknown) => adopt(v), onReason);
+          return;
         }
-        settle(ret);
-      },
-      (reason) => settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)))),
-    );
+      } catch (ex) {
+        onReason(ex);
+        return;
+      }
+      let ret: ResponseObject;
+      try {
+        ret = wrapResponse(value);
+      } catch (ex) {
+        ret = wrapError(ex as Error);
+      }
+      settle(ret);
+    };
+    adopt(thenable, firstThen);
   });
 }
 

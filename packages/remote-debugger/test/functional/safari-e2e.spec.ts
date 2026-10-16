@@ -171,6 +171,9 @@ describe('Safari remote debugger', function () {
     assert.strictEqual(await run('return Promise.resolve(5);'), 5);
     assert.strictEqual(await run('return new Promise((r) => setTimeout(() => r(9), 50));'), 9);
     assert.deepStrictEqual(await run('return (async () => [1, 2])();'), [1, 2]);
+    const countedThen =
+      'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';
+    assert.strictEqual(await run(countedThen), 1);
     const el = await run('return Promise.resolve(document.body);');
     assert.strictEqual(await rd.executeAtom('execute_script', ['return arguments[0].tagName;', [el]]), 'BODY');
     await assert.rejects(run('return Promise.reject(new Error("boom"));'), (err: Error) => {
