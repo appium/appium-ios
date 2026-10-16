@@ -1,6 +1,6 @@
 import {errors} from '@appium/base-driver';
 import {util, timing} from '@appium/support';
-import {retryInterval} from 'asyncbox';
+import {retryInterval, withTimeout} from 'asyncbox';
 
 import {getScriptForAtom} from '../atoms.js';
 import type {AtomName} from '../atoms.js';
@@ -299,18 +299,11 @@ async function executeScriptAtom(
 /** W3C: the remote end ends the wait, also when the page timer cannot fire. */
 async function withNodeTimeout<T>(wait: Promise<T>, timeoutMs: number): Promise<T> {
   const limitMs = Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS);
-  let timer: NodeJS.Timeout | undefined;
-  const timedOut = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`)),
-      limitMs + NODE_TIMEOUT_MARGIN_MS,
-    );
-  });
-  try {
-    return await Promise.race([wait, timedOut]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return await withTimeout(
+    wait,
+    limitMs + NODE_TIMEOUT_MARGIN_MS,
+    new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`),
+  );
 }
 
 /** `Runtime.evaluate` in the page; returns the raw result. */
