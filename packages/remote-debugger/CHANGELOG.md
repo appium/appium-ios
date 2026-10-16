@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.7.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.6.1...appium-remote-debugger@17.7.0) (2026-10-16)
+
+### Features
+
+* **remote-debugger:** opt in to iOS 27 interaction gesture emulation ([#72](https://github.com/appium/appium-ios/issues/72)) ([adb881a](https://github.com/appium/appium-ios/commit/adb881ae38d6d88f12e622252ec424db857daaa8))
+
+
 ## [17.6.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.6.0...appium-remote-debugger@17.6.1) (2026-10-16)
 
 **Note:** Version bump only for package appium-remote-debugger
