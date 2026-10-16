@@ -191,7 +191,8 @@ describe('Safari remote debugger', function () {
   it('should give a script timeout when the page replaced setTimeout', async function () {
     await fixture.selectTestPage();
     const rd = fixture.rd();
-    const script = 'window.__setTimeout = window.setTimeout; window.setTimeout = () => 0; return new Promise(() => {});';
+    const script =
+      'window.__setTimeout = window.setTimeout; window.setTimeout = () => 0; return new Promise(() => {});';
     try {
       await assert.rejects(rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 300}), (err: Error) => {
         assert.ok(err instanceof errors.ScriptTimeoutError);

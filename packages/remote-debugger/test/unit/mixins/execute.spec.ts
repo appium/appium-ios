@@ -164,7 +164,10 @@ describe('execute', function () {
           await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {timeoutMs});
           assert.ok(
             ctx.log.debug.getCalls().some(({args}: {args: string[]}) => expected.test(args[0])),
-            `${timeoutMs}: ${ctx.log.debug.getCalls().map(({args}: {args: string[]}) => args[0]).join(' | ')}`,
+            `${timeoutMs}: ${ctx.log.debug
+              .getCalls()
+              .map(({args}: {args: string[]}) => args[0])
+              .join(' | ')}`,
           );
         }
       });

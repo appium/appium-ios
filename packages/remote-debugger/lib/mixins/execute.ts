@@ -345,7 +345,8 @@ class ScriptPromiseExecutor {
   private async awaitPromise(promiseObjectId: string): Promise<any> {
     const {timeoutMs} = this.opts;
     // the same limit as the atom's page timer
-    const limitMs = typeof timeoutMs === 'number' ? Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) : undefined;
+    const limitMs =
+      typeof timeoutMs === 'number' ? Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) : undefined;
     this.rd.log.debug(
       limitMs === undefined
         ? 'Waiting for the promise returned by the script with no timeout'

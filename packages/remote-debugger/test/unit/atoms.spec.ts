@@ -524,16 +524,22 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
             (async () => window.eval(atom))(),
             new Promise((resolve) => setTimeout(() => resolve('still waiting'), 1000)),
           ]);
-          assert.throws(() => convertJavascriptEvaluationResult(raw), (err: Error) => {
-            assert.ok(err instanceof errors.JavaScriptError, String(raw));
-            assert.match(err.message, /boom/);
-            return true;
-          });
+          assert.throws(
+            () => convertJavascriptEvaluationResult(raw),
+            (err: Error) => {
+              assert.ok(err instanceof errors.JavaScriptError, String(raw));
+              assert.match(err.message, /boom/);
+              return true;
+            },
+          );
         });
       }
 
       it('adopts a thenable that resolves with another thenable', async function () {
-        assert.strictEqual(await runPromiseScript('return {then(r) { r({then(r2) { r2(Promise.resolve(5)); }}); }};'), 5);
+        assert.strictEqual(
+          await runPromiseScript('return {then(r) { r({then(r2) { r2(Promise.resolve(5)); }}); }};'),
+          5,
+        );
       });
 
       it('returns a native promise when the page uses zone.js', async function () {
@@ -575,7 +581,10 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         } finally {
           window.setTimeout = pageSetTimeout;
         }
-        assert.deepStrictEqual(delays.toSorted((a, b) => Number(a) - Number(b)), [20, 60 * 60 * 1000]);
+        assert.deepStrictEqual(
+          delays.toSorted((a, b) => Number(a) - Number(b)),
+          [20, 60 * 60 * 1000],
+        );
       });
 
       it('executeAtom gives the settled value with the real atom, as WebKit answers', async function () {
