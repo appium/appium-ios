@@ -514,6 +514,24 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         });
       }
 
+      for (const [kind, script] of [
+        ['sync', "return {get a() { throw 'boom'; }};"],
+        ['promise', "return Promise.resolve({get a() { throw 'boom'; }});"],
+      ]) {
+        it(`gives a javascript error when a ${kind} value throws a primitive while serialized`, async function () {
+          const atom = await getScriptForAtom('execute_script', [script, [], true]);
+          const raw = await Promise.race([
+            (async () => window.eval(atom))(),
+            new Promise((resolve) => setTimeout(() => resolve('still waiting'), 1000)),
+          ]);
+          assert.throws(() => convertJavascriptEvaluationResult(raw), (err: Error) => {
+            assert.ok(err instanceof errors.JavaScriptError, String(raw));
+            assert.match(err.message, /boom/);
+            return true;
+          });
+        });
+      }
+
       it('reads then once, as W3C', async function () {
         const script =
           'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';

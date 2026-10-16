@@ -39,7 +39,7 @@ export function executeScriptAwaitingPromise(
     try {
       return finish(wrapResponse(result));
     } catch (ex) {
-      return finish(wrapError(ex as Error));
+      return finish(serializationError(ex));
     }
   }
   const firstThen = then;
@@ -57,6 +57,11 @@ function readThen(value: unknown): AnyThen | undefined {
   }
   const then = (value as {then?: unknown}).then;
   return typeof then === 'function' ? (then as AnyThen) : undefined;
+}
+
+/** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
+function serializationError(ex: unknown): ResponseObject {
+  return typeof ex === 'object' && ex !== null ? wrapError(ex as Error) : rejectionResponse(ex);
 }
 
 function rejectionResponse(reason: unknown): ResponseObject {
@@ -146,7 +151,7 @@ function awaitScriptResult(
       try {
         ret = wrapResponse(value);
       } catch (ex) {
-        ret = wrapError(ex as Error);
+        ret = serializationError(ex);
       }
       settle(ret);
     };
