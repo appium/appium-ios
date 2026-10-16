@@ -198,6 +198,19 @@ describe('Safari remote debugger', function () {
     }
   });
 
+  it('should wait for a promise when the page replaced Promise and setTimeout', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const script =
+      'window.__P = window.Promise; window.__T = window.setTimeout; window.Promise = undefined; window.setTimeout = null;' +
+      'return {then(r) { r(5); }};';
+    try {
+      assert.strictEqual(await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000}), 5);
+    } finally {
+      await rd.execute('window.Promise = window.__P; window.setTimeout = window.__T;');
+    }
+  });
+
   it('should give the user gesture to a script that returns a promise, with its timeout', async function () {
     await fixture.selectTestPage();
     const rd = fixture.rd();

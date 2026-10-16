@@ -514,6 +514,32 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         });
       }
 
+      it('waits for a thenable when the page set window.Promise to undefined', async function () {
+        const PagePromise = (window as any).Promise;
+        const script = await getScriptForAtom('execute_script', ['return {then(r) { r(5); }};', [], true]);
+        (window as any).Promise = undefined;
+        let raw: any;
+        try {
+          raw = window.eval(script);
+        } finally {
+          (window as any).Promise = PagePromise;
+        }
+        assert.strictEqual(convertJavascriptEvaluationResult(await raw), 5);
+      });
+
+      it('waits without the page timer when the page set setTimeout to null', async function () {
+        const pageSetTimeout = window.setTimeout;
+        const script = await getScriptForAtom('execute_script', ['return Promise.resolve(5);', [], true, undefined, 50]);
+        (window as any).setTimeout = null;
+        let raw: any;
+        try {
+          raw = window.eval(script);
+          assert.strictEqual(convertJavascriptEvaluationResult(await raw), 5);
+        } finally {
+          window.setTimeout = pageSetTimeout;
+        }
+      });
+
       it('returns a native promise when the page uses zone.js', async function () {
         // Runtime.awaitPromise accepts only a native promise. zone.js replaces window.Promise and
         // also patches the native then() to return its own promise.

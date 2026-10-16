@@ -46,15 +46,24 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   );
 }
 
-/** Never rejects: settles with the response for the value, rejection, timeout or unload. */
+/**
+ * Never rejects: settles with the response for the value, rejection, timeout or unload. Page
+ * globals that the page replaced (Promise, setTimeout, addEventListener) do not break it.
+ */
 function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?: number): Promise<ResponseObject> {
-  return new Promise((resolve) => {
+  // native, also when the page replaced window.Promise
+  const NativePromise = (async () => {})().constructor as PromiseConstructor;
+  return new NativePromise((resolve) => {
     let timeoutId: ReturnType<Window['setTimeout']> | undefined;
     const settle = (ret: ResponseObject) => {
-      for (const event of PAGE_LEAVE_EVENTS) {
-        win.removeEventListener(event, onunload, true);
+      try {
+        for (const event of PAGE_LEAVE_EVENTS) {
+          win.removeEventListener(event, onunload, true);
+        }
+        win.clearTimeout(timeoutId);
+      } catch {
+        // replaced by the page
       }
-      win.clearTimeout(timeoutId);
       resolve(ret);
     };
     // Runtime.awaitPromise never answers after the page goes.
@@ -68,29 +77,38 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         ),
       );
     }
-    for (const event of PAGE_LEAVE_EVENTS) {
-      win.addEventListener(event, onunload, true);
+    try {
+      for (const event of PAGE_LEAVE_EVENTS) {
+        win.addEventListener(event, onunload, true);
+      }
+    } catch {
+      // replaced by the page: no unload answer
     }
 
     if (typeof timeout === 'number') {
       const startTime = Date.now();
-      timeoutId = win.setTimeout(
-        () => {
-          settle(
-            wrapError(
-              new BotError(
-                ErrorCode.SCRIPT_TIMEOUT,
-                `Timed out waiting for the promise returned by the script after ${Date.now() - startTime} ms`,
+      try {
+        timeoutId = win.setTimeout(
+          () => {
+            settle(
+              wrapError(
+                new BotError(
+                  ErrorCode.SCRIPT_TIMEOUT,
+                  `Timed out waiting for the promise returned by the script after ${Date.now() - startTime} ms`,
+                ),
               ),
-            ),
-          );
-        },
-        Math.min(Math.max(0, timeout), MAX_TIMEOUT_MS),
-      );
+            );
+          },
+          Math.min(Math.max(0, timeout), MAX_TIMEOUT_MS),
+        );
+      } catch {
+        // replaced by the page: the Node timer ends the wait
+      }
     }
 
-    // Handled at once: no unhandled rejection in the page.
-    Promise.resolve(thenable).then(
+    // Handled at once: no unhandled rejection in the page. An async function adopts the thenable
+    // without window.Promise.
+    (async () => thenable)().then(
       (value) => {
         let ret: ResponseObject;
         try {
