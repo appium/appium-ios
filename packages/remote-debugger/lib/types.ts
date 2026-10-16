@@ -33,6 +33,24 @@ export type AppDict = StringRecord<AppInfo>;
 
 export type EventListener = (error?: Error, event?: StringRecord, method?: string) => any;
 
+/** Options applied only to the current JavaScript evaluation. */
+export interface ScriptExecutionOptions {
+  /**
+   * Evaluate in a WebKit user-gesture context. Defaults to false.
+   * This can affect popup blocking and other user-activation checks; enable it
+   * only for an intentional interaction, such as a click, rather than every script.
+   * It does not make synthetic DOM events trusted. The option is not inherited
+   * by subsequent commands or executeAtomAsync calls.
+   *
+   * This can preserve navigation entries that WebKit otherwise hides from native
+   * back/forward APIs after a synthetic click. Callers such as XCUITest Driver
+   * must explicitly pass the option; this is not a driver capability or setting.
+   *
+   * @see https://github.com/appium/appium-xcuitest-driver/issues/3042
+   */
+  emulateUserGesture?: boolean;
+}
+
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */
   bundleId?: string;

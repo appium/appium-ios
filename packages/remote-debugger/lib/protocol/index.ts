@@ -211,7 +211,7 @@ const COMMANDS = {
   //#region RUNTIME DOMAIN
   'Runtime.awaitPromise': ['promiseObjectId', 'returnByValue', 'generatePreview', 'saveResult'],
   'Runtime.callFunctionOn': ['objectId', 'functionDeclaration', 'arguments', 'returnByValue'],
-  'Runtime.evaluate': ['expression', 'returnByValue', 'contextId'],
+  'Runtime.evaluate': ['expression', 'returnByValue', 'contextId', 'emulateUserGesture'],
   'Runtime.enable': [],
   'Runtime.disable': [],
   //#endregion
@@ -297,10 +297,10 @@ export function getProtocolCommand(
       objectGroup: OBJECT_GROUP,
       includeCommandLineAPI: true,
       doNotPauseOnExceptionsAndMuteConsole: false,
-      emulateUserGesture: false,
       generatePreview: false,
       saveResult: false,
       ...result.params,
+      emulateUserGesture: result.params.emulateUserGesture ?? false,
     };
   }
   return result;
