@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.9.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.0...appium-ios-simulator@10.9.1) (2026-10-16)
+
+### Code Refactoring
+
+* **coresim:** split notifications store handling out of permissions ([#68](https://github.com/appium/appium-ios/issues/68)) ([7808a34](https://github.com/appium/appium-ios/commit/7808a34bd5c57918414abed62279be31ac18e353))
+
+
 ## [10.9.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.8.0...appium-ios-simulator@10.9.0) (2026-10-15)
 
 ### Features
