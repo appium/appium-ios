@@ -19,7 +19,7 @@ export function executeScriptAwaitingPromise(
   win: Window = window,
   timeout?: number,
 ): string | ResponseObject | Promise<string | ResponseObject> {
-  const finish = (ret: ResponseObject) => (stringify ? toJson(ret) : ret);
+  const finish = (ret: ResponseObject) => (stringify ? JSON.stringify(ret) : ret);
   let result: unknown;
   try {
     // as recompileFunction in inject.ts does for a string
@@ -165,70 +165,4 @@ function getRejectionMessage(reason: unknown): string {
     // e.g. Object.create(null)
   }
   return message || 'The promise returned by the script was rejected';
-}
-
-/**
- * JSON text of a wrapped value. Not the page's JSON.stringify: it calls an inherited toJSON and
- * the page can replace it. WebKit returnByValue (used before) ignores both.
- */
-function toJson(value: unknown): string {
-  if (value === null || value === undefined) {
-    return 'null';
-  }
-  switch (typeof value) {
-    case 'boolean':
-      return String(value);
-    case 'number':
-      return Number.isFinite(value) ? String(value) : 'null';
-    case 'string':
-      return quote(value);
-    case 'object':
-      break;
-    default:
-      return 'null';
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(toJson).join(',')}]`;
-  }
-  const obj = value as Record<string, unknown>;
-  const members = Object.keys(obj)
-    .filter((key) => obj[key] !== undefined && typeof obj[key] !== 'function')
-    .map((key) => `${quote(key)}:${toJson(obj[key])}`);
-  return `{${members.join(',')}}`;
-}
-
-/** A JSON string literal, as JSON.stringify writes it (lone surrogates escaped). */
-function quote(text: string): string {
-  let out = '"';
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    if (code === 0x22 || code === 0x5c) {
-      out += `\\${text[i]}`;
-    } else if (code === 0x08) {
-      out += '\\b';
-    } else if (code === 0x0c) {
-      out += '\\f';
-    } else if (code === 0x0a) {
-      out += '\\n';
-    } else if (code === 0x0d) {
-      out += '\\r';
-    } else if (code === 0x09) {
-      out += '\\t';
-    } else if (code < 0x20 || (code >= 0xd800 && code <= 0xdfff && !isPairedSurrogate(text, i))) {
-      out += `\\u${code.toString(16).padStart(4, '0')}`;
-    } else {
-      out += text[i];
-    }
-  }
-  return `${out}"`;
-}
-
-function isPairedSurrogate(text: string, i: number): boolean {
-  const code = text.charCodeAt(i);
-  if (code <= 0xdbff) {
-    const next = text.charCodeAt(i + 1);
-    return next >= 0xdc00 && next <= 0xdfff;
-  }
-  const prev = text.charCodeAt(i - 1);
-  return prev >= 0xd800 && prev <= 0xdbff;
 }

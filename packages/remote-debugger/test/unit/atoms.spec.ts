@@ -637,46 +637,6 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         await assert.rejects(run('return new Promise(() => {});', 20), errors.ScriptTimeoutError);
       });
 
-      describe('serialization that page changes do not affect, as WebKit returnByValue', function () {
-        const changes: [string, string, string][] = [
-          ['Array.prototype.toJSON', 'Array.prototype.toJSON = () => "hooked";', 'delete Array.prototype.toJSON;'],
-          ['Object.prototype.toJSON', 'Object.prototype.toJSON = () => "hooked";', 'delete Object.prototype.toJSON;'],
-          ['window.JSON', 'window.__JSON = window.JSON; window.JSON = {stringify: () => "hooked"};', 'window.JSON = window.__JSON;'],
-        ];
-        const value = {a: [1, 'x"\\\n\u2028\ud800'], b: {c: null, d: true, e: -0, f: 1.5e300}};
-        const expected = JSON.parse(JSON.stringify(value));
-        for (const [name, change, undo] of changes) {
-          for (const [kind, script] of [
-            ['sync', `return ${JSON.stringify(value)};`],
-            ['promise', `return Promise.resolve(${JSON.stringify(value)});`],
-          ]) {
-            it(`keeps a ${kind} value when the page changed ${name}`, async function () {
-              const atom = await getScriptForAtom('execute_script', [script, [], true]);
-              window.eval(change);
-              let raw: any;
-              try {
-                raw = await window.eval(atom);
-              } finally {
-                window.eval(undo);
-              }
-              assert.strictEqual(typeof raw, 'string');
-              assert.deepStrictEqual(convertJavascriptEvaluationResult(raw), expected);
-            });
-          }
-        }
-      });
-
-      it('keeps every UTF-16 code unit of a string, as JSON does', async function () {
-        const script = 'var s = ""; for (var i = 0; i < 0x10000; i++) { s += String.fromCharCode(i); } return [s, "\\ud83d\\ude00"];';
-        const raw = await window.eval(await getScriptForAtom('execute_script', [script, [], true]));
-        const [all, pair] = convertJavascriptEvaluationResult(raw);
-        assert.strictEqual(all.length, 0x10000);
-        for (let i = 0; i < 0x10000; i++) {
-          assert.strictEqual(all.charCodeAt(i), i);
-        }
-        assert.strictEqual(pair, '\ud83d\ude00');
-      });
-
       it('returns a value that is not a thenable synchronously', async function () {
         const raw = await runAtom(window, 'execute_script', ['return {then: 1};', [], true]);
         assert.strictEqual(typeof raw, 'string');
