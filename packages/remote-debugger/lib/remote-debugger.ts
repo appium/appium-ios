@@ -1,5 +1,6 @@
 import {EventEmitter} from 'node:events';
 
+import {util} from '@appium/support';
 import type {AppiumLogger, StringRecord} from '@appium/types';
 import type {CancellablePromise} from 'asyncbox';
 
@@ -94,6 +95,7 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _isSafari: boolean;
   protected readonly _includeSafari: boolean;
   protected readonly _garbageCollectOnExecute: boolean;
+  protected readonly _emulateUserGestureForInteractionAtoms: boolean;
   protected readonly _host?: string;
   protected readonly _port?: number;
   protected readonly _socketPath?: string;
@@ -126,6 +128,7 @@ export class RemoteDebugger extends EventEmitter {
       pageReadyTimeout = PAGE_READY_TIMEOUT_MS,
       remoteDebugProxy,
       garbageCollectOnExecute = false,
+      emulateUserGestureForInteractionAtoms = false,
       logFullResponse = false,
       logAllCommunication = false,
       logAllCommunicationHexDump = false,
@@ -146,6 +149,8 @@ export class RemoteDebugger extends EventEmitter {
     this._allowNavigationWithoutReload = false;
 
     this._garbageCollectOnExecute = garbageCollectOnExecute;
+    this._emulateUserGestureForInteractionAtoms =
+      emulateUserGestureForInteractionAtoms && !!platformVersion && util.compareVersions(platformVersion, '>=', '27.0');
 
     this._host = host;
     this._port = port;
