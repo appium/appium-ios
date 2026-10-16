@@ -24,6 +24,24 @@ const NODE_TIMEOUT_MARGIN_MS = 1000;
 /* Runtime.awaitPromise gave no atom response: the page changed */
 const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
 
+/** Options of the execute_script path of executeAtom. */
+interface ExecuteScriptAtomOptions {
+  timeoutMs?: number;
+  emulateUserGesture: boolean;
+}
+
+/** Options of one Runtime.evaluate in the page. */
+interface EvaluateOptions {
+  returnByValue: boolean;
+  emulateUserGesture?: boolean;
+}
+
+/** App and page keys of the selected page. */
+interface PageKeys {
+  appIdKey: AppIdKey;
+  pageIdKey: PageIdKey;
+}
+
 /**
  * Executes a Selenium atom in Safari by generating the atom script and
  * executing it in the page context.
@@ -264,7 +282,7 @@ async function executeScriptAtom(
   this: RemoteDebugger,
   args: any[],
   frames: string[],
-  {timeoutMs, emulateUserGesture}: {timeoutMs?: number; emulateUserGesture: boolean},
+  {timeoutMs, emulateUserGesture}: ExecuteScriptAtomOptions,
 ): Promise<any> {
   const [script, scriptArgs = []] = args;
   // stringify, default window, timeout
@@ -309,8 +327,8 @@ async function withNodeTimeout<T>(wait: Promise<T>, timeoutMs: number): Promise<
 async function evaluateInPage(
   this: RemoteDebugger,
   command: string,
-  {returnByValue, emulateUserGesture = false}: {returnByValue: boolean; emulateUserGesture?: boolean},
-  keys: {appIdKey: AppIdKey; pageIdKey: PageIdKey},
+  {returnByValue, emulateUserGesture = false}: EvaluateOptions,
+  keys: PageKeys,
 ): Promise<any> {
   const {appIdKey, pageIdKey} = keys;
   if (getGarbageCollectOnExecute(this)) {
@@ -330,9 +348,6 @@ async function evaluateInPage(
 }
 
 /** The selected app and page keys; throws when one is missing. */
-function getPageKeys(rd: RemoteDebugger): {appIdKey: AppIdKey; pageIdKey: PageIdKey} {
-  return checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as {
-    appIdKey: AppIdKey;
-    pageIdKey: PageIdKey;
-  };
+function getPageKeys(rd: RemoteDebugger): PageKeys {
+  return checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as PageKeys;
 }
