@@ -3,7 +3,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 // Runs in a child process (spawned by test/integration/lifecycle.spec.ts) so process-level behaviour
 // (GC with --expose-gc, exiting with an open transcoder, worker teardown) can be observed for real.
 import {fileURLToPath} from 'node:url';
-import {Worker, isMainThread} from 'node:worker_threads';
+import {Worker, isMainThread, parentPort} from 'node:worker_threads';
 
 import {createTranscoder} from '../../src/transcoder.js';
 import {readHevcFixture} from './annexb.js';
@@ -70,12 +70,13 @@ async function main(): Promise<void> {
         t.push(au);
       }
       void t.close();
+      parentPort?.postMessage('closing'); // the parent terminates us right after this
       await sleep(60_000);
       break;
     }
     case 'worker-terminate': {
       const worker = new Worker(fileURLToPath(import.meta.url), {argv: ['close-and-hang']});
-      await sleep(30);
+      await new Promise((resolve) => worker.once('message', resolve)); // close() has started
       await worker.terminate();
       console.log('done');
       break;
