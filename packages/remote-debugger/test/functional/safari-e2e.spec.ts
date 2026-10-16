@@ -183,6 +183,18 @@ describe('Safari remote debugger', function () {
     assert.strictEqual(await run('return 1 + 1;'), 2);
   });
 
+  it('should give the user gesture to a script that returns a promise, with its timeout', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const script = 'return Promise.resolve(navigator.userActivation.isActive);';
+    // without a gesture first: an activation stays active for a short time
+    assert.strictEqual(await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000}), false);
+    assert.strictEqual(
+      await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000, emulateUserGesture: true}),
+      true,
+    );
+  });
+
   for (const [name, leave] of [
     ['reloads', 'location.reload();'],
     ['navigates to another page', (url: string) => `location.href = ${JSON.stringify(url)};`],

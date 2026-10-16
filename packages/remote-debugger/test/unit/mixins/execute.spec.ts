@@ -94,6 +94,29 @@ describe('execute', function () {
         assert.match(send.firstCall.args[1].expression, /\("return;",\[\],true,undefined,500\)$/);
       });
 
+      it('gives the gesture to the script evaluation only and the timeout to the atom only', async function () {
+        const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+        await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
+          timeoutMs: 500,
+          emulateUserGesture: true,
+        });
+        const [[evaluateMethod, evaluateOpts], [waitMethod, waitOpts]] = send.getCalls().map(({args}) => args);
+        assert.strictEqual(evaluateMethod, 'Runtime.evaluate');
+        assert.strictEqual(evaluateOpts.emulateUserGesture, true);
+        assert.match(evaluateOpts.expression, /,true,undefined,500\)$/);
+        assert.strictEqual(waitMethod, 'Runtime.awaitPromise');
+        assert.ok(!('emulateUserGesture' in waitOpts));
+        for (const opts of [evaluateOpts, waitOpts]) {
+          assert.ok(!('timeoutMs' in opts));
+        }
+      });
+
+      it('does not emulate a gesture for the script by default', async function () {
+        const {ctx, send} = makeCtx(JSON.stringify({status: 0, value: 2}));
+        await executeAtom.call(ctx, 'execute_script', ['return 1 + 1;', []]);
+        assert.strictEqual(send.firstCall.args[1].emulateUserGesture, false);
+      });
+
       it('throws an UnknownError, as the atom on unload, when the wait gives no atom response', async function () {
         const missing = {id: 7, error: {code: -32000, message: 'Missing injected script for given promiseObjectId'}};
         for (const [response, message] of [
