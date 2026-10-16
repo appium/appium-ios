@@ -27,12 +27,6 @@ const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by th
 /** Options of the execute_script path of executeAtom. */
 interface ExecuteScriptAtomOptions {
   timeoutMs?: number;
-  emulateUserGesture: boolean;
-}
-
-/** Options of one Runtime.evaluate in the page. */
-interface EvaluateOptions {
-  returnByValue: boolean;
   emulateUserGesture?: boolean;
 }
 
@@ -72,7 +66,7 @@ export async function executeAtom<R = any>(
     options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
   const value =
     atom === 'execute_script'
-      ? await executeScriptAtom.call(this, args, frames, {timeoutMs: options.timeoutMs, emulateUserGesture})
+      ? await new ScriptPromiseExecutor(this, {timeoutMs: options.timeoutMs, emulateUserGesture}).run(args, frames)
       : await this.execute<R>(await getScriptForAtom(atom, args, frames), undefined, {emulateUserGesture});
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
@@ -209,12 +203,25 @@ export async function execute<R = any>(
   override?: boolean,
   options: ScriptExecutionOptions = {},
 ): Promise<R> {
-  const res = await evaluateInPage.call(
-    this,
-    command,
-    {returnByValue: true, emulateUserGesture: options.emulateUserGesture ?? false},
-    getPageKeys(this),
-  );
+  const {appIdKey, pageIdKey} = checkParams({
+    appIdKey: getAppIdKey(this),
+    pageIdKey: getPageIdKey(this),
+  });
+
+  if (getGarbageCollectOnExecute(this)) {
+    await this.garbageCollect();
+  }
+
+  const rpcClient = this.requireRpcClient(true);
+  await rpcClient.waitForPage(appIdKey as AppIdKey, pageIdKey as PageIdKey);
+  this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
+  const res = await rpcClient.send('Runtime.evaluate', {
+    expression: command,
+    emulateUserGesture: options.emulateUserGesture ?? false,
+    returnByValue: true,
+    appIdKey,
+    pageIdKey,
+  });
   return convertJavascriptEvaluationResult(res) as R;
 }
 
@@ -277,82 +284,81 @@ function isGestureInteraction(atom: AtomName, args: any[]): boolean {
   return text.length > 0 && hasOnlyTextOrNewlines && !/[\uE000-\uE005\uE008-\uF8FF]/u.test(text);
 }
 
-/** Sync result: one call. Thenable: the atom returns a promise, awaited by `Runtime.awaitPromise`. */
-async function executeScriptAtom(
-  this: RemoteDebugger,
-  args: any[],
-  frames: string[],
-  {timeoutMs, emulateUserGesture}: ExecuteScriptAtomOptions,
-): Promise<any> {
-  const [script, scriptArgs = []] = args;
-  // stringify, default window, timeout
-  const atomScript = await getScriptForAtom('execute_script', [script, scriptArgs, true, undefined, timeoutMs], frames);
-  // the promise exists only on the page that created it
-  const keys = getPageKeys(this);
-  // gesture for the script only
-  const res = await evaluateInPage.call(this, atomScript, {returnByValue: false, emulateUserGesture}, keys);
-  const promiseObjectId = res?.result?.objectId;
-  if (!promiseObjectId) {
-    return convertJavascriptEvaluationResult(res);
+/**
+ * execute_script: one `Runtime.evaluate` of the atom (stringify, no returnByValue): a sync result is
+ * a string; a returned promise comes back as an object, awaited by `Runtime.awaitPromise`.
+ */
+class ScriptPromiseExecutor {
+  /** The promise exists only on the page that created it. */
+  private readonly keys: PageKeys;
+
+  constructor(
+    private readonly rd: RemoteDebugger,
+    private readonly opts: ExecuteScriptAtomOptions,
+  ) {
+    this.keys = checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as PageKeys;
   }
 
-  // the same limit as the atom's page timer
-  const limitMs = typeof timeoutMs === 'number' ? Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) : undefined;
-  this.log.debug(
-    limitMs === undefined
-      ? 'Waiting for the promise returned by the script with no timeout'
-      : `Waiting up to ${limitMs} ms for the promise returned by the script (Node backup timer: +${NODE_TIMEOUT_MARGIN_MS} ms)`,
-  );
-  const wait = this.requireRpcClient(true).send('Runtime.awaitPromise', {
-    promiseObjectId,
-    returnByValue: true,
-    ...keys,
-  });
-  const settled = limitMs === undefined ? await wait : await withNodeTimeout(wait, limitMs);
-  // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
-  if (settled?.error) {
-    throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
-  }
-  if (typeof settled !== 'string') {
-    throw new errors.UnknownError(PAGE_CHANGED_MESSAGE);
-  }
-  return convertJavascriptEvaluationResult(settled);
-}
-
-/** W3C: the remote end ends the wait, also when the page timer cannot fire. */
-async function withNodeTimeout<T>(wait: Promise<T>, limitMs: number): Promise<T> {
-  return await withTimeout(
-    wait,
-    limitMs + NODE_TIMEOUT_MARGIN_MS,
-    new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`),
-  );
-}
-
-/** `Runtime.evaluate` in the page; returns the raw result. */
-async function evaluateInPage(
-  this: RemoteDebugger,
-  command: string,
-  {returnByValue, emulateUserGesture = false}: EvaluateOptions,
-  keys: PageKeys,
-): Promise<any> {
-  const {appIdKey, pageIdKey} = keys;
-  if (getGarbageCollectOnExecute(this)) {
-    await this.garbageCollect();
+  async run(args: any[], frames: string[]): Promise<any> {
+    const [script, scriptArgs = []] = args;
+    // stringify, default window, timeout
+    const atomScript = await getScriptForAtom(
+      'execute_script',
+      [script, scriptArgs, true, undefined, this.opts.timeoutMs],
+      frames,
+    );
+    const res = await this.evaluate(atomScript);
+    const promiseObjectId = res?.result?.objectId;
+    return promiseObjectId ? await this.awaitPromise(promiseObjectId) : convertJavascriptEvaluationResult(res);
   }
 
-  const rpcClient = this.requireRpcClient(true);
-  await rpcClient.waitForPage(appIdKey, pageIdKey);
-  this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
-  return await rpcClient.send('Runtime.evaluate', {
-    expression: command,
-    emulateUserGesture,
-    returnByValue,
-    appIdKey,
-    pageIdKey,
-  });
-}
+  /** `Runtime.evaluate` of the atom; the gesture is for the script only. Returns the raw result. */
+  private async evaluate(command: string): Promise<any> {
+    if (getGarbageCollectOnExecute(this.rd)) {
+      await this.rd.garbageCollect();
+    }
+    const rpcClient = this.rd.requireRpcClient(true);
+    await rpcClient.waitForPage(this.keys.appIdKey, this.keys.pageIdKey);
+    this.rd.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
+    return await rpcClient.send('Runtime.evaluate', {
+      expression: command,
+      emulateUserGesture: this.opts.emulateUserGesture ?? false,
+      returnByValue: false,
+      ...this.keys,
+    });
+  }
 
-/** The selected app and page keys; throws when one is missing. */
-function getPageKeys(rd: RemoteDebugger): PageKeys {
-  return checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as PageKeys;
+  private async awaitPromise(promiseObjectId: string): Promise<any> {
+    const {timeoutMs} = this.opts;
+    // the same limit as the atom's page timer
+    const limitMs = typeof timeoutMs === 'number' ? Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) : undefined;
+    this.rd.log.debug(
+      limitMs === undefined
+        ? 'Waiting for the promise returned by the script with no timeout'
+        : `Waiting up to ${limitMs} ms for the promise returned by the script (Node backup timer: +${NODE_TIMEOUT_MARGIN_MS} ms)`,
+    );
+    const wait = this.rd.requireRpcClient(true).send('Runtime.awaitPromise', {
+      promiseObjectId,
+      returnByValue: true,
+      ...this.keys,
+    });
+    const settled = limitMs === undefined ? await wait : await this.waitWithTimeout(wait, limitMs);
+    // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
+    if (settled?.error) {
+      throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
+    }
+    if (typeof settled !== 'string') {
+      throw new errors.UnknownError(PAGE_CHANGED_MESSAGE);
+    }
+    return convertJavascriptEvaluationResult(settled);
+  }
+
+  /** W3C: the remote end ends the wait, also when the page timer cannot fire. */
+  private async waitWithTimeout<T>(wait: Promise<T>, limitMs: number): Promise<T> {
+    return await withTimeout(
+      wait,
+      limitMs + NODE_TIMEOUT_MARGIN_MS,
+      new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`),
+    );
+  }
 }
