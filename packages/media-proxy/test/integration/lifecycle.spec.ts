@@ -34,6 +34,10 @@ describe('transcoder lifecycle', () => {
     assert.strictEqual(await runChild('exit-unclosed'), 'done');
   });
 
+  it('survives a worker thread being terminated while close() drains', async () => {
+    assert.strictEqual(await runChild('worker-terminate'), 'done');
+  });
+
   it('exits when a worker thread leaves a transcoder unclosed', async () => {
     assert.strictEqual(await runChild('worker-exit'), 'done');
   });

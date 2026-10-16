@@ -12,6 +12,7 @@ const FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-360x640-30f.h
 // Large frames keep the worker busy long enough for GC to run while close() is still draining.
 const HEAVY_FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-1170x2532-9f.h265', import.meta.url));
 const COUNT = 10;
+const WORKER_SCENARIOS = new Set(['exit-unclosed', 'close-and-hang']);
 const [firstUnit] = readHevcFixture(FIXTURE);
 
 async function collected(close: boolean): Promise<number> {
@@ -62,6 +63,23 @@ async function main(): Promise<void> {
       console.log('done');
       break;
     }
+    case 'close-and-hang': {
+      // Runs in a worker the parent terminates while this close() is still draining.
+      const t = createTranscoder({codec: 'mjpeg'});
+      for (const au of readHevcFixture(HEAVY_FIXTURE)) {
+        t.push(au);
+      }
+      void t.close();
+      await sleep(60_000);
+      break;
+    }
+    case 'worker-terminate': {
+      const worker = new Worker(fileURLToPath(import.meta.url), {argv: ['close-and-hang']});
+      await sleep(30);
+      await worker.terminate();
+      console.log('done');
+      break;
+    }
     case 'exit-unclosed': {
       // Deliberately never closed: the process must still exit on its own.
       const t = createTranscoder({codec: 'mjpeg'});
@@ -83,7 +101,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (isMainThread || process.argv[2] === 'exit-unclosed') {
+if (isMainThread || WORKER_SCENARIOS.has(process.argv[2])) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

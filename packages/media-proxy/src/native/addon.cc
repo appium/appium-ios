@@ -126,6 +126,9 @@ class Session : public std::enable_shared_from_this<Session> {
     shutdown_ = true;
     pipeline_.reset();
     released_.store(true);
+    // A close() interrupted here would otherwise keep the session alive forever (done is never posted).
+    const auto self = std::move(state_->keepAlive);
+    // `self` may be the last owner: nothing below this line may touch *this.
   }
 
   void ReleaseBridge() {
