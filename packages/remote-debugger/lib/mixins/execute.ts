@@ -5,7 +5,7 @@ import {retryInterval} from 'asyncbox';
 import {getScriptForAtom} from '../atoms.js';
 import type {AtomName} from '../atoms.js';
 import type {RemoteDebugger} from '../remote-debugger.js';
-import type {AppIdKey, PageIdKey, ScriptExecutionOptions} from '../types.js';
+import type {AppIdKey, PageIdKey, ScriptExecutionOptions, ExecuteAtomOptions} from '../types.js';
 import {checkParams, simpleStringify, convertJavascriptEvaluationResult, RESPONSE_LOG_LENGTH} from '../utils/index.js';
 import {
   getAppIdKey,
@@ -38,13 +38,13 @@ export async function executeAtom<R = any>(
   atom: AtomName,
   args: any[] = [],
   frames: string[] = [],
-  options: ScriptExecutionOptions = {},
+  options: ExecuteAtomOptions = {},
 ): Promise<R> {
   this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
   const script = await getScriptForAtom(atom, args, frames);
   const emulateUserGesture =
     options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
-  const value = await this.execute<R>(script, undefined, {...options, emulateUserGesture});
+  const value = await this.execute<R>(script, undefined, {emulateUserGesture});
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
   );

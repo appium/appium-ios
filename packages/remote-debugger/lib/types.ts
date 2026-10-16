@@ -52,6 +52,12 @@ export interface ScriptExecutionOptions {
   emulateUserGesture?: boolean;
 }
 
+/**
+ * Options for one executeAtom call. Evaluation options are inherited so atom-
+ * specific options can be added without changing the call signature.
+ */
+export interface ExecuteAtomOptions extends ScriptExecutionOptions {}
+
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */
   bundleId?: string;

@@ -3,10 +3,10 @@ import {describe, it} from 'node:test';
 
 import sinon from 'sinon';
 
+import type {ExecuteAtomOptions, RemoteDebuggerOptions} from '../../../lib/index.js';
 import {executeAtom, executeAtomAsync, callFunction, execute} from '../../../lib/mixins/execute.js';
 import {RemoteDebugger} from '../../../lib/remote-debugger.js';
 import {RemoteMessages} from '../../../lib/rpc/remote-messages.js';
-import type {RemoteDebuggerOptions} from '../../../lib/types.js';
 
 describe('execute', function () {
   describe('executeAtom', function () {
@@ -212,6 +212,25 @@ describe('opt-in iOS 27 interaction-atom policy', function () {
     await debuggerInstance.executeAtom('get_text', [{ELEMENT: 'id'}]);
     await debuggerInstance.execute('window.open("about:blank")');
     assert.ok(send.getCalls().every(({args}) => args[1].emulateUserGesture === false));
+  });
+
+  it('accepts shared atom options and forwards only evaluation options', async function () {
+    const {debuggerInstance, send} = createDebugger({
+      platformVersion: '27.0',
+      emulateUserGestureForInteractionAtoms: true,
+    });
+    const evaluate = sinon.spy(debuggerInstance, 'execute');
+    // Model an atom-only option added by another feature without exposing it to
+    // execute() or the WebKit Runtime.evaluate protocol.
+    const options: ExecuteAtomOptions & {atomOnlyOption: number} = {
+      emulateUserGesture: false,
+      atomOnlyOption: 1000,
+    };
+    await debuggerInstance.executeAtom('click', [{ELEMENT: 'id'}], [], options);
+    assert.deepStrictEqual(evaluate.firstCall.args.slice(1), [undefined, {emulateUserGesture: false}]);
+    assert.strictEqual(send.firstCall.args[1].emulateUserGesture, false);
+    assert.ok(!('atomOnlyOption' in send.firstCall.args[1]));
+    assert.deepStrictEqual(options, {emulateUserGesture: false, atomOnlyOption: 1000});
   });
 
   it('lets per-call overrides win without changing subsequent defaults', async function () {
