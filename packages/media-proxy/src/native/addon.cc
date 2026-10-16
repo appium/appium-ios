@@ -29,6 +29,7 @@ struct JsState {
   Napi::FunctionReference onUnit;
   Napi::FunctionReference onError;
   std::optional<Napi::Promise::Deferred> deferred;
+  std::shared_ptr<void> keepAlive;  // the Session itself, held while close() drains so GC can't abort it
   std::atomic<size_t> pendingUnits{0};
 };
 
@@ -41,7 +42,7 @@ struct Event {
 };
 
 // Owns one transcoder: the pipeline (worker thread) plus the thread-safe bridge back to JS.
-class Session {
+class Session : public std::enable_shared_from_this<Session> {
  public:
   Session(Napi::Env env, const PipelineConfig& config, const Napi::Function& onUnit, const Napi::Function& onError)
       : env_(env), state_(std::make_shared<JsState>()) {
@@ -106,6 +107,7 @@ class Session {
       auto deferred = Napi::Promise::Deferred::New(env);
       closePromise_ = Napi::Persistent(deferred.Promise());
       state_->deferred = deferred;
+      state_->keepAlive = shared_from_this();
       tsfn_.Ref(env);
       pipeline_->Finish([this] {
         Post(Event::Kind::kDone, {}, {});
@@ -180,6 +182,7 @@ class Session {
         if (auto& deferred = state.deferred; deferred.has_value()) {
           deferred.value().Resolve(env.Undefined());
         }
+        state.keepAlive.reset();  // may destroy the Session (and join its finished worker) right here
         break;
     }
   }

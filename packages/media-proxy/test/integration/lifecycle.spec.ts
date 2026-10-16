@@ -26,6 +26,10 @@ describe('transcoder lifecycle', () => {
     assert.ok(finalized >= count - 1, `finalized ${finalized}/${count}`);
   });
 
+  it('settles close() even when the transcoder is collected while it drains', async () => {
+    assert.strictEqual(await runChild('close-survives-gc', ['--expose-gc']), 'done');
+  });
+
   it('exits on its own with an unclosed transcoder', async () => {
     assert.strictEqual(await runChild('exit-unclosed'), 'done');
   });

@@ -9,6 +9,8 @@ import {createTranscoder} from '../../src/transcoder.js';
 import {readHevcFixture} from './annexb.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-360x640-30f.h265', import.meta.url));
+// Large frames keep the worker busy long enough for GC to run while close() is still draining.
+const HEAVY_FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-1170x2532-9f.h265', import.meta.url));
 const COUNT = 10;
 const [firstUnit] = readHevcFixture(FIXTURE);
 
@@ -42,6 +44,24 @@ async function main(): Promise<void> {
     case 'gc-abandoned':
       console.log(JSON.stringify({finalized: await collected(false), count: COUNT}));
       break;
+    case 'close-survives-gc': {
+      // Only the close() promise is kept: the transcoder itself is dropped and collected mid-drain.
+      const gc = (globalThis as {gc?: () => void}).gc;
+      const closing = (() => {
+        const t = createTranscoder({codec: 'mjpeg'});
+        for (const au of readHevcFixture(HEAVY_FIXTURE)) {
+          t.push(au);
+        }
+        return t.close();
+      })();
+      for (let i = 0; i < 20; i++) {
+        gc?.();
+        await sleep(0);
+      }
+      await closing;
+      console.log('done');
+      break;
+    }
     case 'exit-unclosed': {
       // Deliberately never closed: the process must still exit on its own.
       const t = createTranscoder({codec: 'mjpeg'});
