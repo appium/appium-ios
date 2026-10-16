@@ -61,8 +61,16 @@ class MobileConfigService extends BaseService implements MobileConfigServiceInte
       return this._conn;
     }
 
-    this._conn = await this.startLockdownService(MobileConfigService.RSD_SERVICE_NAME);
+    this._conn = await this.startShimService(MobileConfigService.RSD_SERVICE_NAME);
     return this._conn;
+  }
+
+  /**
+   * Close the mobile config service connection
+   */
+  close(): void {
+    this._conn?.close();
+    this._conn = null;
   }
 
   /**
@@ -184,13 +192,16 @@ class MobileConfigService extends BaseService implements MobileConfigServiceInte
     await this._sendPlistAndReceive(req);
   }
 
+  /**
+   * Sends one request and returns its reply. A failed exchange closes the connection, so a
+   * late reply can never be read as the answer to the next request.
+   */
   private async _sendPlistAndReceive(req: PlistDictionary): Promise<PlistDictionary> {
-    if (!this._conn) {
-      this._conn = await this.connectToMobileConfigService();
-    }
-    // Ignore first response as it is just status check
-    await this._conn.sendAndReceive(req);
-    const res = await this._conn.sendAndReceive(req);
+    const conn = await this.connectToMobileConfigService();
+    const res = await conn.sendPlistRequest(req).catch((error: unknown) => {
+      this.close();
+      throw error;
+    });
     if (res.Status !== 'Acknowledged') {
       const errorCode = (res.ErrorChain as any[])?.[0]?.ErrorCode;
       if (Number.isInteger(errorCode)) {

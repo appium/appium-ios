@@ -161,17 +161,28 @@ class SpringBoardService extends BaseService implements SpringboardInterface {
     if (this._conn) {
       return this._conn;
     }
-    this._conn = await this.startLockdownService(SpringBoardService.RSD_SERVICE_NAME);
+    this._conn = await this.startShimService(SpringBoardService.RSD_SERVICE_NAME);
     return this._conn;
   }
 
+  /**
+   * Close the springboard service connection
+   */
+  close(): void {
+    this._conn?.close();
+    this._conn = null;
+  }
+
+  /**
+   * Sends one request and returns its reply. A failed exchange closes the connection, so a
+   * late reply can never be read as the answer to the next request.
+   */
   private async sendRequestAndReceive(request: PlistDictionary): Promise<PlistDictionary> {
-    if (!this._conn) {
-      this._conn = await this.connectToSpringboardService();
-    }
-    // Skip StartService response
-    await this._conn.sendAndReceive(request);
-    return await this._conn.sendPlistRequest(request);
+    const conn = await this.connectToSpringboardService();
+    return await conn.sendPlistRequest(request).catch((error: unknown) => {
+      this.close();
+      throw error;
+    });
   }
 }
 
