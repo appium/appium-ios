@@ -187,10 +187,12 @@ export async function execute<R = any>(
   override?: boolean,
   options: ScriptExecutionOptions = {},
 ): Promise<R> {
-  const res = await evaluateInPage.call(this, command, {
-    returnByValue: true,
-    emulateUserGesture: options.emulateUserGesture ?? false,
-  });
+  const res = await evaluateInPage.call(
+    this,
+    command,
+    {returnByValue: true, emulateUserGesture: options.emulateUserGesture ?? false},
+    getPageKeys(this),
+  );
   return convertJavascriptEvaluationResult(res) as R;
 }
 
@@ -293,14 +295,15 @@ async function evaluateInPage(
   this: RemoteDebugger,
   command: string,
   {returnByValue, emulateUserGesture = false}: {returnByValue: boolean; emulateUserGesture?: boolean},
-  {appIdKey, pageIdKey} = getPageKeys(this),
+  keys: {appIdKey: AppIdKey; pageIdKey: PageIdKey},
 ): Promise<any> {
+  const {appIdKey, pageIdKey} = keys;
   if (getGarbageCollectOnExecute(this)) {
     await this.garbageCollect();
   }
 
   const rpcClient = this.requireRpcClient(true);
-  await rpcClient.waitForPage(appIdKey as AppIdKey, pageIdKey as PageIdKey);
+  await rpcClient.waitForPage(appIdKey, pageIdKey);
   this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
   return await rpcClient.send('Runtime.evaluate', {
     expression: command,
