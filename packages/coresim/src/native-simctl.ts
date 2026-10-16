@@ -56,6 +56,13 @@ import {
 import {isVideoRecording, startVideoRecording, stopVideoRecording} from './commands/video-recording.js';
 import {startVideoStream} from './commands/video-stream.js';
 import {getWebInspectorSocket} from './commands/webinspector.js';
+import {NativeSimUnavailableError} from './errors.js';
+import type {
+  NativeCoreSimModule,
+  NativeDeviceHandle,
+  NativeDeviceSetHandle,
+  NativeServiceContextHandle,
+} from './types.js';
 // Bare re-imports so `declare module './native-simctl.js'` augmentations in the command modules
 // (which add their methods to NativeSimctl's type) reach downstream consumers' emitted .d.ts
 // import graph — the named imports above alone aren't part of NativeSimctl's emitted type
@@ -78,13 +85,6 @@ import './commands/ui.js';
 import './commands/video-recording.js';
 import './commands/video-stream.js';
 import './commands/webinspector.js';
-import {NativeSimUnavailableError} from './errors.js';
-import type {
-  NativeCoreSimModule,
-  NativeDeviceHandle,
-  NativeDeviceSetHandle,
-  NativeServiceContextHandle,
-} from './types.js';
 import {getPkgRoot, PACKAGE_NAME, runCatchingAsync} from './utils/index.js';
 
 const require = createRequire(import.meta.url);
@@ -107,6 +107,15 @@ const require = createRequire(import.meta.url);
  * './native-simctl.js'` augmentation so `NativeSimctl`'s emitted type includes methods it doesn't
  * textually define.
  */
+export interface NativeSimctlOptions {
+  /**
+   * The versions of SpringBoard's notifications store (`sectionInfoVersionNumber`) the runtimes in
+   * use may have, the oldest first. Defaults to all the known ones; callers that know their Xcode
+   * narrow it. A store of any other version is refused.
+   */
+  bulletinBoardVersions?: readonly number[];
+}
+
 export class NativeSimctl {
   private cachedServiceContext: Promise<NativeServiceContextHandle> | undefined;
 
@@ -117,10 +126,13 @@ export class NativeSimctl {
    * NativeSimctl must never throw — the platform check and the native sharedServiceContext call
    * both happen lazily in the `_serviceContext` getter below, so only a method that actually needs
    * the simulator (getDevices(), createDevice(), ...) can raise.
+   * @param options — see {@link NativeSimctlOptions}.
    */
   constructor(
     private readonly developerDir?: string,
     private readonly deviceSetPath?: string,
+    /** @internal Read by the command mixins. */
+    readonly _options: NativeSimctlOptions = {},
   ) {}
 
   /** @returns `CFBundleVersion` of the loaded `CoreSimulator.framework` (e.g. `"1171.6"`). */

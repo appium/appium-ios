@@ -127,8 +127,8 @@ toolchain (`make` and `xcodebuild`).
   restart; a missing store (a never-booted device) is created with just the app's section and
   `sectionInfoVersionNumber` 2, and SpringBoard adds the rest on first boot (confirmed on iOS
   18.5/26.5). The store is replaced via a temp file + `rename`, and every update of one store —
-  pause, read, write, restart — is serialized within the process (`withStoreLock`), not across
-  processes. Its status can't be read back (`getPermission` rejects).
+  pause, read, write, restart — is serialized within the process (`BulletinBoardStore.withLock`), not across
+  processes. The store formats are versioned data models (`utils/bulletin-board-model-v*.ts`); `NativeSimctl` is given the versions its Xcode may meet (`appium-ios-simulator`'s `bulletinBoardVersions`, via `NativeSimctlOptions`, extended by newer Xcode classes: v2, plus v3 for iOS 27), a store of any other `sectionInfoVersionNumber` is refused rather than rewritten, and a missing store is created in the oldest given format — SpringBoard migrates older stores but drops newer ones (confirmed on a never-booted device: iOS 27.0 loads our v2 store and saves it as v3, iOS 18.6 replaces our v3 store with its own v2 one, losing the section). Its status can't be read back (`getPermission` rejects).
 - **Several CoreSimulator operations reject if the device isn't in the exact state they expect**
   (e.g. erasing requires `Shutdown`; shutting down an already-`Shutdown` device also rejects) rather
   than being idempotent no-ops — callers need to check state first.
