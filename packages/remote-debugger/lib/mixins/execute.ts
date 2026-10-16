@@ -21,6 +21,10 @@ const RPC_RESPONSE_TIMEOUT_MS = 5000;
  * @param frames - Frame context array for frame-specific execution. Defaults to empty array.
  * @param options - Options for this evaluation only; user-gesture emulation defaults to false.
  * @returns A promise that resolves to the result received from the atom execution.
+ * @example
+ * // Opt in only for this click; other evaluations retain the default of false.
+ * await remoteDebugger.executeAtom('click', [element], frames, {emulateUserGesture: true});
+ * @see ScriptExecutionOptions.emulateUserGesture for user-activation side effects.
  */
 export async function executeAtom<R = any>(
   this: RemoteDebugger,
@@ -152,10 +156,13 @@ export async function executeAtomAsync<R = any>(
  * Optionally performs garbage collection before execution if configured.
  *
  * @param command - The JavaScript command string to execute.
- * @param override - Deprecated and unused parameter.
+ * @param override - Deprecated and unused parameter; does not enable user-gesture emulation.
  * @param options - Options for this evaluation only; user-gesture emulation defaults to false.
  * @returns A promise that resolves to the result of the JavaScript evaluation,
  *          converted to a usable format.
+ * @example
+ * await remoteDebugger.execute(command, undefined, {emulateUserGesture: true});
+ * @see ScriptExecutionOptions.emulateUserGesture for user-activation side effects.
  */
 export async function execute<R = any>(
   this: RemoteDebugger,

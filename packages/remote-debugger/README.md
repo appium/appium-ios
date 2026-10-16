@@ -19,29 +19,6 @@ This is an event emitter, which emits a `RemoteDebugger.EVENT_PAGE_CHANGE` event
 
 The steps to using the `RemoteDebugger` involve instantiating an object, then running `connect` and `selectApp`. After this the instance will be listening for events from the server (i.e., the webview or browser).
 
-### Per-evaluation user gestures
-
-`executeAtom` accepts an optional fourth argument to emulate a user gesture for
-that evaluation only. For example, a caller can opt in for a click:
-
-```js
-await remoteDebugger.executeAtom('click', [element], frames, {emulateUserGesture: true});
-```
-
-For direct JavaScript evaluation, pass the same options as the third argument to
-`execute(command, undefined, {emulateUserGesture: true})`. The second argument
-remains the deprecated `override` boolean and does not enable gesture emulation.
-
-The default remains `false`. Use this selectively: WebKit's user-gesture context
-can affect popup blocking and other user-activation checks. It does not make
-synthetic DOM events trusted, and the option is not inherited by subsequent
-commands or `executeAtomAsync` calls.
-
-This can preserve navigation entries that WebKit otherwise hides from native
-back/forward APIs after a synthetic click (see
-[appium-xcuitest-driver#3042](https://github.com/appium/appium-xcuitest-driver/issues/3042)).
-This is a library API; XCUITest Driver must explicitly pass the option to use it.
-
 ## Selenium "atoms"
 
 The remote debugger uses the standard [Selenium JavaScript atoms](https://github.com/SeleniumHQ/selenium/tree/trunk/javascript/atoms)
