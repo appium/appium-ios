@@ -144,10 +144,9 @@ export class NativeSimctl {
    */
   constructor(developerDir?: string, deviceSetPath?: string);
   constructor(optionsOrDeveloperDir?: NativeSimctlOptions | string, deviceSetPath?: string) {
-    this._options =
-      typeof optionsOrDeveloperDir === 'object' && optionsOrDeveloperDir !== null
-        ? {...optionsOrDeveloperDir}
-        : {developerDir: optionsOrDeveloperDir, deviceSetPath};
+    this._options = util.isPlainObject(optionsOrDeveloperDir)
+      ? {...(optionsOrDeveloperDir as NativeSimctlOptions)}
+      : {developerDir: optionsOrDeveloperDir as string | undefined, deviceSetPath};
   }
 
   /** @returns `CFBundleVersion` of the loaded `CoreSimulator.framework` (e.g. `"1171.6"`). */
