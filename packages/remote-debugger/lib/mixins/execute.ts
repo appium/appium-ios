@@ -292,6 +292,11 @@ class ScriptPromiseExecutor {
   /** The promise exists only on the page that created it. */
   private readonly keys: PageKeys;
 
+  /**
+   * @param rd - The remote debugger with the selected page.
+   * @param opts - Script timeout and user gesture for this call.
+   * @throws When no app or page is selected.
+   */
   constructor(
     private readonly rd: RemoteDebugger,
     private readonly opts: ExecuteScriptAtomOptions,
@@ -299,6 +304,15 @@ class ScriptPromiseExecutor {
     this.keys = checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as PageKeys;
   }
 
+  /**
+   * Runs the script and waits for a promise that it returns.
+   *
+   * @param args - `[script, scriptArgs]` of the execute_script atom.
+   * @param frames - Frame context array for frame-specific execution.
+   * @returns The value of the script, or of the promise that it returns.
+   * @throws {errors.ScriptTimeoutError} When the promise does not settle within `timeoutMs`.
+   * @throws {errors.UnknownError} When the page goes before the promise settles.
+   */
   async run(args: any[], frames: string[]): Promise<any> {
     const [script, scriptArgs = []] = args;
     // stringify, default window, timeout
