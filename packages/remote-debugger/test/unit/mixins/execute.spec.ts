@@ -153,6 +153,22 @@ describe('execute', function () {
         });
       });
 
+      it('logs the timeout that it applies to the wait', async function () {
+        for (const [timeoutMs, expected] of [
+          [30000, /Waiting up to 30000 ms for the promise/],
+          [2 * 60 * 60 * 1000, /Waiting up to 3600000 ms for the promise/],
+          [undefined, /Waiting for the promise returned by the script with no timeout/],
+        ] as const) {
+          const {ctx} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+          ctx.log = {debug: sinon.spy()};
+          await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {timeoutMs});
+          assert.ok(
+            ctx.log.debug.getCalls().some(({args}: {args: string[]}) => expected.test(args[0])),
+            `${timeoutMs}: ${ctx.log.debug.getCalls().map(({args}: {args: string[]}) => args[0]).join(' | ')}`,
+          );
+        }
+      });
+
       it('gives the gesture to the script evaluation only and the timeout to the atom only', async function () {
         const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
         await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
