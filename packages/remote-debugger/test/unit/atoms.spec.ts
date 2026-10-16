@@ -532,6 +532,12 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         });
       }
 
+      it('ignores a reject or a throw after a thenable resolved, as a native promise', async function () {
+        const later = '{then(r) { setTimeout(() => r(5), 20); }}';
+        assert.strictEqual(await runPromiseScript(`return {then(res, rej) { res(${later}); rej(new Error("x")); }};`), 5);
+        assert.strictEqual(await runPromiseScript(`return {then(res) { res(${later}); throw new Error("x"); }};`), 5);
+      });
+
       it('reads then once, as W3C', async function () {
         const script =
           'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';

@@ -174,6 +174,9 @@ describe('Safari remote debugger', function () {
     const countedThen =
       'var reads = 0; var t = {}; Object.defineProperty(t, "then", {get() { reads++; return (r) => r(reads); }}); return t;';
     assert.strictEqual(await run(countedThen), 1);
+    const resolvedThenRejected =
+      'return {then(res, rej) { res({then(r) { setTimeout(() => r(5), 20); }}); rej(new Error("x")); }};';
+    assert.strictEqual(await run(resolvedThenRejected), 5);
     await assert.rejects(run("return Promise.resolve({get a() { throw 'boom'; }});", 3000), (err: Error) => {
       assert.ok(err instanceof errors.JavaScriptError, err.constructor.name);
       assert.match(err.message, /boom/);

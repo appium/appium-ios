@@ -137,14 +137,24 @@ function awaitScriptResult(
     // As PromiseResolve: `then` read once, a thenable value adopted again. Handled at once: no
     // unhandled rejection in the page.
     const adopt = (value: unknown, then?: AnyThen) => {
+      // as PromiseResolve: the first call wins, later calls and throws are ignored
+      let called = false;
+      const once =
+        <T>(fn: (arg: T) => void) =>
+        (arg: T) => {
+          if (!called) {
+            called = true;
+            fn(arg);
+          }
+        };
       try {
         const next = then ?? readThen(value);
         if (next) {
-          next.call(value, (v: unknown) => adopt(v), onReason);
+          next.call(value, once(adopt), once(onReason));
           return;
         }
       } catch (ex) {
-        onReason(ex);
+        once(onReason)(ex);
         return;
       }
       let ret: ResponseObject;
