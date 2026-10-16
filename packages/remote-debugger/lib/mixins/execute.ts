@@ -17,7 +17,7 @@ import {
 /* How many milliseconds to wait for webkit to return a response before timing out */
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
 
-/* The atom promise settles with a JSON string; anything else means the page changed */
+/* Runtime.awaitPromise gave no atom response: the page changed */
 const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
 
 /**
@@ -265,7 +265,7 @@ async function executeScriptAtom(
   const atomScript = await getScriptForAtom('execute_script', [script, scriptArgs, true, undefined, timeoutMs], frames);
   // the promise exists only on the page that created it
   const keys = getPageKeys(this);
-  // the gesture applies to the script; the wait for its promise adds none
+  // gesture for the script only
   const res = await evaluateInPage.call(this, atomScript, {returnByValue: false, emulateUserGesture}, keys);
   const promiseObjectId = typeof res === 'string' ? undefined : res?.result?.objectId;
   if (!promiseObjectId) {
@@ -278,10 +278,12 @@ async function executeScriptAtom(
     returnByValue: true,
     ...keys,
   });
+  // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
+  if (settled?.error) {
+    throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
+  }
   if (typeof settled !== 'string') {
-    // e.g. 'Missing injected script for given promiseObjectId': the page went before the wait
-    // arrived. Same error type as the atom on unload.
-    throw new errors.UnknownError(settled?.error?.message ?? PAGE_CHANGED_MESSAGE);
+    throw new errors.UnknownError(PAGE_CHANGED_MESSAGE);
   }
   return convertJavascriptEvaluationResult(settled);
 }
