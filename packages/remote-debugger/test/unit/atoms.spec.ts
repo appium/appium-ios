@@ -6,6 +6,7 @@ import {util} from '@appium/support';
 import {JSDOM} from 'jsdom';
 
 import {getAtom, getScriptForAtom} from '../../lib/atoms.js';
+import {executeAtom} from '../../lib/mixins/execute.js';
 import {convertJavascriptEvaluationResult} from '../../lib/utils/javascript.js';
 import {patchLayout} from './helpers/layout.js';
 
@@ -433,6 +434,157 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
     it('execute_script runs arbitrary JS and returns the result', async function () {
       const raw = await runAtom(window, 'execute_script', ['return 1 + 1;', []]);
       assert.strictEqual(convertJavascriptEvaluationResult(crossRealmToLocal(raw)), 2);
+    });
+
+    describe('execute_script with a script that returns a promise', function () {
+      // as executeAtom calls it: stringify, default window, timeout
+      async function runPromiseScript(script: string, timeout?: number): Promise<any> {
+        // not runAtom: awaiting it would unwrap the promise
+        const raw: any = window.eval(await getScriptForAtom('execute_script', [script, [], true, undefined, timeout]));
+        assert.strictEqual(typeof raw?.then, 'function', 'the atom returns a promise');
+        return convertJavascriptEvaluationResult(await raw);
+      }
+
+      it('resolves with the value of the promise', async function () {
+        assert.strictEqual(await runPromiseScript('return Promise.resolve(5);'), 5);
+      });
+
+      it('waits for a promise that settles on a later task', async function () {
+        assert.strictEqual(await runPromiseScript('return new Promise((r) => setTimeout(() => r(9), 20));'), 9);
+      });
+
+      it('resolves an async function', async function () {
+        assert.deepStrictEqual(await runPromiseScript('return (async () => [1, 2])();'), [1, 2]);
+      });
+
+      it('resolves a promise of an element to an element reference', async function () {
+        const el = await runPromiseScript('return Promise.resolve(document.getElementById("somediv"));');
+        assert.strictEqual(typeof el[W3C_ELEMENT_KEY], 'string');
+      });
+
+      it('gives a javascript error for a rejected promise', async function () {
+        await assert.rejects(runPromiseScript('return Promise.reject(new Error("boom"));'), (err: Error) => {
+          assert.ok(err instanceof errors.JavaScriptError);
+          assert.match(err.message, /boom/);
+          return true;
+        });
+      });
+
+      it('gives a javascript error with a fallback message when the reason has no text', async function () {
+        for (const reason of ['Object.create(null)', 'new Error("")', 'undefined']) {
+          await assert.rejects(runPromiseScript(`return Promise.reject(${reason});`), (err: Error) => {
+            assert.ok(err instanceof errors.JavaScriptError);
+            assert.match(err.message, /promise returned by the script was rejected/);
+            return true;
+          });
+        }
+      });
+
+      it('gives a javascript error when the value cannot be serialized', async function () {
+        await assert.rejects(runPromiseScript('var a = {}; a.a = a; return Promise.resolve(a);'), (err: Error) => {
+          assert.ok(err instanceof errors.JavaScriptError);
+          assert.match(err.message, /Recursive object/);
+          return true;
+        });
+      });
+
+      it('gives a script timeout when the promise does not settle within the timeout', async function () {
+        await assert.rejects(runPromiseScript('return new Promise(() => {});', 50), errors.ScriptTimeoutError);
+      });
+
+      it('keeps a timeout of 0: a promise that settles on a later task times out', async function () {
+        await assert.rejects(
+          runPromiseScript('return new Promise((r) => setTimeout(() => r(9), 20));', 0),
+          errors.ScriptTimeoutError,
+        );
+        assert.strictEqual(await runPromiseScript('return Promise.resolve(5);', 0), 5);
+      });
+
+      for (const event of ['unload', 'pagehide']) {
+        it(`gives an error on ${event} before the promise settles`, async function () {
+          const raw: any = window.eval(
+            await getScriptForAtom('execute_script', ['return new Promise(() => {});', [], true]),
+          );
+          window.dispatchEvent(new window.Event(event));
+          await assert.rejects((async () => convertJavascriptEvaluationResult(await raw))(), (err: Error) => {
+            assert.ok(err instanceof errors.UnknownError);
+            assert.match(err.message, /page unload/);
+            return true;
+          });
+        });
+      }
+
+      it('returns a native promise when the page uses zone.js', async function () {
+        // Runtime.awaitPromise accepts only a native promise. zone.js replaces window.Promise and
+        // also patches the native then() to return its own promise.
+        const NativePromise = (window as any).Promise;
+        const nativeThen = NativePromise.prototype.then;
+        window.eval(`((N, nativeThen) => {
+          class ZoneAwarePromise {
+            constructor(executor) { this.p = Reflect.construct(N, [executor]); }
+            then(a, b) { return new ZoneAwarePromise((res, rej) => nativeThen.call(nativeThen.call(this.p, a, b), res, rej)); }
+            static resolve(v) { return new ZoneAwarePromise((r) => r(v)); }
+          }
+          N.prototype.then = function (a, b) { return new ZoneAwarePromise((res, rej) => nativeThen.call(nativeThen.call(this, a, b), res, rej)); };
+          window.Promise = ZoneAwarePromise;
+        })(window.Promise, window.Promise.prototype.then);`);
+        try {
+          const raw: any = window.eval(
+            await getScriptForAtom('execute_script', ['return Promise.resolve(5);', [], true]),
+          );
+          assert.ok(raw instanceof NativePromise, 'the atom returns a native promise');
+          assert.strictEqual(convertJavascriptEvaluationResult(await raw), 5);
+        } finally {
+          (window as any).Promise = NativePromise;
+          NativePromise.prototype.then = nativeThen;
+        }
+      });
+
+      it('limits the timeout to the largest page timer delay', async function () {
+        const script = 'return new Promise((r) => setTimeout(() => r(9), 20));';
+        assert.strictEqual(await runPromiseScript(script, 3600000000), 9);
+      });
+
+      it('executeAtom gives the settled value with the real atom, as WebKit answers', async function () {
+        // WebKit: evaluate gives primitives by value, objects by objectId
+        const objects = new Map<string, unknown>();
+        const send = async (method: string, opts: any) => {
+          if (method === 'Runtime.evaluate') {
+            const value = window.eval(opts.expression);
+            if (opts.returnByValue || typeof value !== 'object') {
+              return crossRealmToLocal(value);
+            }
+            const objectId = `object-${objects.size}`;
+            objects.set(objectId, value);
+            return {result: {type: 'object', className: 'Promise', objectId}};
+          }
+          assert.strictEqual(method, 'Runtime.awaitPromise');
+          return crossRealmToLocal(await objects.get(opts.promiseObjectId));
+        };
+        const ctx: any = {
+          _appIdKey: 'appId',
+          _pageIdKey: 'pageId',
+          log: {debug: () => {}},
+          _rpcClient: {isConnected: true, send, waitForPage: async () => {}},
+          requireRpcClient() {
+            return this._rpcClient;
+          },
+        };
+
+        const run = (script: string, timeoutMs?: number) =>
+          executeAtom.call(ctx, 'execute_script', [script, []], [], {timeoutMs});
+        assert.strictEqual(await run('return new Promise((r) => setTimeout(() => r(7), 10));'), 7);
+        assert.strictEqual(await run('return 1 + 1;'), 2);
+        assert.strictEqual(objects.size, 1);
+        await assert.rejects(run('return Promise.reject(new Error("boom"));'), errors.JavaScriptError);
+        await assert.rejects(run('return new Promise(() => {});', 20), errors.ScriptTimeoutError);
+      });
+
+      it('returns a value that is not a thenable synchronously', async function () {
+        const raw = await runAtom(window, 'execute_script', ['return {then: 1};', [], true]);
+        assert.strictEqual(typeof raw, 'string');
+        assert.deepStrictEqual(convertJavascriptEvaluationResult(raw), {then: 1});
+      });
     });
 
     it('execute_async_script invokes the provided callback with the result', async function () {

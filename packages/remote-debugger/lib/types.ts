@@ -56,7 +56,13 @@ export interface ScriptExecutionOptions {
  * Options for one executeAtom call. Evaluation options are inherited so atom-
  * specific options can be added without changing the call signature.
  */
-export interface ExecuteAtomOptions extends ScriptExecutionOptions {}
+export interface ExecuteAtomOptions extends ScriptExecutionOptions {
+  /**
+   * `execute_script` only: max wait in ms for a returned promise (`script timeout`).
+   * Default: no timer, as a W3C `null` script timeout. Drivers pass the session script timeout.
+   */
+  timeoutMs?: number;
+}
 
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */

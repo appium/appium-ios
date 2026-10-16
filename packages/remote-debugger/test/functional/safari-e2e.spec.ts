@@ -163,6 +163,58 @@ describe('Safari remote debugger', function () {
     await fixture.rd().selectApp(fixture.address());
   });
 
+  it('should wait for a promise that a script returns', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const run = (script: string, timeoutMs?: number) => rd.executeAtom('execute_script', [script, []], [], {timeoutMs});
+
+    assert.strictEqual(await run('return Promise.resolve(5);'), 5);
+    assert.strictEqual(await run('return new Promise((r) => setTimeout(() => r(9), 50));'), 9);
+    assert.deepStrictEqual(await run('return (async () => [1, 2])();'), [1, 2]);
+    const el = await run('return Promise.resolve(document.body);');
+    assert.strictEqual(await rd.executeAtom('execute_script', ['return arguments[0].tagName;', [el]]), 'BODY');
+    await assert.rejects(run('return Promise.reject(new Error("boom"));'), (err: Error) => {
+      assert.ok(err instanceof errors.JavaScriptError);
+      assert.match(err.message, /boom/);
+      return true;
+    });
+    await assert.rejects(run('return new Promise(() => {});', 300), errors.ScriptTimeoutError);
+    await assert.rejects(run('return new Promise((r) => setTimeout(() => r(9), 50));', 0), errors.ScriptTimeoutError);
+    assert.strictEqual(await run('return 1 + 1;'), 2);
+  });
+
+  for (const [name, leave] of [
+    ['reloads', 'location.reload();'],
+    ['navigates to another page', (url: string) => `location.href = ${JSON.stringify(url)};`],
+  ] as const) {
+    it(`should stop waiting for a promise when the page ${name}`, async function () {
+      await fixture.selectTestPage();
+      const rd = fixture.rd();
+      const pending = rd.executeAtom('execute_script', ['return new Promise(() => {});', []]);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const leaveScript = typeof leave === 'string' ? leave : leave(fixture.freshUrl());
+      await rd.execute(`setTimeout(function () { ${leaveScript} }, 0); "leave";`);
+      await assert.rejects(pending, (err: Error) => {
+        assert.ok(err instanceof errors.UnknownError);
+        assert.match(err.message, /page unload/);
+        return true;
+      });
+    });
+
+    it(`should give an unknown error when the script makes the page ${name} and returns a promise`, async function () {
+      await fixture.selectTestPage();
+      const leaveScript = typeof leave === 'string' ? leave : leave(fixture.freshUrl());
+      // the page can go before Runtime.awaitPromise arrives
+      await assert.rejects(
+        fixture.rd().executeAtom('execute_script', [`${leaveScript} return new Promise(() => {});`, []]),
+        (err: Error) => {
+          assert.ok(err instanceof errors.UnknownError, `${err.constructor.name}: ${err.message}`);
+          return true;
+        },
+      );
+    });
+  }
+
   it('should be able to get console logs from a remote page', async function () {
     await fixture.selectTestPage();
 

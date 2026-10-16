@@ -17,9 +17,14 @@ import {
 /* How many milliseconds to wait for webkit to return a response before timing out */
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
 
+/* The atom promise settles with a JSON string; anything else means the page changed */
+const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
+
 /**
  * Executes a Selenium atom in Safari by generating the atom script and
  * executing it in the page context.
+ *
+ * `execute_script` awaits a returned thenable (https://w3c.github.io/webdriver/#execute-script).
  *
  * @param atom - Name of the Selenium atom to execute (see atoms/ directory).
  * @param args - Arguments to pass to the atom function. Defaults to empty array.
@@ -41,10 +46,12 @@ export async function executeAtom<R = any>(
   options: ExecuteAtomOptions = {},
 ): Promise<R> {
   this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
-  const script = await getScriptForAtom(atom, args, frames);
   const emulateUserGesture =
     options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
-  const value = await this.execute<R>(script, undefined, {emulateUserGesture});
+  const value =
+    atom === 'execute_script'
+      ? await executeScriptAtom.call(this, args, frames, {timeoutMs: options.timeoutMs, emulateUserGesture})
+      : await this.execute<R>(await getScriptForAtom(atom, args, frames), undefined, {emulateUserGesture});
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
   );
@@ -180,24 +187,9 @@ export async function execute<R = any>(
   override?: boolean,
   options: ScriptExecutionOptions = {},
 ): Promise<R> {
-  const {appIdKey, pageIdKey} = checkParams({
-    appIdKey: getAppIdKey(this),
-    pageIdKey: getPageIdKey(this),
-  });
-
-  if (getGarbageCollectOnExecute(this)) {
-    await this.garbageCollect();
-  }
-
-  const rpcClient = this.requireRpcClient(true);
-  await rpcClient.waitForPage(appIdKey as AppIdKey, pageIdKey as PageIdKey);
-  this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
-  const res = await rpcClient.send('Runtime.evaluate', {
-    expression: command,
-    emulateUserGesture: options.emulateUserGesture ?? false,
+  const res = await evaluateInPage.call(this, command, {
     returnByValue: true,
-    appIdKey,
-    pageIdKey,
+    emulateUserGesture: options.emulateUserGesture ?? false,
   });
   return convertJavascriptEvaluationResult(res) as R;
 }
@@ -259,4 +251,68 @@ function isGestureInteraction(atom: AtomName, args: any[]): boolean {
     (char) => char === '\n' || (char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
   );
   return text.length > 0 && hasOnlyTextOrNewlines && !/[\uE000-\uE005\uE008-\uF8FF]/u.test(text);
+}
+
+/** Sync result: one call. Thenable: the atom returns a promise, awaited by `Runtime.awaitPromise`. */
+async function executeScriptAtom(
+  this: RemoteDebugger,
+  args: any[],
+  frames: string[],
+  {timeoutMs, emulateUserGesture}: {timeoutMs?: number; emulateUserGesture: boolean},
+): Promise<any> {
+  const [script, scriptArgs = []] = args;
+  // stringify, default window, timeout
+  const atomScript = await getScriptForAtom('execute_script', [script, scriptArgs, true, undefined, timeoutMs], frames);
+  // the promise exists only on the page that created it
+  const keys = getPageKeys(this);
+  // the gesture applies to the script; the wait for its promise adds none
+  const res = await evaluateInPage.call(this, atomScript, {returnByValue: false, emulateUserGesture}, keys);
+  const promiseObjectId = typeof res === 'string' ? undefined : res?.result?.objectId;
+  if (!promiseObjectId) {
+    return convertJavascriptEvaluationResult(res);
+  }
+
+  this.log.debug('Waiting for the promise returned by the script');
+  const settled = await this.requireRpcClient(true).send('Runtime.awaitPromise', {
+    promiseObjectId,
+    returnByValue: true,
+    ...keys,
+  });
+  if (typeof settled !== 'string') {
+    // e.g. 'Missing injected script for given promiseObjectId': the page went before the wait
+    // arrived. Same error type as the atom on unload.
+    throw new errors.UnknownError(settled?.error?.message ?? PAGE_CHANGED_MESSAGE);
+  }
+  return convertJavascriptEvaluationResult(settled);
+}
+
+/** `Runtime.evaluate` in the page; returns the raw result. */
+async function evaluateInPage(
+  this: RemoteDebugger,
+  command: string,
+  {returnByValue, emulateUserGesture = false}: {returnByValue: boolean; emulateUserGesture?: boolean},
+  {appIdKey, pageIdKey} = getPageKeys(this),
+): Promise<any> {
+  if (getGarbageCollectOnExecute(this)) {
+    await this.garbageCollect();
+  }
+
+  const rpcClient = this.requireRpcClient(true);
+  await rpcClient.waitForPage(appIdKey as AppIdKey, pageIdKey as PageIdKey);
+  this.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
+  return await rpcClient.send('Runtime.evaluate', {
+    expression: command,
+    emulateUserGesture,
+    returnByValue,
+    appIdKey,
+    pageIdKey,
+  });
+}
+
+/** The selected app and page keys; throws when one is missing. */
+function getPageKeys(rd: RemoteDebugger): {appIdKey: AppIdKey; pageIdKey: PageIdKey} {
+  return checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as {
+    appIdKey: AppIdKey;
+    pageIdKey: PageIdKey;
+  };
 }
