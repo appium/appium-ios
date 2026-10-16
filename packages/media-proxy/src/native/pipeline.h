@@ -33,9 +33,17 @@ struct PipelineError {
   std::string message;
 };
 
+// Codecs this build can actually use, probed from the loaded FFmpeg.
+struct Capabilities {
+  std::vector<std::string> decoders;
+  std::vector<std::string> encoders;
+};
+
 // HEVC access units in, encoded units out, on a dedicated worker thread. Pure C++/FFmpeg: no N-API.
 class Pipeline {
  public:
+  static Capabilities Probe();
+
   using UnitCallback = std::function<void(EncodedUnit&&)>;
   using ErrorCallback = std::function<void(PipelineError&&)>;
   using DoneCallback = std::function<void()>;

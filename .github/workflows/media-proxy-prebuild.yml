@@ -61,6 +61,9 @@ jobs:
       - name: Create N-API prebuild
         run: npm run build:prebuilds --workspace packages/media-proxy -- --arch ${{ matrix.arch }}
 
+      - name: Load the prebuild
+        run: node packages/media-proxy/scripts/ci/smoke-prebuild.mjs --arch ${{ matrix.arch }}
+
       - name: Upload prebuild
         if: ${{ inputs.upload-artifacts }}
         uses: actions/upload-artifact@v7

@@ -11,12 +11,13 @@ import {run} from './run.mjs';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
-// Versioned runtime names only (libavcodec.62.dylib, libavcodec.so.62, avcodec-62.dll), not dev symlinks.
+// Versioned runtime names only (e.g. libavcodec-appium.62.dylib), not dev symlinks. The -appium suffix
+// (build-ffmpeg.sh) keeps the libs from being mistaken for another FFmpeg loaded in the same process.
 /** @type {Record<string, {dir: string, pattern: RegExp}>} */
 const RUNTIME_BY_PLATFORM = {
-  darwin: {dir: 'lib', pattern: /^lib(avcodec|avutil|swscale)\.\d+\.dylib$/},
-  linux: {dir: 'lib', pattern: /^lib(avcodec|avutil|swscale)\.so\.\d+$/},
-  win32: {dir: 'bin', pattern: /^(avcodec|avutil|swscale)-\d+\.dll$/},
+  darwin: {dir: 'lib', pattern: /^lib(avcodec|avutil|swscale)-appium\.\d+\.dylib$/},
+  linux: {dir: 'lib', pattern: /^lib(avcodec|avutil|swscale)-appium\.so\.\d+$/},
+  win32: {dir: 'bin', pattern: /^(avcodec|avutil|swscale)-appium-\d+\.dll$/},
 };
 const EXPECTED_LIB_COUNT = 3;
 

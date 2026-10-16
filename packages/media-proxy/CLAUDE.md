@@ -35,6 +35,9 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
   don't add Android-only options.
 - Keep output shapes identical to coresim's `VideoAccessUnit`/`JpegFrame` (video track only).
 - Never bundle or link GPL/nonfree FFmpeg components or x264. Only enable the FFmpeg components the pipeline uses.
+- JS callbacks are held weakly by the native session; the handle's `callbacks` array owns them (keeps abandoned
+  transcoders collectable). Env teardown shuts sessions down via a cleanup hook (releasing a tsfn from a finalizer deadlocks).
+- `MEDIA_PROXY_FFMPEG_LOG=<av log level>` turns FFmpeg's logging back on (off by default).
 - Input is a live stream: never add unbounded buffering or blocking pushes; tests pace their input.
 - No dependency on remotexpc or coresim; inputs are structural types.
 
@@ -44,4 +47,5 @@ The package is `"private": true` and listed in `lerna.json` `ignoreChanges`, so 
 `detect-release-packages.mjs` gate built on it) never treats it as changed: merging changes here
 triggers no release run, version bump, tag, or prebuild. To start releasing it: drop `"private"`,
 remove the `ignoreChanges` entry, add it to `PREBUILT` in `scripts/detect-release-packages.mjs`,
-and add a gated `prebuild-media-proxy` job plus artifact merge to `release.yml` (as for tuntap).
+and add a gated `prebuild-media-proxy` job plus artifact merge to `release.yml` (as for tuntap). Also host
+the FFmpeg source tarball (see `THIRD_PARTY_NOTICES.md`) next to the release, per FFmpeg's legal checklist.

@@ -15,7 +15,9 @@ The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCa
 
 The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
 it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
-real time therefore drops frames; pace it like a device does.
+real time therefore drops frames; pace it like a device does. After such a drop the pipeline waits for
+the next keyframe (the device offers no way to request one), so a source that sends keyframes rarely
+freezes until the next one.
 
 ## Usage
 
@@ -34,7 +36,8 @@ console.log(server.url);
 ```
 
 Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`, `end()`
-(flush, then finish) and `close()` (stop now).
+(flush, then finish) and `close()` (stop consuming and discard output now; the promise resolves once the
+native side has drained its few queued units and freed the codecs). Always call one of them.
 
 ## Building from source
 

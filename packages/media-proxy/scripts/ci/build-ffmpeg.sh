@@ -28,7 +28,14 @@ WORK="${FFMPEG_WORKDIR:-$PKG_DIR/third_party/.build/$PLATFORM-$ARCH}"
 JOBS="${JOBS:-$( (nproc || sysctl -n hw.ncpu) 2>/dev/null || echo 4)}"
 TARBALL="ffmpeg-$FFMPEG_VERSION.tar.xz"
 
-if [ -f "$PREFIX/.built-$FFMPEG_VERSION" ] && [ -z "${FORCE:-}" ]; then
+# Part of the marker, so editing this recipe (flags, patches) rebuilds even without a version bump.
+if command -v sha256sum >/dev/null; then
+  RECIPE_HASH="$(sha256sum "${BASH_SOURCE[0]}" | cut -c1-12)"
+else
+  RECIPE_HASH="$(shasum -a 256 "${BASH_SOURCE[0]}" | cut -c1-12)"
+fi
+MARKER="$PREFIX/.built-$FFMPEG_VERSION-$RECIPE_HASH"
+if [ -f "$MARKER" ] && [ -z "${FORCE:-}" ]; then
   echo "FFmpeg $FFMPEG_VERSION already built in $PREFIX (FORCE=1 to rebuild)"
   exit 0
 fi
@@ -59,6 +66,8 @@ ARGS=(
   --disable-network --disable-avdevice --disable-avformat --disable-avfilter --disable-swresample
   --disable-gpl --disable-nonfree --disable-version3
   --enable-shared --disable-static --enable-pic
+  # Private library names (libavcodec-appium...): never shadowed by, or confused with, another FFmpeg in the process.
+  --build-suffix=-appium
   --enable-avcodec --enable-avutil --enable-swscale
   --enable-decoder=hevc --enable-parser=hevc
   --enable-encoder=mjpeg
@@ -92,22 +101,28 @@ if [ "$ARCH" = "x64" ] && ! command -v nasm >/dev/null; then
   exit 1
 fi
 
+# A stale install (older recipe or version) must not leak into the new one.
+rm -rf "$PREFIX/include" "$PREFIX/lib" "$PREFIX/bin" "$PREFIX/share"
+
 ./configure "${ARGS[@]}"
 make -j"$JOBS"
 make install
 cp COPYING.LGPLv2.1 "$PREFIX/"
 if [ "$PLATFORM" = linux ]; then
-  readelf -d "$PREFIX/lib/libavcodec.so" | grep -E 'RUNPATH|RPATH' | grep -q 'ORIGIN' \
-    || { echo "libavcodec.so has no \$ORIGIN rpath" >&2; exit 1; }
+  readelf -d "$PREFIX/lib/libavcodec-appium.so" | grep -E 'RUNPATH|RPATH' | grep -q 'ORIGIN' \
+    || { echo "libavcodec-appium.so has no \$ORIGIN rpath" >&2; exit 1; }
 fi
 if [ "$PLATFORM" = win32 ]; then
   # MSVC builds install the import libs (avcodec.lib, ...) next to the DLLs; link.exe looks in lib/.
   for f in "$PREFIX"/bin/*.lib; do cp "$f" "$PREFIX/lib/"; done
 fi
-echo "$FFMPEG_VERSION" >"$PREFIX/.built-$FFMPEG_VERSION"
+rm -f "$PREFIX"/.built-*
+echo "$FFMPEG_VERSION" >"$MARKER"
 {
   echo "FFmpeg $FFMPEG_VERSION (LGPL-2.1+, --disable-gpl --disable-nonfree), source: https://ffmpeg.org/releases/$TARBALL"
   echo "sha256 $FFMPEG_SHA256"
-  echo "configure --prefix=<prefix> ${ARGS[*]:1}"
+  printf 'configure --prefix=<prefix>'
+  printf ' %q' "${ARGS[@]:1}"
+  echo
 } >"$PREFIX/.built-info"
 echo "FFmpeg $FFMPEG_VERSION installed in $PREFIX"

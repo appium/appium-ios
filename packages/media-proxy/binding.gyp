@@ -59,23 +59,21 @@
       "conditions": [
         ["OS=='mac'", {
           "libraries": [
-            "-L<(ffmpeg_dir)/lib", "-lavcodec", "-lavutil", "-lswscale",
-            "-Wl,-rpath,@loader_path",
-            "-Wl,-rpath,@loader_path/../../third_party/ffmpeg/darwin-<(target_arch)/lib"
+            "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium",
+            "-Wl,-rpath,@loader_path"
           ]
         }],
         ["OS=='linux'", {
           "libraries": [
-            "-L<(ffmpeg_dir)/lib", "-lavcodec", "-lavutil", "-lswscale",
-            "-Wl,-rpath,'$$ORIGIN'",
-            "-Wl,-rpath,'$$ORIGIN/../../third_party/ffmpeg/linux-<(target_arch)/lib'"
+            "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium",
+            "-Wl,-rpath,'$$ORIGIN'"
           ]
         }],
         ["OS=='win'", {
           "libraries": [
-            "<(ffmpeg_dir)/lib/avcodec.lib",
-            "<(ffmpeg_dir)/lib/avutil.lib",
-            "<(ffmpeg_dir)/lib/swscale.lib"
+            "<(ffmpeg_dir)/lib/avcodec-appium.lib",
+            "<(ffmpeg_dir)/lib/avutil-appium.lib",
+            "<(ffmpeg_dir)/lib/swscale-appium.lib"
           ]
         }]
       ]

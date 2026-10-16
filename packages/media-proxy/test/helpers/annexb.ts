@@ -19,18 +19,24 @@ function splitNals(stream: Buffer): Buffer[] {
 }
 
 const nalType = (nal: Buffer) => (nal[0] >> 1) & 0x3f;
+// End of sequence/bitstream, filler data and suffix SEI follow their picture; every other non-VCL NAL starts the next unit.
+const TRAILING_TYPES = new Set([36, 37, 38, 40]);
 const isVcl = (type: number) => type < 32;
 const startsPicture = (nal: Buffer) => isVcl(nalType(nal)) && (nal[2] & 0x80) !== 0;
 
 /** Groups a bare-NAL Annex-B HEVC stream into access units the way remotexpc delivers them. */
-export function readHevcFixture(path: string, startTimestamp = 0): NalAccessUnit[] {
+export function readHevcFixture(
+  path: string,
+  startTimestamp = 0,
+  ticksPerFrame = RTP_TICKS_PER_FRAME,
+): NalAccessUnit[] {
   const units: NalAccessUnit[] = [];
   let nals: Buffer[] = [];
   let hasVcl = false;
   let key = false;
   const flush = () => {
     if (nals.length > 0) {
-      units.push({nals, isKeyFrame: key, timestamp: (startTimestamp + units.length * RTP_TICKS_PER_FRAME) >>> 0});
+      units.push({nals, isKeyFrame: key, timestamp: (startTimestamp + units.length * ticksPerFrame) >>> 0});
     }
     nals = [];
     hasVcl = false;
@@ -38,7 +44,7 @@ export function readHevcFixture(path: string, startTimestamp = 0): NalAccessUnit
   };
   for (const nal of splitNals(readFileSync(path))) {
     const type = nalType(nal);
-    if (hasVcl && (!isVcl(type) || startsPicture(nal))) {
+    if (hasVcl && (isVcl(type) ? startsPicture(nal) : !TRAILING_TYPES.has(type))) {
       flush();
     }
     nals.push(nal);

@@ -9,6 +9,10 @@ const BUNDLE_SCRIPT = fileURLToPath(new URL('./bundle-libs.mjs', import.meta.url
 
 /** @param {string[]} args */
 function targetArch(args) {
+  const inline = args.find((arg) => arg.startsWith('--arch='));
+  if (inline) {
+    return inline.slice('--arch='.length);
+  }
   const flag = args.indexOf('--arch');
   return flag >= 0 ? args[flag + 1] : process.arch;
 }

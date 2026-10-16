@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
+#include <mutex>
 #include <utility>
 
 extern "C" {
@@ -23,8 +25,10 @@ constexpr const char* kEncoderUnavailable = "MediaProxyEncoderUnavailableError";
 constexpr int kMaxCodecThreads = 4;
 constexpr int kMaxJpegQscale = 31;
 constexpr int kMinJpegQscale = 2;
-// Frames closer than this fraction of 1/fps to the previous one are dropped (fps is an upper bound).
-constexpr double kMinIntervalFraction = 0.8;
+// Slot-grid frame limiter (see Impl::AcceptFrame): timestamp jitter tolerated, as a fraction of 1/fps.
+constexpr int kToleranceDivisor = 4;
+// A slot further ahead of the stream than this many intervals means the timeline jumped back.
+constexpr int64_t kMaxSlotLeadIntervals = 2;
 
 struct CodecContextDeleter {
   void operator()(AVCodecContext* ctx) const { avcodec_free_context(&ctx); }
@@ -71,7 +75,8 @@ class Pipeline::Impl {
   Impl(const PipelineConfig& config, UnitCallback onUnit)
       : config_(config),
         onUnit_(std::move(onUnit)),
-        minIntervalMicros_(static_cast<int64_t>(1e6 / std::max(config.fps, 1.0) * kMinIntervalFraction)) {
+        intervalMicros_(std::max<int64_t>(1, std::llround(1e6 / std::max(config.fps, 1.0)))),
+        toleranceMicros_(intervalMicros_ / kToleranceDivisor) {
     if (config.outputCodec != "mjpeg") {
       throw PipelineError{kEncoderUnavailable, "No H.264 encoder is compiled into this build; use mjpeg"};
     }
@@ -80,7 +85,7 @@ class Pipeline::Impl {
     if (decoder == nullptr || encoder_ == nullptr) {
       throw PipelineError{kEncoderUnavailable, "The HEVC decoder or MJPEG encoder is missing from this build"};
     }
-    av_log_set_level(AV_LOG_QUIET);
+    ConfigureLogging();
     decoder_.reset(avcodec_alloc_context3(decoder));
     decoder_->flags |= AV_CODEC_FLAG_LOW_DELAY;
     decoder_->thread_type = FF_THREAD_SLICE;
@@ -117,6 +122,33 @@ class Pipeline::Impl {
   }
 
  private:
+  // MEDIA_PROXY_FFMPEG_LOG=<av log level, e.g. 32 for info> re-enables FFmpeg's own logging for debugging.
+  static void ConfigureLogging() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+      const char* text = std::getenv("MEDIA_PROXY_FFMPEG_LOG");
+      char* end = nullptr;
+      const long parsed = text != nullptr ? std::strtol(text, &end, 10) : AV_LOG_QUIET;
+      av_log_set_level(end == text ? AV_LOG_QUIET : static_cast<int>(parsed));
+    });
+  }
+
+  // fps is an upper bound: output frames fill slots of a 1/fps grid and each frame consumes one, so the
+  // long-run rate never exceeds fps while the tolerance absorbs timestamp jitter.
+  bool AcceptFrame(int64_t pts) {
+    if (nextSlotMicros_ < 0 || nextSlotMicros_ - pts > kMaxSlotLeadIntervals * intervalMicros_) {
+      nextSlotMicros_ = pts;
+    }
+    if (pts + toleranceMicros_ < nextSlotMicros_) {
+      return false;
+    }
+    nextSlotMicros_ += intervalMicros_;
+    while (nextSlotMicros_ - toleranceMicros_ <= pts) {
+      nextSlotMicros_ += intervalMicros_;  // a gap in the input: don't bank slots for a later burst
+    }
+    return true;
+  }
+
   void DrainDecoder() {
     for (;;) {
       const int ret = avcodec_receive_frame(decoder_.get(), decoded_.get());
@@ -136,16 +168,14 @@ class Pipeline::Impl {
 
   void Encode(const AVFrame* decoded) {
     const int64_t pts = decoded->pts;
-    if (lastEmittedMicros_ >= 0 && pts - lastEmittedMicros_ < minIntervalMicros_) {
+    if (!AcceptFrame(pts)) {
       return;
     }
-    lastEmittedMicros_ = pts;
     const int width = ScaledSize(decoded->width);
     const int height = ScaledSize(decoded->height);
     OpenEncoder(width, height);
 
-    // A fresh buffer per frame: the encoder may still reference the previous one.
-    AllocateConverted(width, height);
+    PrepareConverted(width, height);
     if (const int ret = sws_scale_frame(sws_.get(), converted_.get(), decoded); ret < 0) {
       throw Fatal("Could not convert the decoded frame", ret);
     }
@@ -186,7 +216,12 @@ class Pipeline::Impl {
     }
   }
 
-  void AllocateConverted(int width, int height) {
+  // Reuses the output buffer unless the encoder still holds a reference to it (or the size changed).
+  void PrepareConverted(int width, int height) {
+    if (converted_->buf[0] != nullptr && converted_->width == width && converted_->height == height &&
+        av_frame_is_writable(converted_.get()) != 0) {
+      return;
+    }
     av_frame_unref(converted_.get());
     converted_->format = AV_PIX_FMT_YUVJ420P;
     converted_->width = width;
@@ -224,8 +259,9 @@ class Pipeline::Impl {
 
   PipelineConfig config_;
   UnitCallback onUnit_;
-  int64_t minIntervalMicros_;
-  int64_t lastEmittedMicros_ = -1;
+  int64_t intervalMicros_;
+  int64_t toleranceMicros_;
+  int64_t nextSlotMicros_ = -1;
   const AVCodec* encoder_ = nullptr;
   CodecContext decoder_;
   CodecContext encoderCtx_;
@@ -234,6 +270,17 @@ class Pipeline::Impl {
   Frame converted_;
   Sws sws_;
 };
+
+Capabilities Pipeline::Probe() {
+  Capabilities caps;
+  if (const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_HEVC); decoder != nullptr) {
+    caps.decoders.emplace_back(decoder->name);
+  }
+  if (const AVCodec* encoder = avcodec_find_encoder(AV_CODEC_ID_MJPEG); encoder != nullptr) {
+    caps.encoders.emplace_back(encoder->name);
+  }
+  return caps;
+}
 
 Pipeline::Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError)
     : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit))) {
@@ -323,6 +370,7 @@ void Pipeline::Run() {
   if (!failed) {
     attempt([&] { impl_->Flush(); });
   }
+  impl_.reset();  // free the codecs (and their threads) now, not when the owner is garbage collected
   DoneCallback done;
   {
     const std::scoped_lock<std::mutex> lock(mutex_);

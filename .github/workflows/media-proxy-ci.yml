@@ -27,9 +27,7 @@ jobs:
   # Pure TS against a fake backend, so one OS is enough; the native paths run on all three in
   # integration-test. C++ lint/format are OS-independent (no platform-specific sources).
   unit-test:
-    needs:
-      - node_matrix
-      - prebuild
+    needs: node_matrix
     strategy:
       fail-fast: false
       matrix:
@@ -44,8 +42,6 @@ jobs:
       run-cpp-lint: true
 
   integration-test:
-    needs:
-      - prebuild
     if: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
