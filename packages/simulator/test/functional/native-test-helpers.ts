@@ -31,6 +31,6 @@ export async function createTestDevice(
  */
 export async function deleteTestDevice(udid: string, devicesSetPath?: string): Promise<void> {
   try {
-    await new NativeSimctl(undefined, devicesSetPath).deleteDevice(udid);
+    await new NativeSimctl({deviceSetPath: devicesSetPath}).deleteDevice(udid);
   } catch {}
 }

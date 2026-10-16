@@ -6,4 +6,9 @@ export class SimulatorXcode27 extends SimulatorXcode15 {
   override get uiClientBundleId(): string {
     return DEVICE_HUB_UI_CLIENT_BUNDLE_ID;
   }
+
+  /** @inheritdoc iOS 27 SpringBoard writes the v3 store. */
+  override get bulletinBoardVersions(): readonly number[] {
+    return [...super.bulletinBoardVersions, 3];
+  }
 }

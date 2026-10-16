@@ -1,5 +1,5 @@
 export {NativeSimError, NativeSimUnavailableError, NativeSimDispatchError, NativeSimOperationError} from './errors.js';
-export {NativeSimctl} from './native-simctl.js';
+export {NativeSimctl, type NativeSimctlOptions} from './native-simctl.js';
 export {SpawnedProcess} from './commands/spawn.js';
 export {VideoStream} from './commands/video-stream.js';
 export {JpegStream} from './commands/jpeg-stream.js';
