@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.6.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.16...appium-remote-debugger@17.6.0) (2026-10-16)
+
+### Features
+
+* **remote-debugger:** support per-evaluation user gesture emulation ([#71](https://github.com/appium/appium-ios/issues/71)) ([91ad89a](https://github.com/appium/appium-ios/commit/91ad89a1d841e1766e3ec3657b3b7a0c16a62c96))
+
+
 ## [17.5.16](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.15...appium-remote-debugger@17.5.16) (2026-10-15)
 
 ### Bug Fixes
