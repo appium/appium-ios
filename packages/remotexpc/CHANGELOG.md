@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.2...appium-ios-remotexpc@5.25.3) (2026-10-16)
+
+### Bug Fixes
+
+* **remotexpc:** detach tunnel lockdown handshake connection, close it on failure ([#74](https://github.com/appium/appium-ios/issues/74)) ([7977d77](https://github.com/appium/appium-ios/commit/7977d779ba9cfdeec2947d75c048a5f93185ec4e))
+
+
 ## [5.25.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.1...appium-ios-remotexpc@5.25.2) (2026-10-15)
 
 ### Bug Fixes
