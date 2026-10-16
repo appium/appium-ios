@@ -110,6 +110,7 @@ class Session : public std::enable_shared_from_this<Session> {
       closePromise_ = Napi::Persistent(Napi::Promise(env, promise));
       state_->keepAlive = shared_from_this();
       tsfn_.Ref(env);
+      // Safe even if Deliver destroys *this meanwhile: ~Session joins this worker before members die.
       pipeline_->Finish([this] {
         Post(Event::Kind::kDone, {}, {});
         ReleaseBridge();
