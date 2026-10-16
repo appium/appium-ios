@@ -36,7 +36,8 @@ export type EventListener = (error?: Error, event?: StringRecord, method?: strin
 /** Options applied only to the current JavaScript evaluation. */
 export interface ScriptExecutionOptions {
   /**
-   * Evaluate in a WebKit user-gesture context. Defaults to false.
+   * Evaluate in a WebKit user-gesture context. Overrides the interaction-atom
+   * policy when specified; otherwise defaults to false unless that policy applies.
    * This can affect popup blocking and other user-activation checks; enable it
    * only for an intentional interaction, such as a click, rather than every script.
    * It does not make synthetic DOM events trusted. The option is not inherited
@@ -51,6 +52,12 @@ export interface ScriptExecutionOptions {
   emulateUserGesture?: boolean;
 }
 
+/**
+ * Options for one executeAtom call. Evaluation options are inherited so atom-
+ * specific options can be added without changing the call signature.
+ */
+export interface ExecuteAtomOptions extends ScriptExecutionOptions {}
+
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */
   bundleId?: string;
@@ -58,6 +65,18 @@ export interface RemoteDebuggerOptions {
   additionalBundleIds?: string[];
   /** array of bundle ids to exclude from webview context detection */
   ignoredBundleIds?: string[];
+  /**
+   * On iOS 27+, emulate user gestures for click, clear, submit, and type atoms
+   * containing only ordinary text or Enter/Return. Defaults to false.
+   *
+   * Opt in to preserve native back/forward history for these interactions, as
+   * observed on iOS 26 without emulation. This does not reproduce all iOS 26
+   * behavior: it grants activation and can affect popup blocking. Escape,
+   * modifier/special-key sequences, scripts, and asynchronous atoms are excluded.
+   * An explicit per-call emulateUserGesture value takes precedence.
+   * Unspecified platform versions and versions below 27 retain the default behavior.
+   */
+  emulateUserGestureForInteractionAtoms?: boolean;
   /** version of iOS */
   platformVersion?: string;
   isSafari?: boolean;

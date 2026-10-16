@@ -5,9 +5,14 @@ import {retryInterval} from 'asyncbox';
 import {getScriptForAtom} from '../atoms.js';
 import type {AtomName} from '../atoms.js';
 import type {RemoteDebugger} from '../remote-debugger.js';
-import type {AppIdKey, PageIdKey, ScriptExecutionOptions} from '../types.js';
+import type {AppIdKey, PageIdKey, ScriptExecutionOptions, ExecuteAtomOptions} from '../types.js';
 import {checkParams, simpleStringify, convertJavascriptEvaluationResult, RESPONSE_LOG_LENGTH} from '../utils/index.js';
-import {getAppIdKey, getPageIdKey, getGarbageCollectOnExecute} from './property-accessors.js';
+import {
+  getAppIdKey,
+  getPageIdKey,
+  getGarbageCollectOnExecute,
+  getEmulateUserGestureForInteractionAtoms,
+} from './property-accessors.js';
 
 /* How many milliseconds to wait for webkit to return a response before timing out */
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
@@ -19,10 +24,12 @@ const RPC_RESPONSE_TIMEOUT_MS = 5000;
  * @param atom - Name of the Selenium atom to execute (see atoms/ directory).
  * @param args - Arguments to pass to the atom function. Defaults to empty array.
  * @param frames - Frame context array for frame-specific execution. Defaults to empty array.
- * @param options - Options for this evaluation only; user-gesture emulation defaults to false.
+ * @param options - Options for this evaluation only. An explicit user-gesture value
+ * overrides the opt-in interaction-atom policy. Without either opt-in, emulation
+ * defaults to false.
  * @returns A promise that resolves to the result received from the atom execution.
  * @example
- * // Opt in only for this click; other evaluations retain the default of false.
+ * // Opt in for this call without enabling the interaction-atom policy.
  * await remoteDebugger.executeAtom('click', [element], frames, {emulateUserGesture: true});
  * @see ScriptExecutionOptions.emulateUserGesture for user-activation side effects.
  */
@@ -31,11 +38,13 @@ export async function executeAtom<R = any>(
   atom: AtomName,
   args: any[] = [],
   frames: string[] = [],
-  options: ScriptExecutionOptions = {},
+  options: ExecuteAtomOptions = {},
 ): Promise<R> {
   this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
   const script = await getScriptForAtom(atom, args, frames);
-  const value = await this.execute<R>(script, undefined, options);
+  const emulateUserGesture =
+    options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
+  const value = await this.execute<R>(script, undefined, {emulateUserGesture});
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
   );
@@ -229,4 +238,25 @@ export async function callFunction<R = any>(
   });
 
   return convertJavascriptEvaluationResult(res) as R;
+}
+
+/** Keep the compatibility policy narrower than arbitrary JavaScript or special-key input. */
+function isGestureInteraction(atom: AtomName, args: any[]): boolean {
+  if (atom === 'click' || atom === 'clear' || atom === 'submit') {
+    return true;
+  }
+  if (atom !== 'type') {
+    return false;
+  }
+  const values = Array.isArray(args[1]) ? args[1] : [args[1]];
+  if (!values.every((value) => typeof value === 'string' || typeof value === 'number')) {
+    return false;
+  }
+  const text = values.join('');
+  // WebDriver's private-use keys include Escape and modifier shortcuts. Permit
+  // only Enter/Return; callers can still opt in explicitly for other keys.
+  const hasOnlyTextOrNewlines = [...text].every(
+    (char) => char === '\n' || (char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
+  );
+  return text.length > 0 && hasOnlyTextOrNewlines && !/[\uE000-\uE005\uE008-\uF8FF]/u.test(text);
 }
