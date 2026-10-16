@@ -17,11 +17,11 @@ import {
 /* How many milliseconds to wait for webkit to return a response before timing out */
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
 
-/* Runtime.awaitPromise gave no atom response: the page changed */
 /* Same limit as the atom */
 const MAX_PROMISE_TIMEOUT_MS = 60 * 60 * 1000;
 /* Lets the page timer, with its exact message, answer first */
 const NODE_TIMEOUT_MARGIN_MS = 1000;
+/* Runtime.awaitPromise gave no atom response: the page changed */
 const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
 
 /**
@@ -273,7 +273,7 @@ async function executeScriptAtom(
   const keys = getPageKeys(this);
   // gesture for the script only
   const res = await evaluateInPage.call(this, atomScript, {returnByValue: false, emulateUserGesture}, keys);
-  const promiseObjectId = typeof res === 'string' ? undefined : res?.result?.objectId;
+  const promiseObjectId = res?.result?.objectId;
   if (!promiseObjectId) {
     return convertJavascriptEvaluationResult(res);
   }
