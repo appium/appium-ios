@@ -540,9 +540,20 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         }
       });
 
-      it('limits the timeout to the largest page timer delay', async function () {
-        const script = 'return new Promise((r) => setTimeout(() => r(9), 20));';
-        assert.strictEqual(await runPromiseScript(script, 3600000000), 9);
+      it('limits the timeout to one hour', async function () {
+        const pageSetTimeout = window.setTimeout;
+        const delays: unknown[] = [];
+        (window as any).setTimeout = (fn: () => void, delay?: number) => {
+          delays.push(delay);
+          return pageSetTimeout.call(window, fn, delay);
+        };
+        try {
+          const script = 'return new Promise((r) => setTimeout(() => r(9), 20));';
+          assert.strictEqual(await runPromiseScript(script, 2 * 60 * 60 * 1000), 9);
+        } finally {
+          window.setTimeout = pageSetTimeout;
+        }
+        assert.deepStrictEqual(delays.toSorted((a, b) => Number(a) - Number(b)), [20, 60 * 60 * 1000]);
       });
 
       it('executeAtom gives the settled value with the real atom, as WebKit answers', async function () {

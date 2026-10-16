@@ -1,8 +1,8 @@
 import {BotError, ErrorCode} from './error.js';
 import {type ResponseObject, unwrapValue, wrapError, wrapResponse} from './inject.js';
 
-/** Max page timer delay; longer fires at once. */
-const MAX_TIMER_DELAY_MS = 2147483647;
+/** Longest wait for a returned promise; a longer timeout is reduced to it. */
+const MAX_TIMEOUT_MS = 60 * 60 * 1000;
 
 /** iOS Safari can fire pagehide without unload, e.g. for the back/forward cache. */
 const PAGE_LEAVE_EVENTS = ['unload', 'pagehide'];
@@ -85,7 +85,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
             ),
           );
         },
-        Math.min(Math.max(0, timeout), MAX_TIMER_DELAY_MS),
+        Math.min(Math.max(0, timeout), MAX_TIMEOUT_MS),
       );
     }
 

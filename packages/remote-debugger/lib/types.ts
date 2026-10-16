@@ -58,7 +58,7 @@ export interface ScriptExecutionOptions {
  */
 export interface ExecuteAtomOptions extends ScriptExecutionOptions {
   /**
-   * `execute_script` only: max wait in ms for a returned promise (`script timeout`).
+   * `execute_script` only: max wait in ms for a returned promise (`script timeout`), at most 1 hour.
    * Default: no timer, as a W3C `null` script timeout. Drivers pass the session script timeout.
    */
   timeoutMs?: number;
