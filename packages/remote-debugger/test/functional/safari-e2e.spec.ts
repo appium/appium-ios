@@ -211,6 +211,24 @@ describe('Safari remote debugger', function () {
     }
   });
 
+  it('should serialize as WebKit returnByValue when the page changed toJSON and JSON', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const value = '{a: [1, "x\\"\\n"], b: {c: null, d: true}}';
+    await rd.execute(
+      'Array.prototype.toJSON = Object.prototype.toJSON = () => "hooked";' +
+        'window.__JSON = window.JSON; window.JSON = {stringify: () => "hooked"}; "ok"',
+    );
+    try {
+      const byValue = await rd.execute(`(${value})`);
+      assert.deepStrictEqual(byValue, {a: [1, 'x"\n'], b: {c: null, d: true}});
+      assert.deepStrictEqual(await rd.executeAtom('execute_script', [`return ${value};`, []]), byValue);
+      assert.deepStrictEqual(await rd.executeAtom('execute_script', [`return Promise.resolve(${value});`, []]), byValue);
+    } finally {
+      await rd.execute('delete Array.prototype.toJSON; delete Object.prototype.toJSON; window.JSON = window.__JSON; "ok"');
+    }
+  });
+
   it('should give the user gesture to a script that returns a promise, with its timeout', async function () {
     await fixture.selectTestPage();
     const rd = fixture.rd();
