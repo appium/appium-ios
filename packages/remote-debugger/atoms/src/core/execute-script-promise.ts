@@ -34,7 +34,7 @@ export function executeScriptAwaitingPromise(
       return finish(wrapResponse(result));
     }
   } catch (ex) {
-    return finish(serializationError(ex));
+    return finish(wrapSerializationError(ex));
   }
   const thenable = result;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
@@ -100,7 +100,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         try {
           ret = wrapResponse(value);
         } catch (ex) {
-          ret = serializationError(ex);
+          ret = wrapSerializationError(ex);
         }
         settle(ret);
       },
@@ -110,7 +110,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
 }
 
 /** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
-function serializationError(ex: unknown): ResponseObject {
+function wrapSerializationError(ex: unknown): ResponseObject {
   return typeof ex === 'object' && ex !== null
     ? wrapError(ex as Error)
     : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(ex)));
