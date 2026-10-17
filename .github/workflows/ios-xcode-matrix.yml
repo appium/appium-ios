@@ -1,10 +1,10 @@
 name: iOS Xcode/Runtime Matrix (Reusable)
 
 # Single source of truth for the Xcode/iOS-runtime/device-name combinations that every package's
-# real-simulator test suite runs against - coresim's integration tests, and xcode's and
-# simulator's e2e/functional tests (via build.yml). Keeping them in one place means all three
-# packages are always tested against the same simulators instead of drifting out of sync across
-# separate per-workflow copies of this matrix.
+# real-simulator test suite runs against - coresim's integration tests, xcode's and simulator's
+# e2e/functional tests (via build.yml), and WebDriverAgent's oldest/newest legs (min/max outputs).
+# Keeping them in one place means all packages are always tested against the same simulators
+# instead of drifting out of sync across separate per-workflow copies of this matrix.
 
 on:
   workflow_call:
@@ -12,12 +12,20 @@ on:
       matrix:
         description: JSON array of {xcodeVersion, iosVersion, deviceName, image} objects
         value: ${{ jobs.matrix.outputs.matrix }}
+      min:
+        description: The oldest {xcodeVersion, iosVersion, deviceName, image} entry of the matrix
+        value: ${{ jobs.matrix.outputs.min }}
+      max:
+        description: The newest {xcodeVersion, iosVersion, deviceName, image} entry of the matrix
+        value: ${{ jobs.matrix.outputs.max }}
 
 jobs:
   matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
+      min: ${{ steps.set.outputs.min }}
+      max: ${{ steps.set.outputs.max }}
     steps:
       - id: set
         run: |
@@ -30,3 +38,7 @@ jobs:
             {"xcodeVersion": "16.4", "iosVersion": "18.5", "deviceName": "iPhone 16", "image": "macos-15"}
           ]'
           echo "matrix=$(echo "$json" | jq -c .)" >> "$GITHUB_OUTPUT"
+          # Ends of the matrix by Xcode version, for suites that only run the oldest/newest legs.
+          sorted='sort_by(.xcodeVersion | split(".") | map(tonumber))'
+          echo "min=$(echo "$json" | jq -c "$sorted | .[0]")" >> "$GITHUB_OUTPUT"
+          echo "max=$(echo "$json" | jq -c "$sorted | .[-1]")" >> "$GITHUB_OUTPUT"

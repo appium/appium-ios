@@ -1,0 +1,115 @@
+/**
+* Copyright (c) 2015-present, Facebook, Inc.
+* All rights reserved.
+*
+* This source code is licensed under the BSD-style license found in the
+* LICENSE file in the root directory of this source tree.
+*/
+
+#import "FBActiveAppDetectionPoint.h"
+
+#if TARGET_OS_WATCH
+@import WatchKit;
+#endif
+
+#import "FBErrorBuilder.h"
+#import "FBScreen.h"
+#import "FBConfiguration.h"
+#import "FBExceptions.h"
+#import "XCUIScreen.h"
+#import "FBLogger.h"
+#import "FBXCTestDaemonsProxy.h"
+#import "XCTMessagingChannel_RunnerToDaemon-Protocol.h"
+
+@implementation FBActiveAppDetectionPoint
+
+- (instancetype)init {
+  if ((self = [super init])) {
+#if TARGET_OS_WATCH
+    CGSize screenSize = WKInterfaceDevice.currentDevice.screenBounds.size;
+#else
+    CGSize screenSize = [UIScreen mainScreen].bounds.size;
+#endif
+    // Consider the element, which is located close to the top left corner of the screen the on-screen one.
+    CGFloat pointDistance = MIN(screenSize.width, screenSize.height) * (CGFloat) 0.2;
+    _coordinates = CGPointMake(pointDistance, pointDistance);
+  }
+  return self;
+}
+
++ (instancetype)sharedInstance
+{
+  static FBActiveAppDetectionPoint *instance;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    instance = [[self alloc] init];
+  });
+  return instance;
+}
+
++ (id<FBXCAccessibilityElement>)axElementWithPoint:(CGPoint)point
+{
+  if (nil != FBConfiguration.sharedInstance.currentDisplayId) {
+    NSError *error;
+    XCUIScreen *screen = [FBScreen currentScreenWithError:&error];
+    if (nil == screen) {
+      @throw [NSException exceptionWithName:FBInvalidArgumentException
+                                    reason:error.localizedDescription
+                                  userInfo:nil];
+    }
+    // XCTest's point lookup has no display parameter and always hits the main
+    // display. On Duo this can select the outer SpringBoard while the app is
+    // foreground on the inner display. Let callers use their active-app fallback
+    // instead of treating an element from a different display as authoritative.
+    if (screen.displayID != XCUIScreen.mainScreen.displayID) {
+      return nil;
+    }
+  }
+  __block id<FBXCAccessibilityElement> onScreenElement = nil;
+  id<XCTMessagingChannel_RunnerToDaemon> proxy = [FBXCTestDaemonsProxy testRunnerProxy];
+  dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+  [proxy _XCT_requestElementAtPoint:point
+                              reply:^(id element, NSError *error) {
+                                if (nil == error) {
+                                  onScreenElement = element;
+                                } else {
+                                  [FBLogger logFmt:@"Cannot request the screen point at %@", NSStringFromCGPoint(point)];
+                                }
+                                dispatch_semaphore_signal(sem);
+                              }];
+  dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)));
+  return onScreenElement;
+}
+
+- (id<FBXCAccessibilityElement>)axElement
+{
+  return [self.class axElementWithPoint:self.coordinates];
+}
+
+- (BOOL)setCoordinatesWithString:(NSString *)coordinatesStr error:(NSError **)error
+{
+  NSArray<NSString *> *screenPointCoords = [coordinatesStr componentsSeparatedByString:@","];
+  if (screenPointCoords.count != 2) {
+    return [[[FBErrorBuilder builder]
+             withDescriptionFormat:@"The screen point coordinates should be separated by a single comma character. Got '%@' instead", coordinatesStr]
+            buildError:error];
+  }
+  NSString *strX = [screenPointCoords.firstObject stringByTrimmingCharactersInSet:
+                    NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  NSString *strY = [screenPointCoords.lastObject stringByTrimmingCharactersInSet:
+                    NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  if (0 == strX.length || 0 == strY.length) {
+    return [[[FBErrorBuilder builder]
+             withDescriptionFormat:@"Both screen point coordinates should be valid numbers. Got '%@' instead", coordinatesStr]
+            buildError:error];
+  }
+  self.coordinates = CGPointMake((CGFloat) strX.doubleValue, (CGFloat) strY.doubleValue);
+  return YES;
+}
+
+- (NSString *)stringCoordinates
+{
+  return [NSString stringWithFormat:@"%.2f,%.2f", self.coordinates.x, self.coordinates.y];
+}
+
+@end

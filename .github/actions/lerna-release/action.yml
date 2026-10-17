@@ -21,6 +21,9 @@ outputs:
   uicatalog_release_tag:
     description: '"<pkg_name>@<pkg_version>" if ios-uicatalog was published this run, empty otherwise'
     value: ${{ steps.run-lerna-publish.outputs.uicatalog_release_tag }}
+  webdriveragent_release_tag:
+    description: '"<pkg_name>@<pkg_version>" if appium-webdriveragent was published this run, empty otherwise'
+    value: ${{ steps.run-lerna-publish.outputs.webdriveragent_release_tag }}
 
 runs:
   using: composite
@@ -39,7 +42,9 @@ runs:
         # Default: not published this run. Overwritten below at whichever point
         # ios-uicatalog actually gets published - GITHUB_OUTPUT keeps the last write.
         BEFORE_UICATALOG_VERSION="$(jq -r '.version' packages/uicatalog/package.json)"
+        BEFORE_WDA_VERSION="$(jq -r '.version' packages/webdriveragent/package.json)"
         echo "uicatalog_release_tag=" >> "$GITHUB_OUTPUT"
+        echo "webdriveragent_release_tag=" >> "$GITHUB_OUTPUT"
 
         # Prints "<pkg_name>@<pkg_version>" to stdout for each non-private workspace package
         # whose current package.json version is not yet on npm.
@@ -113,6 +118,9 @@ runs:
             if [ "$pkg_name" = "ios-uicatalog" ]; then
               echo "uicatalog_release_tag=${pkg_spec}" >> "$GITHUB_OUTPUT"
             fi
+            if [ "$pkg_name" = "appium-webdriveragent" ]; then
+              echo "webdriveragent_release_tag=${pkg_spec}" >> "$GITHUB_OUTPUT"
+            fi
           done
           return $overall_status
         }
@@ -162,6 +170,10 @@ runs:
             after_uicatalog_version="$(jq -r '.version' packages/uicatalog/package.json)"
             if [ "$after_uicatalog_version" != "$BEFORE_UICATALOG_VERSION" ]; then
               echo "uicatalog_release_tag=ios-uicatalog@${after_uicatalog_version}" >> "$GITHUB_OUTPUT"
+            fi
+            after_wda_version="$(jq -r '.version' packages/webdriveragent/package.json)"
+            if [ "$after_wda_version" != "$BEFORE_WDA_VERSION" ]; then
+              echo "webdriveragent_release_tag=appium-webdriveragent@${after_wda_version}" >> "$GITHUB_OUTPUT"
             fi
             exit 0
           fi

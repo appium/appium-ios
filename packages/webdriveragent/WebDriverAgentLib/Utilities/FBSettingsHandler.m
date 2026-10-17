@@ -1,0 +1,398 @@
+/**
+ * Copyright (c) 2015-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#import "FBSettingsHandler.h"
+
+#import "FBActiveAppDetectionPoint.h"
+#import "FBClassChainQueryParser.h"
+#import "FBCommandStatus.h"
+#import "FBConfiguration.h"
+#import "FBScreen.h"
+#import "FBSession.h"
+#import "FBSettings.h"
+
+typedef FBCommandStatus * _Nullable (^FBSettingApplyBlock)(FBSession *session, id value);
+typedef id _Nonnull (^FBSettingGetBlock)(FBSession *session);
+
+static id FBNormalizedSettingValue(id value)
+{
+  return value == NSNull.null ? nil : value;
+}
+
+static NSSet<NSString *> *FBNilClearableSettingKeys(void)
+{
+  static NSSet<NSString *> *keys;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    keys = [NSSet setWithObjects:
+      FB_SETTING_DEFAULT_ALERT_ACTION,
+      FB_SETTING_ACCEPT_ALERT_BUTTON_SELECTOR,
+      FB_SETTING_DISMISS_ALERT_BUTTON_SELECTOR,
+      FB_SETTING_AUTO_CLICK_ALERT_SELECTOR,
+      FB_SETTING_CURRENT_DISPLAY_ID,
+      nil];
+  });
+  return keys;
+}
+
+@implementation FBSettingsHandler
+
++ (NSDictionary<NSString *, FBSettingApplyBlock> *)settersMap
+{
+  static NSDictionary<NSString *, FBSettingApplyBlock> *settersMap;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    NSMutableDictionary<NSString *, FBSettingApplyBlock> *map = [NSMutableDictionary dictionary];
+    map[FB_SETTING_USE_COMPACT_RESPONSES] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.shouldUseCompactResponses = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_ELEMENT_RESPONSE_ATTRIBUTES] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.elementResponseAttributes = (NSString *)value;
+      return nil;
+    };
+    map[FB_SETTING_MJPEG_SERVER_SCREENSHOT_QUALITY] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.mjpegServerScreenshotQuality = [value unsignedIntegerValue];
+      return nil;
+    };
+    map[FB_SETTING_MJPEG_SERVER_FRAMERATE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.mjpegServerFramerate = [value unsignedIntegerValue];
+      return nil;
+    };
+    map[FB_SETTING_SCREENSHOT_QUALITY] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.screenshotQuality = [value unsignedIntegerValue];
+      return nil;
+    };
+    map[FB_SETTING_MJPEG_SCALING_FACTOR] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.mjpegScalingFactor = [value floatValue];
+      return nil;
+    };
+    map[FB_SETTING_MJPEG_FIX_ORIENTATION] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.mjpegShouldFixOrientation = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_KEYBOARD_AUTOCORRECTION] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.keyboardAutocorrection = [value boolValue]
+        ? FBConfigurationKeyboardPreferenceEnabled
+        : FBConfigurationKeyboardPreferenceDisabled;
+      return nil;
+    };
+    map[FB_SETTING_KEYBOARD_PREDICTION] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.keyboardPrediction = [value boolValue]
+        ? FBConfigurationKeyboardPreferenceEnabled
+        : FBConfigurationKeyboardPreferenceDisabled;
+      return nil;
+    };
+    map[FB_SETTING_RESPECT_SYSTEM_ALERTS] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.shouldRespectSystemAlerts = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_SNAPSHOT_MAX_DEPTH] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.snapshotMaxDepth = [value intValue];
+      return nil;
+    };
+    map[FB_SETTING_SNAPSHOT_MAX_CHILDREN] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.snapshotMaxChildren = [value intValue];
+      return nil;
+    };
+    map[FB_SETTING_USE_FIRST_MATCH] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.useFirstMatch = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_BOUND_ELEMENTS_BY_INDEX] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.boundElementsByIndex = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_REDUCE_MOTION] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.reduceMotionEnabled = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_DEFAULT_ACTIVE_APPLICATION] = ^FBCommandStatus *(FBSession *session, id value) {
+      session.defaultActiveApplication = (NSString *)value;
+      return nil;
+    };
+    map[FB_SETTING_ACTIVE_APP_DETECTION_POINT] = ^FBCommandStatus *(FBSession *session, id value) {
+      NSError *error;
+      if (![FBActiveAppDetectionPoint.sharedInstance setCoordinatesWithString:(NSString *)value
+                                                                        error:&error]) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
+                                                      traceback:nil];
+      }
+      return nil;
+    };
+    map[FB_SETTING_ACCEPT_ALERT_BUTTON_SELECTOR] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.acceptAlertButtonSelector = (NSString *)value;
+      return nil;
+    };
+    map[FB_SETTING_DISMISS_ALERT_BUTTON_SELECTOR] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.dismissAlertButtonSelector = (NSString *)value;
+      return nil;
+    };
+    map[FB_SETTING_AUTO_CLICK_ALERT_SELECTOR] = ^FBCommandStatus *(FBSession *session, id value) {
+      return [self configureAutoClickAlertWithSelector:(NSString *)value forSession:session];
+    };
+    map[FB_SETTING_WAIT_FOR_IDLE_TIMEOUT] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.waitForIdleTimeout = [value doubleValue];
+      return nil;
+    };
+    map[FB_SETTING_ANIMATION_COOL_OFF_TIMEOUT] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.animationCoolOffTimeout = [value doubleValue];
+      return nil;
+    };
+    map[FB_SETTING_ACCESSIBILITY_DEADLINE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.accessibilityDeadline = [value doubleValue];
+      return nil;
+    };
+    map[FB_SETTING_DEFAULT_ALERT_ACTION] = ^FBCommandStatus *(FBSession *session, id value) {
+      if (nil == value) {
+        session.defaultAlertAction = nil;
+      } else if ([value isKindOfClass:NSString.class]) {
+        session.defaultAlertAction = [(NSString *)value lowercaseString];
+      }
+      return nil;
+    };
+    map[FB_SETTING_MAX_TYPING_FREQUENCY] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.maxTypingFrequency = [value unsignedIntegerValue];
+      return nil;
+    };
+    map[FB_SETTING_USE_CLEAR_TEXT_SHORTCUT] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.useClearTextShortcut = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_INCLUDE_HITTABLE_IN_PAGE_SOURCE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.includeHittableInPageSource = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_INCLUDE_NATIVE_FRAME_IN_PAGE_SOURCE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.includeNativeFrameInPageSource = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_INCLUDE_NATIVE_ACCESSIBILITY_ELEMENT_IN_PAGE_SOURCE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.includeNativeAccessibilityElementInPageSource = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_INCLUDE_MIN_MAX_VALUE_IN_PAGE_SOURCE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.includeMinMaxValueInPageSource = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_INCLUDE_CUSTOM_ACTIONS_IN_PAGE_SOURCE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.includeCustomActionsInPageSource = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_ENFORCE_CUSTOM_SNAPSHOTS] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.enforceCustomSnapshots = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_LIMIT_XPATH_CONTEXT_SCOPE] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.limitXpathContextScope = [value boolValue];
+      return nil;
+    };
+    map[FB_SETTING_CURRENT_DISPLAY_ID] = ^FBCommandStatus *(FBSession *session, id value) {
+      if (nil == value) {
+        FBConfiguration.sharedInstance.currentDisplayId = nil;
+        return nil;
+      }
+      if (![value isKindOfClass:NSNumber.class]
+          || CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()
+          || [value compare:@([value longLongValue])] != NSOrderedSame) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:@"currentDisplayId must be an integer display id returned by /wda/screens"
+                                                      traceback:nil];
+      }
+      NSError *error;
+      if (nil == [FBScreen screenWithDisplayID:[value longLongValue] error:&error]) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
+                                                      traceback:nil];
+      }
+      FBConfiguration.sharedInstance.currentDisplayId = @([value longLongValue]);
+      return nil;
+    };
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+    map[FB_SETTING_SCREENSHOT_ORIENTATION] = ^FBCommandStatus *(FBSession *session, id value) {
+      NSError *error;
+      if (![FBConfiguration.sharedInstance setScreenshotOrientation:(NSString *)value error:&error]) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
+                                                      traceback:nil];
+      }
+      return nil;
+    };
+#endif
+    settersMap = map.copy;
+  });
+  return settersMap;
+}
+
++ (NSDictionary<NSString *, FBSettingGetBlock> *)gettersMap
+{
+  static NSDictionary<NSString *, FBSettingGetBlock> *gettersMap;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    NSMutableDictionary<NSString *, FBSettingGetBlock> *map = [NSMutableDictionary dictionary];
+    map[FB_SETTING_USE_COMPACT_RESPONSES] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.shouldUseCompactResponses);
+    };
+    map[FB_SETTING_ELEMENT_RESPONSE_ATTRIBUTES] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.elementResponseAttributes;
+    };
+    map[FB_SETTING_MJPEG_SERVER_SCREENSHOT_QUALITY] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.mjpegServerScreenshotQuality);
+    };
+    map[FB_SETTING_MJPEG_SERVER_FRAMERATE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.mjpegServerFramerate);
+    };
+    map[FB_SETTING_MJPEG_SCALING_FACTOR] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.mjpegScalingFactor);
+    };
+    map[FB_SETTING_MJPEG_FIX_ORIENTATION] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.mjpegShouldFixOrientation);
+    };
+    map[FB_SETTING_SCREENSHOT_QUALITY] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.screenshotQuality);
+    };
+    map[FB_SETTING_KEYBOARD_AUTOCORRECTION] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.keyboardAutocorrection);
+    };
+    map[FB_SETTING_KEYBOARD_PREDICTION] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.keyboardPrediction);
+    };
+    map[FB_SETTING_SNAPSHOT_MAX_DEPTH] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.snapshotMaxDepth);
+    };
+    map[FB_SETTING_SNAPSHOT_MAX_CHILDREN] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.snapshotMaxChildren);
+    };
+    map[FB_SETTING_USE_FIRST_MATCH] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.useFirstMatch);
+    };
+    map[FB_SETTING_WAIT_FOR_IDLE_TIMEOUT] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.waitForIdleTimeout);
+    };
+    map[FB_SETTING_ANIMATION_COOL_OFF_TIMEOUT] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.animationCoolOffTimeout);
+    };
+    map[FB_SETTING_ACCESSIBILITY_DEADLINE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.accessibilityDeadline);
+    };
+    map[FB_SETTING_BOUND_ELEMENTS_BY_INDEX] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.boundElementsByIndex);
+    };
+    map[FB_SETTING_REDUCE_MOTION] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.reduceMotionEnabled);
+    };
+    map[FB_SETTING_DEFAULT_ACTIVE_APPLICATION] = ^id(FBSession *session) {
+      return session.defaultActiveApplication;
+    };
+    map[FB_SETTING_ACTIVE_APP_DETECTION_POINT] = ^id(FBSession *session) {
+      return FBActiveAppDetectionPoint.sharedInstance.stringCoordinates;
+    };
+    map[FB_SETTING_ACCEPT_ALERT_BUTTON_SELECTOR] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.acceptAlertButtonSelector;
+    };
+    map[FB_SETTING_DISMISS_ALERT_BUTTON_SELECTOR] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.dismissAlertButtonSelector;
+    };
+    map[FB_SETTING_AUTO_CLICK_ALERT_SELECTOR] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.autoClickAlertSelector;
+    };
+    map[FB_SETTING_DEFAULT_ALERT_ACTION] = ^id(FBSession *session) {
+      return session.defaultAlertAction ?: @"";
+    };
+    map[FB_SETTING_MAX_TYPING_FREQUENCY] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.maxTypingFrequency);
+    };
+    map[FB_SETTING_RESPECT_SYSTEM_ALERTS] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.shouldRespectSystemAlerts);
+    };
+    map[FB_SETTING_USE_CLEAR_TEXT_SHORTCUT] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.useClearTextShortcut);
+    };
+    map[FB_SETTING_INCLUDE_HITTABLE_IN_PAGE_SOURCE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.includeHittableInPageSource);
+    };
+    map[FB_SETTING_INCLUDE_NATIVE_FRAME_IN_PAGE_SOURCE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.includeNativeFrameInPageSource);
+    };
+    map[FB_SETTING_INCLUDE_NATIVE_ACCESSIBILITY_ELEMENT_IN_PAGE_SOURCE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.includeNativeAccessibilityElementInPageSource);
+    };
+    map[FB_SETTING_INCLUDE_MIN_MAX_VALUE_IN_PAGE_SOURCE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.includeMinMaxValueInPageSource);
+    };
+    map[FB_SETTING_INCLUDE_CUSTOM_ACTIONS_IN_PAGE_SOURCE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.includeCustomActionsInPageSource);
+    };
+    map[FB_SETTING_ENFORCE_CUSTOM_SNAPSHOTS] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.enforceCustomSnapshots);
+    };
+    map[FB_SETTING_LIMIT_XPATH_CONTEXT_SCOPE] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.limitXpathContextScope);
+    };
+    map[FB_SETTING_CURRENT_DISPLAY_ID] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.currentDisplayId ?: @([FBScreen displayID]);
+    };
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+    map[FB_SETTING_SCREENSHOT_ORIENTATION] = ^id(FBSession *session) {
+      return FBConfiguration.sharedInstance.humanReadableScreenshotOrientation;
+    };
+#endif
+    gettersMap = map.copy;
+  });
+  return gettersMap;
+}
+
++ (NSDictionary *)currentSettingsForSession:(FBSession *)session
+{
+  NSDictionary<NSString *, FBSettingGetBlock> *gettersMap = [self gettersMap];
+  NSMutableDictionary *settings = [NSMutableDictionary dictionaryWithCapacity:gettersMap.count];
+  for (NSString *key in gettersMap) {
+    settings[key] = gettersMap[key](session);
+  }
+  return settings.copy;
+}
+
++ (nullable FBCommandStatus *)applySettings:(NSDictionary *)settings toSession:(FBSession *)session
+{
+  NSDictionary<NSString *, FBSettingApplyBlock> *settersMap = [self settersMap];
+  NSSet<NSString *> *nilClearableKeys = FBNilClearableSettingKeys();
+  for (NSString *key in settings) {
+    FBSettingApplyBlock handler = settersMap[key];
+    if (nil == handler) {
+      continue;
+    }
+    id value = FBNormalizedSettingValue(settings[key]);
+    if (nil == value && ![nilClearableKeys containsObject:key]) {
+      continue;
+    }
+    FBCommandStatus *status = handler(session, value);
+    if (status.hasError) {
+      return status;
+    }
+  }
+  return nil;
+}
+
++ (FBCommandStatus *)configureAutoClickAlertWithSelector:(NSString *)selector
+                                              forSession:(FBSession *)session
+{
+  if (0 == [selector length]) {
+    FBConfiguration.sharedInstance.autoClickAlertSelector = selector;
+    [session disableAlertsMonitor];
+    return [FBCommandStatus ok];
+  }
+
+  NSError *error;
+  FBClassChain *parsedChain = [FBClassChainQueryParser parseQuery:selector error:&error];
+  if (nil == parsedChain) {
+    return [FBCommandStatus invalidSelectorErrorWithMessage:error.localizedDescription
+                                                  traceback:nil];
+  }
+  FBConfiguration.sharedInstance.autoClickAlertSelector = selector;
+  [session enableAlertsMonitor];
+  return [FBCommandStatus ok];
+}
+
+@end
