@@ -18,6 +18,9 @@
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBIsVisible.h"
 #import "FBXCodeCompatibility.h"
+#import "FBConfiguration.h"
+#import "FBScreen.h"
+#import "XCUIDevice+FBHinge.h"
 
 void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber** maxDepth) {
   if (nil == maxDepth) {
@@ -81,6 +84,48 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
   XCTAssertNil(error);
   XCTAssertEqualWithAccuracy(timeElapsed, backgroundDuration, 3.0);
   XCTAssertTrue(self.testedApplication.buttons[@"Alerts"].exists);
+}
+
+- (void)testInputAfterDeactivate
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  BOOL canFold = NO;
+#if TARGET_OS_SIMULATOR
+  canFold = device.fb_canAttemptSimulatedHingeAngleInjection;
+#endif
+  NSNumber *originalAngle = canFold ? [device fb_getSimulatedHingeAngle:nil] : nil;
+  NSNumber *originalDisplay = FBConfiguration.sharedInstance.currentDisplayId;
+  if (canFold) {
+    XCTAssertNotNil(originalAngle);
+  }
+  @try {
+    for (NSNumber *angle in (canFold ? @[@0, @90, @180] : @[@0])) {
+      if (canFold) {
+        XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3]];
+        for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+          if ([screen[@"isMain"] boolValue] == (angle.intValue == 0)) {
+            FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
+          }
+        }
+      }
+      for (NSNumber *duration in @[@0, @2]) {
+        [self launchApplication];
+        NSError *error = nil;
+        XCTAssertTrue([self.testedApplication fb_deactivateWithDuration:duration.doubleValue error:&error]);
+        XCTAssertNil(error);
+        // Existence/foreground checks alone miss lost input. Do not add a
+        // delay or retry: this first tap must actually open the alerts page.
+        [self.testedApplication.buttons[@"Alerts"] tap];
+        XCTAssertTrue([self.testedApplication.buttons[FBShowAlertButtonName] waitForExistenceWithTimeout:2]);
+      }
+    }
+  } @finally {
+    if (nil != originalAngle) {
+      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+    }
+    FBConfiguration.sharedInstance.currentDisplayId = originalDisplay;
+  }
 }
 
 - (void)testActiveApplication

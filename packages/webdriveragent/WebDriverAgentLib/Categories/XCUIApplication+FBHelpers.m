@@ -179,6 +179,16 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   }
   [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:MAX(duration, .0)]];
   [self activate];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  // With Xcode 27.1, reproduced on Duo/iOS 27.1 and iPhone 17e/iOS 27.0:
+  // the app can be idle while SpringBoard's resume transition is still running.
+  // Wait before the next command resolves element frames; waiting inside tap
+  // synthesis can be too late. See appium/appium#22857. The affected version
+  // range is unknown. Remove when testInputAfterDeactivate passes without this
+  // on supported environments. This wait does not prove app-specific readiness.
+  [XCUIApplication.fb_systemApplication fb_waitUntilStableWithTimeout:
+    FBConfiguration.sharedInstance.animationCoolOffTimeout];
+#endif
   return YES;
 }
 
