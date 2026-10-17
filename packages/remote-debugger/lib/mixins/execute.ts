@@ -1,6 +1,6 @@
 import {errors} from '@appium/base-driver';
 import {util, timing} from '@appium/support';
-import {retryInterval} from 'asyncbox';
+import {retryInterval, withTimeout} from 'asyncbox';
 
 import {getScriptForAtom} from '../atoms.js';
 import type {AtomName} from '../atoms.js';
@@ -17,9 +17,30 @@ import {
 /* How many milliseconds to wait for webkit to return a response before timing out */
 const RPC_RESPONSE_TIMEOUT_MS = 5000;
 
+/* Same limit as the atom */
+const MAX_PROMISE_TIMEOUT_MS = 60 * 60 * 1000;
+/* Lets the page timer, with its exact message, answer first */
+const NODE_TIMEOUT_MARGIN_MS = 1000;
+/* Runtime.awaitPromise gave no atom response: the page changed */
+const PAGE_CHANGED_MESSAGE = 'The page changed before the promise returned by the script settled';
+
+/** Options of the execute_script path of executeAtom. */
+interface ExecuteScriptAtomOptions {
+  timeoutMs?: number;
+  emulateUserGesture?: boolean;
+}
+
+/** App and page keys of the selected page. */
+interface PageKeys {
+  appIdKey: AppIdKey;
+  pageIdKey: PageIdKey;
+}
+
 /**
  * Executes a Selenium atom in Safari by generating the atom script and
  * executing it in the page context.
+ *
+ * `execute_script` awaits a returned thenable (https://w3c.github.io/webdriver/#execute-script).
  *
  * @param atom - Name of the Selenium atom to execute (see atoms/ directory).
  * @param args - Arguments to pass to the atom function. Defaults to empty array.
@@ -41,10 +62,12 @@ export async function executeAtom<R = any>(
   options: ExecuteAtomOptions = {},
 ): Promise<R> {
   this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
-  const script = await getScriptForAtom(atom, args, frames);
   const emulateUserGesture =
     options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
-  const value = await this.execute<R>(script, undefined, {emulateUserGesture});
+  const value =
+    atom === 'execute_script'
+      ? await new ScriptPromiseExecutor(this, {timeoutMs: options.timeoutMs, emulateUserGesture}).run(args, frames)
+      : await this.execute<R>(await getScriptForAtom(atom, args, frames), undefined, {emulateUserGesture});
   this.log.debug(
     `Received result for atom '${atom}' execution: ${util.truncateString(simpleStringify(value), RESPONSE_LOG_LENGTH)}`,
   );
@@ -259,4 +282,98 @@ function isGestureInteraction(atom: AtomName, args: any[]): boolean {
     (char) => char === '\n' || (char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
   );
   return text.length > 0 && hasOnlyTextOrNewlines && !/[\uE000-\uE005\uE008-\uF8FF]/u.test(text);
+}
+
+/**
+ * execute_script: one `Runtime.evaluate` of the atom (stringify, no returnByValue): a sync result is
+ * a string; a returned promise comes back as an object, awaited by `Runtime.awaitPromise`.
+ */
+class ScriptPromiseExecutor {
+  /** The promise exists only on the page that created it. */
+  private readonly keys: PageKeys;
+
+  /**
+   * @param rd - The remote debugger with the selected page.
+   * @param opts - Script timeout and user gesture for this call.
+   * @throws When no app or page is selected.
+   */
+  constructor(
+    private readonly rd: RemoteDebugger,
+    private readonly opts: ExecuteScriptAtomOptions,
+  ) {
+    this.keys = checkParams({appIdKey: getAppIdKey(rd), pageIdKey: getPageIdKey(rd)}) as PageKeys;
+  }
+
+  /**
+   * Runs the script and waits for a promise that it returns.
+   *
+   * @param args - `[script, scriptArgs]` of the execute_script atom.
+   * @param frames - Frame context array for frame-specific execution.
+   * @returns The value of the script, or of the promise that it returns.
+   * @throws {errors.ScriptTimeoutError} When the promise does not settle within `timeoutMs`.
+   * @throws {errors.UnknownError} When the page goes before the promise settles.
+   */
+  async run(args: any[], frames: string[]): Promise<any> {
+    const [script, scriptArgs = []] = args;
+    // stringify, default window, timeout
+    const atomScript = await getScriptForAtom(
+      'execute_script',
+      [script, scriptArgs, true, undefined, this.opts.timeoutMs],
+      frames,
+    );
+    const res = await this.evaluate(atomScript);
+    const promiseObjectId = res?.result?.objectId;
+    return promiseObjectId ? await this.awaitPromise(promiseObjectId) : convertJavascriptEvaluationResult(res);
+  }
+
+  /** `Runtime.evaluate` of the atom; the gesture is for the script only. Returns the raw result. */
+  private async evaluate(command: string): Promise<any> {
+    if (getGarbageCollectOnExecute(this.rd)) {
+      await this.rd.garbageCollect();
+    }
+    const rpcClient = this.rd.requireRpcClient(true);
+    await rpcClient.waitForPage(this.keys.appIdKey, this.keys.pageIdKey);
+    this.rd.log.debug(`Sending javascript command: '${util.truncateString(command, 50)}'`);
+    return await rpcClient.send('Runtime.evaluate', {
+      expression: command,
+      emulateUserGesture: this.opts.emulateUserGesture ?? false,
+      returnByValue: false,
+      ...this.keys,
+    });
+  }
+
+  private async awaitPromise(promiseObjectId: string): Promise<any> {
+    const {timeoutMs} = this.opts;
+    // the same limit as the atom's page timer
+    const limitMs =
+      typeof timeoutMs === 'number' ? Math.min(Math.max(0, timeoutMs), MAX_PROMISE_TIMEOUT_MS) : undefined;
+    this.rd.log.debug(
+      limitMs === undefined
+        ? 'Waiting for the promise returned by the script with no timeout'
+        : `Waiting up to ${limitMs} ms for the promise returned by the script (Node backup timer: +${NODE_TIMEOUT_MARGIN_MS} ms)`,
+    );
+    const wait = this.rd.requireRpcClient(true).send('Runtime.awaitPromise', {
+      promiseObjectId,
+      returnByValue: true,
+      ...this.keys,
+    });
+    const settled = limitMs === undefined ? await wait : await this.waitWithTimeout(wait, limitMs);
+    // success: the atom's JSON string; WebKit error: an object (e.g. page gone before the wait)
+    if (settled?.error) {
+      throw new errors.UnknownError(settled.error.message ?? PAGE_CHANGED_MESSAGE);
+    }
+    if (typeof settled !== 'string') {
+      throw new errors.UnknownError(PAGE_CHANGED_MESSAGE);
+    }
+    return convertJavascriptEvaluationResult(settled);
+  }
+
+  /** W3C: the remote end ends the wait, also when the page timer cannot fire. */
+  private async waitWithTimeout<T>(wait: Promise<T>, limitMs: number): Promise<T> {
+    return await withTimeout(
+      wait,
+      limitMs + NODE_TIMEOUT_MARGIN_MS,
+      new errors.ScriptTimeoutError(`Timed out waiting for the promise returned by the script after ${limitMs} ms`),
+    );
+  }
 }

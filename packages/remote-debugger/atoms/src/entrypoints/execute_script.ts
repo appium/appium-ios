@@ -1,1 +1,1 @@
-export {executeScript as default} from '../core/inject.js';
+export {executeScriptAwaitingPromise as default} from '../core/execute-script-promise.js';

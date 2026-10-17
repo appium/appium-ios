@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {describe, it} from 'node:test';
+import {afterEach, beforeEach, describe, it} from 'node:test';
 
+import {errors} from '@appium/base-driver';
 import sinon from 'sinon';
 
 import type {ExecuteAtomOptions, RemoteDebuggerOptions} from '../../../lib/index.js';
@@ -27,6 +28,203 @@ describe('execute', function () {
       };
       const res = await executeAtom.call(ctx, 'find_element', ['css selector', '#id', {ELEMENT: 'foo'}]);
       assert.deepStrictEqual(res, {hello: 'world'});
+    });
+
+    describe('execute_script', function () {
+      function makeCtx(...responses: any[]) {
+        const send = sinon.stub();
+        responses.forEach((response, i) => send.onCall(i).resolves(response));
+        const ctx: any = {
+          _appIdKey: 'appId',
+          _pageIdKey: 'pageId',
+          log: {debug: () => {}},
+          _rpcClient: {isConnected: true, send, waitForPage: async () => {}},
+          requireRpcClient() {
+            return this._rpcClient;
+          },
+        };
+        return {ctx, send};
+      }
+      const promiseObject = {result: {type: 'object', className: 'Promise', objectId: 'promise-1'}};
+
+      it('gives the value of a script that does not return a promise in one call', async function () {
+        const {ctx, send} = makeCtx(JSON.stringify({status: 0, value: 2}));
+        assert.strictEqual(await executeAtom.call(ctx, 'execute_script', ['return 1 + 1;', []]), 2);
+        assert.strictEqual(send.callCount, 1);
+        const [method, opts] = send.firstCall.args;
+        assert.strictEqual(method, 'Runtime.evaluate');
+        assert.strictEqual(opts.returnByValue, false);
+        assert.match(opts.expression, /\("return 1 \+ 1;",\[\],true,undefined,undefined\)$/);
+      });
+
+      it('waits for a promise that the script returns with Runtime.awaitPromise', async function () {
+        const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+        assert.strictEqual(await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []]), 5);
+        assert.strictEqual(send.callCount, 2);
+        const [method, opts] = send.secondCall.args;
+        assert.strictEqual(method, 'Runtime.awaitPromise');
+        assert.strictEqual(opts.promiseObjectId, 'promise-1');
+        assert.strictEqual(opts.returnByValue, true);
+        assert.strictEqual(opts.appIdKey, 'appId');
+        assert.strictEqual(opts.pageIdKey, 'pageId');
+      });
+
+      it('waits for the promise on the page that created it', async function () {
+        const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+        send.onCall(0).callsFake(async () => {
+          ctx._pageIdKey = 'otherPage';
+          return promiseObject;
+        });
+        await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []]);
+        assert.strictEqual(send.secondCall.args[1].pageIdKey, 'pageId');
+      });
+
+      it('gives the error of the atom response for a promise', async function () {
+        const response = {status: 28, value: {error: 'script timeout', message: 'Timed out'}};
+        const {ctx} = makeCtx(promiseObject, JSON.stringify(response));
+        await assert.rejects(
+          executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []]),
+          errors.ScriptTimeoutError,
+        );
+      });
+
+      it('gives the script timeout to the atom', async function () {
+        const {ctx, send} = makeCtx(JSON.stringify({status: 0, value: null}));
+        await executeAtom.call(ctx, 'execute_script', ['return;', []], [], {timeoutMs: 500});
+        assert.match(send.firstCall.args[1].expression, /\("return;",\[\],true,undefined,500\)$/);
+      });
+
+      describe('Node timer for the wait', function () {
+        let clock: sinon.SinonFakeTimers;
+        beforeEach(function () {
+          clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+        });
+        afterEach(function () {
+          clock.restore();
+        });
+        // wait until the given call is sent, without fake timers
+        async function sent(send: sinon.SinonStub, count: number) {
+          while (send.callCount < count) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        }
+
+        it('gives a script timeout when the page does not answer in time', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          const pending = executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []], [], {
+            timeoutMs: 300,
+          });
+          const rejected = assert.rejects(pending, errors.ScriptTimeoutError);
+          await sent(send, 2);
+          await clock.tickAsync(1299);
+          assert.strictEqual(clock.countTimers(), 1);
+          await clock.tickAsync(1);
+          await rejected;
+        });
+
+        it('keeps the page answer and clears the timer', async function () {
+          const {ctx} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+          const value = await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
+            timeoutMs: 300,
+          });
+          assert.strictEqual(value, 5);
+          assert.strictEqual(clock.countTimers(), 0);
+        });
+
+        it('gives the script timeout, not the margin, in the message', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          const pending = executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []], [], {
+            timeoutMs: 300,
+          });
+          const rejected = assert.rejects(pending, /after 300 ms/);
+          await sent(send, 2);
+          await clock.tickAsync(1300);
+          await rejected;
+        });
+
+        it('has no timer without timeoutMs', async function () {
+          const {ctx, send} = makeCtx(promiseObject);
+          send.onCall(1).returns(new Promise(() => {}));
+          void executeAtom.call(ctx, 'execute_script', ['return new Promise(() => {});', []]);
+          await sent(send, 2);
+          assert.strictEqual(clock.countTimers(), 0);
+        });
+      });
+
+      it('logs the timeout that it applies to the wait', async function () {
+        for (const [timeoutMs, expected] of [
+          [30000, /Waiting up to 30000 ms for the promise/],
+          [2 * 60 * 60 * 1000, /Waiting up to 3600000 ms for the promise/],
+          [undefined, /Waiting for the promise returned by the script with no timeout/],
+        ] as const) {
+          const {ctx} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+          ctx.log = {debug: sinon.spy()};
+          await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {timeoutMs});
+          assert.ok(
+            ctx.log.debug.getCalls().some(({args}: {args: string[]}) => expected.test(args[0])),
+            `${timeoutMs}: ${ctx.log.debug
+              .getCalls()
+              .map(({args}: {args: string[]}) => args[0])
+              .join(' | ')}`,
+          );
+        }
+      });
+
+      it('gives the gesture to the script evaluation only and the timeout to the atom only', async function () {
+        const {ctx, send} = makeCtx(promiseObject, JSON.stringify({status: 0, value: 5}));
+        await executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(5);', []], [], {
+          timeoutMs: 500,
+          emulateUserGesture: true,
+        });
+        const [[evaluateMethod, evaluateOpts], [waitMethod, waitOpts]] = send.getCalls().map(({args}) => args);
+        assert.strictEqual(evaluateMethod, 'Runtime.evaluate');
+        assert.strictEqual(evaluateOpts.emulateUserGesture, true);
+        assert.match(evaluateOpts.expression, /,true,undefined,500\)$/);
+        assert.strictEqual(waitMethod, 'Runtime.awaitPromise');
+        assert.ok(!('emulateUserGesture' in waitOpts));
+        for (const opts of [evaluateOpts, waitOpts]) {
+          assert.ok(!('timeoutMs' in opts));
+        }
+      });
+
+      it('does not emulate a gesture for the script by default', async function () {
+        const {ctx, send} = makeCtx(JSON.stringify({status: 0, value: 2}));
+        await executeAtom.call(ctx, 'execute_script', ['return 1 + 1;', []]);
+        assert.strictEqual(send.firstCall.args[1].emulateUserGesture, false);
+      });
+
+      it('throws an UnknownError, as the atom on unload, when the wait gives no atom response', async function () {
+        const missing = {id: 7, error: {code: -32000, message: 'Missing injected script for given promiseObjectId'}};
+        for (const [response, message] of [
+          [missing, /Missing injected script/],
+          [undefined, /page changed/],
+        ] as const) {
+          const {ctx} = makeCtx(promiseObject, response);
+          await assert.rejects(executeAtom.call(ctx, 'execute_script', ['return Promise.resolve(1);', []]), (err) => {
+            assert.ok(err instanceof errors.UnknownError);
+            assert.match((err as Error).message, message);
+            return true;
+          });
+        }
+      });
+    });
+
+    it('keeps returnByValue for the other atoms', async function () {
+      const send = sinon.stub().resolves({hello: 'world'});
+      const ctx: any = {
+        _appIdKey: 'appId',
+        _pageIdKey: 'pageId',
+        log: {debug: () => {}},
+        execute,
+        _rpcClient: {isConnected: true, send, waitForPage: async () => {}},
+        requireRpcClient() {
+          return this._rpcClient;
+        },
+      };
+      await executeAtom.call(ctx, 'get_text', [{ELEMENT: 'foo'}]);
+      assert.strictEqual(send.firstCall.args[1].returnByValue, true);
     });
   });
   describe('.executeAtomAsync', function () {
