@@ -126,12 +126,15 @@ requests and responses, and observed results.
 ### Rotation on Duo devices
 
 On Duo Simulator 27.1, assigning `XCUIDevice.orientation` can update XCTest's
-reported orientation without rotating the application. WDA first uses XCTest
-and checks the application's interface orientation after waiting for stability.
-If that check fails on a device with an available hinge sensor, WDA falls back
-to the vendor-defined `orientation-picker-control` event used by Xcode 27.1's
-Duo controls. The fallback is available on both simulators and physical devices;
-devices without a hinge retain the XCTest path.
+reported orientation without rotating the application. On Duo simulators with
+an available hinge sensor, WDA directly dispatches the vendor-defined
+`orientation-picker-control` event used by Xcode 27.1's Duo controls, while also
+keeping XCTest's reported device orientation in sync.
+
+On physical devices with an available hinge sensor, WDA first uses XCTest and
+checks the application's interface orientation after waiting for stability.
+Only if that check fails does WDA log the transition to the vendor HID fallback
+and attempt it. Devices without a hinge retain the XCTest path.
 
 The vendor event has only been verified on the Duo simulator. Its
 `com.apple.Virtualization.VirtualMachines` receiver may not exist on physical

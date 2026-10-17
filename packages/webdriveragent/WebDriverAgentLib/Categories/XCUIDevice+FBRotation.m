@@ -12,6 +12,7 @@
 #import <mach/mach_time.h>
 
 #import "FBConfiguration.h"
+#import "FBLogger.h"
 #import "FBRunLoopSpinner.h"
 #import "FBScreen.h"
 #import "FBSession.h"
@@ -112,13 +113,26 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
     // is on the inner panel. Prefer the session's active application.
     application = FBSession.activeSession.activeApplication ?: application;
   }
+  // Keep XCTest's reported device orientation in sync on the simulator too.
   [XCUIDevice sharedDevice].orientation = orientation;
+#if TARGET_OS_SIMULATOR
+  if (!supportsHinge) {
+    return [self waitUntilInterfaceIsAtOrientation:orientation application:application];
+  }
+  // On Duo simulators XCTest can update its value without rotating the app.
+  // Dispatch directly instead of waiting for the XCTest path to fail.
+#else
   if ([self waitUntilInterfaceIsAtOrientation:orientation application:application]) {
     return YES;
   }
-  // Try the vendor event only after XCTest fails to rotate the app. Allow
-  // physical hinged devices to try it too; receiver support is unverified.
-  if (!supportsHinge || !FBDispatchDuoOrientation(orientation)) {
+  if (!supportsHinge) {
+    return NO;
+  }
+  [FBLogger logFmt:@"XCTest did not rotate the app to device orientation %ld on a physical Duo device. "
+    @"Falling back to the vendor HID orientation event; physical-device support is unverified.",
+    (long)orientation];
+#endif
+  if (!FBDispatchDuoOrientation(orientation)) {
     return NO;
   }
   // Event dispatch is asynchronous. Keep checking the app, not just XCTest's
