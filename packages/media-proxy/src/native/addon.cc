@@ -17,7 +17,6 @@ using media_proxy::Pipeline;
 using media_proxy::PipelineConfig;
 using media_proxy::PipelineError;
 
-constexpr std::array<uint8_t, 4> kStartCode{0, 0, 0, 1};
 // Encoded units waiting for the JS thread; beyond this new ones are dropped so a stalled loop can't grow memory.
 // Fine for MJPEG (every frame stands alone); H.264 must resync to the next key frame instead.
 constexpr size_t kMaxPendingUnits = 60;
@@ -91,7 +90,7 @@ class Session : public std::enable_shared_from_this<Session> {
         throw Napi::TypeError::New(env, "chunks must be Buffers");
       }
       const auto buffer = chunk.As<Napi::Buffer<uint8_t>>();
-      unit.insert(unit.end(), kStartCode.begin(), kStartCode.end());
+      unit.insert(unit.end(), media_proxy::kAnnexBStartCode.begin(), media_proxy::kAnnexBStartCode.end());
       unit.insert(unit.end(), buffer.Data(), buffer.Data() + buffer.Length());
     }
     if (unit.empty()) {

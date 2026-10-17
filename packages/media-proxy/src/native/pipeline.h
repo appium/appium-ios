@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -12,6 +13,10 @@
 #include <vector>
 
 namespace media_proxy {
+
+// Typed error name (src/errors.ts) and the Annex-B start code shared by the native sources.
+inline constexpr const char* kEncoderUnavailableError = "MediaProxyEncoderUnavailableError";
+inline constexpr std::array<uint8_t, 4> kAnnexBStartCode = {0, 0, 0, 1};
 
 struct PipelineConfig {
   std::string outputCodec;  // "h264" | "mjpeg"

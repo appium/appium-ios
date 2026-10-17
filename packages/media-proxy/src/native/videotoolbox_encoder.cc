@@ -21,8 +21,6 @@ namespace media_proxy {
 
 namespace {
 
-constexpr const char* kUnavailable = "MediaProxyEncoderUnavailableError";
-constexpr std::array<uint8_t, 4> kStartCode = {0, 0, 0, 1};
 constexpr int32_t kMicrosTimescale = 1000000;
 constexpr size_t kMinNalLengthSize = 1;
 constexpr size_t kMaxNalLengthSize = 4;
@@ -59,7 +57,7 @@ bool IsKeyFrame(CMSampleBufferRef sample) {
 }
 
 void AppendNal(std::vector<uint8_t>& out, const uint8_t* data, size_t size) {
-  out.insert(out.end(), kStartCode.begin(), kStartCode.end());
+  out.insert(out.end(), kAnnexBStartCode.begin(), kAnnexBStartCode.end());
   out.insert(out.end(), data, data + size);
 }
 
@@ -75,13 +73,13 @@ class VideoToolboxEncoder final : public H264Encoder {
         VTCompressionSessionCreate(nullptr, params.width, params.height, kCMVideoCodecType_H264, spec.get(),
                                    pixelAttributes.get(), nullptr, &OnOutput, this, &session);
     if (status != noErr || session == nullptr) {
-      throw PipelineError{kUnavailable, Failure("session creation", status).message};
+      throw PipelineError{kEncoderUnavailableError, Failure("session creation", status).message};
     }
     session_.reset(session);
     Configure();
     if (const OSStatus prepared = VTCompressionSessionPrepareToEncodeFrames(session_.get()); prepared != noErr) {
       Invalidate();
-      throw PipelineError{kUnavailable, Failure("prepare", prepared).message};
+      throw PipelineError{kEncoderUnavailableError, Failure("prepare", prepared).message};
     }
   }
 
@@ -99,7 +97,9 @@ class VideoToolboxEncoder final : public H264Encoder {
     const Cf<CVPixelBufferRef> buffer(raw);
     CopyPlanes(nv12, raw);
 
-    const CMTime pts = CMTimeMake(nv12.pts, kMicrosTimescale);
+    // The session needs increasing timestamps even if the source timeline jumped back.
+    lastPts_ = std::max(nv12.pts, lastPts_ + 1);
+    const CMTime pts = CMTimeMake(lastPts_, kMicrosTimescale);
     Cf<CFDictionaryRef> properties;
     if (forceKeyFrame) {
       properties = Dictionary(kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue);
@@ -154,9 +154,15 @@ class VideoToolboxEncoder final : public H264Encoder {
   }
 
   static void CopyPlanes(const AVFrame& nv12, CVPixelBufferRef buffer) {
-    CVPixelBufferLockBaseAddress(buffer, 0);
+    if (const CVReturn locked = CVPixelBufferLockBaseAddress(buffer, 0); locked != kCVReturnSuccess) {
+      throw Failure("pixel buffer lock", locked);
+    }
     for (size_t plane = 0; plane < 2; ++plane) {
       auto* dst = static_cast<uint8_t*>(CVPixelBufferGetBaseAddressOfPlane(buffer, plane));
+      if (dst == nullptr) {
+        CVPixelBufferUnlockBaseAddress(buffer, 0);
+        throw Failure("pixel buffer mapping", kCVReturnError);
+      }
       const size_t dstStride = CVPixelBufferGetBytesPerRowOfPlane(buffer, plane);
       const size_t rows = CVPixelBufferGetHeightOfPlane(buffer, plane);
       const auto srcStride = static_cast<size_t>(nv12.linesize[plane]);
@@ -185,7 +191,7 @@ class VideoToolboxEncoder final : public H264Encoder {
     }
     try {
       pending_.push_back(ToAnnexB(sample));
-    } catch (const PipelineError&) {
+    } catch (...) {  // this is a VideoToolbox thread: nothing may escape (bad_alloc included)
       failure_ = kCMSampleBufferError_InvalidMediaFormat;
     }
   }
@@ -237,7 +243,9 @@ class VideoToolboxEncoder final : public H264Encoder {
       if (length > total - offset) {
         throw PipelineError{"MediaProxyError", "VideoToolbox produced a malformed sample"};
       }
-      AppendNal(unit.data, bytes + offset, length);
+      if (length > 0) {
+        AppendNal(unit.data, bytes + offset, length);
+      }
       offset += length;
     }
     return unit;
@@ -264,6 +272,7 @@ class VideoToolboxEncoder final : public H264Encoder {
   std::mutex mutex_;
   std::vector<EncodedUnit> pending_;
   OSStatus failure_ = noErr;
+  int64_t lastPts_ = -1;
   std::unique_ptr<std::remove_pointer_t<VTCompressionSessionRef>, SessionDeleter> session_;
 };
 

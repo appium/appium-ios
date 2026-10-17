@@ -24,7 +24,6 @@ namespace media_proxy {
 
 namespace {
 
-constexpr const char* kEncoderUnavailable = "MediaProxyEncoderUnavailableError";
 constexpr int kMaxCodecThreads = 4;
 constexpr int kMaxJpegQscale = 31;
 constexpr double kGopSeconds = 2;  // coresim's default key-frame interval
@@ -83,16 +82,20 @@ class Pipeline::Impl {
         onUnit_(std::move(onUnit)),
         intervalMicros_(std::max<int64_t>(1, std::llround(1e6 / std::max(config.fps, 1.0)))),
         toleranceMicros_(intervalMicros_ / kToleranceDivisor) {
+    if (!isH264_ && config.outputCodec != "mjpeg") {
+      throw PipelineError{"MediaProxyOptionError", "outputCodec must be 'h264' or 'mjpeg'"};
+    }
     const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_HEVC);
     if (isH264_) {
       if (H264EncoderNames().empty()) {
-        throw PipelineError{kEncoderUnavailable, "No H.264 encoder is available on this platform; use mjpeg"};
+        throw PipelineError{kEncoderUnavailableError, "No H.264 encoder is available on this platform; use mjpeg"};
       }
     } else {
       mjpeg_ = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
     }
     if (decoder == nullptr || (!isH264_ && mjpeg_ == nullptr)) {
-      throw PipelineError{kEncoderUnavailable, "The HEVC decoder or the output encoder is missing from this build"};
+      throw PipelineError{kEncoderUnavailableError,
+                          "The HEVC decoder or the output encoder is missing from this build"};
     }
     ConfigureLogging();
     decoder_.reset(avcodec_alloc_context3(decoder));
@@ -190,7 +193,7 @@ class Pipeline::Impl {
     }
     converted_->pts = pts;
     if (isH264_) {
-      h264_->Encode(*converted_, keyFrameRequested_.exchange(false));
+      EncodeH264(width, height);
       return;
     }
     converted_->quality = mjpegCtx_->global_quality;
@@ -198,6 +201,23 @@ class Pipeline::Impl {
       throw Fatal("MJPEG encode failed", ret);
     }
     DrainEncoder();
+  }
+
+  // A hardware session can die mid-stream (media-service reset): reopen once and retry; the new session starts
+  // with a key frame. A forced key frame that comes out missing (the encoder dropped it) is requested again.
+  void EncodeH264(int width, int height) {
+    const bool forced = keyFrameRequested_.exchange(false);
+    sawKeyFrame_ = false;
+    try {
+      h264_->Encode(*converted_, forced);
+    } catch (const PipelineError&) {
+      h264_.reset();
+      OpenEncoder(width, height);
+      h264_->Encode(*converted_, true);
+    }
+    if (forced && !sawKeyFrame_) {
+      keyFrameRequested_.store(true);
+    }
   }
 
   // Keeps the aspect ratio; both sides stay even for 4:2:0.
@@ -217,7 +237,10 @@ class Pipeline::Impl {
         params.fps = config_.fps;
         params.bitrate = static_cast<int64_t>(config_.bitrate);
         params.gopFrames = std::max(1, static_cast<int>(std::lround(config_.fps * kGopSeconds)));
-        h264_ = CreateH264Encoder(params, onUnit_);
+        h264_ = CreateH264Encoder(params, [this](EncodedUnit&& unit) {
+          sawKeyFrame_ = sawKeyFrame_ || unit.isKeyFrame;
+          onUnit_(std::move(unit));
+        });
         openWidth_ = width;
         openHeight_ = height;
       }
@@ -299,6 +322,7 @@ class Pipeline::Impl {
   int64_t nextSlotMicros_ = -1;
   const AVCodec* mjpeg_ = nullptr;
   std::unique_ptr<H264Encoder> h264_;
+  bool sawKeyFrame_ = false;
   int openWidth_ = 0;
   int openHeight_ = 0;
   CodecContext decoder_;
