@@ -125,12 +125,32 @@ runs:
           return $overall_status
         }
 
+        # Flags a package's GitHub release for asset (re)building when it exists but has none -
+        # e.g. npm publish succeeded in an earlier failed run, so recovery has nothing to publish.
+        flag_release_without_assets() {
+          local pkg_name="$1" output_key="$2" pkg_dir="$3" pkg_spec count
+          pkg_spec="${pkg_name}@$(jq -r '.version' "${pkg_dir}/package.json")"
+          count="$(gh release view "$pkg_spec" --json assets --jq '.assets | length' 2>/dev/null || true)"
+          if [ "$count" = "0" ]; then
+            echo "Release ${pkg_spec} has no assets; scheduling the asset build"
+            echo "${output_key}=${pkg_spec}" >> "$GITHUB_OUTPUT"
+          fi
+        }
+
+        flag_releases_without_assets() {
+          flag_release_without_assets ios-uicatalog uicatalog_release_tag packages/uicatalog
+          flag_release_without_assets appium-webdriveragent webdriveragent_release_tag packages/webdriveragent
+        }
+
         if [ "$RECOVER_MISSING_ONLY" = "true" ]; then
           echo "Recovery mode: scanning for packages missing on npm at their current package.json version"
           mapfile -t missing < <(find_missing_packages)
 
           if [ ${#missing[@]} -eq 0 ]; then
-            echo "No missing packages found; nothing to do"
+            echo "No missing packages found; nothing to publish"
+            if [ "$DRY_RUN" != "true" ]; then
+              flag_releases_without_assets
+            fi
             exit 0
           fi
 
@@ -148,6 +168,7 @@ runs:
           fi
 
           echo "All missing packages published successfully"
+          flag_releases_without_assets
           exit 0
         fi
 
@@ -206,6 +227,7 @@ runs:
             fi
 
             echo "All publishable workspace package versions are present on npm; treating recovery as successful."
+            flag_releases_without_assets
           else
             echo "Release failed and no known recovery condition matched"
             exit $release_exit_code
