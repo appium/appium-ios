@@ -23,7 +23,6 @@
 
 # if !TARGET_OS_TV && !TARGET_OS_WATCH
 
-#if TARGET_OS_SIMULATOR
 static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
 {
   XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
@@ -99,7 +98,6 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
   }
   return canDispatch;
 }
-#endif
 
 static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDeviceOrientation orientation);
 
@@ -107,27 +105,29 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
 
 - (BOOL)fb_setDeviceInterfaceOrientation:(UIDeviceOrientation)orientation
 {
+  BOOL supportsHinge = self.fb_supportsHingeAngleReading;
   XCUIApplication *application = XCUIApplication.fb_activeApplication;
-  [XCUIDevice sharedDevice].orientation = orientation;
-#if TARGET_OS_SIMULATOR
-  if (self.fb_supportsHingeAngleReading) {
+  if (supportsHinge) {
     // Point-based detection can select the cover SpringBoard while the app
     // is on the inner panel. Prefer the session's active application.
     application = FBSession.activeSession.activeApplication ?: application;
-    if (!FBDispatchDuoOrientation(orientation)) {
-      return NO;
-    }
-    // Event dispatch is asynchronous. Keep checking the app, not just XCTest's
-    // device-orientation value, which can change without rotating the scene.
-    BOOL reachedOrientation = [[[FBRunLoopSpinner new] timeout:5.0] spinUntilTrue:^BOOL{
-      return application.interfaceOrientation == FBInterfaceOrientationFromDeviceOrientation(orientation);
-    }];
-    if (!reachedOrientation) {
-      return NO;
-    }
   }
-#endif
-  return [self waitUntilInterfaceIsAtOrientation:orientation application:application];
+  [XCUIDevice sharedDevice].orientation = orientation;
+  if ([self waitUntilInterfaceIsAtOrientation:orientation application:application]) {
+    return YES;
+  }
+  // Try the vendor event only after XCTest fails to rotate the app. Allow
+  // physical hinged devices to try it too; receiver support is unverified.
+  if (!supportsHinge || !FBDispatchDuoOrientation(orientation)) {
+    return NO;
+  }
+  // Event dispatch is asynchronous. Keep checking the app, not just XCTest's
+  // device-orientation value, which can change without rotating the scene.
+  BOOL reachedOrientation = [[[FBRunLoopSpinner new] timeout:5.0] spinUntilTrue:^BOOL{
+    return application.interfaceOrientation == FBInterfaceOrientationFromDeviceOrientation(orientation);
+  }];
+  return reachedOrientation
+    && [self waitUntilInterfaceIsAtOrientation:orientation application:application];
 }
 
 - (BOOL)fb_setDeviceRotation:(NSDictionary *)rotationObj

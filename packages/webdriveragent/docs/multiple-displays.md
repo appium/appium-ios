@@ -123,14 +123,20 @@ we would appreciate [reports of its display and capture behavior](https://github
 including the device model, iOS/Xcode and WDA versions, selected display IDs,
 requests and responses, and observed results.
 
-### Rotation on Duo simulators
+### Rotation on Duo devices
 
 On Duo Simulator 27.1, assigning `XCUIDevice.orientation` can update XCTest's
-reported orientation without rotating the application. WDA supplements that
-assignment with the vendor-defined `orientation-picker-control` event used by
-Xcode 27.1's Duo controls. This path is limited to iOS simulators with an
-available hinge sensor; ordinary simulators and physical devices retain the
-XCTest path.
+reported orientation without rotating the application. WDA first uses XCTest
+and checks the application's interface orientation after waiting for stability.
+If that check fails on a device with an available hinge sensor, WDA falls back
+to the vendor-defined `orientation-picker-control` event used by Xcode 27.1's
+Duo controls. The fallback is available on both simulators and physical devices;
+devices without a hinge retain the XCTest path.
+
+The vendor event has only been verified on the Duo simulator. Its
+`com.apple.Virtualization.VirtualMachines` receiver may not exist on physical
+hardware. Physical-device feedback is welcome; availability of the IOKit APIs
+or successful event submission does not establish that rotation works.
 
 Select the active panel with `currentDisplayId` before rotating. The inner
 panel's native orientation is a quarter turn from the cover panel, so WDA
