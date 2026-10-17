@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -143,7 +144,8 @@ class VideoToolboxEncoder final : public H264Encoder {
       CFStringGetCString(key, name.data(), name.size(), kCFStringEncodingUTF8);
       if (required) {
         Invalidate();
-        throw Failure((std::string("setting ") + name.data()).c_str(), status);
+        throw PipelineError{kEncoderUnavailableError,
+                            Failure((std::string("setting ") + name.data()).c_str(), status).message};
       }
       av_log(nullptr, AV_LOG_WARNING, "VideoToolbox rejected %s (OSStatus %d)\n", name.data(),
              static_cast<int>(status));
@@ -152,7 +154,8 @@ class VideoToolboxEncoder final : public H264Encoder {
     set(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel, false);
     set(kVTCompressionPropertyKey_ExpectedFrameRate, Number(params_.fps).get(), false);
     set(kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse, true);
-    set(kVTCompressionPropertyKey_AverageBitRate, Number(static_cast<int32_t>(params_.bitrate)).get(), true);
+    set(kVTCompressionPropertyKey_AverageBitRate,
+        Number(static_cast<int32_t>(std::min<int64_t>(params_.bitrate, INT32_MAX))).get(), true);
     set(kVTCompressionPropertyKey_MaxKeyFrameInterval, Number(static_cast<int32_t>(params_.gopFrames)).get(), true);
     set(kVTCompressionPropertyKey_ColorPrimaries, kCMFormatDescriptionColorPrimaries_ITU_R_709_2, true);
     set(kVTCompressionPropertyKey_TransferFunction, kCMFormatDescriptionTransferFunction_ITU_R_709_2, true);

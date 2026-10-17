@@ -26,7 +26,8 @@ namespace {
 
 constexpr int kMaxCodecThreads = 4;
 constexpr int kMaxJpegQscale = 31;
-constexpr double kGopSeconds = 2;  // coresim's default key-frame interval
+constexpr double kMaxGopFrames = 1 << 20;  // keeps the int conversion defined for absurd fps
+constexpr double kGopSeconds = 2;          // coresim's default key-frame interval
 constexpr int kMinJpegQscale = 2;
 // Slot-grid frame limiter (see Impl::AcceptFrame): timestamp jitter tolerated, as a fraction of 1/fps.
 constexpr int kToleranceDivisor = 4;
@@ -240,7 +241,7 @@ class Pipeline::Impl {
         params.height = height;
         params.fps = config_.fps;
         params.bitrate = static_cast<int64_t>(config_.bitrate);
-        params.gopFrames = std::max(1, static_cast<int>(std::lround(config_.fps * kGopSeconds)));
+        params.gopFrames = static_cast<int>(std::lround(std::clamp(config_.fps * kGopSeconds, 1.0, kMaxGopFrames)));
         h264_ = CreateH264Encoder(params, [this](EncodedUnit&& unit) {
           sawKeyFrame_ = sawKeyFrame_ || unit.isKeyFrame;
           onUnit_(std::move(unit));
