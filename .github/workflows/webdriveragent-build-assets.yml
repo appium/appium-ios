@@ -72,16 +72,16 @@ jobs:
       uses: nick-fields/retry@v4
       with:
         timeout_minutes: 10
-        working_directory: packages/webdriveragent
         max_attempts: 3
         command: |
+          cd "$GITHUB_WORKSPACE/packages/webdriveragent"
           export DERIVED_DATA_PATH="${{ matrix.config.derived_data_path }}"
           export SCHEME="${{ matrix.config.scheme }}"
           export DESTINATION="${{ matrix.config.destination }}"
           export WD="${{ matrix.config.wd }}"
           export ZIP_PKG_NAME="${{ matrix.config.zip_name }}"
           export ARCHS="${{ matrix.config.archs || '' }}"
-          sh $GITHUB_WORKSPACE/packages/webdriveragent/Scripts/ci/${{ matrix.config.build_script }}
+          sh Scripts/ci/${{ matrix.config.build_script }}
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
