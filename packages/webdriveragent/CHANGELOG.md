@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 16.16.0 (2026-10-17)
+
+### Features
+
+* move WebDriverAgent into the monorepo as packages/webdriveragent ([#76](https://github.com/appium/appium-ios/issues/76)) ([e5886f6](https://github.com/appium/appium-ios/commit/e5886f6f2265f4fc94e5c4c35889f67bd09aad96))
+
+
 ## [16.15.3](https://github.com/appium/WebDriverAgent/compare/v16.15.2...v16.15.3) (2026-10-16)
 
 ### Bug Fixes
