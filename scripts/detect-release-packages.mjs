@@ -49,11 +49,20 @@ async function isMissingOnNpm({name, version}) {
 async function hasEmptyRelease({name, version}) {
   try {
     const {stdout} = await execFileAsync('gh', [
-      'release', 'view', `${name}@${version}`, '--json', 'assets', '--jq', '.assets | length',
+      'release',
+      'view',
+      `${name}@${version}`,
+      '--json',
+      'assets',
+      '--jq',
+      '.assets | length',
     ]);
     return stdout.trim() === '0';
-  } catch {
-    return false; // no such release
+  } catch (err) {
+    if (/release not found/i.test(`${err.stderr}`)) {
+      return false;
+    }
+    throw err;
   }
 }
 

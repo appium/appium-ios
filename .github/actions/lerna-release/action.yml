@@ -130,7 +130,14 @@ runs:
         flag_release_without_assets() {
           local pkg_name="$1" output_key="$2" pkg_dir="$3" pkg_spec count
           pkg_spec="${pkg_name}@$(jq -r '.version' "${pkg_dir}/package.json")"
-          count="$(gh release view "$pkg_spec" --json assets --jq '.assets | length' 2>/dev/null || true)"
+          if ! count="$(gh release view "$pkg_spec" --json assets --jq '.assets | length' 2>&1)"; then
+            # A missing release is harmless; any other lookup failure must not pass silently
+            if [[ "$count" == *"release not found"* ]]; then
+              return 0
+            fi
+            echo "::error::Could not look up release ${pkg_spec}: ${count}"
+            return 1
+          fi
           if [ "$count" = "0" ]; then
             echo "Release ${pkg_spec} has no assets; scheduling the asset build"
             echo "${output_key}=${pkg_spec}" >> "$GITHUB_OUTPUT"
