@@ -114,14 +114,19 @@ before resolving coordinates, in addition to keeping its pose stable during a
 command. This observation does not imply that every missed gesture is an
 XCTest defect.
 
-## Home button on the Duo simulator
+## Home button on Duo devices
 
 On the Duo simulator running iOS 27.1, XCTest's Home button and its IOHID
 wrapper can return success without leaving the foreground application. WDA
 uses a directly dispatched IOKit Home key-down/key-up pair for Home requests
-on iOS simulators with an available hinge sensor. Ordinary simulators and
-physical devices retain the XCTest path. The direct path sends button events;
+on iOS devices with an available hinge sensor, including simulators and physical
+devices. Devices without a hinge retain the XCTest path. The direct path sends button events;
 it does not substitute application activation or change the selected display.
+
+The Home key event has been verified on the Duo simulator; physical Duo Home
+behavior remains unverified and feedback is welcome. Availability of IOKit APIs
+and successful event dispatch do not by themselves confirm that the app left
+the foreground.
 
 This workaround does not address rotation or input immediately after an
 application is reactivated. See [Appium #22857](https://github.com/appium/appium/issues/22857).

@@ -29,8 +29,15 @@
 static const NSTimeInterval FBHomeButtonCoolOffTime = 1.;
 static const NSTimeInterval FBScreenLockTimeout = 5.;
 
-#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
-static BOOL FBPressSimulatedHomeButton(NSError **error)
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+// Workaround tracked in https://github.com/appium/appium/issues/22857.
+// Reproduced on the iOS 27.1 Duo simulator with Xcode 27.1: XCTest's Home
+// request returns without backgrounding the app. This direct HID path is also
+// enabled on physical hinged devices, but Home behavior there is unverified.
+// The affected Xcode/runtime version range has not been established. Remove
+// this path when XCTest-only Home presses pass testHomeButtonBackgroundsApplication
+// on supported Duo environments, including physical devices and both panels.
+static BOOL FBPressDuoHomeButton(NSError **error)
 {
   static CFTypeRef (*createEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
   static CFTypeRef (*createClient)(CFAllocatorRef);
@@ -47,14 +54,14 @@ static BOOL FBPressSimulatedHomeButton(NSError **error)
     }
   });
   if (NULL == createEvent || NULL == createClient || NULL == dispatchEvent || NULL == setTimestamp) {
-    return [[FBErrorBuilder.builder withDescription:@"The simulator Home button HID APIs are unavailable"] buildError:error];
+    return [[FBErrorBuilder.builder withDescription:@"The Home button HID APIs are unavailable"] buildError:error];
   }
   CFTypeRef client = createClient(kCFAllocatorDefault);
   CFTypeRef down = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, 0x40, YES, 0);
   CFTypeRef up = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, 0x40, NO, 0);
   BOOL ready = NULL != client && NULL != down && NULL != up;
   if (ready) {
-    // XCTest's Home event arrives as an external-keyboard event on Duo and has
+    // XCTest's Home event arrives as external-keyboard input on the Duo simulator and has
     // no effect. Dispatch a paired HID button event instead; do not activate
     // SpringBoard, which would change the semantics of repeated Home presses.
     dispatchEvent(client, down);
@@ -71,7 +78,7 @@ static BOOL FBPressSimulatedHomeButton(NSError **error)
   if (NULL != client) {
     CFRelease(client);
   }
-  return ready || [[FBErrorBuilder.builder withDescription:@"Cannot create the simulator Home button HID event or client"] buildError:error];
+  return ready || [[FBErrorBuilder.builder withDescription:@"Cannot create the Home button HID event or client"] buildError:error];
 }
 #endif
 
@@ -400,9 +407,9 @@ static bool fb_isLocked;
              withDescriptionFormat:@"The button '%@' is not supported. The device under test only supports the following buttons: %@", buttonName, sortedKeys]
             buildError:error];
   }
-#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
   if (buttonValue.unsignedIntegerValue == XCUIDeviceButtonHome && self.fb_supportsHingeAngleReading) {
-    return FBPressSimulatedHomeButton(error);
+    return FBPressDuoHomeButton(error);
   }
 #endif
   [self pressButton:(XCUIDeviceButton)[buttonValue unsignedIntegerValue]];
