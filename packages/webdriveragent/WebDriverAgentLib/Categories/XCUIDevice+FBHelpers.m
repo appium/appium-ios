@@ -9,7 +9,9 @@
 #import "XCUIDevice+FBHelpers.h"
 
 #import <arpa/inet.h>
+#import <dlfcn.h>
 #import <ifaddrs.h>
+#import <mach/mach_time.h>
 #include <notify.h>
 #import <objc/runtime.h>
 
@@ -22,9 +24,56 @@
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIDevice.h"
+#import "XCUIDevice+FBHinge.h"
 
 static const NSTimeInterval FBHomeButtonCoolOffTime = 1.;
 static const NSTimeInterval FBScreenLockTimeout = 5.;
+
+#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
+static BOOL FBPressSimulatedHomeButton(NSError **error)
+{
+  static CFTypeRef (*createEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
+  static CFTypeRef (*createClient)(CFAllocatorRef);
+  static void (*dispatchEvent)(CFTypeRef, CFTypeRef);
+  static void (*setTimestamp)(CFTypeRef, uint64_t);
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    void *handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    if (NULL != handle) {
+      createEvent = dlsym(handle, "IOHIDEventCreateKeyboardEvent");
+      createClient = dlsym(handle, "IOHIDEventSystemClientCreate");
+      dispatchEvent = dlsym(handle, "IOHIDEventSystemClientDispatchEvent");
+      setTimestamp = dlsym(handle, "IOHIDEventSetTimeStamp");
+    }
+  });
+  if (NULL == createEvent || NULL == createClient || NULL == dispatchEvent || NULL == setTimestamp) {
+    return [[FBErrorBuilder.builder withDescription:@"The simulator Home button HID APIs are unavailable"] buildError:error];
+  }
+  CFTypeRef client = createClient(kCFAllocatorDefault);
+  CFTypeRef down = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, 0x40, YES, 0);
+  CFTypeRef up = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, 0x40, NO, 0);
+  BOOL ready = NULL != client && NULL != down && NULL != up;
+  if (ready) {
+    // XCTest's Home event arrives as an external-keyboard event on Duo and has
+    // no effect. Dispatch a paired HID button event instead; do not activate
+    // SpringBoard, which would change the semantics of repeated Home presses.
+    dispatchEvent(client, down);
+    [NSThread sleepForTimeInterval:0.03];
+    setTimestamp(up, mach_absolute_time());
+    dispatchEvent(client, up);
+  }
+  if (NULL != down) {
+    CFRelease(down);
+  }
+  if (NULL != up) {
+    CFRelease(up);
+  }
+  if (NULL != client) {
+    CFRelease(client);
+  }
+  return ready || [[FBErrorBuilder.builder withDescription:@"Cannot create the simulator Home button HID event or client"] buildError:error];
+}
+#endif
 
 #if TARGET_OS_TV
 NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
@@ -351,6 +400,11 @@ static bool fb_isLocked;
              withDescriptionFormat:@"The button '%@' is not supported. The device under test only supports the following buttons: %@", buttonName, sortedKeys]
             buildError:error];
   }
+#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (buttonValue.unsignedIntegerValue == XCUIDeviceButtonHome && self.fb_supportsHingeAngleReading) {
+    return FBPressSimulatedHomeButton(error);
+  }
+#endif
   [self pressButton:(XCUIDeviceButton)[buttonValue unsignedIntegerValue]];
   return YES;
 }

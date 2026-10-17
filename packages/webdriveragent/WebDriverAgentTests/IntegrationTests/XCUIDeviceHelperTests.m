@@ -15,6 +15,7 @@
 #import "XCUIApplication.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIDevice+FBHelpers.h"
+#import "XCUIDevice+FBHinge.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIScreen.h"
 
@@ -102,6 +103,44 @@
   XCTAssertTrue([[XCUIDevice sharedDevice] fb_goToHomescreenWithError:&error]);
   XCTAssertNil(error);
   FBAssertWaitTillBecomesTrue([XCUIApplication fb_activeApplication].icons[@"Safari"].exists);
+}
+
+- (void)testHomeButtonBackgroundsApplication
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  BOOL hasHinge = NO;
+#if TARGET_OS_SIMULATOR
+  hasHinge = device.fb_canAttemptSimulatedHingeAngleInjection;
+#endif
+  NSNumber *originalAngle = hasHinge ? [device fb_getSimulatedHingeAngle:nil] : nil;
+  if (hasHinge && nil == originalAngle) {
+    XCTFail(@"Cannot read the original hinge angle");
+    return;
+  }
+  @try {
+    for (NSNumber *angle in (hasHinge ? @[@0, @180] : @[@0])) {
+      if (hasHinge) {
+        XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2]];
+      }
+      for (NSUInteger attempt = 0; attempt < 2; attempt++) {
+        [self.testedApplication activate];
+        XCTAssertEqual(self.testedApplication.state, XCUIApplicationStateRunningForeground);
+        NSError *error = nil;
+        XCTAssertTrue([device fb_pressButton:@"home" forDuration:nil error:&error]);
+        XCTAssertNil(error);
+        XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
+          return self.testedApplication.state == XCUIApplicationStateRunningBackground
+            || self.testedApplication.state == XCUIApplicationStateRunningBackgroundSuspended;
+        }]);
+        XCTAssertTrue([XCUIApplication.fb_activeApplication.bundleID isEqualToString:@"com.apple.springboard"]);
+      }
+    }
+  } @finally {
+    if (nil != originalAngle) {
+      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+    }
+  }
 }
 
 - (void)testLockUnlockScreen
