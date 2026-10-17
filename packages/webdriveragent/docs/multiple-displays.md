@@ -144,6 +144,23 @@ The shipped `IntegrationApp` also reproduced the delivery failure: after
 The failing internal component is not isolated; no unconditional delay or
 automatic retry of user actions is applied by WDA.
 
+### Home button input
+
+Follow-up probes for [Appium #22857](https://github.com/appium/appium/issues/22857#issuecomment-6234088645)
+compared `pressButton:XCUIDeviceButtonHome` with Home IOHID events (page `0x0C`,
+usage `0x40`) lasting 0.005, 0.1, and 0.5 seconds. All four paths left the native
+fixture foreground in both closed and fully open Duo poses, despite successful
+event submission. On an iPhone 17e simulator running iOS 27.0, the ordinary Home
+press and the two shorter IOHID events backgrounded the same fixture; the
+0.5-second event did not. Increasing the hold duration is not a verified fix.
+
+Activating SpringBoard via `fb_goToHomescreenWithError:` did background the
+fixture and make SpringBoard active in both Duo poses. For a test that only
+needs to reach the home screen, this existing path is an observed alternative.
+It does not reproduce Home-button semantics such as repeated presses, and the
+reactivation input limitation above still applies. The driver can explicitly
+activate `com.apple.springboard` with `mobile: activateApp` for this purpose.
+
 ### Rotation and lock
 
 Direct XCTest assignments to `XCUIDevice.orientation` changed the device value,
@@ -154,6 +171,23 @@ response represents either landscape direction, while setting `LANDSCAPE`
 requests a particular direction; reading and setting that string need not be a
 no-op. Validate the resulting app layout rather than assuming a successful
 orientation assignment means it rotated.
+
+The follow-up rotation probe sampled the application's interface orientation
+and frame once per second for five seconds after each WDA rotation request.
+Neither Settings nor the SDK 27.1 fixture rotated on Duo within that interval:
+closed remained portrait, and open remained landscape. On the iPhone 17e
+simulator, the identical fixture rotated successfully in both landscape
+directions and back to portrait, while Settings remained portrait and WDA
+reported failure for landscape requests. Device rotation and application
+rotation must therefore be checked separately; a 500 response is not by itself
+proof of a timing bug. These probes do not support fixing Duo by adding a delay
+or accepting the device orientation alone as success.
+
+A separate host-side `@appium/coresim` 1.11.0 probe sent portrait and both
+landscape values through `PurpleWorkspacePort`, outside XCTest. The device
+orientation changed, but the fixture's interface orientation and frame remained
+fixed in each Duo pose. This alternative path is not a verified rotation fix
+either.
 
 Direct `pressLockButton` calls left the fixture foreground and the SpringBoard
 lock-state value at zero. Power IOHID events (page `0x0C`, usage `0x30`) at
