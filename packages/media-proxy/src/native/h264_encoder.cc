@@ -1,6 +1,8 @@
 #include "h264_encoder.h"
 
 #ifdef __APPLE__
+#include <atomic>
+
 #include "videotoolbox_encoder.h"
 #endif
 
@@ -9,17 +11,20 @@ namespace media_proxy {
 #ifdef __APPLE__
 namespace {
 
-// Opening a throwaway session is the only reliable test (VMs and some Macs have no usable encoder); done once.
+// Opening a throwaway session is the only reliable test (VMs and some Macs have no usable encoder). Only a
+// success is cached: a failure may be transient (media-service reset), so the next call tries again.
 bool VideoToolboxUsable() {
-  static const bool usable = [] {
-    constexpr H264Params kProbe{320, 240, 30, 1'000'000, 60};
-    try {
-      return CreateVideoToolboxEncoder(kProbe, [](EncodedUnit&&) {}) != nullptr;
-    } catch (const PipelineError&) {
-      return false;
-    }
-  }();
-  return usable;
+  static std::atomic<bool> usable{false};
+  if (usable.load()) {
+    return true;
+  }
+  constexpr H264Params kProbe{320, 240, 30, 1'000'000, 60};
+  try {
+    usable.store(CreateVideoToolboxEncoder(kProbe, [](EncodedUnit&&) {}) != nullptr);
+  } catch (const PipelineError&) {
+    return false;
+  }
+  return usable.load();
 }
 
 }  // namespace

@@ -15,6 +15,7 @@
 
 extern "C" {
 #include <libavutil/frame.h>
+#include <libavutil/log.h>
 }
 
 namespace media_proxy {
@@ -26,6 +27,7 @@ constexpr size_t kMinNalLengthSize = 1;
 constexpr size_t kMaxNalLengthSize = 4;
 constexpr size_t kByteBits = 8;
 constexpr Boolean kNo = 0;
+constexpr size_t kKeyNameSize = 64;
 
 struct CfDeleter {
   void operator()(CFTypeRef ref) const { CFRelease(ref); }
@@ -130,20 +132,31 @@ class VideoToolboxEncoder final : public H264Encoder {
     void operator()(VTCompressionSessionRef session) const { CFRelease(session); }
   };
 
+  // Properties that shape the promised output must be accepted; the rest are tuning (rejections are logged).
   void Configure() {
-    const auto set = [&](CFStringRef key, CFTypeRef value) {
-      // Optional tuning: a property this macOS version rejects must not stop the stream.
-      VTSessionSetProperty(session_.get(), key, value);
+    const auto set = [&](CFStringRef key, CFTypeRef value, bool required) {
+      const OSStatus status = VTSessionSetProperty(session_.get(), key, value);
+      if (status == noErr) {
+        return;
+      }
+      std::array<char, kKeyNameSize> name{};
+      CFStringGetCString(key, name.data(), name.size(), kCFStringEncodingUTF8);
+      if (required) {
+        Invalidate();
+        throw Failure((std::string("setting ") + name.data()).c_str(), status);
+      }
+      av_log(nullptr, AV_LOG_WARNING, "VideoToolbox rejected %s (OSStatus %d)\n", name.data(),
+             static_cast<int>(status));
     };
-    set(kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-    set(kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
-    set(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel);
-    set(kVTCompressionPropertyKey_AverageBitRate, Number(static_cast<int32_t>(params_.bitrate)).get());
-    set(kVTCompressionPropertyKey_ExpectedFrameRate, Number(params_.fps).get());
-    set(kVTCompressionPropertyKey_MaxKeyFrameInterval, Number(static_cast<int32_t>(params_.gopFrames)).get());
-    set(kVTCompressionPropertyKey_ColorPrimaries, kCMFormatDescriptionColorPrimaries_ITU_R_709_2);
-    set(kVTCompressionPropertyKey_TransferFunction, kCMFormatDescriptionTransferFunction_ITU_R_709_2);
-    set(kVTCompressionPropertyKey_YCbCrMatrix, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2);
+    set(kVTCompressionPropertyKey_RealTime, kCFBooleanTrue, false);
+    set(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel, false);
+    set(kVTCompressionPropertyKey_ExpectedFrameRate, Number(params_.fps).get(), false);
+    set(kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse, true);
+    set(kVTCompressionPropertyKey_AverageBitRate, Number(static_cast<int32_t>(params_.bitrate)).get(), true);
+    set(kVTCompressionPropertyKey_MaxKeyFrameInterval, Number(static_cast<int32_t>(params_.gopFrames)).get(), true);
+    set(kVTCompressionPropertyKey_ColorPrimaries, kCMFormatDescriptionColorPrimaries_ITU_R_709_2, true);
+    set(kVTCompressionPropertyKey_TransferFunction, kCMFormatDescriptionTransferFunction_ITU_R_709_2, true);
+    set(kVTCompressionPropertyKey_YCbCrMatrix, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2, true);
   }
 
   void Invalidate() {
