@@ -114,23 +114,6 @@ before resolving coordinates, in addition to keeping its pose stable during a
 command. This observation does not imply that every missed gesture is an
 XCTest defect.
 
-## Input after background/resume on Duo
-
-On the Duo simulator with Xcode 27.1 / iOS 27.1, an immediate tap after
-backgrounding and reactivating an app can return successfully without reaching
-the app. Foreground state, element existence, and `hittable` do not reliably
-establish input readiness. Waiting for the app itself to idle was insufficient.
-
-The same delivery failure also reproduced on an iPhone 17e / iOS 27.0 simulator.
-For iOS background-app commands, WDA waits for SpringBoard to become idle,
-including animations, after reactivation.
-This happens before a subsequent command resolves its target element; waiting
-later during tap synthesis did not prevent the reproduced missed taps. The wait
-uses `animationCoolOffTimeout` and is skipped when that setting is zero. This
-workaround is verified on the simulator; physical-device behavior remains untested.
-It does not retry taps or restart the app, and does not cover independent calls
-to `activateApp`. See [Appium #22857](https://github.com/appium/appium/issues/22857).
-
 ## Validation and feedback
 
 Duo display behavior has been tested on the iPhone Duo simulator with Xcode 27.1
