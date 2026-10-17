@@ -131,6 +131,10 @@ describe('native H.264 key-frame handling', {skip: !HAS_H264}, () => {
     const {handle, units, errors} = open();
     for (const [i, au] of aus.entries()) {
       if (i === target) {
+        // On a slow runner the encoder lags the input; let it catch up so the request lands on `target`.
+        for (let wait = 0; units.length < target && wait < 500; wait++) {
+          await sleep(10);
+        }
         handle.requestKeyFrame();
       }
       push(handle, au, i);
