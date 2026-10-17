@@ -86,3 +86,18 @@ Early stage: core device and app lifecycle is implemented and tested; broader co
 progress.
 
 See [`CLAUDE.md`](./CLAUDE.md) for architecture details.
+
+### Screenshot display lookup cache
+
+Repeated numeric-ID screenshots can opt in with
+`getScreenshot(udid, {displayId: 1, cacheDisplayId: true})`. The default remains uncached.
+The cache is scoped to a CoreSim client and device, holds at most 32 device selections, and
+reuses successful numeric selections while the device is Booted and its `lastBootedAt` marker
+is unchanged. Missing or unreadable boot metadata disables caching. The marker is checked
+before and after capture so a detected reboot cannot seed or preserve an old cache entry.
+Default selection, explicit UUIDs, recording, and streaming remain unchanged.
+A failed cached capture discards the selection and retries the same numeric ID once with a
+fresh lookup. Set `cacheDisplayId: false` for a capture to discard the previous selection.
+This is not a topology-change subscription: disable caching while reconfiguring displays.
+A same-boot mapping change that leaves the old port usable is not detected. The private boot
+timestamp is an observed generation marker, not a documented unique session identifier.
