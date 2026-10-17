@@ -128,6 +128,8 @@ class Pipeline::Impl {
     DrainDecoder();
   }
 
+  [[nodiscard]] bool EncoderOpen() const { return h264_ || mjpegCtx_; }
+
   void Flush() {
     avcodec_send_packet(decoder_.get(), nullptr);
     DrainDecoder();
@@ -195,7 +197,6 @@ class Pipeline::Impl {
     converted_->pts = pts;
     if (isH264_) {
       EncodeH264(width, height);
-      warm_.store(true);
       return;
     }
     converted_->quality = mjpegCtx_->global_quality;
@@ -203,7 +204,6 @@ class Pipeline::Impl {
       throw Fatal("MJPEG encode failed", ret);
     }
     DrainEncoder();
-    warm_.store(true);
   }
 
   // A hardware session can die mid-stream (media-service reset): reopen once and retry; the new session starts
@@ -439,6 +439,13 @@ void Pipeline::Run() {
       continue;
     }
     attempt([&] { impl_->Decode(input); });
+    {
+      // Caught up again (the backlog from an encoder start-up is gone): back to the tight steady-state limit.
+      const std::scoped_lock<std::mutex> lock(mutex_);
+      if (impl_->EncoderOpen() && queue_.size() < kMaxQueuedUnits) {
+        warm_.store(true);
+      }
+    }
   }
   if (!failed) {
     attempt([&] { impl_->Flush(); });

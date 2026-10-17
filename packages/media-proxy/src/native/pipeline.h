@@ -68,7 +68,7 @@ class Pipeline {
   void Finish(DoneCallback onDone);
 
   static constexpr size_t kMaxQueuedUnits = 8;
-  // Limit while the encoder is not yet running (starting up or reopening after a rotation).
+  // Limit until the backlog behind a (re)opening encoder has drained (start-up, rotation).
   static constexpr size_t kMaxWarmupUnits = 120;
 
  private:
@@ -87,7 +87,7 @@ class Pipeline {
   bool awaitingKeyFrame_ = false;
   bool finishing_ = false;
   bool aborting_ = false;
-  std::atomic<bool> warm_{false};  // an encoder is open and has taken a frame
+  std::atomic<bool> warm_{false};  // false while an encoder opens and the backlog behind it drains
   DoneCallback onDone_;
   ErrorCallback onError_;
   std::unique_ptr<Impl> impl_;
