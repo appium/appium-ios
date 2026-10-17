@@ -44,7 +44,7 @@ struct Event {
 class Session : public std::enable_shared_from_this<Session> {
  public:
   Session(Napi::Env env, const PipelineConfig& config, const Napi::Function& onUnit, const Napi::Function& onError)
-      : env_(env), state_(std::make_shared<JsState>()) {
+      : env_(env), isH264_(config.outputCodec == "h264"), state_(std::make_shared<JsState>()) {
     state_->onUnit = Napi::Weak(onUnit);
     state_->onError = Napi::Weak(onError);
     // The bridge's own function is a no-op: it must not keep JS objects alive.
@@ -57,7 +57,7 @@ class Session : public std::enable_shared_from_this<Session> {
     try {
       pipeline_ = std::make_unique<Pipeline>(
           config, [this](EncodedUnit&& unit) { PostUnit(std::move(unit)); },
-          [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); });
+          [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); }, keyFrameRequested_);
     } catch (...) {
       napi_remove_env_cleanup_hook(env_, &Session::OnEnvCleanup, this);
       ReleaseBridge();  // the destructor won't run for a half-built Session
@@ -100,6 +100,8 @@ class Session : public std::enable_shared_from_this<Session> {
     pipeline_->Push(std::move(unit), info[1].As<Napi::Number>().Int64Value(), info[2].As<Napi::Boolean>().Value());
   }
 
+  void RequestKeyFrame() { keyFrameRequested_.store(true); }
+
   Napi::Value Close(const Napi::Env& env) {
     if (!closing_) {
       closing_ = true;
@@ -139,10 +141,19 @@ class Session : public std::enable_shared_from_this<Session> {
     }
   }
 
+  // Dropping an H.264 unit breaks the prediction chain: skip everything up to a fresh key frame and ask for one.
   void PostUnit(EncodedUnit&& unit) {
     if (state_->pendingUnits.load() >= kMaxPendingUnits) {
+      if (isH264_) {
+        awaitingKeyFrame_ = true;
+        keyFrameRequested_.store(true);
+      }
       return;
     }
+    if (awaitingKeyFrame_ && !unit.isKeyFrame) {
+      return;
+    }
+    awaitingKeyFrame_ = false;
     ++state_->pendingUnits;
     Post(Event::Kind::kUnit, std::move(unit), {});
   }
@@ -228,12 +239,15 @@ class Session : public std::enable_shared_from_this<Session> {
   }
 
   napi_env env_;
+  bool isH264_;
   std::shared_ptr<JsState> state_;
   Napi::ThreadSafeFunction tsfn_;
   Napi::Reference<Napi::Promise> closePromise_;
   std::atomic<bool> released_{false};
   bool shutdown_ = false;
   bool closing_ = false;
+  bool awaitingKeyFrame_ = false;  // worker thread only
+  std::atomic<bool> keyFrameRequested_{false};
   std::unique_ptr<Pipeline> pipeline_;  // last: destroyed (and joined) first
 };
 
@@ -287,7 +301,7 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
   handle.Set("callbacks", callbacks);
   handle.Set("push", Napi::Function::New(env, [session](const Napi::CallbackInfo& call) { session->Push(call); }));
   handle.Set("requestKeyFrame",
-             Napi::Function::New(env, [](const Napi::CallbackInfo&) {}));  // MJPEG: every frame is a key frame
+             Napi::Function::New(env, [session](const Napi::CallbackInfo&) { session->RequestKeyFrame(); }));
   handle.Set("close", Napi::Function::New(
                           env, [session](const Napi::CallbackInfo& call) { return session->Close(call.Env()); }));
   return handle;

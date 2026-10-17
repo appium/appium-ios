@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -13,7 +14,7 @@
 namespace media_proxy {
 
 struct PipelineConfig {
-  std::string outputCodec;  // "mjpeg" (h264 arrives with the encoder milestone)
+  std::string outputCodec;  // "h264" | "mjpeg"
   // Doubles: the TS layer accepts fractional values (e.g. fps 29.97, scale 33.3).
   double fps = 60;
   double bitrate = 0;
@@ -48,8 +49,10 @@ class Pipeline {
   using ErrorCallback = std::function<void(PipelineError&&)>;
   using DoneCallback = std::function<void()>;
 
-  // Throws PipelineError when the requested encoder/decoder is unavailable.
-  Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError);
+  // Throws PipelineError when the requested encoder/decoder is unavailable. Setting `keyFrameRequested` (from any
+  // thread, must outlive the pipeline) makes the H.264 encoder emit a key frame next; it is ignored for MJPEG.
+  Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError,
+           std::atomic<bool>& keyFrameRequested);
   ~Pipeline();
   Pipeline(const Pipeline&) = delete;
   Pipeline& operator=(const Pipeline&) = delete;
@@ -59,7 +62,8 @@ class Pipeline {
   // Drains queued input, flushes the codecs, then calls `onDone` from the worker thread (once).
   void Finish(DoneCallback onDone);
 
-  static constexpr size_t kMaxQueuedUnits = 8;
+  // About 270 ms at 60 fps: rides out opening a hardware encoder (~120 ms) on the first frame or a rotation.
+  static constexpr size_t kMaxQueuedUnits = 16;
 
  private:
   struct Input {

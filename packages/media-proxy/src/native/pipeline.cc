@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
@@ -17,6 +18,8 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include "h264_encoder.h"
+
 namespace media_proxy {
 
 namespace {
@@ -24,6 +27,7 @@ namespace {
 constexpr const char* kEncoderUnavailable = "MediaProxyEncoderUnavailableError";
 constexpr int kMaxCodecThreads = 4;
 constexpr int kMaxJpegQscale = 31;
+constexpr double kGopSeconds = 2;  // coresim's default key-frame interval
 constexpr int kMinJpegQscale = 2;
 // Slot-grid frame limiter (see Impl::AcceptFrame): timestamp jitter tolerated, as a fraction of 1/fps.
 constexpr int kToleranceDivisor = 4;
@@ -72,18 +76,23 @@ int JpegQscale(double quality) {
 // FFmpeg state; touched only by the worker thread after construction.
 class Pipeline::Impl {
  public:
-  Impl(const PipelineConfig& config, UnitCallback onUnit)
+  Impl(const PipelineConfig& config, UnitCallback onUnit, std::atomic<bool>& keyFrameRequested)
       : config_(config),
+        isH264_(config.outputCodec == "h264"),
+        keyFrameRequested_(keyFrameRequested),
         onUnit_(std::move(onUnit)),
         intervalMicros_(std::max<int64_t>(1, std::llround(1e6 / std::max(config.fps, 1.0)))),
         toleranceMicros_(intervalMicros_ / kToleranceDivisor) {
-    if (config.outputCodec != "mjpeg") {
-      throw PipelineError{kEncoderUnavailable, "No H.264 encoder is compiled into this build; use mjpeg"};
-    }
     const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_HEVC);
-    encoder_ = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
-    if (decoder == nullptr || encoder_ == nullptr) {
-      throw PipelineError{kEncoderUnavailable, "The HEVC decoder or MJPEG encoder is missing from this build"};
+    if (isH264_) {
+      if (H264EncoderNames().empty()) {
+        throw PipelineError{kEncoderUnavailable, "No H.264 encoder is available on this platform; use mjpeg"};
+      }
+    } else {
+      mjpeg_ = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
+    }
+    if (decoder == nullptr || (!isH264_ && mjpeg_ == nullptr)) {
+      throw PipelineError{kEncoderUnavailable, "The HEVC decoder or the output encoder is missing from this build"};
     }
     ConfigureLogging();
     decoder_.reset(avcodec_alloc_context3(decoder));
@@ -180,8 +189,12 @@ class Pipeline::Impl {
       throw Fatal("Could not convert the decoded frame", ret);
     }
     converted_->pts = pts;
-    converted_->quality = encoderCtx_->global_quality;
-    if (const int ret = avcodec_send_frame(encoderCtx_.get(), converted_.get()); ret < 0) {
+    if (isH264_) {
+      h264_->Encode(*converted_, keyFrameRequested_.exchange(false));
+      return;
+    }
+    converted_->quality = mjpegCtx_->global_quality;
+    if (const int ret = avcodec_send_frame(mjpegCtx_.get(), converted_.get()); ret < 0) {
       throw Fatal("MJPEG encode failed", ret);
     }
     DrainEncoder();
@@ -194,27 +207,45 @@ class Pipeline::Impl {
   }
 
   void OpenEncoder(int width, int height) {
-    if (encoderCtx_ && encoderCtx_->width == width && encoderCtx_->height == height) {
+    if (isH264_) {
+      if (!h264_ || width != openWidth_ || height != openHeight_) {
+        FlushEncoder();
+        h264_.reset();
+        H264Params params;
+        params.width = width;
+        params.height = height;
+        params.fps = config_.fps;
+        params.bitrate = static_cast<int64_t>(config_.bitrate);
+        params.gopFrames = std::max(1, static_cast<int>(std::lround(config_.fps * kGopSeconds)));
+        h264_ = CreateH264Encoder(params, onUnit_);
+        openWidth_ = width;
+        openHeight_ = height;
+      }
+      return;
+    }
+    if (mjpegCtx_ && mjpegCtx_->width == width && mjpegCtx_->height == height) {
       return;
     }
     FlushEncoder();
-    encoderCtx_.reset(avcodec_alloc_context3(encoder_));
-    encoderCtx_->width = width;
-    encoderCtx_->height = height;
-    encoderCtx_->pix_fmt = AV_PIX_FMT_YUVJ420P;
-    encoderCtx_->color_range = AVCOL_RANGE_JPEG;
-    encoderCtx_->time_base = {1, 1000000};
-    encoderCtx_->framerate = av_d2q(config_.fps, 1000000);
-    encoderCtx_->flags |= AV_CODEC_FLAG_QSCALE;
-    encoderCtx_->global_quality = FF_QP2LAMBDA * JpegQscale(config_.quality);
-    encoderCtx_->thread_type = FF_THREAD_SLICE;
-    encoderCtx_->thread_count = CodecThreads();
+    mjpegCtx_.reset(avcodec_alloc_context3(mjpeg_));
+    mjpegCtx_->width = width;
+    mjpegCtx_->height = height;
+    mjpegCtx_->pix_fmt = AV_PIX_FMT_YUVJ420P;
+    mjpegCtx_->color_range = AVCOL_RANGE_JPEG;
+    mjpegCtx_->time_base = {1, 1000000};
+    mjpegCtx_->framerate = av_d2q(config_.fps, 1000000);
+    mjpegCtx_->flags |= AV_CODEC_FLAG_QSCALE;
+    mjpegCtx_->global_quality = FF_QP2LAMBDA * JpegQscale(config_.quality);
+    mjpegCtx_->thread_type = FF_THREAD_SLICE;
+    mjpegCtx_->thread_count = CodecThreads();
     // Default Huffman tables: the optimal ones need a second pass over every frame.
-    av_opt_set(encoderCtx_->priv_data, "huffman", "default", 0);
-    if (const int ret = avcodec_open2(encoderCtx_.get(), encoder_, nullptr); ret < 0) {
+    av_opt_set(mjpegCtx_->priv_data, "huffman", "default", 0);
+    if (const int ret = avcodec_open2(mjpegCtx_.get(), mjpeg_, nullptr); ret < 0) {
       throw Fatal("Could not open the MJPEG encoder", ret);
     }
   }
+
+  [[nodiscard]] AVPixelFormat EncoderPixelFormat() const { return isH264_ ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUVJ420P; }
 
   // Reuses the output buffer unless the encoder still holds a reference to it (or the size changed).
   void PrepareConverted(int width, int height) {
@@ -223,25 +254,27 @@ class Pipeline::Impl {
       return;
     }
     av_frame_unref(converted_.get());
-    converted_->format = AV_PIX_FMT_YUVJ420P;
+    converted_->format = EncoderPixelFormat();
     converted_->width = width;
     converted_->height = height;
-    converted_->color_range = AVCOL_RANGE_JPEG;
+    converted_->color_range = isH264_ ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
     if (const int ret = av_frame_get_buffer(converted_.get(), 0); ret < 0) {
       throw Fatal("Could not allocate the output frame", ret);
     }
   }
 
   void FlushEncoder() {
-    if (encoderCtx_) {
-      avcodec_send_frame(encoderCtx_.get(), nullptr);
+    if (h264_) {
+      h264_->Flush();
+    } else if (mjpegCtx_) {
+      avcodec_send_frame(mjpegCtx_.get(), nullptr);
       DrainEncoder();
     }
   }
 
   void DrainEncoder() {
     for (;;) {
-      const int ret = avcodec_receive_packet(encoderCtx_.get(), packet_.get());
+      const int ret = avcodec_receive_packet(mjpegCtx_.get(), packet_.get());
       if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
         return;
       }
@@ -258,13 +291,18 @@ class Pipeline::Impl {
   }
 
   PipelineConfig config_;
+  bool isH264_;
+  std::atomic<bool>& keyFrameRequested_;
   UnitCallback onUnit_;
   int64_t intervalMicros_;
   int64_t toleranceMicros_;
   int64_t nextSlotMicros_ = -1;
-  const AVCodec* encoder_ = nullptr;
+  const AVCodec* mjpeg_ = nullptr;
+  std::unique_ptr<H264Encoder> h264_;
+  int openWidth_ = 0;
+  int openHeight_ = 0;
   CodecContext decoder_;
-  CodecContext encoderCtx_;
+  CodecContext mjpegCtx_;
   Packet packet_;
   Frame decoded_;
   Frame converted_;
@@ -279,11 +317,15 @@ Capabilities Pipeline::Probe() {
   if (const AVCodec* encoder = avcodec_find_encoder(AV_CODEC_ID_MJPEG); encoder != nullptr) {
     caps.encoders.emplace_back(encoder->name);
   }
+  for (std::string& name : H264EncoderNames()) {
+    caps.encoders.push_back(std::move(name));
+  }
   return caps;
 }
 
-Pipeline::Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError)
-    : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit))) {
+Pipeline::Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError,
+                   std::atomic<bool>& keyFrameRequested)
+    : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit), keyFrameRequested)) {
   worker_ = std::thread([this] { Run(); });
 }
 
