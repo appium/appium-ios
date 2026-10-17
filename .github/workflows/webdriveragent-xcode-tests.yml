@@ -14,27 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MIN_VM_IMAGE: macos-15
-  MIN_XCODE_VERSION: "16.4"
-  MIN_PLATFORM_VERSION: "18.5"
-  MIN_TV_PLATFORM_VERSION: "18.5"
+  # Xcode, iOS runtime, iPhone model and runner image come from ios-xcode-matrix.yml (shared with
+  # the other packages); only the device models/versions it doesn't cover are listed here.
   MIN_TV_DEVICE_NAME: "Apple TV 4K (3rd generation)"
   MIN_WATCH_PLATFORM_VERSION: "11.5"
   MIN_WATCH_DEVICE_NAME: "Apple Watch Series 10 (46mm)"
-  MIN_IPHONE_DEVICE_NAME: "iPhone 16"
   MIN_IPAD_DEVICE_NAME: "iPad Air 13-inch (M2)"
-  MAX_VM_IMAGE: xcode-27
-  MAX_XCODE_VERSION: "27.0"
-  MAX_PLATFORM_VERSION: "27.0"
-  MAX_TV_PLATFORM_VERSION: "27.0"
   MAX_WATCH_PLATFORM_VERSION: "27.0"
   MAX_WATCH_DEVICE_NAME: "Apple Watch Series 12 (46mm)"
-  MAX_IPHONE_DEVICE_NAME: "iPhone 17"
   MAX_TV_DEVICE_NAME: "Apple TV 4K (3rd generation)"
   MAX_IPAD_DEVICE_NAME: "iPad Air 11-inch (M4)"
 
 jobs:
+  xcode_matrix:
+    uses: ./.github/workflows/ios-xcode-matrix.yml
+
   build_matrix:
+    needs: xcode_matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -43,23 +39,24 @@ jobs:
         run: |
           cat <<'MATRIX_JSON' | jq -c . > matrix.json
           [
-            {"name": "Generic_iOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "runner", "sdk": "sim", "dest": "generic", "code_sign": "no"},
-            {"name": "Generic_iOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "runner", "sdk": "sim", "dest": "generic", "code_sign": "no"},
-            {"name": "Generic_tvOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv_generic", "code_sign": "no"},
-            {"name": "Generic_tvOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv_generic", "code_sign": "no"},
-            {"name": "Generic_watchOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch_generic", "code_sign": "no"},
-            {"name": "Generic_watchOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch_generic", "code_sign": "no"},
-            {"name": "iOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "runner", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "runner", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ env.MAX_TV_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ env.MIN_TV_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Build_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Build_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
+            {"name": "Generic_iOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "runner", "sdk": "sim", "dest": "generic", "code_sign": "no"},
+            {"name": "Generic_iOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "runner", "sdk": "sim", "dest": "generic", "code_sign": "no"},
+            {"name": "Generic_tvOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv_generic", "code_sign": "no"},
+            {"name": "Generic_tvOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv_generic", "code_sign": "no"},
+            {"name": "Generic_watchOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch_generic", "code_sign": "no"},
+            {"name": "Generic_watchOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch_generic", "code_sign": "no"},
+            {"name": "iOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "runner", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "runner", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "tvOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "tvOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "tv_runner", "sdk": "tv_sim", "dest": "tv", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "watchOS_Build_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
+            {"name": "watchOS_Build_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "build", "target": "watch_runner", "sdk": "watch_sim", "dest": "watch", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
           ]
           MATRIX_JSON
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
 
   analyze_matrix:
+    needs: xcode_matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -68,23 +65,24 @@ jobs:
         run: |
           cat <<'MATRIX_JSON' | jq -c . > matrix.json
           [
-            {"name": "iOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "lib", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "lib", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "iOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "runner", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "runner", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "tv_lib", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ env.MAX_TV_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "tv_lib", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ env.MIN_TV_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ env.MAX_TV_PLATFORM_VERSION }}"},
-            {"name": "tvOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ env.MIN_TV_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "watch_lib", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "watch_lib", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "target": "watch_runner", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
-            {"name": "watchOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "target": "watch_runner", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
+            {"name": "iOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "lib", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "lib", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "iOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "runner", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "runner", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "tvOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "tv_lib", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "tvOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "tv_lib", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "tvOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "tvOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "tv_runner", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "watchOS_Lib_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "watch_lib", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
+            {"name": "watchOS_Lib_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "watch_lib", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"},
+            {"name": "watchOS_Runner_Analyze_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "target": "watch_runner", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
+            {"name": "watchOS_Runner_Analyze_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "target": "watch_runner", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
           ]
           MATRIX_JSON
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
 
   unit_test_matrix:
+    needs: xcode_matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -93,13 +91,14 @@ jobs:
         run: |
           cat <<'MATRIX_JSON' | jq -c . > matrix.json
           [
-            {"name": "iPhone_Unit_Test_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iPhone_Unit_Test_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"}
+            {"name": "iPhone_Unit_Test_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iPhone_Unit_Test_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"}
           ]
           MATRIX_JSON
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
 
   integration_test_matrix:
+    needs: xcode_matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -108,22 +107,22 @@ jobs:
         run: |
           cat <<'MATRIX_JSON' | jq -c . > matrix.json
           [
-            {"name": "iphone_int_test_1_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iphone_int_test_2_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iphone_int_test_3_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_1_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_2_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_3_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MAX_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MAX_PLATFORM_VERSION }}"},
-            {"name": "iphone_int_test_1_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "iphone_int_test_2_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "iphone_int_test_3_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_1_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_2_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "ipad_int_test_3_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ env.MIN_IPHONE_DEVICE_NAME }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ env.MIN_PLATFORM_VERSION }}"},
-            {"name": "tv_int_test_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ env.MAX_TV_PLATFORM_VERSION }}"},
-            {"name": "tv_int_test_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ env.MIN_TV_PLATFORM_VERSION }}"},
-            {"name": "watch_int_test_Max_Xcode", "vm_image": "${{ env.MAX_VM_IMAGE }}", "xcode_version": "${{ env.MAX_XCODE_VERSION }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
-            {"name": "watch_int_test_Min_Xcode", "vm_image": "${{ env.MIN_VM_IMAGE }}", "xcode_version": "${{ env.MIN_XCODE_VERSION }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
+            {"name": "iphone_int_test_1_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iphone_int_test_2_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iphone_int_test_3_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "ipad_int_test_1_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "ipad_int_test_2_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "ipad_int_test_3_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ env.MAX_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "iphone_int_test_1_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "iphone_int_test_2_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "iphone_int_test_3_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "ipad_int_test_1_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "ipad_int_test_2_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "ipad_int_test_3_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ env.MIN_IPAD_DEVICE_NAME }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "tv_int_test_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ env.MAX_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
+            {"name": "tv_int_test_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ env.MIN_TV_DEVICE_NAME }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
+            {"name": "watch_int_test_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ env.MAX_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MAX_WATCH_PLATFORM_VERSION }}"},
+            {"name": "watch_int_test_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ env.MIN_WATCH_DEVICE_NAME }}", "watch_version": "${{ env.MIN_WATCH_PLATFORM_VERSION }}"}
           ]
           MATRIX_JSON
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
