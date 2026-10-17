@@ -66,6 +66,24 @@ export class BaseService {
     }
   }
 
+  /**
+   * Starts a `.shim.remote` lockdown service and drains its initial `StartService` greeting,
+   * so it can never be mistaken for the reply to a later request
+   */
+  protected async startShimService(serviceName: string): Promise<ServiceConnection> {
+    const connection = await this.startLockdownService(serviceName);
+    try {
+      const greeting = await connection.receive();
+      if (greeting?.Request !== 'StartService') {
+        throw new Error(`Expected StartService greeting, got: ${JSON.stringify(greeting)}`);
+      }
+      return connection;
+    } catch (error) {
+      connection.close();
+      throw error;
+    }
+  }
+
   protected async resolveServiceAddress(
     serviceName: string,
     waitMs: number = DEFAULT_TUNNEL_SERVICE_WAIT_MS,
