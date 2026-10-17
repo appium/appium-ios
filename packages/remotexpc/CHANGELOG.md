@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.3...appium-ios-remotexpc@5.25.4) (2026-10-17)
+
+### Bug Fixes
+
+* **remotexpc:** send misagent, mobile config and springboard requests once ([#75](https://github.com/appium/appium-ios/issues/75)) ([c706fda](https://github.com/appium/appium-ios/commit/c706fda27cfe303310a001399bf30e0cf19fb2fa))
+
+
 ## [5.25.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.2...appium-ios-remotexpc@5.25.3) (2026-10-16)
 
 ### Bug Fixes
