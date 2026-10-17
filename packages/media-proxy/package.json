@@ -35,8 +35,9 @@
   "scripts": {
     "clean": "rm -rf build node_modules lib",
     "build": "tsc -b",
-    "build:addon": "node-gyp rebuild",
-    "build:prebuilds": "prebuildify --napi --strip",
+    "build:addon": "node-gyp rebuild && node scripts/ci/bundle-libs.mjs --dest build/Release",
+    "build:ffmpeg": "bash scripts/ci/build-ffmpeg.sh",
+    "build:prebuilds": "node scripts/ci/build-prebuilds.mjs",
     "lint:cpp": "npm run build:compile-commands && bash scripts/ci/lint-cpp.sh",
     "format:cpp": "clang-format -i src/native/*.cc src/native/*.h",
     "format:cpp:check": "clang-format --dry-run --Werror src/native/*.cc src/native/*.h",

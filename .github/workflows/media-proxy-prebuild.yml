@@ -1,8 +1,7 @@
 name: Build media-proxy native addon (Reusable)
 
-# N-API prebuild matrix (darwin x64/arm64, linux x64/arm64, win32 x64/arm64), ported from
-# media-proxy's own prebuild.yml. Called both as a PR smoke build (upload-artifacts:
-# false) and from release.yml before publishing, so a real release always ships prebuilds.
+# Prebuild matrix (darwin/linux/win32 x x64/arm64): cached LGPL FFmpeg + addon + bundled libs.
+# Not called from release.yml yet (unreleased package); see packages/media-proxy/CLAUDE.md.
 
 on:
   workflow_call:
@@ -54,8 +53,16 @@ jobs:
         # below invokes node-gyp itself.
         run: npm ci --ignore-scripts
 
+      - name: Build FFmpeg
+        uses: ./.github/actions/media-proxy-ffmpeg
+        with:
+          arch: ${{ matrix.arch }}
+
       - name: Create N-API prebuild
         run: npm run build:prebuilds --workspace packages/media-proxy -- --arch ${{ matrix.arch }}
+
+      - name: Load the prebuild
+        run: node packages/media-proxy/scripts/ci/smoke-prebuild.mjs --arch ${{ matrix.arch }}
 
       - name: Upload prebuild
         if: ${{ inputs.upload-artifacts }}

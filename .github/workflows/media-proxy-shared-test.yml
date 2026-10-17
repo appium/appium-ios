@@ -1,8 +1,7 @@
 name: Reusable media-proxy native test
 
-# Installs at the workspace root (shared lockfile) and scopes test/lint commands to the
-# media-proxy workspace. TS/JS lint and format are covered by build.yml's lint job; only the
-# C++-specific checks (clang-format/clang-tidy) are exposed here.
+# Root install, commands scoped to the media-proxy workspace; JS lint/format live in build.yml,
+# only the C++ checks (clang-format/clang-tidy) are here.
 
 on:
   workflow_call:
@@ -50,10 +49,8 @@ jobs:
         with:
           mode: firewall-free
 
-      # Scoped like build.yml: an unscoped `npm ci` also compiles packages/tuntap (which needs
-      # OpenSSL on Windows) and every other workspace's native install. --ignore-scripts also skips
-      # the root `prepare` (tsc -b over packages/xcode, whose @types are not in a scoped install);
-      # media-proxy is built explicitly below.
+      # Scoped like build.yml (an unscoped ci also compiles tuntap); --ignore-scripts skips the root
+      # `prepare` (tsc over packages/xcode), so media-proxy is built explicitly below.
       - name: Install npm dependencies
         if: ${{ !contains(inputs.image, 'windows') }}
         run: sfw npm ci --workspace=packages/media-proxy --include-workspace-root --ignore-scripts
@@ -64,6 +61,11 @@ jobs:
 
       - name: Build TypeScript
         run: npm run build --workspace packages/media-proxy
+
+      # The addon links FFmpeg, and clang-tidy needs its headers.
+      - name: Build FFmpeg
+        if: ${{ inputs.run-cpp-lint || inputs.test-command == 'test:integration' }}
+        uses: ./.github/actions/media-proxy-ffmpeg
 
       - name: Install clang-format
         if: ${{ contains(inputs.image, 'ubuntu') && inputs.run-cpp-format-check }}
