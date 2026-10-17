@@ -64,6 +64,23 @@ describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
     assert.ok(Math.abs(units[1].timestampMicros - FRAME_MICROS) < 2);
   });
 
+  it('keeps queueing input while the encoder opens instead of dropping to the next key frame', async () => {
+    // Everything arrives within the encoder's start-up time, far more than the steady-state queue holds.
+    const t = createTranscoder({codec: 'h264'});
+    let count = 0;
+    const drain = (async () => {
+      for await (const _ of t.units()) {
+        count++;
+      }
+    })();
+    for (const au of readHevcFixture(FIXTURE)) {
+      t.push(au);
+    }
+    await t.end();
+    await drain;
+    assert.strictEqual(count, FRAMES);
+  });
+
   it('treats fps as an upper bound', async () => {
     const units = await encode({fps: 30});
     assert.strictEqual(units.length, FRAMES / 2);

@@ -14,7 +14,7 @@ The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCa
 > macOS through VideoToolbox; other platforms throw `MediaProxyEncoderUnavailableError` for `codec: 'h264'`
 > until their hardware encoders land. The package is not released.
 
-The input is treated as a **live stream**: the native side buffers at most 16 access units and, when
+The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
 it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
 real time therefore drops frames; pace it like a device does. After such a drop the pipeline waits for
 the next keyframe (the device offers no way to request one), so a source that sends keyframes rarely

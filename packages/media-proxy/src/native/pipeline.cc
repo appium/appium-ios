@@ -75,10 +75,11 @@ int JpegQscale(double quality) {
 // FFmpeg state; touched only by the worker thread after construction.
 class Pipeline::Impl {
  public:
-  Impl(const PipelineConfig& config, UnitCallback onUnit, std::atomic<bool>& keyFrameRequested)
+  Impl(const PipelineConfig& config, UnitCallback onUnit, std::atomic<bool>& keyFrameRequested, std::atomic<bool>& warm)
       : config_(config),
         isH264_(config.outputCodec == "h264"),
         keyFrameRequested_(keyFrameRequested),
+        warm_(warm),
         onUnit_(std::move(onUnit)),
         intervalMicros_(std::max<int64_t>(1, std::llround(1e6 / std::max(config.fps, 1.0)))),
         toleranceMicros_(intervalMicros_ / kToleranceDivisor) {
@@ -194,6 +195,7 @@ class Pipeline::Impl {
     converted_->pts = pts;
     if (isH264_) {
       EncodeH264(width, height);
+      warm_.store(true);
       return;
     }
     converted_->quality = mjpegCtx_->global_quality;
@@ -201,6 +203,7 @@ class Pipeline::Impl {
       throw Fatal("MJPEG encode failed", ret);
     }
     DrainEncoder();
+    warm_.store(true);
   }
 
   // A hardware session can die mid-stream (media-service reset): reopen once and retry; the new session starts
@@ -229,6 +232,7 @@ class Pipeline::Impl {
   void OpenEncoder(int width, int height) {
     if (isH264_) {
       if (!h264_ || width != openWidth_ || height != openHeight_) {
+        warm_.store(false);
         FlushEncoder();
         h264_.reset();
         H264Params params;
@@ -249,6 +253,7 @@ class Pipeline::Impl {
     if (mjpegCtx_ && mjpegCtx_->width == width && mjpegCtx_->height == height) {
       return;
     }
+    warm_.store(false);
     FlushEncoder();
     mjpegCtx_.reset(avcodec_alloc_context3(mjpeg_));
     mjpegCtx_->width = width;
@@ -316,6 +321,7 @@ class Pipeline::Impl {
   PipelineConfig config_;
   bool isH264_;
   std::atomic<bool>& keyFrameRequested_;
+  std::atomic<bool>& warm_;
   UnitCallback onUnit_;
   int64_t intervalMicros_;
   int64_t toleranceMicros_;
@@ -349,7 +355,7 @@ Capabilities Pipeline::Probe() {
 
 Pipeline::Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError,
                    std::atomic<bool>& keyFrameRequested)
-    : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit), keyFrameRequested)) {
+    : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit), keyFrameRequested, warm_)) {
   worker_ = std::thread([this] { Run(); });
 }
 
@@ -376,7 +382,8 @@ void Pipeline::Push(std::vector<uint8_t> accessUnit, int64_t timestampMicros, bo
       }
       awaitingKeyFrame_ = false;
     }
-    if (queue_.size() >= kMaxQueuedUnits) {
+    // While an encoder is opening (first frame, rotation) nothing is on screen yet: queue more and catch up fast.
+    if (queue_.size() >= (warm_.load() ? kMaxQueuedUnits : kMaxWarmupUnits)) {
       // Falling behind: drop the backlog and resume at the next key frame (P-frames can't decode alone).
       queue_.clear();
       if (!isKeyFrame) {

@@ -67,8 +67,9 @@ class Pipeline {
   // Drains queued input, flushes the codecs, then calls `onDone` from the worker thread (once).
   void Finish(DoneCallback onDone);
 
-  // About 270 ms at 60 fps: rides out opening a hardware encoder (~120 ms) on the first frame or a rotation.
-  static constexpr size_t kMaxQueuedUnits = 16;
+  static constexpr size_t kMaxQueuedUnits = 8;
+  // Limit while the encoder is not yet running (starting up or reopening after a rotation).
+  static constexpr size_t kMaxWarmupUnits = 120;
 
  private:
   struct Input {
@@ -86,6 +87,7 @@ class Pipeline {
   bool awaitingKeyFrame_ = false;
   bool finishing_ = false;
   bool aborting_ = false;
+  std::atomic<bool> warm_{false};  // an encoder is open and has taken a frame
   DoneCallback onDone_;
   ErrorCallback onError_;
   std::unique_ptr<Impl> impl_;
