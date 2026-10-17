@@ -137,6 +137,10 @@ Do not replace the background operation with `pressButton:XCUIDeviceButtonHome`
 based only on a successful subsequent tap: in these probes, that button path
 left the app in `XCUIApplicationStateRunningForeground`, so it did not exercise
 background/resume. Verify the lifecycle transition as well as delivered input.
+The shipped `IntegrationApp` also reproduced the delivery failure: after
+`fb_deactivateWithDuration:5`, tapping `Alerts` did not open the page containing
+`Create App Alert` within two seconds. The existing deactivate test's check that
+`Alerts` exists does not detect this failure.
 The failing internal component is not isolated; no unconditional delay or
 automatic retry of user actions is applied by WDA.
 
