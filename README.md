@@ -13,6 +13,7 @@
 - [`appium-ios-remotexpc`][]: Remote XPC, lockdown, usbmux and tunneling services for communicating with iOS devices
 - [`appium-remote-debugger`][]: Node.js frontend for the Remote Debugger protocol used to connect to iOS webviews and Safari
 - [`node-devicectl`][]: Node.js wrapper around Apple's `devicectl` tool
+- [`appium-webdriveragent`][]: WebDriverAgent, the iOS/tvOS/watchOS WebDriver server used by the XCUITest driver
 
 ## More Info
 
@@ -27,6 +28,7 @@ See the main [Appium site](https://appium.io) or [Appium GitHub repository](http
 [`appium-ios-remotexpc`]: https://github.com/appium/appium-ios/tree/main/packages/remotexpc
 [`appium-remote-debugger`]: https://github.com/appium/appium-ios/tree/main/packages/remote-debugger
 [`node-devicectl`]: https://github.com/appium/appium-ios/tree/main/packages/devicectl
+[`appium-webdriveragent`]: https://github.com/appium/appium-ios/tree/main/packages/webdriveragent
 
 ## License
 

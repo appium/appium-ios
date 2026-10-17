@@ -1,0 +1,20 @@
+XC_PROJECT = File.absolute_path('../WebDriverAgent.xcodeproj')
+
+lane :test do
+  # https://docs.fastlane.tools/actions/scan/
+  run_tests(
+    project: XC_PROJECT,
+    fail_build: true,
+    scheme: ENV['SCHEME'],
+    sdk: ENV['SDK'],
+    device: ENV['DEVICE'],
+    number_of_retries: 3,
+    skip_testing: ENV.fetch('SKIP_TESTING', '')
+      .split(',')
+      .reject(&:empty?),
+    # Forwarded into the on-simulator test process via each scheme's CI
+    # LaunchAction environment variable, since xcodebuild does not propagate
+    # the calling shell's environment to the app under test on its own.
+    xcargs: "CI=#{ENV['CI']}"
+  )
+end

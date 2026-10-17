@@ -118,6 +118,8 @@ jobs:
       # "<pkg_name>@<pkg_version>" (lerna's independent-mode tag format) if ios-uicatalog was
       # published this run, empty otherwise - see the lerna-release action.
       uicatalog_release_tag: ${{ steps.run-lerna-publish.outputs.uicatalog_release_tag }}
+      # Same for appium-webdriveragent, whose prebuilt runner archives get attached to its release.
+      webdriveragent_release_tag: ${{ steps.run-lerna-publish.outputs.webdriveragent_release_tag }}
 
     steps:
       - name: Checkout repository
@@ -182,3 +184,12 @@ jobs:
       upload_release_artifacts: true
       release_tag: ${{ needs.release.outputs.uicatalog_release_tag }}
       checkout_ref: ${{ needs.release.outputs.uicatalog_release_tag }}
+
+  release-webdriveragent-assets:
+    name: Build and upload WebDriverAgent archives
+    needs: release
+    if: needs.release.outputs.webdriveragent_release_tag != ''
+    uses: ./.github/workflows/webdriveragent-build-assets.yml
+    with:
+      release_tag: ${{ needs.release.outputs.webdriveragent_release_tag }}
+      checkout_ref: ${{ needs.release.outputs.webdriveragent_release_tag }}

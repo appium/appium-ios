@@ -82,3 +82,8 @@ labels:
     sync: true
     matcher:
       files: ['packages/xcode/**']
+
+  - label: 'package:webdriveragent'
+    sync: true
+    matcher:
+      files: ['packages/webdriveragent/**']

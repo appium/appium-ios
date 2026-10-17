@@ -1,0 +1,79 @@
+/**
+ * Copyright (c) 2015-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#import <XCTest/XCTest.h>
+
+#import "FBIntegrationTestCase.h"
+#import "FBMacros.h"
+#import "FBSession.h"
+#import "FBXCodeCompatibility.h"
+#import "FBTestMacros.h"
+#import "XCUIElement+FBUtilities.h"
+
+
+@interface FBAutoAlertsHandlerTests : FBIntegrationTestCase
+@property (nonatomic) FBSession *session;
+@end
+
+
+@implementation FBAutoAlertsHandlerTests
+
+- (void)setUp
+{
+  [super setUp];
+
+  [self launchApplication];
+  [self goToAlertsPage];
+
+  [self clearAlert];
+}
+
+- (void)tearDown
+{
+  [self clearAlert];
+
+  if (self.session) {
+    [self.session kill];
+  }
+
+  [super tearDown];
+}
+
+- (void)testAutoAcceptingOfAlerts
+{
+  if (FBIntegrationTestCase.isRunningInCI) {
+    XCTSkip(@"Flaky on slow CI machines");
+  }
+
+  self.session = [FBSession
+                  initWithApplication:XCUIApplication.fb_activeApplication
+                  defaultAlertAction:@"accept"];
+  for (int i = 0; i < 2; i++) {
+    [self.testedApplication.buttons[FBShowAlertButtonName] tap];
+    [self.testedApplication fb_waitUntilStable];
+    FBAssertWaitTillBecomesTrue(self.testedApplication.alerts.count == 0);
+  }
+}
+
+- (void)testAutoDismissingOfAlerts
+{
+  if (FBIntegrationTestCase.isRunningInCI) {
+    XCTSkip(@"Flaky on slow CI machines");
+  }
+
+  self.session = [FBSession
+                  initWithApplication:XCUIApplication.fb_activeApplication
+                  defaultAlertAction:@"dismiss"];
+  for (int i = 0; i < 2; i++) {
+    [self.testedApplication.buttons[FBShowAlertButtonName] tap];
+    [self.testedApplication fb_waitUntilStable];
+    FBAssertWaitTillBecomesTrue(self.testedApplication.alerts.count == 0);
+  }
+}
+
+@end
