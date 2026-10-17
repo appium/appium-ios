@@ -60,6 +60,7 @@ jobs:
         id: detect
         env:
           RECOVER_MISSING_ONLY: ${{ inputs.recover_missing_only || false }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # `gh release view` for asset-less releases
         run: node scripts/detect-release-packages.mjs
 
   # Build tuntap's native addon for every platform only when tuntap itself is being published -
