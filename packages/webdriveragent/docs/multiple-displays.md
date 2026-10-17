@@ -114,6 +114,54 @@ before resolving coordinates, in addition to keeping its pose stable during a
 command. This observation does not imply that every missed gesture is an
 XCTest defect.
 
+## Lifecycle and device controls on the Duo simulator
+
+Additional probes on **iOS 27.1 (24A94401), Xcode 27.1 (27A9269)** with an
+SDK 27.1 native button-counter fixture found the following limitations in both
+closed and fully open poses. These observations do not establish behavior on a
+physical Duo or other runtimes.
+
+### Input immediately after reactivation
+
+After `fb_deactivateWithDuration:2`, an immediate XCTest element tap returned
+without incrementing the fixture's counter (three attempts per pose). Calling
+`fb_waitUntilStable` after reactivation did not restore delivery (another three
+attempts per pose). The same fixture accepted clicks after a one-second delay
+in an HTTP probe; this is an observed workaround, not a universal readiness
+threshold. A successful command or foreground application state alone is not
+proof that the application can receive input yet.
+
+Waiting explicitly for `XCUIApplicationStateRunningBackground` before the
+background interval also failed to restore immediate input after activation.
+Do not replace the background operation with `pressButton:XCUIDeviceButtonHome`
+based only on a successful subsequent tap: in these probes, that button path
+left the app in `XCUIApplicationStateRunningForeground`, so it did not exercise
+background/resume. Verify the lifecycle transition as well as delivered input.
+The shipped `IntegrationApp` also reproduced the delivery failure: after
+`fb_deactivateWithDuration:5`, tapping `Alerts` did not open the page containing
+`Create App Alert` within two seconds. The existing deactivate test's check that
+`Alerts` exists does not detect this failure.
+The failing internal component is not isolated; no unconditional delay or
+automatic retry of user actions is applied by WDA.
+
+### Rotation and lock
+
+Direct XCTest assignments to `XCUIDevice.orientation` changed the device value,
+but the fixture's interface orientation stayed portrait while closed and
+landscape while open. WDA rotation requests can therefore fail even though the
+device orientation setter accepted the request. Also, WebDriver's `LANDSCAPE`
+response represents either landscape direction, while setting `LANDSCAPE`
+requests a particular direction; reading and setting that string need not be a
+no-op. Validate the resulting app layout rather than assuming a successful
+orientation assignment means it rotated.
+
+Direct `pressLockButton` calls left the fixture foreground and the SpringBoard
+lock-state value at zero. Power IOHID events (page `0x0C`, usage `0x30`) at
+0.005, 0.1, and 0.5 seconds also returned success without a locked state in these
+probes. The real-device workaround for power-button hold duration is therefore
+not established as a fix for this simulator. Do not interpret successful event
+submission as successful locking or suppress WDA's lock-state timeout.
+
 ## Validation and feedback
 
 Duo display behavior has been tested on the iPhone Duo simulator with Xcode 27.1
