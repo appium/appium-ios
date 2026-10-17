@@ -4,7 +4,8 @@
 // expensive native prebuilds (tuntap, coresim) when those packages aren't part of it.
 // Union of: packages lerna would bump (skipped when RECOVER_MISSING_ONLY=true; includes private ones,
 // e.g. ios-uicatalog, which still trigger the UIKitCatalog app release) and public packages whose
-// current version is missing on npm (what the recovery paths publish).
+// current version is missing on npm (what the recovery paths publish), plus - in recovery mode -
+// packages whose GitHub release exists without the assets their release workflow attaches.
 // Writes `packages` (JSON names), `any`, `tuntap` and `coresim` to $GITHUB_OUTPUT.
 import {execFile} from 'node:child_process';
 import {appendFile, readFile, readdir} from 'node:fs/promises';
@@ -12,6 +13,8 @@ import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const PREBUILT = {tuntap: 'appium-ios-tuntap', coresim: '@appium/coresim'};
+// Packages whose GitHub release gets assets attached (see the lerna-release action)
+const RELEASE_ASSET_PACKAGES = ['ios-uicatalog', 'appium-webdriveragent'];
 
 async function listPackages() {
   const dirs = await readdir('packages');
@@ -43,14 +46,44 @@ async function isMissingOnNpm({name, version}) {
   }
 }
 
+async function hasEmptyRelease({name, version}) {
+  try {
+    const {stdout} = await execFileAsync('gh', [
+      'release',
+      'view',
+      `${name}@${version}`,
+      '--json',
+      'assets',
+      '--jq',
+      '.assets | length',
+    ]);
+    return stdout.trim() === '0';
+  } catch (err) {
+    if (/release not found/i.test(`${err.stderr}`)) {
+      return false;
+    }
+    throw err;
+  }
+}
+
 async function main() {
   const packages = await listPackages();
-  const changed = process.env.RECOVER_MISSING_ONLY === 'true' ? [] : await lernaChanged();
+  const recovery = process.env.RECOVER_MISSING_ONLY === 'true';
+  const changed = recovery ? [] : await lernaChanged();
   const npmPackages = packages.filter((p) => !p.private);
   const missing = (await Promise.all(npmPackages.map(async (p) => ((await isMissingOnNpm(p)) ? p.name : null)))).filter(
     Boolean,
   );
-  const names = new Set([...changed, ...missing].filter((n) => packages.some((p) => p.name === n)));
+  const emptyReleases = recovery
+    ? (
+        await Promise.all(
+          packages
+            .filter((p) => RELEASE_ASSET_PACKAGES.includes(p.name))
+            .map(async (p) => ((await hasEmptyRelease(p)) ? p.name : null)),
+        )
+      ).filter(Boolean)
+    : [];
+  const names = new Set([...changed, ...missing, ...emptyReleases].filter((n) => packages.some((p) => p.name === n)));
 
   const outputs = {
     packages: JSON.stringify([...names]),
