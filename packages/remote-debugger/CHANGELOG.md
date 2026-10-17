@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.7.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.2...appium-remote-debugger@17.7.3) (2026-10-17)
+
+### Bug Fixes
+
+* **remote-debugger:** wait for a promise that execute_script returns ([#66](https://github.com/appium/appium-ios/issues/66)) ([82f2e87](https://github.com/appium/appium-ios/commit/82f2e871c2ca08f30d47e3c0105ee7231f3cc21f)), closes [#72](https://github.com/appium/appium-ios/issues/72) [#71](https://github.com/appium/appium-ios/issues/71) [#72](https://github.com/appium/appium-ios/issues/72) [appium/appium#22978](https://github.com/appium/appium/issues/22978)
+
+
 ## [17.7.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.1...appium-remote-debugger@17.7.2) (2026-10-17)
 
 **Note:** Version bump only for package appium-remote-debugger
