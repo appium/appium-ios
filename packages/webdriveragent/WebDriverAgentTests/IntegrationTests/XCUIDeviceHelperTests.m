@@ -7,6 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <math.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBImageUtils.h"
@@ -153,6 +154,53 @@
   XCTAssertTrue([[XCUIDevice sharedDevice] fb_unlockScreen:&error]);
   XCTAssertFalse([[XCUIDevice sharedDevice] fb_isScreenLocked]);
   XCTAssertNil(error);
+}
+
+- (void)testRepeatedLockUnlockAcrossHingePoses
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  BOOL hasHinge = NO;
+#if TARGET_OS_SIMULATOR
+  hasHinge = device.fb_canAttemptSimulatedHingeAngleInjection;
+#endif
+  NSNumber *originalAngle = hasHinge ? [device fb_getSimulatedHingeAngle:nil] : nil;
+  if (hasHinge) {
+    XCTAssertNotNil(originalAngle);
+  }
+  BOOL (^setAngleAndWait)(NSNumber *) = ^BOOL(NSNumber *angle) {
+    return [device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]
+      && [[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
+        NSNumber *reading = [device fb_getSimulatedHingeAngle:nil];
+        return nil != reading && fabs(reading.doubleValue - angle.doubleValue) < 1;
+      }];
+  };
+  @try {
+    for (NSNumber *angle in (hasHinge ? @[@0, @90, @180] : @[@0])) {
+      if (hasHinge) {
+        XCTAssertTrue(setAngleAndWait(angle));
+      }
+      for (NSUInteger attempt = 0; attempt < 3; attempt++) {
+        XCTAssertFalse(device.fb_isScreenLocked);
+        NSError *error = nil;
+        XCTAssertTrue([device fb_lockScreen:&error]);
+        XCTAssertNil(error);
+        XCTAssertTrue(device.fb_isScreenLocked);
+        // Repeating lock must not toggle the screen back to unlocked.
+        XCTAssertTrue([device fb_lockScreen:&error]);
+        XCTAssertTrue(device.fb_isScreenLocked);
+        XCTAssertTrue([device fb_unlockScreen:&error]);
+        XCTAssertNil(error);
+        XCTAssertFalse(device.fb_isScreenLocked);
+        XCTAssertTrue([device fb_unlockScreen:&error]);
+        XCTAssertFalse(device.fb_isScreenLocked);
+      }
+    }
+  } @finally {
+    [device fb_unlockScreen:nil];
+    if (nil != originalAngle) {
+      XCTAssertTrue(setAngleAndWait(originalAngle));
+    }
+  }
 }
 
 - (void)testUrlSchemeActivation
