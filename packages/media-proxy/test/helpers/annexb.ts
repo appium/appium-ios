@@ -1,6 +1,12 @@
 import {readFileSync} from 'node:fs';
 
+import {loadNative} from '../../src/native.js';
 import type {NalAccessUnit} from '../../src/types.js';
+
+/** Whether this platform's addon has an H.264 encoder (macOS VideoToolbox so far). */
+export const HAS_H264 = loadNative()
+  .capabilities()
+  .encoders.some((name) => name.startsWith('h264_'));
 
 const RTP_TICKS_PER_FRAME = 1500; // 60 fps at 90 kHz
 
@@ -71,4 +77,16 @@ export function jpegSize(jpeg: Buffer): {width: number; height: number} {
     i += 2 + jpeg.readUInt16BE(i + 2);
   }
   throw new Error('no SOF marker');
+}
+
+/** NAL unit types (H.264) of an Annex-B buffer, in order. */
+export function h264NalTypes(data: Buffer): number[] {
+  const types: number[] = [];
+  for (let i = 0; i + 4 < data.length; i++) {
+    if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1) {
+      types.push(data[i + 4] & 0x1f);
+      i += 3;
+    }
+  }
+  return types;
 }

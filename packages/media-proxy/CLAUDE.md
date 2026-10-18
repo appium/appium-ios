@@ -23,6 +23,9 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - `src/framing/` — APST (mirrors the Android settings app's streaming-protocol) and MJPEG multipart/HTTP.
 - `src/native/` — C++. `pipeline.{h,cc}` is pure FFmpeg (worker thread: HEVC decode → swscale → MJPEG encode,
   bounded input queue that drops to the next keyframe); `addon.cc` is the N-API/ThreadSafeFunction wrapper.
+  H.264 goes through the `H264Encoder` interface (`h264_encoder.{h,cc}`); `videotoolbox_encoder.cc` (macOS only
+  in `binding.gyp`) calls VideoToolbox directly because FFmpeg's wrapper adds ~4 frames of latency. A dropped
+  H.264 output unit makes `addon.cc` skip to a forced key frame.
   Native errors set `err.name` to a typed error name; `wrapNativeError` re-types them.
 - `scripts/ci/` (CI/build only, never shipped; the package `files` list must not include it): `build-ffmpeg.sh`, `bundle-libs.mjs`, `build-prebuilds.mjs`, `lint-cpp.sh`, `run.mjs` (shared spawn helper).
   Windows builds FFmpeg with MSVC under MSYS2 (arm64: no asm). Everything link-time lives in `binding.gyp` (`ffmpeg_dir`).
