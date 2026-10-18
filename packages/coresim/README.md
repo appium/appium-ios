@@ -86,8 +86,3 @@ Early stage: core device and app lifecycle is implemented and tested; broader co
 progress.
 
 See [`CLAUDE.md`](./CLAUDE.md) for architecture details.
-
-### Screenshot display lookup cache
-
-For opt-in numeric display-ID caching, see
-[`ScreenshotOptions.cacheDisplayId`](./src/types.ts).
