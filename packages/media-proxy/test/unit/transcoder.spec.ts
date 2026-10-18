@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
 import {MediaProxyEncoderUnavailableError, MediaProxyOptionError} from '../../src/errors.js';
-import {TimestampConverter, Transcoder, pipeThrough, resolveOptions, transcode} from '../../src/transcoder.js';
+import {TimestampConverter, Transcoder, pipeThrough, resolveOptions} from '../../src/transcoder.js';
 import type {
   JpegFrame,
   NativeConfig,
@@ -432,11 +432,11 @@ describe('pipeThrough() / transcode()', () => {
     assert.ok(state.returned, 'source return() was called');
   });
 
-  it('transcode() surfaces the typed error when no encoder is compiled in', async () => {
-    const source = (async function* () {
-      yield au(0, true);
-    })();
-    // Real addon (or its absence): either way the first iteration rejects with a MediaProxy error.
-    await assert.rejects(transcode(source, {codec: 'h264'}).next(), (err: Error) => err.name.startsWith('MediaProxy'));
+  it('re-types a native "no encoder" failure when the transcoder is created', () => {
+    const backend = fakeBackend();
+    backend.createTranscoder = () => {
+      throw Object.assign(new Error('no encoder'), {name: 'MediaProxyEncoderUnavailableError'});
+    };
+    assert.throws(() => new Transcoder(h264, backend), MediaProxyEncoderUnavailableError);
   });
 });

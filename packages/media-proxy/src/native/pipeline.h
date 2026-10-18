@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -12,8 +14,12 @@
 
 namespace media_proxy {
 
+// Typed error name (src/errors.ts) and the Annex-B start code shared by the native sources.
+inline constexpr const char* kEncoderUnavailableError = "MediaProxyEncoderUnavailableError";
+inline constexpr std::array<uint8_t, 4> kAnnexBStartCode = {0, 0, 0, 1};
+
 struct PipelineConfig {
-  std::string outputCodec;  // "mjpeg" (h264 arrives with the encoder milestone)
+  std::string outputCodec;  // "h264" | "mjpeg"
   // Doubles: the TS layer accepts fractional values (e.g. fps 29.97, scale 33.3).
   double fps = 60;
   double bitrate = 0;
@@ -48,8 +54,10 @@ class Pipeline {
   using ErrorCallback = std::function<void(PipelineError&&)>;
   using DoneCallback = std::function<void()>;
 
-  // Throws PipelineError when the requested encoder/decoder is unavailable.
-  Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError);
+  // Throws PipelineError when the requested encoder/decoder is unavailable. Setting `keyFrameRequested` (from any
+  // thread, must outlive the pipeline) makes the H.264 encoder emit a key frame next; it is ignored for MJPEG.
+  Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError,
+           std::atomic<bool>& keyFrameRequested);
   ~Pipeline();
   Pipeline(const Pipeline&) = delete;
   Pipeline& operator=(const Pipeline&) = delete;
@@ -60,6 +68,8 @@ class Pipeline {
   void Finish(DoneCallback onDone);
 
   static constexpr size_t kMaxQueuedUnits = 8;
+  // Limit until the backlog behind a (re)opening encoder has drained (start-up, rotation).
+  static constexpr size_t kMaxWarmupUnits = 120;
 
  private:
   struct Input {
@@ -77,6 +87,7 @@ class Pipeline {
   bool awaitingKeyFrame_ = false;
   bool finishing_ = false;
   bool aborting_ = false;
+  std::atomic<bool> warm_{false};  // false while an encoder opens and the backlog behind it drains
   DoneCallback onDone_;
   ErrorCallback onError_;
   std::unique_ptr<Impl> impl_;
