@@ -226,8 +226,7 @@ class MediaFoundationEncoder final : public H264Encoder {
       av_log(nullptr, AV_LOG_WARNING, "Media Foundation rejected %s (HRESULT 0x%lx)\n", name,
              static_cast<unsigned long>(hr));
     };
-    set(CODECAPI_AVEncCommonLowLatency, "AVEncCommonLowLatency", BoolVariant(true), false);
-    set(CODECAPI_AVEncCommonRealTime, "AVEncCommonRealTime", BoolVariant(true), false);
+    set(CODECAPI_AVLowLatencyMode, "AVLowLatencyMode", BoolVariant(true), false);
     set(CODECAPI_AVEncCommonRateControlMode, "AVEncCommonRateControlMode",
         UInt32Variant(eAVEncCommonRateControlMode_CBR), false);
     set(CODECAPI_AVEncMPVDefaultBPictureCount, "AVEncMPVDefaultBPictureCount", UInt32Variant(0), true);

@@ -157,6 +157,19 @@ describe('native H.264 key-frame handling', {skip: !HAS_H264}, () => {
   const push = (handle: ReturnType<typeof open>['handle'], au: NalAccessUnit, index: number) =>
     handle.push(au.nals, Math.round(index * FRAME_MICROS), au.isKeyFrame);
 
+  it('returns each frame without waiting for later input', async () => {
+    const aus = readHevcFixture(FIXTURE).slice(0, 6);
+    const {handle, units, errors} = open();
+    for (const [i, au] of aus.entries()) {
+      push(handle, au, i);
+      await sleep(PACE_MS);
+    }
+    await sleep(300); // generous for slow runners; an encoder that holds frames back never catches up
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(units.length, aus.length);
+    await handle.close();
+  });
+
   it('emits a key frame on request', async () => {
     const aus = readHevcFixture(FIXTURE);
     // An input unit that is neither a key frame nor follows one directly, so the encoder isn't about to start a GOP.
