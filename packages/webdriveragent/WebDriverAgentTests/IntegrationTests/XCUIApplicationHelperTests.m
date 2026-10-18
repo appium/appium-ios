@@ -120,6 +120,7 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       return nil != reading && fabs(reading.doubleValue - angle.doubleValue) < 1;
     }];
   };
+  FBSession *session = useSession ? [FBSession initWithApplication:self.testedApplication] : nil;
   @try {
     for (NSNumber *angle in (canFold ? @[@0, @90, @180] : @[@0])) {
       if (canFold) {
@@ -136,10 +137,16 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
         if (useSession) {
           XCTAssertTrue([device fb_goToHomescreenWithError:&error]);
           XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
-            return self.testedApplication.state != XCUIApplicationStateRunningForeground;
+            XCUIApplicationState state = self.testedApplication.state;
+            return state == XCUIApplicationStateRunningBackground
+              || state == XCUIApplicationStateRunningBackgroundSuspended;
           }]);
           [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:duration.doubleValue]];
-          FBSession *session = [FBSession initWithApplication:self.testedApplication];
+          XCUIApplicationState state = self.testedApplication.state;
+          XCTAssertTrue(state == XCUIApplicationStateRunningBackground
+                        || state == XCUIApplicationStateRunningBackgroundSuspended,
+                        @"Expected a background app before activation (angle %@, duration %@), got %lu",
+                        angle, duration, (unsigned long)state);
           [session activateApplicationWithBundleId:self.testedApplication.bundleID];
         } else {
           XCTAssertTrue([self.testedApplication fb_deactivateWithDuration:duration.doubleValue error:&error]);
@@ -152,6 +159,7 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       }
     }
   } @finally {
+    [session kill];
     BOOL restored = nil == originalAngle || setAngleAndWait(originalAngle);
     FBConfiguration.sharedInstance.currentDisplayId = originalDisplay;
     XCTAssertTrue(restored, @"Hinge did not return to %@ degrees", originalAngle);
