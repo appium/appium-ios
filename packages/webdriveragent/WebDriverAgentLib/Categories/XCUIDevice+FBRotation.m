@@ -24,22 +24,9 @@
 
 # if !TARGET_OS_TV && !TARGET_OS_WATCH
 
-// Workaround tracked in https://github.com/appium/appium/issues/22857.
-// Reproduced with Xcode 27.1 and the iOS 27.1 Duo simulator runtime (24A94401):
-// XCTest updates XCUIDevice.orientation but a rotation-capable app's scene does
-// not rotate. The same app rotates on an ordinary iPhone simulator. The vendor
-// event below was verified on Duo; physical-device receiver support is unknown.
-// The affected version range is NOT established. XCTest/toolchain, simulator
-// runtime, and Duo device behavior have not been isolated by version comparisons;
-// do not infer an OS-only or Xcode-only version gate from this reproduction.
-// The payload also depends on private DeviceKit/CoreDevice conventions.
-// Removal: bypass this dispatch and rerun XCUIDeviceRotationTests, especially
-// testRotationOnSelectedDuoDisplay, on supported Xcode/runtime combinations.
-// Confirm the app's scene rotates on cover/inner displays at hinge angles
-// 0/90/180, for both orientation and numeric rotation commands, using XCTest
-// alone. A changed device-orientation value or successful CLI exit is not enough.
-// Remove the direct simulator path when those checks pass across supported
-// environments; assess the physical-device fallback separately with real devices.
+// Work around XCTest updating Duo device orientation without rotating the app.
+// Reproduction details and checks required before removing this workaround:
+// https://github.com/appium/appium-ios/pull/81
 static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
 {
   XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
