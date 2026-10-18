@@ -146,8 +146,9 @@ runs:
         }
 
         flag_releases_without_assets() {
-          flag_release_without_assets ios-uicatalog uicatalog_release_tag packages/uicatalog
-          flag_release_without_assets appium-webdriveragent webdriveragent_release_tag packages/webdriveragent
+          # Explicit returns: callers run this inside `if !`, where `set -e` is disabled
+          flag_release_without_assets ios-uicatalog uicatalog_release_tag packages/uicatalog || return 1
+          flag_release_without_assets appium-webdriveragent webdriveragent_release_tag packages/webdriveragent || return 1
         }
 
         # Publishes whatever is still missing on npm, then flags releases lacking assets.
@@ -161,7 +162,7 @@ runs:
             publish_missing_packages "${missing[@]}" || return 1
           fi
           echo "All publishable workspace package versions are present on npm; treating recovery as successful."
-          flag_releases_without_assets
+          flag_releases_without_assets || return 1
         }
 
         if [ "$RECOVER_MISSING_ONLY" = "true" ]; then
