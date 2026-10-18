@@ -8,6 +8,7 @@
 #include <mferror.h>
 #include <mfidl.h>
 #include <mftransform.h>
+#include <strmif.h>
 #include <codecapi.h>
 #include <wrl/client.h>
 // clang-format on
