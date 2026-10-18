@@ -1,3 +1,5 @@
+import {LRUCache} from 'lru-cache';
+
 import type {NativeSimctl} from '../native-simctl.js';
 import {SimDeviceState, type NativeDeviceHandle, type ScreenshotOptions, type SimDisplayInfo} from '../types.js';
 import {resolveDisplayPortId, runCatchingAsync, validateDisplayId} from '../utils/index.js';
@@ -8,7 +10,7 @@ interface CachedDisplay {
   portId: string;
   bootMarker: number;
 }
-const displayCaches = new WeakMap<NativeSimctl, Map<string, CachedDisplay>>();
+const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, CachedDisplay>>();
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -80,7 +82,7 @@ async function captureScreenshot(
     return await device.screenshot({...options, displayId});
   }
   if (!cache) {
-    cache = new Map();
+    cache = new LRUCache<string, CachedDisplay>({max: MAX_CACHED_DEVICES});
     displayCaches.set(client, cache);
   }
   let bootMarker = readBootMarker(device);
@@ -101,12 +103,6 @@ async function captureScreenshot(
   const displayId = await resolveDisplayPortId(device, options.displayId);
   const result = await device.screenshot({...options, displayId});
   if (displayId && bootMarker !== null && readBootMarker(device) === bootMarker) {
-    if (cache.size >= MAX_CACHED_DEVICES) {
-      const oldestKey = cache.keys().next().value;
-      if (oldestKey !== undefined) {
-        cache.delete(oldestKey);
-      }
-    }
     cache.set(key, {screenId: options.displayId, portId: displayId, bootMarker});
   }
   return result;

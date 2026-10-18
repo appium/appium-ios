@@ -215,6 +215,22 @@ describe('opt-in screenshot display cache', () => {
     assert.equal(f.getDisplays.mock.callCount(), 34);
   });
 
+  it('evicts the least recently used device while retaining a recently captured device', async () => {
+    const f = fixture();
+    for (let i = 0; i < 32; i++) {
+      await f.capture({}, `device-${i}`);
+    }
+    await f.capture({}, 'device-0');
+    assert.equal(f.getDisplays.mock.callCount(), 32);
+
+    await f.capture({}, 'device-32');
+    await f.capture({}, 'device-0');
+    assert.equal(f.getDisplays.mock.callCount(), 33);
+
+    await f.capture({}, 'device-1');
+    assert.equal(f.getDisplays.mock.callCount(), 34);
+  });
+
   it('rejects a non-boolean cache option', async () => {
     const f = fixture();
     await assert.rejects(f.capture({cacheDisplayId: 1 as any}), /cacheDisplayId must be a boolean/);
