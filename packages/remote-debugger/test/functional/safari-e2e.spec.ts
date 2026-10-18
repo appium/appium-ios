@@ -163,6 +163,92 @@ describe('Safari remote debugger', function () {
     await fixture.rd().selectApp(fixture.address());
   });
 
+  it('should wait for a promise that a script returns', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const run = (script: string, timeoutMs?: number) => rd.executeAtom('execute_script', [script, []], [], {timeoutMs});
+
+    assert.strictEqual(await run('return Promise.resolve(5);'), 5);
+    assert.strictEqual(await run('return new Promise((r) => setTimeout(() => r(9), 50));'), 9);
+    assert.deepStrictEqual(await run('return (async () => [1, 2])();'), [1, 2]);
+    await assert.rejects(run("return Promise.resolve({get a() { throw 'boom'; }});", 3000), (err: Error) => {
+      assert.ok(err instanceof errors.JavaScriptError, err.constructor.name);
+      assert.match(err.message, /boom/);
+      return true;
+    });
+    const el = await run('return Promise.resolve(document.body);');
+    assert.strictEqual(await rd.executeAtom('execute_script', ['return arguments[0].tagName;', [el]]), 'BODY');
+    await assert.rejects(run('return Promise.reject(new Error("boom"));'), (err: Error) => {
+      assert.ok(err instanceof errors.JavaScriptError);
+      assert.match(err.message, /boom/);
+      return true;
+    });
+    await assert.rejects(run('return new Promise(() => {});', 300), errors.ScriptTimeoutError);
+    await assert.rejects(run('return new Promise((r) => setTimeout(() => r(9), 50));', 0), errors.ScriptTimeoutError);
+    assert.strictEqual(await run('return 1 + 1;'), 2);
+  });
+
+  it('should give a script timeout when the page replaced setTimeout', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const script =
+      'window.__setTimeout = window.setTimeout; window.setTimeout = () => 0; return new Promise(() => {});';
+    try {
+      await assert.rejects(rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 300}), (err: Error) => {
+        assert.ok(err instanceof errors.ScriptTimeoutError);
+        assert.match(err.message, /after 300 ms/);
+        return true;
+      });
+    } finally {
+      // only when the page did not change
+      await rd.execute('if (window.__setTimeout) { window.setTimeout = window.__setTimeout; } "ok"');
+    }
+  });
+
+  it('should give the user gesture to a script that returns a promise, with its timeout', async function () {
+    await fixture.selectTestPage();
+    const rd = fixture.rd();
+    const script = 'return Promise.resolve(navigator.userActivation.isActive);';
+    // without a gesture first: an activation stays active for a short time
+    assert.strictEqual(await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000}), false);
+    assert.strictEqual(
+      await rd.executeAtom('execute_script', [script, []], [], {timeoutMs: 5000, emulateUserGesture: true}),
+      true,
+    );
+  });
+
+  for (const [name, leave] of [
+    ['reloads', 'location.reload();'],
+    ['navigates to another page', (url: string) => `location.href = ${JSON.stringify(url)};`],
+  ] as const) {
+    it(`should stop waiting for a promise when the page ${name}`, async function () {
+      await fixture.selectTestPage();
+      const rd = fixture.rd();
+      const pending = rd.executeAtom('execute_script', ['return new Promise(() => {});', []]);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const leaveScript = typeof leave === 'string' ? leave : leave(fixture.freshUrl());
+      await rd.execute(`setTimeout(function () { ${leaveScript} }, 0); "leave";`);
+      await assert.rejects(pending, (err: Error) => {
+        assert.ok(err instanceof errors.UnknownError);
+        assert.match(err.message, /page unload/);
+        return true;
+      });
+    });
+
+    it(`should give an unknown error when the script makes the page ${name} and returns a promise`, async function () {
+      await fixture.selectTestPage();
+      const leaveScript = typeof leave === 'string' ? leave : leave(fixture.freshUrl());
+      // the page can go before Runtime.awaitPromise arrives
+      await assert.rejects(
+        fixture.rd().executeAtom('execute_script', [`${leaveScript} return new Promise(() => {});`, []]),
+        (err: Error) => {
+          assert.ok(err instanceof errors.UnknownError, `${err.constructor.name}: ${err.message}`);
+          return true;
+        },
+      );
+    });
+  }
+
   it('should be able to get console logs from a remote page', async function () {
     await fixture.selectTestPage();
 

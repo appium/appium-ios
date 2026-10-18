@@ -178,9 +178,13 @@ export async function getRect(this: AutomationSession, el: AutomationElement): P
   return (await computeLayout.call(this, el, false, 'Page')).rect;
 }
 
-/** Takes a screenshot of just this element, scrolling it into view first. */
+/** Takes a screenshot of the whole element (including parts outside the viewport), scrolling it into view first. */
 export async function elementScreenshot(this: AutomationSession, el: AutomationElement): Promise<string> {
-  return await takeScreenshot.call(this, {nodeHandle: this.unwrapElement(el), scrollIntoViewIfNeeded: true});
+  return await takeScreenshot.call(this, {
+    nodeHandle: this.unwrapElement(el),
+    scrollIntoViewIfNeeded: true,
+    clipToViewport: false,
+  });
 }
 
 /** Thrown internally by `pollForRawNodes` to signal a timeout, distinct from a real RPC/eval failure. */

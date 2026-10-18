@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@appium/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "checkJs": true,
+    "rootDir": ".",
+    "outDir": "./lib"
+  },
+  "include": ["src", "scripts", "test"],
+  "exclude": ["build", "lib", "scripts/bench.mjs"]
+}

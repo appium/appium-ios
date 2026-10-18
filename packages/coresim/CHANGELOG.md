@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.13.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.13.0...@appium/coresim@1.13.1) (2026-10-16)
+
+### Code Refactoring
+
+* **coresim:** split notifications store handling out of permissions ([#68](https://github.com/appium/appium-ios/issues/68)) ([7808a34](https://github.com/appium/appium-ios/commit/7808a34bd5c57918414abed62279be31ac18e353))
+
+
+## [1.13.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.12.0...@appium/coresim@1.13.0) (2026-10-15)
+
+### Features
+
+* restore the notifications permission and the &#x60;all&#x60; permissions key ([#38](https://github.com/appium/appium-ios/issues/38)) ([d374250](https://github.com/appium/appium-ios/commit/d374250c24a99d8f91b6d83a77afcc771e00c9b1))
+
+
+## [1.12.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.11.1...@appium/coresim@1.12.0) (2026-10-12)
+
+### Features
+
+* support numeric display IDs across capture APIs ([#49](https://github.com/appium/appium-ios/issues/49)) ([ca7649a](https://github.com/appium/appium-ios/commit/ca7649addf546a023bc0d601f784f801b8d99b56))
+
+
 ## [1.11.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.11.0...@appium/coresim@1.11.1) (2026-10-05)
 
 ### Performance Improvements

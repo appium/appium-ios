@@ -78,6 +78,8 @@ async function instanceToDevice(
       identifierSource: 'bonjour',
       model: txt.model ?? '',
       version: txt.ver ?? '',
+      serviceIdentifier: txt.identifier,
+      authTag: txt.authTag,
     };
     return {
       id: identifier,

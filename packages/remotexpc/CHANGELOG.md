@@ -3,6 +3,41 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.3...appium-ios-remotexpc@5.25.4) (2026-10-17)
+
+### Bug Fixes
+
+* **remotexpc:** send misagent, mobile config and springboard requests once ([#75](https://github.com/appium/appium-ios/issues/75)) ([c706fda](https://github.com/appium/appium-ios/commit/c706fda27cfe303310a001399bf30e0cf19fb2fa))
+
+
+## [5.25.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.2...appium-ios-remotexpc@5.25.3) (2026-10-16)
+
+### Bug Fixes
+
+* **remotexpc:** detach tunnel lockdown handshake connection, close it on failure ([#74](https://github.com/appium/appium-ios/issues/74)) ([7977d77](https://github.com/appium/appium-ios/commit/7977d779ba9cfdeec2947d75c048a5f93185ec4e))
+
+
+## [5.25.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.1...appium-ios-remotexpc@5.25.2) (2026-10-15)
+
+### Bug Fixes
+
+* **remotexpc:** detach plist layer from DVT and testmanagerd DTX sockets ([#67](https://github.com/appium/appium-ios/issues/67)) ([a13cdad](https://github.com/appium/appium-ios/commit/a13cdad333a6acc47735a8ebe6ef607e41394130))
+
+
+## [5.25.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.0...appium-ios-remotexpc@5.25.1) (2026-10-14)
+
+### Bug Fixes
+
+* **remotexpc:** parse binary plist dicts that have a &quot;type&quot; key ([#64](https://github.com/appium/appium-ios/issues/64)) ([e8ac890](https://github.com/appium/appium-ios/commit/e8ac890fe68a5c22161e2a9b10de15f124d80068))
+
+
+## [5.25.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.7...appium-ios-remotexpc@5.25.0) (2026-10-12)
+
+### Features
+
+* **remotexpc:** match Apple TV adverts to pair records by authTag ([#50](https://github.com/appium/appium-ios/issues/50)) ([81f6930](https://github.com/appium/appium-ios/commit/81f69306a1736ffa430cec9b778a2de88e8e44e8))
+
+
 ## [5.24.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.24.6...appium-ios-remotexpc@5.24.7) (2026-10-08)
 
 **Note:** Version bump only for package appium-ios-remotexpc

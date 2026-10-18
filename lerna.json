@@ -49,7 +49,7 @@
       "allowBranch": ["main"]
     }
   },
-  "ignoreChanges": ["**/test/**", "**/*.md"],
+  "ignoreChanges": ["**/test/**", "**/*.md", "packages/media-proxy/**"],
   "useNx": false,
   "version": "independent"
 }

@@ -4,6 +4,10 @@ export interface DiscoveredDeviceMetadata {
   model?: string;
   version?: string;
   deviceType?: string;
+  /** Raw TXT `identifier`; survives devicectl enrichment, which replaces `identifier`. */
+  serviceIdentifier?: string;
+  /** Base64 TXT `authTag`: SipHash-2-4(altIRK, serviceIdentifier). */
+  authTag?: string;
 }
 
 export interface DiscoveredDevice {

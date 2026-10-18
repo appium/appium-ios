@@ -1,0 +1,72 @@
+name: Build media-proxy native addon (Reusable)
+
+# Prebuild matrix (darwin/linux/win32 x x64/arm64): cached LGPL FFmpeg + addon + bundled libs.
+# Not called from release.yml yet (unreleased package); see packages/media-proxy/CLAUDE.md.
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifacts:
+        description: Upload each platform's .node (and bundled libs) as a workflow artifact
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  prebuild:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: macos-latest
+            arch: arm64
+            artifact: darwin-arm64
+          - runs-on: macos-latest
+            arch: x64
+            artifact: darwin-x64
+          - runs-on: ubuntu-latest
+            arch: x64
+            artifact: linux-x64
+          - runs-on: ubuntu-24.04-arm
+            arch: arm64
+            artifact: linux-arm64
+          - runs-on: windows-2022
+            arch: x64
+            artifact: win32-x64
+          - runs-on: windows-11-arm
+            arch: arm64
+            artifact: win32-arm64
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          check-latest: true
+
+      - name: Install dependencies
+        # --ignore-scripts: skip every workspace's own install/prepare hooks - build:prebuilds
+        # below invokes node-gyp itself.
+        run: npm ci --ignore-scripts
+
+      - name: Build FFmpeg
+        uses: ./.github/actions/media-proxy-ffmpeg
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Create N-API prebuild
+        run: npm run build:prebuilds --workspace packages/media-proxy -- --arch ${{ matrix.arch }}
+
+      - name: Load the prebuild
+        run: node packages/media-proxy/scripts/ci/smoke-prebuild.mjs --arch ${{ matrix.arch }}
+
+      - name: Upload prebuild
+        if: ${{ inputs.upload-artifacts }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: media-proxy-prebuild-${{ matrix.artifact }}
+          path: packages/media-proxy/prebuilds/

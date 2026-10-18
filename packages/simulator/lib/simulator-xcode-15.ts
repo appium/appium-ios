@@ -66,7 +66,7 @@ export class SimulatorXcode15 extends BaseSimulator implements CoreSimulator {
     super();
 
     this._udid = String(udid);
-    this._native = createNativeSimctl(this._devicesSetPath);
+    this._native = createNativeSimctl(this._devicesSetPath, this.bulletinBoardVersions);
     this._xcodeVersion = xcodeVersion;
     // platformVersion cannot be found initially, since getting it has side effects for
     // our logic for figuring out if a sim has been run
@@ -114,6 +114,14 @@ export class SimulatorXcode15 extends BaseSimulator implements CoreSimulator {
   }
 
   /**
+   * @returns The versions of SpringBoard's notifications store (`VersionedSectionInfo.plist`) this
+   * Xcode's runtimes may have, the oldest first. Newer Xcode versions extend the list.
+   */
+  get bulletinBoardVersions(): readonly number[] {
+    return [2];
+  }
+
+  /**
    * @returns The maximum number of milliseconds to wait until Simulator booting is completed.
    */
   get startupTimeout(): number {
@@ -137,7 +145,7 @@ export class SimulatorXcode15 extends BaseSimulator implements CoreSimulator {
    */
   set devicesSetPath(value: string | null) {
     this._devicesSetPath = value;
-    this._native = createNativeSimctl(value);
+    this._native = createNativeSimctl(value, this.bulletinBoardVersions);
   }
 }
 

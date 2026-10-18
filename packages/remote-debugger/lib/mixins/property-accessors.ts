@@ -133,3 +133,8 @@ export function getPageLoadStartegy(instance: RemoteDebugger): (typeof instance)
 export function getPageReadyTimeout(instance: RemoteDebugger): (typeof instance)['_pageReadyTimeout'] {
   return instance['_pageReadyTimeout'];
 }
+
+/** Gets whether the caller opted into interaction-atom emulation on a supported OS. */
+export function getEmulateUserGestureForInteractionAtoms(instance: RemoteDebugger): boolean {
+  return instance['_emulateUserGestureForInteractionAtoms'];
+}

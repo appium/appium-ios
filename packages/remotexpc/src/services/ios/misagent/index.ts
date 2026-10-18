@@ -16,8 +16,16 @@ class MisagentService extends BaseService implements MisagentServiceInterface {
       return this._conn;
     }
 
-    this._conn = await this.startLockdownService(MisagentService.RSD_SERVICE_NAME);
+    this._conn = await this.startShimService(MisagentService.RSD_SERVICE_NAME);
     return this._conn;
+  }
+
+  /**
+   * Close the misagent service connection
+   */
+  close(): void {
+    this._conn?.close();
+    this._conn = null;
   }
 
   async installProfileFromPath(filePath: string): Promise<void> {
@@ -73,12 +81,17 @@ class MisagentService extends BaseService implements MisagentServiceInterface {
     );
   }
 
+  /**
+   * Sends one request and returns its reply. A failed exchange closes the connection, so a
+   * late reply can never be read as the answer to the next request.
+   */
   private async sendRequest(request: any, errorMessage: string): Promise<PlistDictionary> {
     const conn = await this.connectToMisagentService();
     try {
-      // Skip StartService response
-      await conn.sendPlistRequest(request);
-      const res = await conn.sendPlistRequest(request);
+      const res = await conn.sendPlistRequest(request).catch((error: unknown) => {
+        this.close();
+        throw error;
+      });
       if (res.Status) {
         throw new Error(`Invalid response: ${JSON.stringify(res)}`);
       }

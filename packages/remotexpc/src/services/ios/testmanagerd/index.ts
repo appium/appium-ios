@@ -76,7 +76,7 @@ export class DvtTestmanagedProxyService extends BaseService {
 
     // testmanagerd uses DTX binary protocol, connect without plist-based RSDCheckin
     this.connection = await this.startLockdownWithoutCheckin(DvtTestmanagedProxyService.RSD_SERVICE_NAME);
-    this.socket = this.connection.getSocket();
+    this.socket = this.connection.detachSocket();
     stripSSL(this.socket);
 
     // Persistent handlers capture socket death between readExact() calls.
@@ -560,6 +560,11 @@ export class DvtTestmanagedProxyService extends BaseService {
     }
   }
 
+  /**
+   * Read exact number of bytes from the socket.
+   * The socket flows only while a read waits for data and is paused otherwise,
+   * so data arriving between reads stays buffered instead of being dropped.
+   */
   private async readExact(length: number, signal?: AbortSignal): Promise<Buffer> {
     if (!this.socket) {
       throw new Error(`${this.constructor.name} is not initialized. Call connect() before sending messages.`);
@@ -586,6 +591,7 @@ export class DvtTestmanagedProxyService extends BaseService {
           socket.off('error', onError);
           socket.off('close', onClose);
           signal?.removeEventListener('abort', onAbort);
+          socket.pause();
         };
 
         const onData = (data: Buffer) => {
@@ -613,6 +619,7 @@ export class DvtTestmanagedProxyService extends BaseService {
         socket.once('error', onError);
         socket.once('close', onClose);
         signal?.addEventListener('abort', onAbort, {once: true});
+        socket.resume();
       });
 
       this.readBuffer = Buffer.concat([this.readBuffer, chunk]);

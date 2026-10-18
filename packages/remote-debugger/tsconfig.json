@@ -18,5 +18,5 @@
     "test/unit/frameworks",
     "test/fixtures"
   ],
-  "references": [{"path": "../coresim"}]
+  "references": [{"path": "../coresim"}, {"path": "../remotexpc"}]
 }

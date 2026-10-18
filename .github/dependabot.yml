@@ -12,6 +12,16 @@ updates:
     labels:
       - "dependencies"
     versioning-strategy: increase-if-necessary
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

@@ -3,6 +3,105 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.7.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.2...appium-remote-debugger@17.7.3) (2026-10-17)
+
+### Bug Fixes
+
+* **remote-debugger:** wait for a promise that execute_script returns ([#66](https://github.com/appium/appium-ios/issues/66)) ([82f2e87](https://github.com/appium/appium-ios/commit/82f2e871c2ca08f30d47e3c0105ee7231f3cc21f)), closes [#72](https://github.com/appium/appium-ios/issues/72) [#71](https://github.com/appium/appium-ios/issues/71) [#72](https://github.com/appium/appium-ios/issues/72) [appium/appium#22978](https://github.com/appium/appium/issues/22978)
+
+
+## [17.7.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.1...appium-remote-debugger@17.7.2) (2026-10-17)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.0...appium-remote-debugger@17.7.1) (2026-10-16)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.6.1...appium-remote-debugger@17.7.0) (2026-10-16)
+
+### Features
+
+* **remote-debugger:** opt in to iOS 27 interaction gesture emulation ([#72](https://github.com/appium/appium-ios/issues/72)) ([adb881a](https://github.com/appium/appium-ios/commit/adb881ae38d6d88f12e622252ec424db857daaa8))
+
+
+## [17.6.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.6.0...appium-remote-debugger@17.6.1) (2026-10-16)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.6.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.16...appium-remote-debugger@17.6.0) (2026-10-16)
+
+### Features
+
+* **remote-debugger:** support per-evaluation user gesture emulation ([#71](https://github.com/appium/appium-ios/issues/71)) ([91ad89a](https://github.com/appium/appium-ios/commit/91ad89a1d841e1766e3ec3657b3b7a0c16a62c96))
+
+
+## [17.5.16](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.15...appium-remote-debugger@17.5.16) (2026-10-15)
+
+### Bug Fixes
+
+* **ci:** make the release publishable again ([#69](https://github.com/appium/appium-ios/issues/69)) ([38cb413](https://github.com/appium/appium-ios/commit/38cb4133563147796c1f441d1b418d8a0723ae29))
+
+
+## [17.5.15](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.14...appium-remote-debugger@17.5.15) (2026-10-15)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.5.14](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.13...appium-remote-debugger@17.5.14) (2026-10-15)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.5.13](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.12...appium-remote-debugger@17.5.13) (2026-10-14)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.5.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.11...appium-remote-debugger@17.5.12) (2026-10-13)
+
+### Bug Fixes
+
+* **remote-debugger:** capture the whole element in element screenshots ([#59](https://github.com/appium/appium-ios/issues/59)) ([f6ad00f](https://github.com/appium/appium-ios/commit/f6ad00fdca567f8ca39383d0d2a94fc10375875c))
+
+
+## [17.5.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.10...appium-remote-debugger@17.5.11) (2026-10-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.5.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.9...appium-remote-debugger@17.5.10) (2026-10-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
 ## [17.5.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.5.8...appium-remote-debugger@17.5.9) (2026-10-08)
 
 **Note:** Version bump only for package appium-remote-debugger

@@ -58,6 +58,11 @@ labels:
     matcher:
       files: ['packages/resigner/**']
 
+  - label: 'package:media-proxy'
+    sync: true
+    matcher:
+      files: ['packages/media-proxy/**']
+
   - label: 'package:simulator'
     sync: true
     matcher:
@@ -77,3 +82,8 @@ labels:
     sync: true
     matcher:
       files: ['packages/xcode/**']
+
+  - label: 'package:webdriveragent'
+    sync: true
+    matcher:
+      files: ['packages/webdriveragent/**']

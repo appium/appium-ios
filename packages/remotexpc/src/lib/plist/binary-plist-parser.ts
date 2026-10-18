@@ -11,13 +11,21 @@ import {APPLE_EPOCH_OFFSET, BPLIST_MAGIC_AND_VERSION, BPLIST_TRAILER_SIZE, BPLIS
 const log = getLogger('Plist');
 
 /**
- * Represents a temporary object during binary plist parsing
+ * Represents a temporary object during binary plist parsing.
+ * A class so it can be told apart from parsed dictionaries, which may have the same keys.
  */
-interface TempObject {
-  type: 'array' | 'dict';
-  objLength: number;
-  startOffset: number;
-  value: PlistArray | PlistDictionary;
+class TempObject {
+  readonly type: 'array' | 'dict';
+  readonly objLength: number;
+  readonly startOffset: number;
+  readonly value: PlistArray | PlistDictionary;
+
+  constructor(type: 'array' | 'dict', objLength: number, startOffset: number, value: PlistArray | PlistDictionary) {
+    this.type = type;
+    this.objLength = objLength;
+    this.startOffset = startOffset;
+    this.value = value;
+  }
 }
 
 /**
@@ -388,12 +396,7 @@ class BinaryPlistParser {
    * @returns The temporary array object
    */
   private _createTempArray(objLength: number, startOffset: number): TempObject {
-    return {
-      type: 'array',
-      objLength,
-      startOffset,
-      value: [] as PlistArray,
-    };
+    return new TempObject('array', objLength, startOffset, [] as PlistArray);
   }
 
   /**
@@ -403,12 +406,7 @@ class BinaryPlistParser {
    * @returns The temporary dictionary object
    */
   private _createTempDict(objLength: number, startOffset: number): TempObject {
-    return {
-      type: 'dict',
-      objLength,
-      startOffset,
-      value: {} as PlistDictionary,
-    };
+    return new TempObject('dict', objLength, startOffset, {} as PlistDictionary);
   }
 
   /**
@@ -417,7 +415,7 @@ class BinaryPlistParser {
    * @returns True if the object is a TempObject
    */
   private _isTempObject(obj: ObjectTableItem): obj is TempObject {
-    return typeof obj === 'object' && obj !== null && 'type' in obj;
+    return obj instanceof TempObject;
   }
 
   /**

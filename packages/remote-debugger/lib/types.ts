@@ -33,6 +33,37 @@ export type AppDict = StringRecord<AppInfo>;
 
 export type EventListener = (error?: Error, event?: StringRecord, method?: string) => any;
 
+/** Options applied only to the current JavaScript evaluation. */
+export interface ScriptExecutionOptions {
+  /**
+   * Evaluate in a WebKit user-gesture context. Overrides the interaction-atom
+   * policy when specified; otherwise defaults to false unless that policy applies.
+   * This can affect popup blocking and other user-activation checks; enable it
+   * only for an intentional interaction, such as a click, rather than every script.
+   * It does not make synthetic DOM events trusted. The option is not inherited
+   * by subsequent commands or executeAtomAsync calls.
+   *
+   * This can preserve navigation entries that WebKit otherwise hides from native
+   * back/forward APIs after a synthetic click. Callers such as XCUITest Driver
+   * must explicitly pass the option; this is not a driver capability or setting.
+   *
+   * @see https://github.com/appium/appium-xcuitest-driver/issues/3042
+   */
+  emulateUserGesture?: boolean;
+}
+
+/**
+ * Options for one executeAtom call. Evaluation options are inherited so atom-
+ * specific options can be added without changing the call signature.
+ */
+export interface ExecuteAtomOptions extends ScriptExecutionOptions {
+  /**
+   * `execute_script` only: max wait in ms for a returned promise (`script timeout`), at most 1 hour.
+   * Default: no timer, as a W3C `null` script timeout. Drivers pass the session script timeout.
+   */
+  timeoutMs?: number;
+}
+
 export interface RemoteDebuggerOptions {
   /** id of the app being connected to */
   bundleId?: string;
@@ -40,6 +71,18 @@ export interface RemoteDebuggerOptions {
   additionalBundleIds?: string[];
   /** array of bundle ids to exclude from webview context detection */
   ignoredBundleIds?: string[];
+  /**
+   * On iOS 27+, emulate user gestures for click, clear, submit, and type atoms
+   * containing only ordinary text or Enter/Return. Defaults to false.
+   *
+   * Opt in to preserve native back/forward history for these interactions, as
+   * observed on iOS 26 without emulation. This does not reproduce all iOS 26
+   * behavior: it grants activation and can affect popup blocking. Escape,
+   * modifier/special-key sequences, scripts, and asynchronous atoms are excluded.
+   * An explicit per-call emulateUserGesture value takes precedence.
+   * Unspecified platform versions and versions below 27 retain the default behavior.
+   */
+  emulateUserGestureForInteractionAtoms?: boolean;
   /** version of iOS */
   platformVersion?: string;
   isSafari?: boolean;

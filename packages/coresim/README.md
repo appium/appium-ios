@@ -27,6 +27,7 @@ instead of crashing.
 ```ts
 import {NativeSimctl} from '@appium/coresim';
 
+// Optionally: new NativeSimctl({developerDir, deviceSetPath}), like `simctl --set <path>`
 const sim = new NativeSimctl();
 
 const devices = await sim.getDevices();

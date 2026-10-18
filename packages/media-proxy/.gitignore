@@ -1,0 +1,12 @@
+node_modules
+lib
+build
+prebuilds
+*.node
+compile_commands.json
+tsconfig.tsbuildinfo
+.idea
+
+# Locally built FFmpeg (see scripts/ci/build-ffmpeg.sh) — never committed.
+third_party/ffmpeg
+/third_party/.build

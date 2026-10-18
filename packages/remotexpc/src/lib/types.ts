@@ -553,6 +553,10 @@ export interface MobileConfigService extends BaseService {
    * @param {String} identifier Query identifier list through getProfileList method
    */
   removeProfile(identifier: string): Promise<void>;
+  /**
+   * Close the mobile config service connection
+   */
+  close(): void;
 }
 
 /**
@@ -1865,6 +1869,10 @@ export interface SpringboardService extends BaseService {
    * @returns {Promise<Buffer>}
    */
   getWallpaperPNGData(wallpaperName: string): Promise<Buffer>;
+  /**
+   * Close the springboard service connection
+   */
+  close(): void;
 }
 
 /**
@@ -1958,6 +1966,10 @@ export interface MisagentService extends BaseService {
    * });
    */
   fetchAll(): Promise<ProvisioningProfile[]>;
+  /**
+   * Close the misagent service connection
+   */
+  close(): void;
 }
 
 /**

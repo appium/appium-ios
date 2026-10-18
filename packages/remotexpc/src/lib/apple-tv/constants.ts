@@ -29,6 +29,9 @@ export const REMOTE_PAIRING_VERIFIED_DISCOVERY_SERVICE_TYPE = '_remotepairing._t
 
 export const REMOTE_PAIRING_DISCOVERY_DOMAIN = 'local';
 
+// Byte length of the altIRK an Apple TV reveals in pair-setup M6 (the SipHash key behind its mDNS authTag)
+export const ALT_IRK_LENGTH = 16;
+
 // TLV8 component type identifiers used in pairing data exchange
 export const PairingDataComponentType = {
   METHOD: 0x00,

@@ -1,0 +1,86 @@
+name: Build FFmpeg for media-proxy
+description: >
+  Builds (or restores from cache) the minimal LGPL FFmpeg shared libs the media-proxy addon links
+  against, into packages/media-proxy/third_party/ffmpeg/<platform>-<arch>.
+
+inputs:
+  arch:
+    description: Target architecture (x64 or arm64). Defaults to the runner's.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve target
+      id: target
+      shell: bash
+      run: |
+        arch='${{ inputs.arch }}'
+        if [ -z "$arch" ]; then
+          if [ "$RUNNER_ARCH" = ARM64 ]; then arch=arm64; else arch=x64; fi
+        fi
+        case "$RUNNER_OS" in
+          macOS) platform=darwin ;;
+          Linux) platform=linux ;;
+          Windows) platform=win32 ;;
+        esac
+        echo "arch=$arch" >> "$GITHUB_OUTPUT"
+        echo "dir=packages/media-proxy/third_party/ffmpeg/$platform-$arch" >> "$GITHUB_OUTPUT"
+
+    - name: Restore FFmpeg build
+      id: cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.target.outputs.dir }}
+        key: media-proxy-ffmpeg-${{ runner.os }}-${{ steps.target.outputs.arch }}-${{ hashFiles('packages/media-proxy/scripts/ci/build-ffmpeg.sh') }}
+
+    - name: Install nasm (macOS)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'macOS' && steps.target.outputs.arch == 'x64' }}
+      shell: bash
+      run: brew install nasm
+
+    - name: Install nasm (Linux)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'Linux' && steps.target.outputs.arch == 'x64' }}
+      shell: bash
+      run: sudo apt-get install -y nasm
+
+    - name: Build FFmpeg (macOS, Linux)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows' }}
+      shell: bash
+      env:
+        TARGET_ARCH: ${{ steps.target.outputs.arch }}
+      run: bash packages/media-proxy/scripts/ci/build-ffmpeg.sh
+
+    # Windows: FFmpeg's configure runs under MSYS2 and drives the MSVC toolchain (cl/link from vcvars).
+    - name: Install nasm (Windows)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows' && steps.target.outputs.arch == 'x64' }}
+      shell: pwsh
+      run: |
+        choco install nasm -y --no-progress
+        "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Set up MSVC (Windows)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows' }}
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ steps.target.outputs.arch }}
+
+    - name: Set up MSYS2 (Windows)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows' }}
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MSYS
+        path-type: inherit
+        update: false
+        install: make diffutils
+
+    - name: Build FFmpeg (Windows)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows' }}
+      shell: msys2 {0}
+      env:
+        TARGET_ARCH: ${{ steps.target.outputs.arch }}
+      run: |
+        # MSYS2's link.exe shadows MSVC's linker.
+        rm -f /usr/bin/link.exe
+        bash packages/media-proxy/scripts/ci/build-ffmpeg.sh
