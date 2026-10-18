@@ -24,6 +24,7 @@
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIApplication+FBQuiescence.h"
 #import "XCUIElement.h"
+#import "XCUIElement+FBUtilities.h"
 
 /*!
  The intial value for the default application property.
@@ -475,7 +476,18 @@ static NSUInteger _committedTerminationCount = 0;
 - (XCUIApplication *)activateApplicationWithBundleId:(NSString *)bundleIdentifier
 {
   XCUIApplication *app = [self makeApplicationWithBundleId:bundleIdentifier];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  XCUIApplicationState previousState = app.state;
+#endif
   [app activate];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (previousState == XCUIApplicationStateRunningBackground
+      || previousState == XCUIApplicationStateRunningBackgroundSuspended) {
+    // Resolve subsequent element frames only after the system's resume transition.
+    [XCUIApplication.fb_systemApplication fb_waitUntilStableWithTimeout:
+      FBConfiguration.sharedInstance.animationCoolOffTimeout];
+  }
+#endif
   return app;
 }
 

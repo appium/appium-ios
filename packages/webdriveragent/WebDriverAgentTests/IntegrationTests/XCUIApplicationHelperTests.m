@@ -13,6 +13,7 @@
 
 #import "FBIntegrationTestCase.h"
 #import "FBElement.h"
+#import "FBSession.h"
 #import "FBMacros.h"
 #import "FBTestMacros.h"
 #import "XCUIApplication.h"
@@ -90,6 +91,16 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
 
 - (void)testInputAfterDeactivate
 {
+  [self verifyInputAfterBackgroundUsingSession:NO];
+}
+
+- (void)testInputAfterSessionActivate
+{
+  [self verifyInputAfterBackgroundUsingSession:YES];
+}
+
+- (void)verifyInputAfterBackgroundUsingSession:(BOOL)useSession
+{
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL canFold = NO;
 #if TARGET_OS_SIMULATOR
@@ -122,7 +133,17 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       for (NSNumber *duration in @[@0, @2]) {
         [self launchApplication];
         NSError *error = nil;
-        XCTAssertTrue([self.testedApplication fb_deactivateWithDuration:duration.doubleValue error:&error]);
+        if (useSession) {
+          XCTAssertTrue([device fb_goToHomescreenWithError:&error]);
+          XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
+            return self.testedApplication.state != XCUIApplicationStateRunningForeground;
+          }]);
+          [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:duration.doubleValue]];
+          FBSession *session = [FBSession initWithApplication:self.testedApplication];
+          [session activateApplicationWithBundleId:self.testedApplication.bundleID];
+        } else {
+          XCTAssertTrue([self.testedApplication fb_deactivateWithDuration:duration.doubleValue error:&error]);
+        }
         XCTAssertNil(error);
         // Existence/foreground checks alone miss lost input. Do not add a
         // delay or retry: this first tap must actually open the alerts page.
