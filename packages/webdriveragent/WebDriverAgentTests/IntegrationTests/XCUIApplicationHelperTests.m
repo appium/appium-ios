@@ -9,6 +9,7 @@
 #import <XCTest/XCTest.h>
 
 #import <mach/mach_time.h>
+#import <math.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBElement.h"
@@ -20,6 +21,7 @@
 #import "FBXCodeCompatibility.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBHinge.h"
 
 void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber** maxDepth) {
@@ -98,11 +100,19 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
   if (canFold) {
     XCTAssertNotNil(originalAngle);
   }
+  BOOL (^setAngleAndWait)(NSNumber *) = ^BOOL(NSNumber *angle) {
+    if (![device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]) {
+      return NO;
+    }
+    return [[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
+      NSNumber *reading = [device fb_getSimulatedHingeAngle:nil];
+      return nil != reading && fabs(reading.doubleValue - angle.doubleValue) < 1;
+    }];
+  };
   @try {
     for (NSNumber *angle in (canFold ? @[@0, @90, @180] : @[@0])) {
       if (canFold) {
-        XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
-        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3]];
+        XCTAssertTrue(setAngleAndWait(angle), @"Hinge did not reach %@ degrees", angle);
         for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
           if ([screen[@"isMain"] boolValue] == (angle.intValue == 0)) {
             FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
@@ -121,10 +131,9 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       }
     }
   } @finally {
-    if (nil != originalAngle) {
-      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
-    }
+    BOOL restored = nil == originalAngle || setAngleAndWait(originalAngle);
     FBConfiguration.sharedInstance.currentDisplayId = originalDisplay;
+    XCTAssertTrue(restored, @"Hinge did not return to %@ degrees", originalAngle);
   }
 }
 
