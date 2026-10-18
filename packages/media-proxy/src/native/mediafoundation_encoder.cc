@@ -148,7 +148,7 @@ class MediaFoundationEncoder final : public H264Encoder {
   void Encode(const AVFrame& nv12, bool forceKeyFrame) override {
     const ComScope com;
     if (forceKeyFrame) {
-      const VARIANT on = UInt32Variant(1);
+      VARIANT on = UInt32Variant(1);
       Check(codecApi_->SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &on), "forcing a key frame");
     }
     // The MFT needs increasing timestamps even if the source timeline jumped back.
