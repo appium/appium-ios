@@ -13,6 +13,7 @@ import type {NativeConfig, NativeUnit, NalAccessUnit, VideoAccessUnit} from '../
 import {h264NalTypes, HAS_H264, readHevcFixture} from '../helpers/annexb.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-360x640-30f.h265', import.meta.url));
+const BT709_FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-128x128-bt709-10f.h265', import.meta.url));
 const FRAMES = 30;
 const PACE_MS = 10;
 const NAL_IDR = 5;
@@ -22,7 +23,7 @@ const NAL_PPS = 8;
 const NAL_SEI = 6;
 const FRAME_MICROS = 1e6 / 60;
 
-async function encode(opts: {fps?: number; bitrate?: number} = {}): Promise<VideoAccessUnit[]> {
+async function encode(opts: {fps?: number; bitrate?: number} = {}, fixture = FIXTURE): Promise<VideoAccessUnit[]> {
   const t = createTranscoder({codec: 'h264', ...opts});
   const out: VideoAccessUnit[] = [];
   const drain = (async () => {
@@ -30,7 +31,7 @@ async function encode(opts: {fps?: number; bitrate?: number} = {}): Promise<Vide
       out.push(unit);
     }
   })();
-  for (const au of readHevcFixture(FIXTURE)) {
+  for (const au of readHevcFixture(fixture)) {
     t.push(au);
     await sleep(PACE_MS);
   }
@@ -100,6 +101,38 @@ describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
           ...['-show_entries', 'stream=codec_name,width,height,nb_read_frames', '-of', 'csv=p=0', file],
         ]);
         assert.strictEqual(probe.stdout.toString().trim(), `h264,360,640,${FRAMES}`, probe.stderr.toString());
+      } finally {
+        rmSync(dir, {recursive: true, force: true});
+      }
+    },
+  );
+
+  it(
+    'keeps the pixel values of a BT.709 source',
+    {skip: spawnSync('ffmpeg', ['-version']).error !== undefined},
+    async () => {
+      // The fixture is a flat (Y, U, V) = (63, 102, 240) picture tagged BT.709, like the H.264 output.
+      const size = 128;
+      const units = await encode({}, BT709_FIXTURE);
+      const dir = mkdtempSync(join(tmpdir(), 'media-proxy-'));
+      try {
+        const file = join(dir, 'out.h264');
+        writeFileSync(file, Buffer.concat(units.map((u) => u.data)));
+        const raw = spawnSync(
+          'ffmpeg',
+          [...['-v', 'error', '-i', file, '-frames:v', '1', '-pix_fmt', 'yuv420p', '-f', 'rawvideo', '-']],
+          {maxBuffer: 1 << 24},
+        ).stdout;
+        const chroma = (size / 2) ** 2;
+        const centre = (plane: number, width: number) => raw[plane + (width / 2) * width + width / 2];
+        const [y, u, v] = [centre(0, size), centre(size * size, size / 2), centre(size * size + chroma, size / 2)];
+        for (const [got, want] of [
+          [y, 63],
+          [u, 102],
+          [v, 240],
+        ]) {
+          assert.ok(Math.abs(got - want) <= 3, `expected ${want}, got ${got} (Y,U,V = ${y},${u},${v})`);
+        }
       } finally {
         rmSync(dir, {recursive: true, force: true});
       }

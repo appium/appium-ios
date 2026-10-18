@@ -182,7 +182,7 @@ class Pipeline::Impl {
     }
   }
 
-  void Encode(const AVFrame* decoded) {
+  void Encode(AVFrame* decoded) {
     const int64_t pts = decoded->pts;
     if (!AcceptFrame(pts)) {
       return;
@@ -192,6 +192,10 @@ class Pipeline::Impl {
     OpenEncoder(width, height);
 
     PrepareConverted(width, height);
+    // Untagged input (the device doesn't tag its stream) is taken as the BT.709 the output is labelled with.
+    if (isH264_ && decoded->colorspace == AVCOL_SPC_UNSPECIFIED) {
+      decoded->colorspace = AVCOL_SPC_BT709;
+    }
     if (const int ret = sws_scale_frame(sws_.get(), converted_.get(), decoded); ret < 0) {
       throw Fatal("Could not convert the decoded frame", ret);
     }
@@ -287,6 +291,8 @@ class Pipeline::Impl {
     converted_->width = width;
     converted_->height = height;
     converted_->color_range = isH264_ ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+    // The H.264 output is tagged BT.709; an unspecified target would make swscale convert to BT.601.
+    converted_->colorspace = isH264_ ? AVCOL_SPC_BT709 : AVCOL_SPC_UNSPECIFIED;
     if (const int ret = av_frame_get_buffer(converted_.get(), 0); ret < 0) {
       throw Fatal("Could not allocate the output frame", ret);
     }
