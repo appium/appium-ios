@@ -109,7 +109,8 @@ export const HKDF_HASH_ALGORITHM = 'sha512';
 export const HKDF_HASH_LENGTH = 64;
 
 // OPACK2 encoding constants
-export const OPACK2_NULL = 0x03;
+export const OPACK2_TERMINATOR = 0x03;
+export const OPACK2_NULL = 0x04;
 export const OPACK2_TRUE = 0x01;
 export const OPACK2_FALSE = 0x02;
 export const OPACK2_SMALL_INT_OFFSET = 8;
