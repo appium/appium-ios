@@ -22,6 +22,7 @@
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIDevice.h"
+#import "XCUIApplication.h"
 
 static const NSTimeInterval FBHomeButtonCoolOffTime = 1.;
 static const NSTimeInterval FBScreenLockTimeout = 5.;
@@ -139,7 +140,9 @@ static bool fb_isLocked;
 #if TARGET_OS_WATCH
   // Carousel rejects launch/activate requests on watchOS 27.0.
   XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
-  if ([foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
+  // The watch face is a separate foreground application from Carousel.
+  if ([foregroundApp.bundleID isEqualToString:@"com.apple.clockface"]
+      || [foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
     return YES;
   }
   @try {
