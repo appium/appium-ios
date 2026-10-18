@@ -2,7 +2,8 @@ name: Lerna Release
 description: |
   Runs `lerna publish` (independent versioning) across workspace packages. Supports a dry-run
   mode and a recovery mode that publishes only package versions missing from npm. Falls back to
-  scoped recovery when `lerna publish` fails because its release tag already exists.
+  scoped recovery when `lerna publish` fails because its release tag already exists or
+  because of a Sigstore transparency-log 409 (TLOG_CREATE_ENTRY_ERROR).
 
 inputs:
   github-token:
@@ -149,6 +150,20 @@ runs:
           flag_release_without_assets appium-webdriveragent webdriveragent_release_tag packages/webdriveragent
         }
 
+        # Publishes whatever is still missing on npm, then flags releases lacking assets.
+        # Returns non-zero if a publish failed.
+        publish_missing_and_flag_assets() {
+          local missing=()
+          mapfile -t missing < <(find_missing_packages)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing package versions on npm before scoped recovery:"
+            printf ' - %s\n' "${missing[@]}"
+            publish_missing_packages "${missing[@]}" || return 1
+          fi
+          echo "All publishable workspace package versions are present on npm; treating recovery as successful."
+          flag_releases_without_assets
+        }
+
         if [ "$RECOVER_MISSING_ONLY" = "true" ]; then
           echo "Recovery mode: scanning for packages missing on npm at their current package.json version"
           mapfile -t missing < <(find_missing_packages)
@@ -222,19 +237,19 @@ runs:
             fi
 
             git checkout "$tagged_commit"
-            mapfile -t missing < <(find_missing_packages)
-
-            if [ ${#missing[@]} -gt 0 ]; then
-              echo "Missing package versions on npm before scoped recovery:"
-              printf ' - %s\n' "${missing[@]}"
-              if ! publish_missing_packages "${missing[@]}"; then
-                echo "Recovery incomplete: one or more packages failed to publish"
-                exit $release_exit_code
-              fi
+            if ! publish_missing_and_flag_assets; then
+              echo "Recovery incomplete: one or more packages failed to publish"
+              exit $release_exit_code
             fi
-
-            echo "All publishable workspace package versions are present on npm; treating recovery as successful."
-            flag_releases_without_assets
+          elif [[ "$release_output" == *"TLOG_CREATE_ENTRY_ERROR"* ]]; then
+            # Sigstore 409 (entry already in the transparency log): lerna already pushed the
+            # version commit/tag/release, so the checkout holds the bumped versions. Only
+            # publish what npm still lacks.
+            echo "Detected Sigstore tlog 409 during publish; reconciling against npm"
+            if ! publish_missing_and_flag_assets; then
+              echo "Recovery incomplete: one or more packages failed to publish"
+              exit $release_exit_code
+            fi
           else
             echo "Release failed and no known recovery condition matched"
             exit $release_exit_code
