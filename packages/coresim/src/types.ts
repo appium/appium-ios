@@ -138,13 +138,10 @@ export interface DisplayOptions {
 /** Options for `NativeSimctl.getScreenshot`. */
 export interface ScreenshotOptions extends DisplayOptions {
   /**
-   * Reuse a successfully resolved numeric display ID within the current observed boot. Defaults to `false`.
-   * Scoped to the CoreSim client and device; UUID strings and default selection are never cached.
-   * A failed cached capture clears the entry and retries once with fresh display resolution.
-   * Requires Booted state and an unchanged, readable lastBootedAt marker; otherwise resolves afresh.
-   * The marker is checked before and after capture. Set false to discard a cached selection.
-   * Disable while changing display topology: a mapping change that leaves the old port usable
-   * within the same boot cannot be detected by the boot marker alone.
+   * Cache numeric display-ID lookups per client/device while the observed boot marker is unchanged.
+   * Defaults to `false`, which clears the selection. Missing boot metadata disables caching.
+   * Failed cached captures retry once with fresh resolution. Disable during display-topology changes.
+   * @see https://github.com/appium/appium-ios/pull/51 for boot-marker limitations and validation.
    */
   cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
