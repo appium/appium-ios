@@ -16,6 +16,10 @@ and licensed under the GNU LGPL v2.1 or later.
 - The libraries are dynamically linked and sit next to the addon, so they can be replaced with a
   modified build of the same version (rebuild with the script above and copy the libraries over).
 
+## Platform frameworks
+
+H.264 encoding on macOS calls Apple's VideoToolbox system framework. Nothing from it is bundled or redistributed.
+
 ## OpenH264 (optional, downloaded at runtime)
 
 Cisco's OpenH264 is BSD-2-Clause. It is not redistributed in this package: the binary is fetched

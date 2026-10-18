@@ -10,8 +10,9 @@ already produced by `@appium/coresim` (simulators) and the Android settings app:
 The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCapture`
 (iOS 27+ real devices). Supported platforms: darwin, linux, win32 on x64 and arm64.
 
-> **Status:** HEVC → MJPEG works on a bundled LGPL FFmpeg (software decode). H.264 output is not
-> built yet: `codec: 'h264'` throws `MediaProxyEncoderUnavailableError`. The package is not released.
+> **Status:** HEVC → MJPEG works on every platform (bundled LGPL FFmpeg, software decode). H.264 output works on
+> macOS through VideoToolbox; other platforms throw `MediaProxyEncoderUnavailableError` for `codec: 'h264'`
+> until their hardware encoders land. The package is not released.
 
 The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
 it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
@@ -26,8 +27,8 @@ import {transcode, serveMjpeg} from '@appium/media-proxy';
 
 const capture = await ScreenStreamCapture.start(display, {displayId: 1});
 
-// H.264 (same shape as coresim's VideoAccessUnit) - not available yet
-// for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {}
+// H.264 (same shape as coresim's VideoAccessUnit); macOS only for now
+for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {}
 
 // MJPEG over HTTP (multipart/x-mixed-replace)
 const frames = transcode(capture.accessUnits(), {codec: 'mjpeg', quality: 80});
@@ -76,7 +77,7 @@ Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOpti
 
 The package is Apache-2.0. The native addon links FFmpeg built **LGPL-only** (no `--enable-gpl`, no
 `--enable-nonfree`), shipped as shared libraries next to the addon so it can be relinked. See
-`THIRD_PARTY_NOTICES.md`. x264 is never bundled. A software H.264 fallback (planned) will use Cisco's OpenH264,
+`THIRD_PARTY_NOTICES.md`. x264 is never bundled. H.264 uses the platform's hardware encoder (VideoToolbox on macOS, a system framework). A software fallback (planned) will use Cisco's OpenH264,
 which must be downloaded at runtime (not redistributed) to be covered by Cisco's patent grant.
 
 Note that HEVC and H.264 are patent-encumbered formats; hardware codecs rely on the platform's

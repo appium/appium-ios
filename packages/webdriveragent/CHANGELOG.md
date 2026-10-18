@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.16.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.1...appium-webdriveragent@16.16.2) (2026-10-18)
+
+### Bug Fixes
+
+* **webdriveragent:** use Home to background watchOS apps ([#84](https://github.com/appium/appium-ios/issues/84)) ([b1dd12e](https://github.com/appium/appium-ios/commit/b1dd12e93d8eb0f6acc0a0addaf8733b2bfb0b19))
+
+
+## [16.16.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.0...appium-webdriveragent@16.16.1) (2026-10-18)
+
+### Bug Fixes
+
+* **webdriveragent:** use the remote Home button to background tvOS apps ([#83](https://github.com/appium/appium-ios/issues/83)) ([2d953f4](https://github.com/appium/appium-ios/commit/2d953f41a598ddcb2ebe10398aecf3164bd00ad4))
+
+
 ## 16.16.0 (2026-10-17)
 
 ### Features

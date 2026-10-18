@@ -11,6 +11,7 @@
       "target_name": "media_proxy",
       "sources": [
         "src/native/addon.cc",
+        "src/native/h264_encoder.cc",
         "src/native/pipeline.cc"
       ],
       "include_dirs": [
@@ -58,7 +59,9 @@
       ],
       "conditions": [
         ["OS=='mac'", {
+          "sources": ["src/native/videotoolbox_encoder.cc"],
           "libraries": [
+            "-framework CoreFoundation", "-framework CoreMedia", "-framework CoreVideo", "-framework VideoToolbox",
             "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium",
             "-Wl,-rpath,@loader_path"
           ]

@@ -22,9 +22,14 @@
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIDevice.h"
+#import "XCUIApplication.h"
 
 static const NSTimeInterval FBHomeButtonCoolOffTime = 1.;
 static const NSTimeInterval FBScreenLockTimeout = 5.;
+
+#if TARGET_OS_WATCH
+static NSString *const FBClockFaceBundleId = @"com.apple.clockface";
+#endif
 
 #if TARGET_OS_TV
 NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
@@ -136,8 +141,58 @@ static bool fb_isLocked;
 
 - (BOOL)fb_goToHomescreenWithError:(NSError **)error
 {
+#if TARGET_OS_TV
+  return [self fb_goToHomescreenOnTVWithError:error];
+#elif TARGET_OS_WATCH
+  return [self fb_goToHomescreenOnWatchWithError:error];
+#else
   return [XCUIApplication fb_switchToSystemApplicationWithError:error];
+#endif
 }
+
+#if TARGET_OS_WATCH
+- (BOOL)fb_goToHomescreenOnWatchWithError:(NSError **)error
+{
+  // Carousel rejects launch/activate requests on watchOS 27.0.
+  XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
+  // The watch face is a separate foreground application from Carousel.
+  if ([foregroundApp.bundleID isEqualToString:FBClockFaceBundleId]
+      || [foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
+    return YES;
+  }
+  @try {
+    [self pressButton:XCUIDeviceButtonHome];
+  } @catch (NSException *exception) {
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+  }
+  return [[[[FBRunLoopSpinner new] timeout:5]
+           timeoutErrorMessage:@"Timed out while waiting for the home screen"]
+          spinUntilTrue:^BOOL{
+            return foregroundApp.state != XCUIApplicationStateRunningForeground;
+          } error:error];
+}
+#endif
+
+#if TARGET_OS_TV
+- (BOOL)fb_goToHomescreenOnTVWithError:(NSError **)error
+{
+  // PineBoard rejects launch/activate requests on tvOS 26.5 and 27.0.
+  XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
+  if ([foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
+    return YES;
+  }
+  @try {
+    [XCUIRemote.sharedRemote pressButton:XCUIRemoteButtonHome];
+  } @catch (NSException *exception) {
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+  }
+  return [[[[FBRunLoopSpinner new] timeout:5]
+           timeoutErrorMessage:@"Timed out while waiting for the home screen"]
+          spinUntilTrue:^BOOL{
+            return foregroundApp.state != XCUIApplicationStateRunningForeground;
+          } error:error];
+}
+#endif
 
 - (BOOL)fb_lockScreen:(NSError **)error
 {
