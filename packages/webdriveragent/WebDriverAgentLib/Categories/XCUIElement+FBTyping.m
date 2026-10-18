@@ -10,6 +10,7 @@
 
 #import "FBConfiguration.h"
 #import "FBErrorBuilder.h"
+#import "FBKeyboard.h"
 #import "FBXCElementSnapshotWrapper.h"
 #import "FBXCElementSnapshotWrapper+Helpers.h"
 #import "FBXCodeCompatibility.h"
@@ -38,6 +39,31 @@ BOOL FBTypeText(NSString *text, NSUInteger typingSpeed, NSError **error)
   [eventRecord addPointerEventPath:ep];
   return [FBXCTestDaemonsProxy synthesizeEventWithRecord:eventRecord error:error];
 }
+
+#if TARGET_OS_IOS
+// iOS reports keyboard focus while the keyboard is still opening and drops every
+// character after the first. Once a key is hittable the burst can be sent whole.
+static const NSTimeInterval kFBTypingKeyboardSettleDelay = 0.5;
+
+static BOOL FBTypeTextLettingKeyboardSettle(NSString *text,
+                                            NSUInteger typingSpeed,
+                                            BOOL keyboardWasVisible,
+                                            NSError **error)
+{
+  if (keyboardWasVisible || text.length < 2) {
+    return FBTypeText(text, typingSpeed, error);
+  }
+  NSRange firstCharacter = [text rangeOfComposedCharacterSequenceAtIndex:0];
+  if (NSMaxRange(firstCharacter) >= text.length) {
+    return FBTypeText(text, typingSpeed, error);
+  }
+  if (!FBTypeText([text substringWithRange:firstCharacter], typingSpeed, error)) {
+    return NO;
+  }
+  [NSThread sleepForTimeInterval:kFBTypingKeyboardSettleDelay];
+  return FBTypeText([text substringFromIndex:NSMaxRange(firstCharacter)], typingSpeed, error);
+}
+#endif
 
 @interface NSString (FBRepeat)
 
@@ -130,6 +156,12 @@ BOOL FBTypeText(NSString *text, NSUInteger typingSpeed, NSError **error)
               error:(NSError **)error
 {
   FBXCElementSnapshotWrapper *wrapped = [FBXCElementSnapshotWrapper ensureWrapped:snapshot];
+#if TARGET_OS_IOS
+  NSError *visibilityError = nil;
+  BOOL keyboardWasVisible = [FBKeyboard waitUntilVisibleForApplication:self.application
+                                                              timeout:0
+                                                                error:&visibilityError];
+#endif
   [self fb_prepareForTextInputWithSnapshot:wrapped];
   if (shouldClear && ![self fb_clearTextWithSnapshot:wrapped shouldPrepareForInput:NO error:error]) {
     return NO;
@@ -139,6 +171,8 @@ BOOL FBTypeText(NSString *text, NSUInteger typingSpeed, NSError **error)
   // partial workaround (keystrokes still don't always land - a known limitation).
   [self typeText:text];
   return YES;
+#elif TARGET_OS_IOS
+  return FBTypeTextLettingKeyboardSettle(text, frequency, keyboardWasVisible, error);
 #else
   return FBTypeText(text, frequency, error);
 #endif

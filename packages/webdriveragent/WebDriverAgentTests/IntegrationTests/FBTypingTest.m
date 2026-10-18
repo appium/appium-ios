@@ -49,6 +49,17 @@
   XCTAssertEqualObjects(textField.value, expectedText);
 }
 
+- (void)testTextTypingImmediatelyAfterFocus
+{
+  NSString *text = @"TheQuickBrownFox123!";
+  XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
+  [textField tap];
+  NSError *error;
+  XCTAssertTrue([textField fb_typeText:text shouldClear:NO error:&error]);
+  XCTAssertNil(error);
+  XCTAssertEqualObjects(textField.value, text);
+}
+
 - (void)testTextClearing
 {
   XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
