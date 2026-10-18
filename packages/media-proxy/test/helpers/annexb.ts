@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {loadNative} from '../../src/native.js';
 import type {NalAccessUnit} from '../../src/types.js';
 
-/** Whether this platform's addon has an H.264 encoder (macOS VideoToolbox so far). */
+/** Whether this platform's addon has an H.264 encoder (macOS VideoToolbox, Windows Media Foundation). */
 export const HAS_H264 = loadNative()
   .capabilities()
   .encoders.some((name) => name.startsWith('h264_'));

@@ -73,7 +73,9 @@
           ]
         }],
         ["OS=='win'", {
+          "sources": ["src/native/mediafoundation_encoder.cc"],
           "libraries": [
+            "mfplat.lib", "mf.lib", "mfuuid.lib", "strmiids.lib", "ole32.lib", "oleaut32.lib",
             "<(ffmpeg_dir)/lib/avcodec-appium.lib",
             "<(ffmpeg_dir)/lib/avutil-appium.lib",
             "<(ffmpeg_dir)/lib/swscale-appium.lib"
