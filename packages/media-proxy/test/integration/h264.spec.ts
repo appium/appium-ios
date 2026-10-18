@@ -3,14 +3,14 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {describe, it} from 'node:test';
+import {after, before, describe, it} from 'node:test';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
 import {loadNative} from '../../src/native.js';
 import {createTranscoder} from '../../src/transcoder.js';
 import type {NativeConfig, NativeUnit, NalAccessUnit, VideoAccessUnit} from '../../src/types.js';
-import {h264NalTypes, HAS_H264, readHevcFixture} from '../helpers/annexb.js';
+import {h264NalTypes, H264_ENCODERS, readHevcFixture} from '../helpers/annexb.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-360x640-30f.h265', import.meta.url));
 const BT709_FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-128x128-bt709-10f.h265', import.meta.url));
@@ -22,6 +22,21 @@ const NAL_SPS = 7;
 const NAL_PPS = 8;
 const NAL_SEI = 6;
 const FRAME_MICROS = 1e6 / 60;
+
+/** Runs the suite once per available H.264 encoder, forcing it through the diagnostic env override. */
+function eachEncoder(name: string, body: () => void) {
+  for (const encoder of H264_ENCODERS) {
+    describe(`${name} (${encoder})`, () => {
+      before(() => {
+        process.env.MEDIA_PROXY_H264_ENCODER = encoder;
+      });
+      after(() => {
+        delete process.env.MEDIA_PROXY_H264_ENCODER;
+      });
+      body();
+    });
+  }
+}
 
 async function encode(opts: {fps?: number; bitrate?: number} = {}, fixture = FIXTURE): Promise<VideoAccessUnit[]> {
   const t = createTranscoder({codec: 'h264', ...opts});
@@ -40,7 +55,7 @@ async function encode(opts: {fps?: number; bitrate?: number} = {}, fixture = FIX
   return out;
 }
 
-describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
+eachEncoder('HEVC -> H.264', () => {
   it('produces Annex-B units with inline parameter sets on key frames', async () => {
     const units = await encode();
     assert.strictEqual(units.length, FRAMES);
@@ -144,7 +159,7 @@ describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
 });
 
 // Drives the addon directly: these paths (key-frame requests, output overflow) have no public API.
-describe('native H.264 key-frame handling', {skip: !HAS_H264}, () => {
+eachEncoder('native H.264 key-frame handling', () => {
   const config: NativeConfig = {outputCodec: 'h264', fps: 60, bitrate: 4_000_000, quality: 80, scale: 100};
 
   function open() {

@@ -38,6 +38,9 @@ class H264Encoder {
 // Names of the H.264 encoders this platform's build can offer, best first (empty: none).
 std::vector<std::string> H264EncoderNames();
 
+// The error for "no H.264 encoder at all": says why each backend failed and how to install OpenH264.
+PipelineError NoH264EncoderError();
+
 // Opens the best available encoder. Throws PipelineError (MediaProxyEncoderUnavailableError) if none opens.
 std::unique_ptr<H264Encoder> CreateH264Encoder(const H264Params& params, const H264Encoder::Sink& sink);
 

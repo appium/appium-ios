@@ -25,7 +25,9 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
   bounded input queue that drops to the next keyframe); `addon.cc` is the N-API/ThreadSafeFunction wrapper.
   H.264 goes through the `H264Encoder` interface (`h264_encoder.{h,cc}`); `videotoolbox_encoder.cc` (macOS only
   in `binding.gyp`) and `mediafoundation_encoder.cc` (Windows only, synchronous MFTs) call the platform API directly
-  because FFmpeg's wrappers add frames of latency. A dropped
+  because FFmpeg's wrappers add frames of latency. `openh264_encoder.cc` is the software fallback: it `dlopen`s Cisco's
+  library from `$MEDIA_PROXY_OPENH264_PATH` (installed by the client, never bundled or downloaded here), so there is no
+  link-time dependency; `h264_encoder.cc` tries the backends in order (`vendor/` is third-party: excluded from format/lint). A dropped
   H.264 output unit makes `addon.cc` skip to a forced key frame.
   Native errors set `err.name` to a typed error name; `wrapNativeError` re-types them.
 - `scripts/ci/` (CI/build only, never shipped; the package `files` list must not include it): `build-ffmpeg.sh`, `bundle-libs.mjs`, `build-prebuilds.mjs`, `lint-cpp.sh`, `run.mjs` (shared spawn helper).
@@ -43,6 +45,8 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
   transcoders collectable). Env teardown shuts sessions down via a cleanup hook (releasing a tsfn from a finalizer deadlocks).
 - `addon.cc` `Deliver` (thread-safe-function callback) uses raw N-API only: during worker termination calls fail and
   node-addon-api aborts the process building its C++ Error. Never throw or use `Napi::` throwing wrappers there.
+- `MEDIA_PROXY_H264_ENCODER=<name>` forces one H.264 backend (tests run each suite per available encoder).
+- Bumping OpenH264: replace `src/native/vendor/openh264/*.h`, the README table and `scripts/ci/fetch-openh264.py` together (the C++ ABI is per major.minor).
 - `MEDIA_PROXY_FFMPEG_LOG=<av log level>` turns FFmpeg's logging back on (off by default).
 - Input is a live stream: never add unbounded buffering or blocking pushes; tests pace their input.
 - No dependency on remotexpc or coresim; inputs are structural types.
