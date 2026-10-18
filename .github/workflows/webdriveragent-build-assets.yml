@@ -16,6 +16,12 @@ on:
         type: string
         default: ''
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing WDA release tag to rebuild and upload (empty builds artifacts only)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -26,10 +32,10 @@ env:
   # (at least WDA failed to start on iOS 15)
   # Xcode 26.3 looks like it's working as expected.
   XCODE_VERSION: '16.4'
-  # Available destination for simulators depends on Xcode version.
-  DESTINATION_SIM: platform=iOS Simulator,name=iPhone 17
-  DESTINATION_SIM_TVOS: platform=tvOS Simulator,name=Apple TV 4K (3rd generation)
-  DESTINATION_SIM_WATCHOS: platform=watchOS Simulator,name=Apple Watch Series 11 (46mm)
+  # Archive builds do not require a booted simulator or an installed runtime.
+  DESTINATION_SIM: generic/platform=iOS Simulator
+  DESTINATION_SIM_TVOS: generic/platform=tvOS Simulator
+  DESTINATION_SIM_WATCHOS: generic/platform=watchOS Simulator
 
 jobs:
   build_matrix:
@@ -37,6 +43,14 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Validate recovery release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          [[ "$RELEASE_TAG" == appium-webdriveragent@* ]] || exit 1
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
       - id: set-matrix
         run: |
           cat <<MATRIX_JSON | jq -c . > matrix.json
@@ -64,7 +78,14 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
-        ref: ${{ inputs.checkout_ref || github.ref }}
+        ref: ${{ inputs.release_tag || inputs.checkout_ref || github.ref }}
+    - name: Verify release version
+      if: inputs.release_tag != ''
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+      run: |
+        VERSION=$(node -p "require('./packages/webdriveragent/package.json').version")
+        test "$RELEASE_TAG" = "appium-webdriveragent@$VERSION"
     - uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: "${{ env.XCODE_VERSION }}"
@@ -81,7 +102,7 @@ jobs:
           export WD="${{ matrix.config.wd }}"
           export ZIP_PKG_NAME="${{ matrix.config.zip_name }}"
           export ARCHS="${{ matrix.config.archs || '' }}"
-          sh Scripts/ci/${{ matrix.config.build_script }}
+          bash -e Scripts/ci/${{ matrix.config.build_script }}
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
@@ -98,6 +119,7 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: wda-assets
+        pattern: WebDriverAgentRunner*
         merge-multiple: true
     - name: Upload to the release
       uses: softprops/action-gh-release@v3
