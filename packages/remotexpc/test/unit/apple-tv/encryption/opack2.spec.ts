@@ -42,7 +42,10 @@ describe('Apple TV Encryption - Opack2', function () {
 
     it('should decode a terminated 15-element array', function () {
       const bytes = Buffer.from('df08090a0b0c0d0e0f1011121314151603', 'hex');
-      assert.deepStrictEqual(Opack2.loads(bytes), Array.from({length: 15}, (_, i) => i));
+      assert.deepStrictEqual(
+        Opack2.loads(bytes),
+        Array.from({length: 15}, (_, i) => i),
+      );
     });
 
     it('should decode the null marker (0x04) inside a terminated array', function () {
