@@ -14,6 +14,7 @@
 #import "FBIntegrationTestCase.h"
 #import "FBElement.h"
 #import "FBSession.h"
+#import "FBSessionCommands.h"
 #import "FBMacros.h"
 #import "FBTestMacros.h"
 #import "XCUIApplication.h"
@@ -24,6 +25,13 @@
 #import "FBScreen.h"
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBHinge.h"
+
+// Exercise the session-start resume path without creating a second session.
+@interface FBSessionCommands (FBActivationTests)
++ (id)activateBackgroundApplication:(XCUIApplication *)app
+                          bundleID:(NSString *)bundleID
+                        initialUrl:(nullable NSString *)initialUrl;
+@end
 
 void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber** maxDepth) {
   if (nil == maxDepth) {
@@ -91,15 +99,25 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
 
 - (void)testInputAfterDeactivate
 {
-  [self verifyInputAfterBackgroundUsingSession:NO];
+  [self verifyInputAfterBackgroundWithMode:0];
 }
 
 - (void)testInputAfterSessionActivate
 {
-  [self verifyInputAfterBackgroundUsingSession:YES];
+  [self verifyInputAfterBackgroundWithMode:1];
 }
 
-- (void)verifyInputAfterBackgroundUsingSession:(BOOL)useSession
+- (void)testInputAfterSessionLaunch
+{
+  [self verifyInputAfterBackgroundWithMode:2];
+}
+
+- (void)testInputAfterSessionStartActivate
+{
+  [self verifyInputAfterBackgroundWithMode:3];
+}
+
+- (void)verifyInputAfterBackgroundWithMode:(NSUInteger)mode
 {
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL canFold = NO;
@@ -120,7 +138,7 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       return nil != reading && fabs(reading.doubleValue - angle.doubleValue) < 1;
     }];
   };
-  FBSession *session = useSession ? [FBSession initWithApplication:self.testedApplication] : nil;
+  FBSession *session = mode != 0 ? [FBSession initWithApplication:self.testedApplication] : nil;
   @try {
     for (NSNumber *angle in (canFold ? @[@0, @90, @180] : @[@0])) {
       if (canFold) {
@@ -134,7 +152,7 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
       for (NSNumber *duration in @[@0, @2]) {
         [self launchApplication];
         NSError *error = nil;
-        if (useSession) {
+        if (mode != 0) {
           XCTAssertTrue([device fb_goToHomescreenWithError:&error]);
           XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
             XCUIApplicationState state = self.testedApplication.state;
@@ -147,7 +165,16 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
                         || state == XCUIApplicationStateRunningBackgroundSuspended,
                         @"Expected a background app before activation (angle %@, duration %@), got %lu",
                         angle, duration, (unsigned long)state);
-          [session activateApplicationWithBundleId:self.testedApplication.bundleID];
+          if (mode == 1) {
+            [session activateApplicationWithBundleId:self.testedApplication.bundleID];
+          } else if (mode == 2) {
+            [session launchApplicationWithBundleId:self.testedApplication.bundleID
+                          shouldWaitForQuiescence:nil arguments:nil environment:nil];
+          } else {
+            XCTAssertNil([FBSessionCommands activateBackgroundApplication:self.testedApplication
+                                                                bundleID:self.testedApplication.bundleID
+                                                              initialUrl:nil]);
+          }
         } else {
           XCTAssertTrue([self.testedApplication fb_deactivateWithDuration:duration.doubleValue error:&error]);
         }

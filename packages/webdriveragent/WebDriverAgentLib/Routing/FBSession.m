@@ -433,7 +433,7 @@ static NSUInteger _committedTerminationCount = 0;
     app.launchEnvironment = environment ?: @{};
     [app launch];
   } else {
-    [app activate];
+    [app fb_activate];
   }
   if (asApplicationUnderTest) {
     BOOL waitForQuiescence = app.fb_shouldWaitForQuiescence;
@@ -476,18 +476,7 @@ static NSUInteger _committedTerminationCount = 0;
 - (XCUIApplication *)activateApplicationWithBundleId:(NSString *)bundleIdentifier
 {
   XCUIApplication *app = [self makeApplicationWithBundleId:bundleIdentifier];
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-  XCUIApplicationState previousState = app.state;
-#endif
-  [app activate];
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-  if (previousState == XCUIApplicationStateRunningBackground
-      || previousState == XCUIApplicationStateRunningBackgroundSuspended) {
-    // Resolve subsequent element frames only after the system's resume transition.
-    [XCUIApplication.fb_systemApplication fb_waitUntilStableWithTimeout:
-      FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  }
-#endif
+  [app fb_activate];
   return app;
 }
 
