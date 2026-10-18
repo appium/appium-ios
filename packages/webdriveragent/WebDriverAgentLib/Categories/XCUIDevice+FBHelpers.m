@@ -138,6 +138,15 @@ static bool fb_isLocked;
 - (BOOL)fb_goToHomescreenWithError:(NSError **)error
 {
 #if TARGET_OS_WATCH
+  return [self fb_goToHomescreenOnWatchWithError:error];
+#else
+  return [XCUIApplication fb_switchToSystemApplicationWithError:error];
+#endif
+}
+
+#if TARGET_OS_WATCH
+- (BOOL)fb_goToHomescreenOnWatchWithError:(NSError **)error
+{
   // Carousel rejects launch/activate requests on watchOS 27.0.
   XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
   // The watch face is a separate foreground application from Carousel.
@@ -155,10 +164,8 @@ static bool fb_isLocked;
           spinUntilTrue:^BOOL{
             return foregroundApp.state != XCUIApplicationStateRunningForeground;
           } error:error];
-#else
-  return [XCUIApplication fb_switchToSystemApplicationWithError:error];
-#endif
 }
+#endif
 
 - (BOOL)fb_lockScreen:(NSError **)error
 {
