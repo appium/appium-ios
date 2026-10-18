@@ -48,14 +48,17 @@ describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
       assert.strictEqual(u.track, 'video');
       assert.strictEqual(u.sequence, i);
       assert.deepStrictEqual([...u.data.subarray(0, 4)], [0, 0, 0, 1], 'four-byte start code');
-      const types = h264NalTypes(u.data);
+      // A picture may be split into several slices (Media Foundation does); it is still one buffer.
+      const types = h264NalTypes(u.data).filter((t) => t !== NAL_SEI);
+      const slices = types.filter((t) => t === NAL_IDR || t === NAL_SLICE);
+      assert.ok(slices.length >= 1 && new Set(slices).size === 1, `one picture, got ${types}`);
       if (u.isKeyFrame) {
-        assert.deepStrictEqual(
-          types.filter((t) => t !== NAL_SEI),
-          [NAL_SPS, NAL_PPS, NAL_IDR],
-        );
+        assert.deepStrictEqual(types.slice(0, 2), [NAL_SPS, NAL_PPS]);
+        assert.strictEqual(slices[0], NAL_IDR);
+        assert.strictEqual(types.length, 2 + slices.length);
       } else {
-        assert.deepStrictEqual(types, [NAL_SLICE]);
+        assert.strictEqual(slices[0], NAL_SLICE);
+        assert.strictEqual(types.length, slices.length);
       }
       if (i > 0) {
         assert.ok(u.timestampMicros > units[i - 1].timestampMicros, 'timestamps increase (no reordering)');
@@ -156,6 +159,22 @@ describe('native H.264 key-frame handling', {skip: !HAS_H264}, () => {
   }
   const push = (handle: ReturnType<typeof open>['handle'], au: NalAccessUnit, index: number) =>
     handle.push(au.nals, Math.round(index * FRAME_MICROS), au.isKeyFrame);
+
+  it('returns each frame without waiting for later input', async () => {
+    const aus = readHevcFixture(FIXTURE).slice(0, 6);
+    const {handle, units, errors} = open();
+    for (const [i, au] of aus.entries()) {
+      push(handle, au, i);
+      await sleep(PACE_MS);
+    }
+    // Bounded wait for a slow runner; no more input and no close, so an encoder holding its last frame still fails.
+    for (let wait = 0; units.length < aus.length && wait < 500; wait++) {
+      await sleep(10);
+    }
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(units.length, aus.length);
+    await handle.close();
+  });
 
   it('emits a key frame on request', async () => {
     const aus = readHevcFixture(FIXTURE);

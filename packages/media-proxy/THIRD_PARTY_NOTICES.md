@@ -18,7 +18,8 @@ and licensed under the GNU LGPL v2.1 or later.
 
 ## Platform frameworks
 
-H.264 encoding on macOS calls Apple's VideoToolbox system framework. Nothing from it is bundled or redistributed.
+H.264 encoding on macOS calls Apple's VideoToolbox system framework, and on Windows the Media Foundation H.264
+encoder installed with the OS. Nothing from either is bundled or redistributed.
 
 ## OpenH264 (optional, downloaded at runtime)
 
