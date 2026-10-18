@@ -48,14 +48,17 @@ describe('HEVC -> H.264', {skip: !HAS_H264}, () => {
       assert.strictEqual(u.track, 'video');
       assert.strictEqual(u.sequence, i);
       assert.deepStrictEqual([...u.data.subarray(0, 4)], [0, 0, 0, 1], 'four-byte start code');
-      const types = h264NalTypes(u.data);
+      // A picture may be split into several slices (Media Foundation does); it is still one buffer.
+      const types = h264NalTypes(u.data).filter((t) => t !== NAL_SEI);
+      const slices = types.filter((t) => t === NAL_IDR || t === NAL_SLICE);
+      assert.ok(slices.length >= 1 && new Set(slices).size === 1, `one picture, got ${types}`);
       if (u.isKeyFrame) {
-        assert.deepStrictEqual(
-          types.filter((t) => t !== NAL_SEI),
-          [NAL_SPS, NAL_PPS, NAL_IDR],
-        );
+        assert.deepStrictEqual(types.slice(0, 2), [NAL_SPS, NAL_PPS]);
+        assert.strictEqual(slices[0], NAL_IDR);
+        assert.strictEqual(types.length, 2 + slices.length);
       } else {
-        assert.deepStrictEqual(types, [NAL_SLICE]);
+        assert.strictEqual(slices[0], NAL_SLICE);
+        assert.strictEqual(types.length, slices.length);
       }
       if (i > 0) {
         assert.ok(u.timestampMicros > units[i - 1].timestampMicros, 'timestamps increase (no reordering)');
