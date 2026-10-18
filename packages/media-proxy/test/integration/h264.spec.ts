@@ -167,7 +167,10 @@ describe('native H.264 key-frame handling', {skip: !HAS_H264}, () => {
       push(handle, au, i);
       await sleep(PACE_MS);
     }
-    await sleep(300); // generous for slow runners; an encoder that holds frames back never catches up
+    // Bounded wait for a slow runner; no more input and no close, so an encoder holding its last frame still fails.
+    for (let wait = 0; units.length < aus.length && wait < 500; wait++) {
+      await sleep(10);
+    }
     assert.deepStrictEqual(errors, []);
     assert.strictEqual(units.length, aus.length);
     await handle.close();

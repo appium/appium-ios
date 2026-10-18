@@ -135,6 +135,9 @@ class MediaFoundationEncoder final : public H264Encoder {
     try {
       const ComScope com;
       Open();
+    } catch (const PipelineError& err) {  // whatever fails while opening means this encoder can't serve the request
+      Release();
+      throw PipelineError{kEncoderUnavailableError, err.message};
     } catch (...) {
       Release();
       throw;
@@ -178,11 +181,18 @@ class MediaFoundationEncoder final : public H264Encoder {
     SetTypes();
     Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0), "begin streaming");
     Check(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0), "start of stream");
+    RefreshOutput();
+  }
+
+  // Re-reads everything that depends on the output type; the cached sample and buffer are rebuilt on demand.
+  void RefreshOutput() {
     MFT_OUTPUT_STREAM_INFO info{};
     Check(transform_->GetOutputStreamInfo(0, &info), "output stream info");
     providesSamples_ =
         (info.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
     outputSize_ = info.cbSize;
+    outputBuffer_.Reset();
+    outputSample_.Reset();
     ReadSequenceHeader();
   }
 
@@ -264,6 +274,7 @@ class MediaFoundationEncoder final : public H264Encoder {
 
   // SPS/PPS from the negotiated output type, for key frames the MFT emits without them.
   void ReadSequenceHeader() {
+    sequenceHeader_.clear();
     ComPtr<IMFMediaType> type;
     if (FAILED(transform_->GetOutputCurrentType(0, &type))) {
       return;
@@ -333,7 +344,7 @@ class MediaFoundationEncoder final : public H264Encoder {
         ComPtr<IMFMediaType> type;
         Check(transform_->GetOutputAvailableType(0, 0, &type), "output type renegotiation");
         Check(transform_->SetOutputType(0, type.Get(), 0), "output type renegotiation");
-        ReadSequenceHeader();
+        RefreshOutput();
         continue;
       }
       Check(hr, "output");
