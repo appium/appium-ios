@@ -136,8 +136,33 @@ static bool fb_isLocked;
 
 - (BOOL)fb_goToHomescreenWithError:(NSError **)error
 {
+#if TARGET_OS_TV
+  return [self fb_goToHomescreenOnTVWithError:error];
+#else
   return [XCUIApplication fb_switchToSystemApplicationWithError:error];
+#endif
 }
+
+#if TARGET_OS_TV
+- (BOOL)fb_goToHomescreenOnTVWithError:(NSError **)error
+{
+  // PineBoard rejects launch/activate requests on tvOS 26.5 and 27.0.
+  XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
+  if ([foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
+    return YES;
+  }
+  @try {
+    [XCUIRemote.sharedRemote pressButton:XCUIRemoteButtonHome];
+  } @catch (NSException *exception) {
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+  }
+  return [[[[FBRunLoopSpinner new] timeout:5]
+           timeoutErrorMessage:@"Timed out while waiting for the home screen"]
+          spinUntilTrue:^BOOL{
+            return foregroundApp.state != XCUIApplicationStateRunningForeground;
+          } error:error];
+}
+#endif
 
 - (BOOL)fb_lockScreen:(NSError **)error
 {
