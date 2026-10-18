@@ -136,7 +136,25 @@ static bool fb_isLocked;
 
 - (BOOL)fb_goToHomescreenWithError:(NSError **)error
 {
+#if TARGET_OS_WATCH
+  // Carousel rejects launch/activate requests on watchOS 27.0.
+  XCUIApplication *foregroundApp = XCUIApplication.fb_activeApplication;
+  if ([foregroundApp fb_isSameAppAs:XCUIApplication.fb_systemApplication]) {
+    return YES;
+  }
+  @try {
+    [self pressButton:XCUIDeviceButtonHome];
+  } @catch (NSException *exception) {
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+  }
+  return [[[[FBRunLoopSpinner new] timeout:5]
+           timeoutErrorMessage:@"Timed out while waiting for the home screen"]
+          spinUntilTrue:^BOOL{
+            return foregroundApp.state != XCUIApplicationStateRunningForeground;
+          } error:error];
+#else
   return [XCUIApplication fb_switchToSystemApplicationWithError:error];
+#endif
 }
 
 - (BOOL)fb_lockScreen:(NSError **)error
