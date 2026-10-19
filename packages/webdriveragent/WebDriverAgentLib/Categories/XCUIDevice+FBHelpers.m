@@ -203,10 +203,12 @@ static bool fb_isLocked;
   [self pressLockButton];
 #else
   if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
-    // iOS 27: pressLockButton no longer locks; use a direct IOHID Power press (0x0C/0x30, ~0.5s hold).
+    // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
+    // A 0.5s hold can invoke Siri instead of locking the screen.
+    const NSTimeInterval duration = 0.2;
     if (![self fb_performIOHIDEventWithPage:0x0C
                                       usage:0x30
-                                   duration:0.5
+                                   duration:duration
                                       error:error]) {
       return NO;
     }
