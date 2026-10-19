@@ -53,10 +53,13 @@ function collect(transcoder, sentAt) {
 }
 
 /** Pushes `frames` access units paced at `fps`, looping the clip (key frames repeat, time keeps advancing). */
-async function feed(transcoder, units, {fps, frames}, sentAt) {
+async function feed(transcoder, units, {fps, frames}, sentAt, rssSamples) {
   const interval = 1000 / fps;
   const start = performance.now();
   for (let i = 0; i < frames; i++) {
+    if (i % fps === 0) {
+      rssSamples.push(process.memoryUsage().rss / BYTES_PER_MB);
+    }
     sentAt.set(Math.round((i * 1e6) / fps), performance.now());
     transcoder.push({...units[i % units.length], timestamp: Math.round((i * RTP_CLOCK_HZ) / fps) >>> 0});
     const wait = start + (i + 1) * interval - performance.now();
@@ -68,7 +71,9 @@ async function feed(transcoder, units, {fps, frames}, sentAt) {
   return (performance.now() - start) / 1000;
 }
 
-function summarize(options, units, stats, elapsed) {
+function summarize(options, units, stats, elapsed, rssSamples) {
+  // Growth after the first quarter of the run (warm-up allocations excluded): a steady climb means a leak.
+  const settled = rssSamples.slice(Math.floor(rssSamples.length / 4));
   const sorted = [...stats.latencies].sort((a, b) => a - b);
   const pct = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]?.toFixed(1);
   return {
@@ -81,6 +86,7 @@ function summarize(options, units, stats, elapsed) {
     mbps: +((stats.bytes * 8) / elapsed / 1e6).toFixed(1),
     latencyMs: {p50: pct(0.5), p95: pct(0.95), p99: pct(0.99), max: sorted.at(-1)?.toFixed(1)},
     rssMb: Math.round(process.memoryUsage().rss / BYTES_PER_MB),
+    rssGrowthMb: settled.length > 1 ? Math.round(settled.at(-1) - settled[0]) : 0,
   };
 }
 
@@ -95,9 +101,10 @@ async function main() {
   });
   const sentAt = new Map();
   const {stats, done} = collect(transcoder, sentAt);
-  const elapsed = await feed(transcoder, units, options, sentAt);
+  const rssSamples = [];
+  const elapsed = await feed(transcoder, units, options, sentAt, rssSamples);
   await done;
-  console.log(JSON.stringify(summarize(options, units, stats, elapsed)));
+  console.log(JSON.stringify(summarize(options, units, stats, elapsed, rssSamples)));
 }
 
 main().catch((err) => {

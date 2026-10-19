@@ -105,6 +105,20 @@ On Windows keep the `.dll` extension (the loader appends one otherwise). `script
 version of these steps. Set `MEDIA_PROXY_H264_ENCODER=libopenh264` (or `h264_videotoolbox`, `h264_mf`) to force one
 encoder for diagnostics. OpenH264 output is multi-slice (one slice per core, up to 4; a frame too short for that falls back to one slice), tagged BT.709 limited range like the other encoders, and needs frames of at least 16×16.
 
+## Performance
+
+`node scripts/bench.mjs clip.h265 --codec h264 --seconds 60` paces a clip at 60 fps and reports output fps, added latency
+(push to output) and RSS growth. On an M-series Mac with a 1170×2532 scrolling-UI clip (numbers vary ±30% between runs):
+
+| Output                    | p50     | p95      | Notes                                                                      |
+| ------------------------- | ------- | -------- | -------------------------------------------------------------------------- |
+| MJPEG                     | ~5 ms   | ~6 ms    | software JPEG                                                              |
+| H.264 VideoToolbox        | ~8 ms   | ~11 ms   | low-latency rate control; the first few frames after start-up may be dropped |
+| H.264 OpenH264 (software) | ~15 ms  | ~20 ms   | needs ~4 cores; fast-changing content (video, games) can fall behind 60 fps  |
+
+RSS stays flat over a 60 s soak. The pipeline itself (decode, colour conversion) costs under 2 ms per frame, so latency is
+the encoder's.
+
 ## Licensing
 
 The package is Apache-2.0. The native addon links FFmpeg built **LGPL-only** (no `--enable-gpl`, no
