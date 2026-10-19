@@ -462,6 +462,18 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         assert.strictEqual(typeof el[W3C_ELEMENT_KEY], 'string');
       });
 
+      for (const [kind, script] of [
+        ['an Error', 'throw new Error("boom");'],
+        ['a primitive', 'throw "boom";'],
+        ['a DOMException', 'document.createElement("div").appendChild(document);'],
+        ['a syntax error', 'return (;'],
+      ]) {
+        it(`gives a javascript error when the script throws ${kind}`, async function () {
+          const raw = await runAtom(window, 'execute_script', [script, [], true]);
+          assert.throws(() => convertJavascriptEvaluationResult(raw), errors.JavaScriptError);
+        });
+      }
+
       it('gives a javascript error for a rejected promise', async function () {
         await assert.rejects(runPromiseScript('return Promise.reject(new Error("boom"));'), (err: Error) => {
           assert.ok(err instanceof errors.JavaScriptError);
@@ -641,6 +653,25 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       window.eval(script);
       assert.strictEqual(convertJavascriptEvaluationResult(crossRealmToLocal((window as any)[promiseName])), 123);
     });
+  });
+
+  describe('execute_async_script errors', function () {
+    for (const [kind, script] of [
+      ['an Error', 'throw new Error("boom");'],
+      ['null', 'throw null;'],
+      ['a primitive', 'throw "boom";'],
+      ['a DOMException', 'document.createElement("div").appendChild(document);'],
+      ['a syntax error', 'return (;'],
+    ]) {
+      it(`gives a javascript error when the script throws ${kind}`, async function () {
+        const callback = 'function (res) { window.atomsSpecAsyncError = res; }';
+        window.eval(await getScriptForAtom('execute_async_script', [script, [], 1000], [], callback));
+        assert.throws(
+          () => convertJavascriptEvaluationResult(crossRealmToLocal((window as any).atomsSpecAsyncError)),
+          errors.JavaScriptError,
+        );
+      });
+    }
   });
 
   describe('html5 storage/geolocation', function () {

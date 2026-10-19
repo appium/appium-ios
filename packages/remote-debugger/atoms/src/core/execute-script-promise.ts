@@ -4,6 +4,9 @@ import {type ResponseObject, unwrapValue, wrapError, wrapResponse} from './injec
 /** Longest wait for a returned promise; a longer timeout is reduced to it. */
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;
 
+const SYNC_ERROR_FALLBACK = 'The script threw an error';
+const REJECTION_FALLBACK = 'The promise returned by the script was rejected';
+
 /** iOS Safari can fire pagehide without unload, e.g. for the back/forward cache. */
 const PAGE_LEAVE_EVENTS = ['unload', 'pagehide'];
 
@@ -27,14 +30,14 @@ export function executeScriptAwaitingPromise(
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     result = compiled.apply(null, unwrappedArgs);
   } catch (ex) {
-    return finish(wrapError(ex as Error));
+    return finish(wrapScriptError(ex, SYNC_ERROR_FALLBACK));
   }
   try {
     if (!isThenable(result)) {
       return finish(wrapResponse(result));
     }
   } catch (ex) {
-    return finish(wrapSerializationError(ex));
+    return finish(wrapScriptError(ex, SYNC_ERROR_FALLBACK));
   }
   const thenable = result;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
@@ -100,23 +103,27 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         try {
           ret = wrapResponse(value);
         } catch (ex) {
-          ret = wrapSerializationError(ex);
+          ret = wrapScriptError(ex, SYNC_ERROR_FALLBACK);
         }
         settle(ret);
       },
-      (reason) => settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)))),
+      (reason) =>
+        settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(reason, REJECTION_FALLBACK)))),
     );
   });
 }
 
-/** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
-function wrapSerializationError(ex: unknown): ResponseObject {
-  return typeof ex === 'object' && ex !== null
+/**
+ * An error of the atoms keeps its code; any other thrown value is a script error (W3C `javascript error`).
+ * Not the `code` of the value: a DOMException has one that is no WebDriver code.
+ */
+function wrapScriptError(ex: unknown, fallback: string): ResponseObject {
+  return typeof ex === 'object' && ex !== null && (ex as {isAutomationError?: unknown}).isAutomationError === true
     ? wrapError(ex as Error)
-    : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(ex)));
+    : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(ex, fallback)));
 }
 
-function getRejectionMessage(reason: unknown): string {
+function getErrorMessage(reason: unknown, fallback: string): string {
   let message = '';
   try {
     if (reason !== null && reason !== undefined) {
@@ -126,5 +133,5 @@ function getRejectionMessage(reason: unknown): string {
   } catch {
     // e.g. Object.create(null)
   }
-  return message || 'The promise returned by the script was rejected';
+  return message || fallback;
 }

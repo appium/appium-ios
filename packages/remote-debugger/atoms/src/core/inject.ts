@@ -202,9 +202,9 @@ export function executeAsyncScript(
 
     let wrapped: ResponseObject;
     if (status !== ErrorCode.SUCCESS) {
-      const err = value as {message?: string; stack?: string} | Error;
-      const botError = new BotError(status, err.message || `${value}`);
-      botError.stack = (err as Error).stack || '';
+      const err = value as {message?: string; stack?: string} | null | undefined;
+      const botError = new BotError(status, err?.message || `${value}`);
+      botError.stack = err?.stack || '';
       wrapped = wrapError(botError);
     } else {
       wrapped = wrapResponse(value);
@@ -225,14 +225,13 @@ export function executeAsyncScript(
     return;
   }
 
-  const recompiled = recompileFunction(fn, win);
-  const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
-  unwrappedArgs.push((value: unknown) => sendResponse(ErrorCode.SUCCESS, value));
-
   win.addEventListener('unload', onunload, true);
 
   const startTime = Date.now();
   try {
+    const recompiled = recompileFunction(fn, win);
+    const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
+    unwrappedArgs.push((value: unknown) => sendResponse(ErrorCode.SUCCESS, value));
     recompiled.apply(win, unwrappedArgs);
 
     // Register the timeout *after* invoking the function, so a callback invoked synchronously
@@ -247,7 +246,9 @@ export function executeAsyncScript(
       Math.max(0, timeout),
     );
   } catch (ex) {
-    sendResponse((ex as {code?: ErrorCode}).code || ErrorCode.UNKNOWN_ERROR, ex);
+    // Keep the code of a BotError only: any other value (even a DOMException with a `code`) is a script error
+    const isBotError = (ex as {isAutomationError?: unknown} | null)?.isAutomationError === true;
+    sendResponse(isBotError ? (ex as BotError).code : ErrorCode.JAVASCRIPT_ERROR, ex);
   }
 }
 
