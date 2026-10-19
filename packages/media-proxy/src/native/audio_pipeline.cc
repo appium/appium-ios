@@ -86,8 +86,12 @@ std::optional<AscFormat> ParseAsc(const std::vector<uint8_t>& asc) {
 int64_t SamplesToMicros(int64_t samples, int rate) { return ((samples * kMicrosPerSecond) + (rate / 2)) / rate; }
 
 int AdtsRateIndex(int rate) {
-  const auto* const it = std::find(kAdtsSampleRates.begin(), kAdtsSampleRates.end(), rate);
-  return it == kAdtsSampleRates.end() ? -1 : static_cast<int>(it - kAdtsSampleRates.begin());
+  for (size_t i = 0; i < kAdtsSampleRates.size(); ++i) {
+    if (kAdtsSampleRates[i] == rate) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
 }
 
 std::array<uint8_t, kAdtsHeaderSize> AdtsHeader(size_t payloadSize, int rateIndex, int channels) {
