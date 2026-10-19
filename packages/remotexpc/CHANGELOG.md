@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.25.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.4...appium-ios-remotexpc@5.25.5) (2026-10-19)
+
+### Bug Fixes
+
+* **remotexpc:** opack2 15-element array and null terminator collision ([#95](https://github.com/appium/appium-ios/issues/95)) ([4a5abfb](https://github.com/appium/appium-ios/commit/4a5abfbcd33ed29e4a5edd7375f71462f1d45868))
+
+
 ## [5.25.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.3...appium-ios-remotexpc@5.25.4) (2026-10-17)
 
 ### Bug Fixes
