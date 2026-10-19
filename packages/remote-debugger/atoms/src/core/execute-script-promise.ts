@@ -1,5 +1,12 @@
 import {BotError, ErrorCode} from './error.js';
-import {type ResponseObject, unwrapValue, wrapError, wrapResponse} from './inject.js';
+import {
+  getErrorMessage,
+  isAutomationError,
+  type ResponseObject,
+  unwrapValue,
+  wrapError,
+  wrapResponse,
+} from './inject.js';
 
 /** Longest wait for a returned promise; a longer timeout is reduced to it. */
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;
@@ -118,20 +125,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
  * Not the `code` of the value: a DOMException has one that is no WebDriver code.
  */
 function wrapScriptError(ex: unknown, fallback: string): ResponseObject {
-  return typeof ex === 'object' && ex !== null && (ex as {isAutomationError?: unknown}).isAutomationError === true
-    ? wrapError(ex as Error)
+  return isAutomationError(ex)
+    ? wrapError(ex)
     : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(ex, fallback)));
-}
-
-function getErrorMessage(reason: unknown, fallback: string): string {
-  let message = '';
-  try {
-    if (reason !== null && reason !== undefined) {
-      const reasonMessage = (reason as {message?: unknown}).message;
-      message = String(reasonMessage === undefined ? reason : reasonMessage);
-    }
-  } catch {
-    // e.g. Object.create(null)
-  }
-  return message || fallback;
 }

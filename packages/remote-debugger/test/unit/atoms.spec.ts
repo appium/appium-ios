@@ -467,6 +467,10 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         ['a primitive', 'throw "boom";'],
         ['a DOMException', 'document.createElement("div").appendChild(document);'],
         ['a syntax error', 'return (;'],
+        [
+          'an object whose marker getter throws',
+          "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
+        ],
       ]) {
         it(`gives a javascript error when the script throws ${kind}`, async function () {
           const raw = await runAtom(window, 'execute_script', [script, [], true]);
@@ -529,6 +533,10 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       for (const [kind, script] of [
         ['sync', "return {get a() { throw 'boom'; }};"],
         ['promise', "return Promise.resolve({get a() { throw 'boom'; }});"],
+        [
+          'promise (marker getter)',
+          "return Promise.resolve({get a() { throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }}; }});",
+        ],
       ]) {
         it(`gives a javascript error when a ${kind} value throws a primitive while serialized`, async function () {
           const atom = await getScriptForAtom('execute_script', [script, [], true]);
@@ -662,6 +670,10 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       ['a primitive', 'throw "boom";'],
       ['a DOMException', 'document.createElement("div").appendChild(document);'],
       ['a syntax error', 'return (;'],
+      [
+        'an object whose marker getter throws',
+        "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
+      ],
     ]) {
       it(`gives a javascript error when the script throws ${kind}`, async function () {
         const callback = 'function (res) { window.atomsSpecAsyncError = res; }';

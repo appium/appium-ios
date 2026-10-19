@@ -157,6 +157,34 @@ export function wrapError(err: Error & {code?: ErrorCode}): ResponseObject {
 }
 
 /**
+ * Whether a thrown value is a BotError. Duck-typed, as `instanceof` fails across realms; a throwing
+ * getter on the value counts as no.
+ */
+export function isAutomationError(value: unknown): value is BotError {
+  try {
+    return (
+      typeof value === 'object' && value !== null && (value as {isAutomationError?: unknown}).isAutomationError === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The message of a thrown value or rejection reason, or `fallback` if it has no text or cannot be read. */
+export function getErrorMessage(reason: unknown, fallback: string): string {
+  let message = '';
+  try {
+    if (reason !== null && reason !== undefined) {
+      const reasonMessage = (reason as {message?: unknown}).message;
+      message = String(reasonMessage === undefined ? reason : reasonMessage);
+    }
+  } catch {
+    // e.g. Object.create(null)
+  }
+  return message || fallback;
+}
+
+/**
  * Executes an injected script. Should never be called from within JavaScript itself — used from
  * an external source injecting a script for execution.
  */
@@ -247,8 +275,11 @@ export function executeAsyncScript(
     );
   } catch (ex) {
     // Keep the code of a BotError only: any other value (even a DOMException with a `code`) is a script error
-    const isBotError = (ex as {isAutomationError?: unknown} | null)?.isAutomationError === true;
-    sendResponse(isBotError ? (ex as BotError).code : ErrorCode.JAVASCRIPT_ERROR, ex);
+    if (isAutomationError(ex)) {
+      sendResponse(ex.code, ex);
+    } else {
+      sendResponse(ErrorCode.JAVASCRIPT_ERROR, new Error(getErrorMessage(ex, 'The script threw an error')));
+    }
   }
 }
 
