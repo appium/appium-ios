@@ -156,32 +156,60 @@ export function wrapError(err: Error & {code?: ErrorCode}): ResponseObject {
   };
 }
 
+/** The message of a script error that has no text of its own. */
+export const SCRIPT_ERROR_FALLBACK = 'The script threw an error';
+
 /**
- * Whether a thrown value is a BotError. Duck-typed, as `instanceof` fails across realms; a throwing
- * getter on the value counts as no.
+ * The code of a thrown BotError, or undefined for any other value. Duck-typed, as `instanceof` fails
+ * across realms; a page can spoof the marker, so the code must be a known failure code, and a
+ * throwing getter counts as no BotError.
  */
-export function isAutomationError(value: unknown): value is BotError {
+function getAutomationErrorCode(value: unknown): ErrorCode | undefined {
   try {
-    return (
-      typeof value === 'object' && value !== null && (value as {isAutomationError?: unknown}).isAutomationError === true
-    );
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      (value as {isAutomationError?: unknown}).isAutomationError !== true
+    ) {
+      return undefined;
+    }
+    const code = (value as {code?: unknown}).code;
+    return typeof code === 'number' && code !== ErrorCode.SUCCESS && ErrorCode[code] !== undefined ? code : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
-/** The message of a thrown value or rejection reason, or `fallback` if it has no text or cannot be read. */
+/**
+ * The message of a thrown value or rejection reason, or `fallback` if it has no text or cannot be read.
+ * An error name other than `Error` leads the message; an object without a message is JSON-ified.
+ */
 export function getErrorMessage(reason: unknown, fallback: string): string {
   let message = '';
   try {
     if (reason !== null && reason !== undefined) {
-      const reasonMessage = (reason as {message?: unknown}).message;
-      message = String(reasonMessage === undefined ? reason : reasonMessage);
+      const text = (reason as {message?: unknown}).message;
+      if (text !== undefined) {
+        const name = String((reason as {name?: unknown}).name ?? '');
+        message = String(text);
+        message = name && name !== 'Error' ? (message ? `${name}: ${message}` : name) : message;
+      } else {
+        message = typeof reason === 'object' ? (JSON.stringify(reason) ?? '') : String(reason);
+        message = message === '{}' ? '' : message;
+      }
     }
   } catch {
-    // e.g. Object.create(null)
+    // e.g. Object.create(null), a circular object or a throwing getter
   }
   return message || fallback;
+}
+
+/**
+ * A thrown BotError keeps its code; any other thrown value is a script error (W3C `javascript error`).
+ * Not the `code` of the value: a DOMException has one that is no WebDriver code.
+ */
+export function toBotError(thrown: unknown, fallback: string): BotError {
+  return new BotError(getAutomationErrorCode(thrown) ?? ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(thrown, fallback));
 }
 
 /**
@@ -225,6 +253,8 @@ export function executeAsyncScript(
     if (responseSent) {
       return;
     }
+    // Before onDone: a throwing onDone must not get a second response
+    responseSent = true;
     win.removeEventListener('unload', onunload, true);
     win.clearTimeout(timeoutId);
 
@@ -238,7 +268,6 @@ export function executeAsyncScript(
       wrapped = wrapResponse(value);
     }
     onDone(stringify ? JSON.stringify(wrapped) : wrapped);
-    responseSent = true;
   }
 
   function onunload(): void {
@@ -274,12 +303,8 @@ export function executeAsyncScript(
       Math.max(0, timeout),
     );
   } catch (ex) {
-    // Keep the code of a BotError only: any other value (even a DOMException with a `code`) is a script error
-    if (isAutomationError(ex)) {
-      sendResponse(ex.code, ex);
-    } else {
-      sendResponse(ErrorCode.JAVASCRIPT_ERROR, new Error(getErrorMessage(ex, 'The script threw an error')));
-    }
+    const botError = toBotError(ex, SCRIPT_ERROR_FALLBACK);
+    sendResponse(botError.code, botError);
   }
 }
 

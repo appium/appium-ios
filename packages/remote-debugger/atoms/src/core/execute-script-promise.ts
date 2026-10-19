@@ -1,8 +1,9 @@
 import {BotError, ErrorCode} from './error.js';
 import {
   getErrorMessage,
-  isAutomationError,
+  SCRIPT_ERROR_FALLBACK,
   type ResponseObject,
+  toBotError,
   unwrapValue,
   wrapError,
   wrapResponse,
@@ -11,7 +12,6 @@ import {
 /** Longest wait for a returned promise; a longer timeout is reduced to it. */
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;
 
-const SYNC_ERROR_FALLBACK = 'The script threw an error';
 const REJECTION_FALLBACK = 'The promise returned by the script was rejected';
 
 /** iOS Safari can fire pagehide without unload, e.g. for the back/forward cache. */
@@ -19,8 +19,8 @@ const PAGE_LEAVE_EVENTS = ['unload', 'pagehide'];
 
 /**
  * `executeScript` from inject.ts for a script string, plus a returned thenable is awaited
- * (https://w3c.github.io/webdriver/#execute-script). Kept apart so inject.ts, bundled in most
- * atoms, does not change.
+ * (https://w3c.github.io/webdriver/#execute-script). Kept apart so this promise handling is
+ * not bundled into every atom that bundles inject.ts.
  */
 export function executeScriptAwaitingPromise(
   script: string,
@@ -37,14 +37,14 @@ export function executeScriptAwaitingPromise(
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     result = compiled.apply(null, unwrappedArgs);
   } catch (ex) {
-    return finish(wrapScriptError(ex, SYNC_ERROR_FALLBACK));
+    return finish(wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK)));
   }
   try {
     if (!isThenable(result)) {
       return finish(wrapResponse(result));
     }
   } catch (ex) {
-    return finish(wrapScriptError(ex, SYNC_ERROR_FALLBACK));
+    return finish(wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK)));
   }
   const thenable = result;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
@@ -110,7 +110,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         try {
           ret = wrapResponse(value);
         } catch (ex) {
-          ret = wrapScriptError(ex, SYNC_ERROR_FALLBACK);
+          ret = wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK));
         }
         settle(ret);
       },
@@ -118,14 +118,4 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(reason, REJECTION_FALLBACK)))),
     );
   });
-}
-
-/**
- * An error of the atoms keeps its code; any other thrown value is a script error (W3C `javascript error`).
- * Not the `code` of the value: a DOMException has one that is no WebDriver code.
- */
-function wrapScriptError(ex: unknown, fallback: string): ResponseObject {
-  return isAutomationError(ex)
-    ? wrapError(ex)
-    : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(ex, fallback)));
 }

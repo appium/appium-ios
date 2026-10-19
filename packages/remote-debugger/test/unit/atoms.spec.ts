@@ -471,10 +471,40 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
           'an object whose marker getter throws',
           "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
         ],
+        ['a spoofed marker with a success code', "throw {message: 'boom', isAutomationError: true, code: 0};"],
+        [
+          'a spoofed marker whose message getter throws',
+          'throw {get message() { throw 1; }, isAutomationError: true, code: 17};',
+        ],
       ]) {
         it(`gives a javascript error when the script throws ${kind}`, async function () {
           const raw = await runAtom(window, 'execute_script', [script, [], true]);
           assert.throws(() => convertJavascriptEvaluationResult(raw), errors.JavaScriptError);
+        });
+      }
+
+      it('keeps the code of an error of the atoms', async function () {
+        const args = [[{[W3C_ELEMENT_KEY]: 'not-in-the-cache'}]];
+        const raw = await runAtom(window, 'execute_script', ['return arguments[0];', ...args, true]);
+        assert.throws(() => convertJavascriptEvaluationResult(raw), errors.StaleElementReferenceError);
+      });
+
+      for (const [script, expected] of [
+        ['throw new RangeError("bad");', /RangeError: bad/],
+        ['throw new TypeError("");', /TypeError/],
+        ['throw {reason: "x"};', /"reason":"x"/],
+        ['throw Object.create(null);', /The script threw an error/],
+      ] as const) {
+        it(`reports a readable message for \`${script}\``, async function () {
+          const raw = await runAtom(window, 'execute_script', [script, [], true]);
+          assert.throws(
+            () => convertJavascriptEvaluationResult(raw),
+            (err: Error) => {
+              assert.ok(err instanceof errors.JavaScriptError);
+              assert.match(err.message, expected);
+              return true;
+            },
+          );
         });
       }
 
@@ -674,6 +704,11 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         'an object whose marker getter throws',
         "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
       ],
+      ['a spoofed marker with a success code', "throw {message: 'boom', isAutomationError: true, code: 0};"],
+      [
+        'a spoofed marker whose message getter throws',
+        'throw {get message() { throw 1; }, isAutomationError: true, code: 17};',
+      ],
     ]) {
       it(`gives a javascript error when the script throws ${kind}`, async function () {
         const callback = 'function (res) { window.atomsSpecAsyncError = res; }';
@@ -684,6 +719,27 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         );
       });
     }
+
+    it('keeps the code of an error of the atoms', async function () {
+      const callback = 'function (res) { window.atomsSpecAsyncError = res; }';
+      const args = ['arguments[arguments.length - 1](1);', [{[W3C_ELEMENT_KEY]: 'not-in-the-cache'}], 1000];
+      window.eval(await getScriptForAtom('execute_async_script', args, [], callback));
+      assert.throws(
+        () => convertJavascriptEvaluationResult(crossRealmToLocal((window as any).atomsSpecAsyncError)),
+        errors.StaleElementReferenceError,
+      );
+    });
+
+    it('sends one response when the callback is called synchronously and onDone throws', async function () {
+      const atom = (await getAtom('execute_async_script')).toString('utf8');
+      let calls = 0;
+      (window as any).atomsSpecOnDone = () => {
+        calls++;
+        throw new Error('onDone failed');
+      };
+      window.eval(`(${atom})('arguments[0](1);', [], 1000, window.atomsSpecOnDone, true)`);
+      assert.strictEqual(calls, 1);
+    });
   });
 
   describe('html5 storage/geolocation', function () {
