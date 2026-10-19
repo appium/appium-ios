@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.16.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.2...appium-webdriveragent@16.16.3) (2026-10-19)
+
+### Bug Fixes
+
+* **webdriveragent:** shorten lock button press on iOS 27 ([#91](https://github.com/appium/appium-ios/issues/91)) ([e002283](https://github.com/appium/appium-ios/commit/e002283d4b26738b0dae1200a3a639e611101d79))
+
+
 ## [16.16.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.1...appium-webdriveragent@16.16.2) (2026-10-18)
 
 ### Bug Fixes
