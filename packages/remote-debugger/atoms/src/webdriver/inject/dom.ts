@@ -52,7 +52,7 @@ function executeDomFunction(fn: inject.AnyFunction, args: unknown[], win?: JsonW
     const functionResult = fn.apply(null, unwrappedArgs);
     response = inject.wrapResponse(functionResult);
   } catch (ex) {
-    response = inject.wrapError(ex as Error);
+    response = inject.wrapError(ex);
   }
   return JSON.stringify(response);
 }

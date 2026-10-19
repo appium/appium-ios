@@ -143,14 +143,15 @@ export function wrapResponse(value: unknown): ResponseObject {
 /**
  * Wraps a JavaScript error in an object literal so it can be JSON-ified for transmission. The
  * wrapped value carries both the legacy numeric status code and its W3C WebDriver error string
- * equivalent, so callers can consume either.
+ * equivalent, so callers can consume either. A thrown BotError keeps its code; any other value,
+ * even one with a `code` (e.g. a DOMException), is an unknown error.
  */
-export function wrapError(err: Error & {code?: ErrorCode}): ResponseObject {
-  const code = 'code' in err && typeof err.code === 'number' ? err.code : ErrorCode.UNKNOWN_ERROR;
+export function wrapError(err: unknown): ResponseObject {
+  const code = getAutomationErrorCode(err) ?? ErrorCode.UNKNOWN_ERROR;
   return {
     status: code,
     value: {
-      message: err.message,
+      message: getErrorMessage(err, ''),
       error: stateForCode(code),
     },
   };
@@ -190,7 +191,9 @@ export function getErrorMessage(reason: unknown, fallback: string): string {
     if (reason !== null && reason !== undefined) {
       const text = (reason as {message?: unknown}).message;
       if (text !== undefined) {
-        const name = String((reason as {name?: unknown}).name ?? '');
+        // a BotError has its own name, such as StaleElementReferenceError: no prefix
+        const name =
+          getAutomationErrorCode(reason) === undefined ? String((reason as {name?: unknown}).name ?? '') : '';
         message = String(text);
         message = name && name !== 'Error' ? (message ? `${name}: ${message}` : name) : message;
       } else {
@@ -228,7 +231,7 @@ export function executeScript(
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     ret = wrapResponse(recompiled.apply(null, unwrappedArgs));
   } catch (ex) {
-    ret = wrapError(ex as Error);
+    ret = wrapError(ex);
   }
   return stringify ? JSON.stringify(ret) : ret;
 }

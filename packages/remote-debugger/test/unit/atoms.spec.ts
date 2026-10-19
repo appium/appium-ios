@@ -415,6 +415,18 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       assert.strictEqual(await runInjectAtom(window, 'get_local_storage_size'), 0);
     });
 
+    for (const [kind, thrown, expected] of [
+      ['a DOMException', 'new window.DOMException("full", "InvalidStateError")', errors.UnknownError],
+      ['a primitive', '"full"', errors.UnknownError],
+      ['null', 'null', errors.UnknownError],
+    ] as const) {
+      it(`gives an unknown error when the storage throws ${kind}`, async function () {
+        window.eval(`window.Storage.prototype.getItem = function () { throw ${thrown}; };`);
+        const raw = await runAtom(window, 'get_local_storage_item', ['foo']);
+        assert.throws(() => convertJavascriptEvaluationResult(raw), expected);
+      });
+    }
+
     it('session storage: set/get/keys/size/key/remove/clear round-trip', async function () {
       assert.strictEqual(await runInjectAtom(window, 'get_session_storage_size'), 0);
       await runInjectAtom(window, 'set_session_storage_item', ['foo', 'bar']);
