@@ -9,7 +9,7 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - `npm run build:ffmpeg` — builds the pinned LGPL FFmpeg into `third_party/ffmpeg/<platform>-<arch>` (needed before any native build)
 - `npm run build:addon` — `node-gyp rebuild` + copies the FFmpeg libs into `build/Release` (picked up by node-gyp-build)
 - `npm run build:prebuilds [-- --arch x64]` — prebuildify + bundles the FFmpeg libs into `prebuilds/<platform>-<arch>` (CI)
-- `node scripts/bench.mjs clip.h265` — real-time fps/latency report
+- `node scripts/bench.mjs clip.h265` — real-time fps/latency/RSS-growth report (use a UI-like clip: OpenH264's screen-content mode is tuned for it and is slower on synthetic test patterns)
 - `npm run test:unit` — pure TS, fake native backend, no addon needed
 - `npm run test:integration` — needs the addon (`build:addon` first)
 - `npm run format:cpp:check` / `lint:cpp` — clang-format / clang-tidy over `src/native`
