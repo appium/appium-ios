@@ -11,8 +11,9 @@ The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCa
 (iOS 27+ real devices). Supported platforms: darwin, linux, win32 on x64 and arm64.
 
 > **Status:** HEVC → MJPEG works on every platform (bundled LGPL FFmpeg, software decode). H.264 output works on
-> macOS (VideoToolbox) and Windows (Media Foundation); Linux throws `MediaProxyEncoderUnavailableError` for
-> `codec: 'h264'` until the NVENC and OpenH264 encoders land. The package is not released.
+> macOS (VideoToolbox) and Windows (Media Foundation); everywhere else (and when those fail to open) it falls back to
+> Cisco's OpenH264 once [installed by the client](#software-h264-openh264), and throws `MediaProxyEncoderUnavailableError` if it
+> is not installed. Hardware encoders for Linux are still to come. The package is not released.
 
 The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
 it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
@@ -27,7 +28,7 @@ import {transcode, serveMjpeg} from '@appium/media-proxy';
 
 const capture = await ScreenStreamCapture.start(display, {displayId: 1});
 
-// H.264 (same shape as coresim's VideoAccessUnit); macOS only for now
+// H.264 (same shape as coresim's VideoAccessUnit)
 for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', fps: 60})) {}
 
 // MJPEG over HTTP (multipart/x-mixed-replace)
@@ -73,12 +74,43 @@ Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOpti
 - `formatMjpegPart` / `serveMjpeg`: MJPEG over HTTP; each client keeps only its newest unsent frame.
   `server.done` rejects if the frame source fails; clients connecting after the source ended get `410`.
 
+## Software H.264 (OpenH264)
+
+Without a hardware encoder (Linux, some VMs), H.264 uses Cisco's OpenH264. This package never bundles or
+downloads it: **the client package (e.g. the driver) installs it and points `MEDIA_PROXY_OPENH264_PATH` at it**.
+Without it, `createTranscoder({codec: 'h264'})` throws `MediaProxyEncoderUnavailableError`.
+
+Each end user must fetch Cisco's signed binary from Cisco under
+[Cisco's binary license](https://www.openh264.org/BINARY_LICENSE.txt) (that is what the patent grant covers), so do it on the
+user's machine, on request, not at publish time:
+
+1. Download `https://ciscobinary.openh264.org/<file>.bz2` for the platform (exactly **2.6.0**: the addon is built against
+   that major.minor and refuses any other).
+2. Verify the SHA-256 of the `.bz2`, then decompress it (`bunzip2`; Python's `bz2` works on Windows).
+3. Store the library where it survives reinstalls, by convention
+   `<APPIUM_HOME or ~/.appium>/media-proxy/openh264/2.6.0/<library>`.
+4. Set `MEDIA_PROXY_OPENH264_PATH` to its full path in the process that uses this package, before the first H.264
+   transcoder is created (it is read when an encoder opens).
+
+| Platform      | File (`.bz2`)                         | Library name        | SHA-256 of the `.bz2`                                              |
+| ------------- | ------------------------------------- | ------------------- | ------------------------------------------------------------------ |
+| darwin-arm64  | `libopenh264-2.6.0-mac-arm64.dylib`   | `libopenh264.dylib` | `6db362ee5abdab572311aeadb96d3f44b0617d9a4a4b9f4db4cb5ac4d968da71` |
+| darwin-x64    | `libopenh264-2.6.0-mac-x64.dylib`     | `libopenh264.dylib` | `38b2ed6d1d45b6a3e408c734173f2d67ab44a10d0e154ff3489b89877cd60e7e` |
+| linux-arm64   | `libopenh264-2.6.0-linux-arm64.8.so`  | `libopenh264.so`    | `a78aea7970150f46bcd3bb7994c9e6dd90bd7a9ea785920f5a73f6964e3fcda7` |
+| linux-x64     | `libopenh264-2.6.0-linux64.8.so`      | `libopenh264.so`    | `27ab53323c110b76214c1c72222f459d17febbcd1e252136cadc292b0308d75b` |
+| win32-arm64   | `openh264-2.6.0-win-arm64.dll`        | `openh264.dll`      | `6b57d3ecd06bd80b5f3ee1abbb31d48798ca6d89ef1bc98cf2e6d1ebddf5cf45` |
+| win32-x64     | `openh264-2.6.0-win64.dll`            | `openh264.dll`      | `dab5f2a872777f9a58b69bfa9fbcf20d9f82f2d6ec91383fd70bff49bd34ac9f` |
+
+On Windows keep the `.dll` extension (the loader appends one otherwise). `scripts/ci/fetch-openh264.py` is the CI's
+version of these steps. Set `MEDIA_PROXY_H264_ENCODER=libopenh264` (or `h264_videotoolbox`, `h264_mf`) to force one
+encoder for diagnostics. OpenH264 output is multi-slice (one slice per core, up to 4; a frame too short for that falls back to one slice), tagged BT.709 limited range like the other encoders, and needs frames of at least 16×16.
+
 ## Licensing
 
 The package is Apache-2.0. The native addon links FFmpeg built **LGPL-only** (no `--enable-gpl`, no
 `--enable-nonfree`), shipped as shared libraries next to the addon so it can be relinked. See
-`THIRD_PARTY_NOTICES.md`. x264 is never bundled. H.264 uses the platform's encoder (VideoToolbox on macOS, Media Foundation on Windows: both system components). A software fallback (planned) will use Cisco's OpenH264,
-which must be downloaded at runtime (not redistributed) to be covered by Cisco's patent grant.
+`THIRD_PARTY_NOTICES.md`. x264 is never bundled. H.264 uses the platform's encoder (VideoToolbox on macOS, Media Foundation on Windows: both system components). The software fallback uses Cisco's OpenH264,
+which the client downloads at runtime (not redistributed by this package) to be covered by Cisco's patent grant.
 
 Note that HEVC and H.264 are patent-encumbered formats; hardware codecs rely on the platform's
 licenses, while software decode/encode carries none from this package.

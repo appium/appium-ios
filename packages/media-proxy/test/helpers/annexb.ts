@@ -3,10 +3,11 @@ import {readFileSync} from 'node:fs';
 import {loadNative} from '../../src/native.js';
 import type {NalAccessUnit} from '../../src/types.js';
 
-/** Whether this platform's addon has an H.264 encoder (macOS VideoToolbox, Windows Media Foundation). */
-export const HAS_H264 = loadNative()
+/** H.264 encoders this addon offers: the platform one (VideoToolbox, Media Foundation) and OpenH264 once installed. */
+export const H264_ENCODERS = loadNative()
   .capabilities()
-  .encoders.some((name) => name.startsWith('h264_'));
+  .encoders.filter((name) => name.startsWith('h264_') || name === 'libopenh264');
+export const HAS_H264 = H264_ENCODERS.length > 0;
 
 const RTP_TICKS_PER_FRAME = 1500; // 60 fps at 90 kHz
 
