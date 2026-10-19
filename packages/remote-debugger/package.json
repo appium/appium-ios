@@ -63,10 +63,10 @@
     "teen_process": "^4.2.0"
   },
   "devDependencies": {
-    "@angular/common": "^22.2.2",
-    "@angular/compiler": "^22.1.1",
-    "@angular/core": "^22.1.1",
-    "@angular/platform-browser": "^22.2.2",
+    "@angular/common": "^22.2.3",
+    "@angular/compiler": "^22.2.2",
+    "@angular/core": "^22.2.3",
+    "@angular/platform-browser": "^22.2.3",
     "@appium/coresim": "^1.13.1",
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.0.0-rc.1",
