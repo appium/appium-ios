@@ -89,9 +89,7 @@ class Pipeline::Impl {
     }
     const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_HEVC);
     if (isH264_) {
-      if (H264EncoderNames().empty()) {
-        throw NoH264EncoderError();
-      }
+      RequireH264Encoder();
     } else {
       mjpeg_ = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
     }

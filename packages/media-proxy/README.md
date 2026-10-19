@@ -103,7 +103,7 @@ user's machine, on request, not at publish time:
 
 On Windows keep the `.dll` extension (the loader appends one otherwise). `scripts/ci/fetch-openh264.py` is the CI's
 version of these steps. Set `MEDIA_PROXY_H264_ENCODER=libopenh264` (or `h264_videotoolbox`, `h264_mf`) to force one
-encoder for diagnostics. OpenH264 output is multi-slice (one slice per core, up to 4) and carries no colour tags.
+encoder for diagnostics. OpenH264 output is multi-slice (one slice per core, up to 4; a frame too short for that falls back to one slice), tagged BT.709 limited range like the other encoders, and needs frames of at least 16×16.
 
 ## Licensing
 

@@ -1,6 +1,7 @@
 #include "openh264_encoder.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
@@ -178,6 +179,8 @@ class OpenH264Encoder final : public H264Encoder {
  private:
   static constexpr int64_t kMicrosPerMilli = 1000;
   static constexpr int kMaxThreads = 4;
+  static constexpr int kMinSide = 16;                  // smaller frames initialise but fail every encode
+  static constexpr int64_t kMaxBitrate = 288'000'000;  // the highest rate OpenH264 accepts (level 5.2)
 
   // One slice per worker thread: OpenH264 can only parallelise across slices.
   static int SliceThreads() {
@@ -186,13 +189,28 @@ class OpenH264Encoder final : public H264Encoder {
   }
 
   void Open(const H264Params& params) {
+    if (width_ < kMinSide || height_ < kMinSide) {
+      throw Unavailable("OpenH264 cannot encode frames smaller than 16x16 pixels");
+    }
     int logLevel = WELS_LOG_QUIET;
     encoder_->SetOption(ENCODER_OPTION_TRACE_LEVEL, &logLevel);
+    if (Initialize(params, SliceThreads())) {
+      return;
+    }
+    // Rate control needs room for a few macroblock rows per slice: a short frame only encodes as one slice.
+    encoder_->Uninitialize();
+    if (!Initialize(params, 1)) {
+      throw Unavailable("OpenH264 rejected the encoder parameters");
+    }
+  }
+
+  bool Initialize(const H264Params& params, int threads) {
     SEncParamExt ext{};
     if (encoder_->GetDefaultParams(&ext) != cmResultSuccess) {
       throw Unavailable("OpenH264 rejected its default parameters");
     }
-    const int bitrate = static_cast<int>(std::min<int64_t>(params.bitrate, std::numeric_limits<int>::max()));
+    const auto lowest = static_cast<int64_t>(std::ceil(params.fps));
+    const auto bitrate = static_cast<int>(std::clamp<int64_t>(params.bitrate, lowest, kMaxBitrate));
     ext.iUsageType = SCREEN_CONTENT_REAL_TIME;
     ext.iPicWidth = width_;
     ext.iPicHeight = height_;
@@ -207,7 +225,6 @@ class OpenH264Encoder final : public H264Encoder {
     ext.eSpsPpsIdStrategy = CONSTANT_ID;
     ext.bEnableFrameSkip = false;
     ext.bEnableDenoise = false;
-    const int threads = SliceThreads();
     ext.iMultipleThreadIdc = static_cast<unsigned short>(threads);
     SSpatialLayerConfig& layer = ext.sSpatialLayers[0];
     layer.iVideoWidth = width_;
@@ -217,9 +234,15 @@ class OpenH264Encoder final : public H264Encoder {
     layer.iMaxSpatialBitrate = bitrate;
     layer.sSliceArgument.uiSliceMode = threads > 1 ? SM_FIXEDSLCNUM_SLICE : SM_SINGLE_SLICE;
     layer.sSliceArgument.uiSliceNum = static_cast<unsigned int>(threads);
-    if (encoder_->InitializeExt(&ext) != cmResultSuccess) {
-      throw Unavailable("OpenH264 rejected the encoder parameters");
-    }
+    // The pipeline converts to limited-range BT.709 (same tags as the VideoToolbox and Media Foundation encoders).
+    layer.bVideoSignalTypePresent = true;
+    layer.uiVideoFormat = VF_UNDEF;
+    layer.bFullRange = false;
+    layer.bColorDescriptionPresent = true;
+    layer.uiColorPrimaries = CP_BT709;
+    layer.uiTransferCharacteristics = TRC_BT709;
+    layer.uiColorMatrix = CM_BT709;
+    return encoder_->InitializeExt(&ext) == cmResultSuccess;
   }
 
   void PackPlanes(const AVFrame& nv12, SSourcePicture& picture) {
