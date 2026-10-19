@@ -18,6 +18,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include "ffmpeg_util.h"
 #include "h264_encoder.h"
 
 namespace media_proxy {
@@ -34,31 +35,11 @@ constexpr int kToleranceDivisor = 4;
 // A slot further ahead of the stream than this many intervals means the timeline jumped back.
 constexpr int64_t kMaxSlotLeadIntervals = 2;
 
-struct CodecContextDeleter {
-  void operator()(AVCodecContext* ctx) const { avcodec_free_context(&ctx); }
-};
-struct FrameDeleter {
-  void operator()(AVFrame* frame) const { av_frame_free(&frame); }
-};
-struct PacketDeleter {
-  void operator()(AVPacket* pkt) const { av_packet_free(&pkt); }
-};
 struct SwsDeleter {
   void operator()(SwsContext* sws) const { sws_free_context(&sws); }
 };
 
-using CodecContext = std::unique_ptr<AVCodecContext, CodecContextDeleter>;
-using Frame = std::unique_ptr<AVFrame, FrameDeleter>;
-using Packet = std::unique_ptr<AVPacket, PacketDeleter>;
 using Sws = std::unique_ptr<SwsContext, SwsDeleter>;
-
-PipelineError MakeError(const char* name, const std::string& what, int code) {
-  std::array<char, AV_ERROR_MAX_STRING_SIZE> text{};
-  av_strerror(code, text.data(), text.size());
-  return {name, what + ": " + text.data()};
-}
-
-PipelineError Fatal(const std::string& what, int code) { return MakeError("MediaProxyError", what, code); }
 
 int CodecThreads() {
   const auto cores = static_cast<int>(std::thread::hardware_concurrency());
@@ -350,6 +331,12 @@ Capabilities Pipeline::Probe() {
     caps.decoders.emplace_back(decoder->name);
   }
   if (const AVCodec* encoder = avcodec_find_encoder(AV_CODEC_ID_MJPEG); encoder != nullptr) {
+    caps.encoders.emplace_back(encoder->name);
+  }
+  if (const AVCodec* decoder = avcodec_find_decoder(AV_CODEC_ID_AAC); decoder != nullptr) {
+    caps.decoders.emplace_back(decoder->name);
+  }
+  if (const AVCodec* encoder = avcodec_find_encoder(AV_CODEC_ID_AAC); encoder != nullptr) {
     caps.encoders.emplace_back(encoder->name);
   }
   for (std::string& name : H264EncoderNames()) {

@@ -28,6 +28,7 @@ export {DEFAULT_MJPEG_BOUNDARY, formatMjpegPart, mjpegContentType, mjpegPartHead
 export {serveMjpeg} from './framing/mjpeg-http.js';
 export type {MjpegServer, MjpegServerOptions} from './framing/mjpeg-http.js';
 export type {
+  AudioAccessUnit,
   H264Options,
   JpegFrame,
   JpegStreamOptions,

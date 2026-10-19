@@ -6,8 +6,9 @@ import {loadNative} from '../../src/native.js';
 describe('native addon', () => {
   it('loads on this platform and reports its compiled-in codecs', () => {
     const caps = loadNative().capabilities();
-    assert.deepStrictEqual(caps.decoders, ['hevc']);
+    assert.deepStrictEqual(caps.decoders, ['hevc', 'aac']);
     assert.ok(caps.encoders.includes('mjpeg'));
+    assert.ok(caps.encoders.includes('aac'));
     if (process.platform !== 'darwin') {
       assert.ok(!caps.encoders.includes('h264_videotoolbox'));
     }

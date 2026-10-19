@@ -21,7 +21,9 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - `src/native.ts` — lazy memoized loader; throws `MediaProxyUnavailableError` (never at import).
 - `src/queue.ts` — bounded queue; on overflow drops until the next keyframe (H.264) like coresim's.
 - `src/framing/` — APST (mirrors the Android settings app's streaming-protocol) and MJPEG multipart/HTTP.
-- `src/native/` — C++. `pipeline.{h,cc}` is pure FFmpeg (worker thread: HEVC decode → swscale → MJPEG encode,
+- `src/native/` — C++. `audio_pipeline.{h,cc}` is its own worker (AAC-ELD decode → FIFO → native AAC-LC encode → ADTS
+  header written by hand; gaps padded with silence, packet times = start of the frame they were encoded from);
+  `ffmpeg_util.h` has the shared RAII wrappers. `pipeline.{h,cc}` is pure FFmpeg (worker thread: HEVC decode → swscale → MJPEG encode,
   bounded input queue that drops to the next keyframe); `addon.cc` is the N-API/ThreadSafeFunction wrapper.
   H.264 goes through the `H264Encoder` interface (`h264_encoder.{h,cc}`); `videotoolbox_encoder.cc` (macOS only
   in `binding.gyp`) and `mediafoundation_encoder.cc` (Windows only, synchronous MFTs) call the platform API directly
