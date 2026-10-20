@@ -2,7 +2,7 @@ export const MAX_BUFFERED_UNITS = 60;
 
 /**
  * Single-consumer FIFO between the native callback and `units()`. Bounded: on overflow the backlog
- * is cleared and, while `dropsDuringResync` says so, further units are discarded until `endsResync`
+ * is cleared (except units `keepOnOverflow` accepts) and, while `dropsDuringResync` says so, further units are discarded until `endsResync`
  * sees a self-decodable one — dropping an arbitrary P-frame would corrupt every later one.
  */
 export class UnitQueue<T> {
@@ -18,6 +18,7 @@ export class UnitQueue<T> {
       dropsDuringResync: (unit: T) => boolean;
       endsResync: (unit: T) => boolean;
       onOverflow?: () => void;
+      keepOnOverflow?: (unit: T) => boolean;
       capacity?: number;
     },
   ) {}
@@ -41,10 +42,17 @@ export class UnitQueue<T> {
       return;
     }
     this.buffer.push(unit);
-    if (this.buffer.length > (this.opts.capacity ?? MAX_BUFFERED_UNITS)) {
-      this.buffer.length = 0;
-      this.resyncing = true;
-      this.opts.onOverflow?.();
+    const capacity = this.opts.capacity ?? MAX_BUFFERED_UNITS;
+    if (this.buffer.length > capacity) {
+      const {keepOnOverflow} = this.opts;
+      const kept = keepOnOverflow ? this.buffer.filter(keepOnOverflow) : [];
+      const dropped = kept.length < this.buffer.length;
+      // Kept units alone may still exceed the capacity: drop their oldest.
+      this.buffer.splice(0, this.buffer.length, ...kept.slice(-capacity));
+      if (dropped) {
+        this.resyncing = true;
+        this.opts.onOverflow?.();
+      }
     }
   }
 

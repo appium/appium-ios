@@ -564,6 +564,35 @@ describe('Transcoder audio', () => {
   });
 });
 
+describe('Transcoder audio buffered before a video overflow', () => {
+  it('survives the overflow eviction', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    backend.emit({data: Buffer.from('a'), isKeyFrame: true, timestampMicros: 0, audio: true});
+    for (let i = 0; i < 600; i++) {
+      backend.emit({data: Buffer.from('p'), timestampMicros: i + 1});
+    }
+    assert.strictEqual(backend.keyFrameRequests, 1);
+    backend.emit({data: Buffer.from('idr'), isKeyFrame: true, timestampMicros: 700});
+    await t.end();
+    const tracks = [];
+    for await (const u of t.units()) {
+      tracks.push((u as VideoAccessUnit).track);
+    }
+    assert.deepStrictEqual(tracks, ['audio', 'video']);
+  });
+
+  it('does not request a key frame when only audio overflows', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    for (let i = 0; i < 600; i++) {
+      backend.emit({data: Buffer.from('a'), isKeyFrame: true, timestampMicros: i, audio: true});
+    }
+    assert.strictEqual(backend.keyFrameRequests, 0);
+    await t.close();
+  });
+});
+
 describe('transcode() with an audio source', () => {
   async function* audioSource(...items: AudioAccessUnit[]) {
     yield* items;
@@ -619,6 +648,28 @@ describe('transcode() with an audio source', () => {
       }
     }, /audio went away/);
     assert.strictEqual(seen.length, 1);
+  });
+
+  it('reports an audio failure although the video read never settles', async () => {
+    const t = new Transcoder(withAudio, fakeBackend({echo: true}));
+    const video: AsyncIterable<NalAccessUnit> = {
+      [Symbol.asyncIterator]: () => ({
+        next: () => new Promise<IteratorResult<NalAccessUnit>>(() => {}),
+        return: async () => ({value: undefined, done: true}),
+      }),
+    };
+    const audio: AsyncIterable<AudioAccessUnit> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error('audio went away');
+        },
+      }),
+    };
+    await assert.rejects(async () => {
+      for await (const _ of pipeThrough(t, video, undefined, audio)) {
+        // drain
+      }
+    }, /audio went away/);
   });
 });
 

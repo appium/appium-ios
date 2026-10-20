@@ -134,6 +134,7 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
         ? {
             dropsDuringResync: (u) => (u as VideoAccessUnit).track === 'video' && !(u as VideoAccessUnit).isKeyFrame,
             endsResync: (u) => (u as VideoAccessUnit).track === 'video' && (u as VideoAccessUnit).isKeyFrame,
+            keepOnOverflow: (u) => (u as VideoAccessUnit).track === 'audio',
             onOverflow: () => this.handle?.requestKeyFrame(),
             capacity: MAX_BUFFERED_UNITS + (this.hasAudio ? MAX_BUFFERED_AUDIO_UNITS : 0),
           }
@@ -397,6 +398,10 @@ export async function* pipeThrough(
   }
   if (signal?.aborted) {
     return;
+  }
+  // A failure is reported without waiting for the pump: an idle video read may never settle.
+  if (failed) {
+    throw pumpError;
   }
   await pump;
   if (failed) {
