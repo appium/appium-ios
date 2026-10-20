@@ -113,9 +113,8 @@
 {
 #if TARGET_OS_SIMULATOR
   XCUIDevice *device = XCUIDevice.sharedDevice;
-  if (!device.fb_supportsHingeAngleReading) {
-    return;
-  }
+  XCTSkipIf(!device.fb_supportsHingeAngleReading || !device.fb_canAttemptSimulatedHingeAngleInjection,
+            @"Requires hinge angle reading and injection support");
   NSNumber *originalDisplay = FBConfiguration.sharedInstance.currentDisplayId;
   NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
   XCTAssertNotNil(originalAngle);
