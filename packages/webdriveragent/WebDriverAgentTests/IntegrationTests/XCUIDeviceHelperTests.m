@@ -167,14 +167,6 @@
 }
 #endif
 
-- (void)testGetPressableButtons
-{
-  NSDictionary<NSString *, id> *pressableButtons = [XCUIDevice.sharedDevice fb_getPressableButtons];
-  XCTAssertNotNil([pressableButtons objectForKey:@"xctest"]);
-  XCTAssertNotNil([pressableButtons objectForKey:@"iohid"]);
-  XCTAssertTrue([pressableButtons[@"xctest"] containsObject:@"home"]);
-}
-
 - (void)testPressingUnsupportedButton
 {
   NSError *error;

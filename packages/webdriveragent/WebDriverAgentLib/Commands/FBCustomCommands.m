@@ -356,7 +356,12 @@
 
 + (id<FBResponsePayload>)handleGetPressableButtons:(FBRouteRequest *)request
 {
-  return FBResponseWithObject([XCUIDevice.sharedDevice fb_getPressableButtons]);
+  NSDictionary<NSString *, NSNumber *> *availableButtons = [XCUIDevice.sharedDevice fb_availableButtonNames];
+  NSArray *xctestButtonNames = [availableButtons.allKeys sortedArrayUsingSelector:@selector(compare:)];
+
+  return FBResponseWithObject(@{
+    @"xctest": xctestButtonNames,
+  });
 }
 
 #if TARGET_OS_WATCH
