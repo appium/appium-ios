@@ -148,6 +148,33 @@ describe('opt-in screenshot display cache', () => {
     assert.equal(f.getDisplays.mock.callCount(), 3);
   });
 
+  for (const cachedHit of [false, true]) {
+    it(`does not restore an invalidated mapping after an in-flight ${cachedHit ? 'cached' : 'fresh'} capture`, async () => {
+      const f = fixture();
+      if (cachedHit) {
+        await f.capture();
+      }
+      let signalStarted!: () => void;
+      const started = new Promise<void>((resolve) => (signalStarted = resolve));
+      let finishCapture!: (value: Buffer<ArrayBuffer>) => void;
+      const finish = new Promise<Buffer<ArrayBuffer>>((resolve) => (finishCapture = resolve));
+      f.screenshot.mock.mockImplementationOnce(async () => {
+        signalStarted();
+        return await finish;
+      });
+      const pending = f.capture();
+      await started;
+      f.setPorts([{id: 'port-b', screenId: 1, displayClass: 0, isMain: true}]);
+      assert.equal((await f.capture({cacheDisplayId: false}, 'DEVICE-A')).toString(), 'port-b');
+      finishCapture(Buffer.from('port-a'));
+      await pending;
+      // Keep the old port usable: an incorrect cache hit must not be rescued by a failure.
+      f.screenshot.mock.mockImplementation(async (options) => Buffer.from(options!.displayId!));
+      assert.equal((await f.capture()).toString(), 'port-b');
+      assert.equal(f.getDisplays.mock.callCount(), 3);
+    });
+  }
+
   it('refreshes a replaced UUID on a failed hit and retries the same numeric ID', async () => {
     const f = fixture();
     await f.capture();

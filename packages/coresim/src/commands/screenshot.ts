@@ -10,7 +10,10 @@ interface CachedDisplay {
   portId: string;
   bootMarker: number;
 }
-const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, CachedDisplay>>();
+interface DisplayCacheEntry {
+  display?: CachedDisplay;
+}
+const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, DisplayCacheEntry>>();
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -46,10 +49,7 @@ export async function getScreenshot(
   if (options.cacheDisplayId !== undefined && typeof options.cacheDisplayId !== 'boolean') {
     throw new TypeError('cacheDisplayId must be a boolean');
   }
-  return runCatchingAsync(async () => {
-    const device = await this._findDevice(udid);
-    return await captureScreenshot(this, udid, device, options);
-  });
+  return runCatchingAsync(async () => await captureScreenshot(this, udid, options));
 }
 
 /**
@@ -71,26 +71,33 @@ export async function getDisplays(this: NativeSimctl, udid: string): Promise<Sim
 async function captureScreenshot(
   client: NativeSimctl,
   udid: string,
-  device: NativeDeviceHandle,
   {cacheDisplayId, ...options}: ScreenshotOptions,
 ): Promise<Buffer> {
   const key = udid.toLowerCase();
   let cache = displayCaches.get(client);
   if (!cacheDisplayId || typeof options.displayId !== 'number') {
     cache?.delete(key);
+    const device = await client._findDevice(udid);
     const displayId = await resolveDisplayPortId(device, options.displayId);
     return await device.screenshot({...options, displayId});
   }
   if (!cache) {
-    cache = new LRUCache<string, CachedDisplay>({max: MAX_CACHED_DEVICES});
+    cache = new LRUCache<string, DisplayCacheEntry>({max: MAX_CACHED_DEVICES});
     displayCaches.set(client, cache);
   }
+  const cached = cache.get(key)?.display;
+  // Reserve ownership before device lookup; later captures or invalidation supersede it.
+  const entry: DisplayCacheEntry = {};
+  cache.set(key, entry);
+  const device = await client._findDevice(udid);
   let bootMarker = readBootMarker(device);
-  const cached = cache.get(key);
   if (bootMarker !== null && cached && cached.screenId === options.displayId && bootMarker === cached.bootMarker) {
     try {
       const result = await device.screenshot({...options, displayId: cached.portId});
       if (readBootMarker(device) === bootMarker) {
+        if (cache.peek(key) === entry) {
+          entry.display = cached;
+        }
         return result;
       }
     } catch {
@@ -99,11 +106,10 @@ async function captureScreenshot(
     }
     bootMarker = readBootMarker(device);
   }
-  cache.delete(key);
   const displayId = await resolveDisplayPortId(device, options.displayId);
   const result = await device.screenshot({...options, displayId});
-  if (displayId && bootMarker !== null && readBootMarker(device) === bootMarker) {
-    cache.set(key, {screenId: options.displayId, portId: displayId, bootMarker});
+  if (cache.peek(key) === entry && displayId && bootMarker !== null && readBootMarker(device) === bootMarker) {
+    entry.display = {screenId: options.displayId, portId: displayId, bootMarker};
   }
   return result;
 }
