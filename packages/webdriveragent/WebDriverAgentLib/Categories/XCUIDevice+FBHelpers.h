@@ -120,6 +120,15 @@ typedef NS_ENUM(NSUInteger, FBUIInterfaceAppearance) {
 
 
 /**
+ Information about all pressable buttons available on the device
+
+ @return dictionary with 2 keys:
+ - xctest: supported buttons whose name constants are defined in XCTest
+ - iohid: supported buttons without XCTest constants, implemented using IOHID
+ */
+- (NSDictionary<NSString *, id> *)fb_getPressableButtons;
+
+/**
  Activates Siri service voice recognition with the given text to parse
 
  @param text The actual string to parse

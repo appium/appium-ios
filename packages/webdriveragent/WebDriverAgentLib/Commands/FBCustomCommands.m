@@ -67,6 +67,8 @@
     [[FBRoute GET:@"/wda/batteryInfo"] respondWithTarget:self action:@selector(handleGetBatteryInfo:)],
 #endif
     [[FBRoute POST:@"/wda/pressButton"] respondWithTarget:self action:@selector(handlePressButtonCommand:)],
+    [[FBRoute GET:@"/wda/pressableButtons"].standalone respondWithTarget:self action:@selector(handleGetPressableButtons:)],
+    [[FBRoute GET:@"/wda/pressableButtons"].withoutSession.standalone respondWithTarget:self action:@selector(handleGetPressableButtons:)],
 #if TARGET_OS_WATCH
     [[FBRoute POST:@"/wda/rotateDigitalCrown"] respondWithTarget:self action:@selector(handleRotateDigitalCrownCommand:)],
     [[FBRoute POST:@"/wda/performHandGesture"] respondWithTarget:self action:@selector(handlePerformHandGestureCommand:)],
@@ -350,6 +352,12 @@
     return FBResponseWithUnknownError(error);
   }
   return FBResponseWithOK();
+}
+
++ (id<FBResponsePayload>)handleGetPressableButtons:(FBRouteRequest *)request
+{
+  NSDictionary<NSString *, id> *pressableButtons = [XCUIDevice.sharedDevice fb_getPressableButtons];
+  return FBResponseWithObject(pressableButtons);
 }
 
 #if TARGET_OS_WATCH

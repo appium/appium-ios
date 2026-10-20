@@ -367,6 +367,21 @@ static bool fb_isLocked;
   return fb_availableButtonNames()[buttonName.lowercaseString] != nil;
 }
 
+- (NSDictionary<NSString *, id> *)fb_getPressableButtons
+{
+  NSDictionary<NSString *, NSNumber *> *availableButtons = fb_availableButtonNames();
+  NSArray *xctestButtonNames = [availableButtons.allKeys sortedArrayUsingSelector:@selector(compare:)];
+  // Currently empty - buttons may be added in the future,
+  // so the array is already defined to ensure the API shape 
+  NSArray *iohidButtonNames = [NSArray array];
+
+  return
+  @{
+    @"xctest": xctestButtonNames,
+    @"iohid": iohidButtonNames
+  };
+}
+
 - (BOOL)fb_pressButton:(NSString *)buttonName
            forDuration:(nullable NSNumber *)duration
                  error:(NSError **)error
