@@ -1,4 +1,4 @@
-import {BotError, ErrorCode, stateForCode} from './error.js';
+import {BotError, ErrorCode, isBotError, stateForCode} from './error.js';
 
 /**
  * An arbitrary function of unknown arity/signature, as decompiled from an injected script. Uses
@@ -160,25 +160,9 @@ export function wrapError(err: unknown): ResponseObject {
 /** The message of a script error that has no text of its own. */
 export const SCRIPT_ERROR_FALLBACK = 'The script threw an error';
 
-/**
- * The code of a thrown BotError, or undefined for any other value. Duck-typed, as `instanceof` fails
- * across realms; a page can spoof the marker, so the code must be a known failure code, and a
- * throwing getter counts as no BotError.
- */
+/** The code of a thrown BotError of this bundle, or undefined for any other value, even one that claims to be one. */
 function getAutomationErrorCode(value: unknown): ErrorCode | undefined {
-  try {
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      (value as {isAutomationError?: unknown}).isAutomationError !== true
-    ) {
-      return undefined;
-    }
-    const code = (value as {code?: unknown}).code;
-    return typeof code === 'number' && code !== ErrorCode.SUCCESS && ErrorCode[code] !== undefined ? code : undefined;
-  } catch {
-    return undefined;
-  }
+  return isBotError(value) ? value.code : undefined;
 }
 
 /**

@@ -484,6 +484,8 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
           "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
         ],
         ['a spoofed marker with a success code', "throw {message: 'boom', isAutomationError: true, code: 0};"],
+        ['a spoofed marker with a stale element code', "throw {message: 'boom', isAutomationError: true, code: 10};"],
+        ['a spoofed marker with a stale element code', "throw {message: 'boom', isAutomationError: true, code: 10};"],
         [
           'a spoofed marker whose message getter throws',
           'throw {get message() { throw 1; }, isAutomationError: true, code: 17};',
