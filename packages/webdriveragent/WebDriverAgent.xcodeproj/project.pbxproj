@@ -6224,12 +6224,17 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EEE5CABF1C80361500CBBDD9 /* IOSSettings.xcconfig */;
 			buildSettings = {
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_$(XCODE_VERSION_MAJOR))";
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_$(XCODE_VERSION_MAJOR)) $(WDA_XCTEST_EXCLUDED_MINOR_$(XCODE_VERSION_MINOR))";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphoneos*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_1600)";
 				/* Reuse Xcode 26 framework embedding; add only its missing dependencies. */
 				WDA_XCTEST_EXCLUDED_2600 = "XCTest.framework XCTestCore.framework XCUIAutomation.framework XCTAutomationSupport.framework Testing.framework ResultDataPublisher.framework XCTestSupport.framework libXCTestSwiftSupport.dylib";
 				/* Xcode 16 does not need the additional Swift Testing dependencies. */
 				WDA_XCTEST_EXCLUDED_1600 = "$(WDA_XCTEST_EXCLUDED_2600) lib_TestingInterop.dylib _Testing_Foundation.framework";
+				/* Xcode 26.0-26.3 do not ship lib_TestingInterop.dylib, so there is nothing to embed. */
+				WDA_XCTEST_EXCLUDED_MINOR_2600 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2610 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2620 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2630 = lib_TestingInterop.dylib;
 
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_STATIC_ANALYZER_MODE = deep;
@@ -6285,12 +6290,17 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EEE5CABF1C80361500CBBDD9 /* IOSSettings.xcconfig */;
 			buildSettings = {
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_$(XCODE_VERSION_MAJOR))";
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_$(XCODE_VERSION_MAJOR)) $(WDA_XCTEST_EXCLUDED_MINOR_$(XCODE_VERSION_MINOR))";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphoneos*]" = "$(inherited) $(WDA_XCTEST_EXCLUDED_1600)";
 				/* Reuse Xcode 26 framework embedding; add only its missing dependencies. */
 				WDA_XCTEST_EXCLUDED_2600 = "XCTest.framework XCTestCore.framework XCUIAutomation.framework XCTAutomationSupport.framework Testing.framework ResultDataPublisher.framework XCTestSupport.framework libXCTestSwiftSupport.dylib";
 				/* Xcode 16 does not need the additional Swift Testing dependencies. */
 				WDA_XCTEST_EXCLUDED_1600 = "$(WDA_XCTEST_EXCLUDED_2600) lib_TestingInterop.dylib _Testing_Foundation.framework";
+				/* Xcode 26.0-26.3 do not ship lib_TestingInterop.dylib, so there is nothing to embed. */
+				WDA_XCTEST_EXCLUDED_MINOR_2600 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2610 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2620 = lib_TestingInterop.dylib;
+				WDA_XCTEST_EXCLUDED_MINOR_2630 = lib_TestingInterop.dylib;
 
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_STATIC_ANALYZER_MODE = deep;
