@@ -356,8 +356,7 @@
 
 + (id<FBResponsePayload>)handleGetPressableButtons:(FBRouteRequest *)request
 {
-  NSDictionary<NSString *, id> *pressableButtons = [XCUIDevice.sharedDevice fb_getPressableButtons];
-  return FBResponseWithObject(pressableButtons);
+  return FBResponseWithObject([XCUIDevice.sharedDevice fb_getPressableButtons]);
 }
 
 #if TARGET_OS_WATCH
