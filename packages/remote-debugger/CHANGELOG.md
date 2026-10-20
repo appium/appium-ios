@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.7.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.4...appium-remote-debugger@17.7.5) (2026-10-20)
+
+### Bug Fixes
+
+* **remote-debugger:** give a javascript error for a script error without a code ([#100](https://github.com/appium/appium-ios/issues/100)) ([af541de](https://github.com/appium/appium-ios/commit/af541de46d5ebcd3a16fe0ffe7629e3b6a5fa4ca))
+
+
 ## [17.7.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.3...appium-remote-debugger@17.7.4) (2026-10-19)
 
 **Note:** Version bump only for package appium-remote-debugger
