@@ -1,4 +1,4 @@
-import {BotError, ErrorCode, stateForCode} from './error.js';
+import {BotError, ErrorCode, isBotError, stateForCode} from './error.js';
 
 /**
  * An arbitrary function of unknown arity/signature, as decompiled from an injected script. Uses
@@ -143,17 +143,60 @@ export function wrapResponse(value: unknown): ResponseObject {
 /**
  * Wraps a JavaScript error in an object literal so it can be JSON-ified for transmission. The
  * wrapped value carries both the legacy numeric status code and its W3C WebDriver error string
- * equivalent, so callers can consume either.
+ * equivalent, so callers can consume either. A thrown BotError keeps its code; any other value,
+ * even one with a `code` (e.g. a DOMException), is an unknown error.
  */
-export function wrapError(err: Error & {code?: ErrorCode}): ResponseObject {
-  const code = 'code' in err && typeof err.code === 'number' ? err.code : ErrorCode.UNKNOWN_ERROR;
+export function wrapError(err: unknown): ResponseObject {
+  const code = getAutomationErrorCode(err) ?? ErrorCode.UNKNOWN_ERROR;
   return {
     status: code,
     value: {
-      message: err.message,
+      message: getErrorMessage(err, ''),
       error: stateForCode(code),
     },
   };
+}
+
+/** The message of a script error that has no text of its own. */
+export const SCRIPT_ERROR_FALLBACK = 'The script threw an error';
+
+/** The code of a thrown BotError of this bundle, or undefined for any other value, even one that claims to be one. */
+function getAutomationErrorCode(value: unknown): ErrorCode | undefined {
+  return isBotError(value) ? value.code : undefined;
+}
+
+/**
+ * The message of a thrown value or rejection reason, or `fallback` if it has no text or cannot be read.
+ * An error name other than `Error` leads the message; an object without a message is JSON-ified.
+ */
+export function getErrorMessage(reason: unknown, fallback: string): string {
+  let message = '';
+  try {
+    if (reason !== null && reason !== undefined) {
+      const text = (reason as {message?: unknown}).message;
+      if (text !== undefined) {
+        // a BotError has its own name, such as StaleElementReferenceError: no prefix
+        const name =
+          getAutomationErrorCode(reason) === undefined ? String((reason as {name?: unknown}).name ?? '') : '';
+        message = String(text);
+        message = name && name !== 'Error' ? (message ? `${name}: ${message}` : name) : message;
+      } else {
+        message = typeof reason === 'object' ? (JSON.stringify(reason) ?? '') : String(reason);
+        message = message === '{}' ? '' : message;
+      }
+    }
+  } catch {
+    // e.g. Object.create(null), a circular object or a throwing getter
+  }
+  return message || fallback;
+}
+
+/**
+ * A thrown BotError keeps its code; any other thrown value is a script error (W3C `javascript error`).
+ * Not the `code` of the value: a DOMException has one that is no WebDriver code.
+ */
+export function toBotError(thrown: unknown, fallback: string): BotError {
+  return new BotError(getAutomationErrorCode(thrown) ?? ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(thrown, fallback));
 }
 
 /**
@@ -172,7 +215,7 @@ export function executeScript(
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     ret = wrapResponse(recompiled.apply(null, unwrappedArgs));
   } catch (ex) {
-    ret = wrapError(ex as Error);
+    ret = wrapError(ex);
   }
   return stringify ? JSON.stringify(ret) : ret;
 }
@@ -197,20 +240,21 @@ export function executeAsyncScript(
     if (responseSent) {
       return;
     }
+    // Before onDone: a throwing onDone must not get a second response
+    responseSent = true;
     win.removeEventListener('unload', onunload, true);
     win.clearTimeout(timeoutId);
 
     let wrapped: ResponseObject;
     if (status !== ErrorCode.SUCCESS) {
-      const err = value as {message?: string; stack?: string} | Error;
-      const botError = new BotError(status, err.message || `${value}`);
-      botError.stack = (err as Error).stack || '';
+      const err = value as {message?: string; stack?: string} | null | undefined;
+      const botError = new BotError(status, err?.message || `${value}`);
+      botError.stack = err?.stack || '';
       wrapped = wrapError(botError);
     } else {
       wrapped = wrapResponse(value);
     }
     onDone(stringify ? JSON.stringify(wrapped) : wrapped);
-    responseSent = true;
   }
 
   function onunload(): void {
@@ -225,14 +269,13 @@ export function executeAsyncScript(
     return;
   }
 
-  const recompiled = recompileFunction(fn, win);
-  const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
-  unwrappedArgs.push((value: unknown) => sendResponse(ErrorCode.SUCCESS, value));
-
   win.addEventListener('unload', onunload, true);
 
   const startTime = Date.now();
   try {
+    const recompiled = recompileFunction(fn, win);
+    const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
+    unwrappedArgs.push((value: unknown) => sendResponse(ErrorCode.SUCCESS, value));
     recompiled.apply(win, unwrappedArgs);
 
     // Register the timeout *after* invoking the function, so a callback invoked synchronously
@@ -247,7 +290,8 @@ export function executeAsyncScript(
       Math.max(0, timeout),
     );
   } catch (ex) {
-    sendResponse((ex as {code?: ErrorCode}).code || ErrorCode.UNKNOWN_ERROR, ex);
+    const botError = toBotError(ex, SCRIPT_ERROR_FALLBACK);
+    sendResponse(botError.code, botError);
   }
 }
 

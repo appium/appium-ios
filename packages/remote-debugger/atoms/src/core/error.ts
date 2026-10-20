@@ -109,17 +109,24 @@ export function stateForCode(code: ErrorCode): ErrorState {
   return CODE_TO_STATE[code] ?? ErrorState.UNKNOWN_ERROR;
 }
 
+/** The BotErrors created by this bundle: a brand a page script cannot forge, and valid across realms. */
+const botErrors = new WeakSet<object>();
+
+/** Whether the value is a BotError created by this bundle; unlike `instanceof`, it holds across realms. */
+export function isBotError(value: unknown): value is BotError {
+  return typeof value === 'object' && value !== null && botErrors.has(value);
+}
+
 /**
  * Represents an error returned from a WebDriver command request.
  */
 export class BotError extends Error {
   code: ErrorCode;
   state: ErrorState;
-  /** Duck-typing flag: an Error thrown in one realm and reported to another fails `instanceof`. */
-  isAutomationError = true;
 
   constructor(code: ErrorCode, message: string = '') {
     super(message);
+    botErrors.add(this);
     this.code = code;
     this.state = stateForCode(code);
 
