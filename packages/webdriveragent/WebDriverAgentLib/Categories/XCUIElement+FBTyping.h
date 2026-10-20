@@ -21,6 +21,17 @@ NS_ASSUME_NONNULL_BEGIN
  */
 BOOL FBTypeText(NSString *text, NSUInteger typingSpeed, NSError **error);
 
+/**
+ Same as FBTypeText unless waitForKeyboardOpening is on. On iOS, a field that did not have
+ focus yet is split when no key is hittable. A field that already had focus waits briefly
+ for a key, then the whole string is sent once.
+ */
+BOOL FBTypeTextRespectingKeyboardOpening(NSString *text,
+                                         NSUInteger typingSpeed,
+                                         XCUIApplication * _Nullable application,
+                                         BOOL fieldAlreadyFocused,
+                                         NSError **error);
+
 @interface XCUIElement (FBTyping)
 
 /**

@@ -60,6 +60,8 @@ typedef NS_ENUM(NSInteger, FBConfigurationKeyboardPreference) {
 
 /*! The maximum typing frequency for all typing activities */
 @property (atomic, assign) NSUInteger maxTypingFrequency;
+/*! When YES, a type that starts while the keyboard is not up yet sends the first character, waits, then sends the rest. Default NO. */
+@property (atomic, assign) BOOL waitForKeyboardOpening;
 @property (atomic, readonly) NSUInteger defaultTypingFrequency;
 
 /*! Use singleton test manager proxy */

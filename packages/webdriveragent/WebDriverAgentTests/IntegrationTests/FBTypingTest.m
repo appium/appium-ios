@@ -8,6 +8,7 @@
 
 #import <XCTest/XCTest.h>
 
+#import "FBConfiguration.h"
 #import "FBIntegrationTestCase.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBTyping.h"
@@ -22,6 +23,12 @@
   [super setUp];
   [self launchApplication];
   [self goToAttributesPage];
+}
+
+- (void)tearDown
+{
+  FBConfiguration.sharedInstance.waitForKeyboardOpening = NO;
+  [super tearDown];
 }
 
 - (void)testTextTyping
@@ -51,6 +58,22 @@
 
 - (void)testTextTypingImmediatelyAfterFocus
 {
+  // The field is a storyboard UIKit text field. This passes with the pause off,
+  // which is the default, and it does not reproduce a dropped character.
+  NSString *text = @"TheQuickBrownFox123!";
+  XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
+  [textField tap];
+  NSError *error;
+  XCTAssertTrue([textField fb_typeText:text shouldClear:NO error:&error]);
+  XCTAssertNil(error);
+  XCTAssertEqualObjects(textField.value, text);
+}
+
+- (void)testTextTypingWithWaitForKeyboardOpening
+{
+  // The field is a storyboard UIKit text field. The setting is on and the string still arrives.
+  // This does not reproduce a dropped character.
+  FBConfiguration.sharedInstance.waitForKeyboardOpening = YES;
   NSString *text = @"TheQuickBrownFox123!";
   XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
   [textField tap];

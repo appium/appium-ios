@@ -32,6 +32,7 @@ NSString* const FB_SETTING_SCREENSHOT_ORIENTATION = @"screenshotOrientation";
 NSString* const FB_SETTING_WAIT_FOR_IDLE_TIMEOUT = @"waitForIdleTimeout";
 NSString* const FB_SETTING_ANIMATION_COOL_OFF_TIMEOUT = @"animationCoolOffTimeout";
 NSString* const FB_SETTING_MAX_TYPING_FREQUENCY = @"maxTypingFrequency";
+NSString* const FB_SETTING_WAIT_FOR_KEYBOARD_OPENING = @"waitForKeyboardOpening";
 NSString* const FB_SETTING_RESPECT_SYSTEM_ALERTS = @"respectSystemAlerts";
 NSString* const FB_SETTING_USE_CLEAR_TEXT_SHORTCUT = @"useClearTextShortcut";
 NSString* const FB_SETTING_LIMIT_XPATH_CONTEXT_SCOPE = @"limitXPathContextScope";

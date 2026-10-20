@@ -160,6 +160,10 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
       FBConfiguration.sharedInstance.maxTypingFrequency = [value unsignedIntegerValue];
       return nil;
     };
+    map[FB_SETTING_WAIT_FOR_KEYBOARD_OPENING] = ^FBCommandStatus *(FBSession *session, id value) {
+      FBConfiguration.sharedInstance.waitForKeyboardOpening = [value boolValue];
+      return nil;
+    };
     map[FB_SETTING_USE_CLEAR_TEXT_SHORTCUT] = ^FBCommandStatus *(FBSession *session, id value) {
       FBConfiguration.sharedInstance.useClearTextShortcut = [value boolValue];
       return nil;
@@ -303,6 +307,9 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
     };
     map[FB_SETTING_MAX_TYPING_FREQUENCY] = ^id(FBSession *session) {
       return @(FBConfiguration.sharedInstance.maxTypingFrequency);
+    };
+    map[FB_SETTING_WAIT_FOR_KEYBOARD_OPENING] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.waitForKeyboardOpening);
     };
     map[FB_SETTING_RESPECT_SYSTEM_ALERTS] = ^id(FBSession *session) {
       return @(FBConfiguration.sharedInstance.shouldRespectSystemAlerts);

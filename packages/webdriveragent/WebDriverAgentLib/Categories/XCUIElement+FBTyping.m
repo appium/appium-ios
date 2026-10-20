@@ -41,18 +41,12 @@ BOOL FBTypeText(NSString *text, NSUInteger typingSpeed, NSError **error)
 }
 
 #if TARGET_OS_IOS
-// iOS reports keyboard focus while the keyboard is still opening and drops every
-// character after the first. Once a key is hittable the burst can be sent whole.
+// Used only when waitForKeyboardOpening is on. iOS can report focus while the keyboard
+// is still opening and drop every character after the first.
 static const NSTimeInterval kFBTypingKeyboardSettleDelay = 0.5;
 
-static BOOL FBTypeTextLettingKeyboardSettle(NSString *text,
-                                            NSUInteger typingSpeed,
-                                            BOOL keyboardWasVisible,
-                                            NSError **error)
+static BOOL FBTypeTextLettingKeyboardSettle(NSString *text, NSUInteger typingSpeed, NSError **error)
 {
-  if (keyboardWasVisible || text.length < 2) {
-    return FBTypeText(text, typingSpeed, error);
-  }
   NSRange firstCharacter = [text rangeOfComposedCharacterSequenceAtIndex:0];
   if (NSMaxRange(firstCharacter) >= text.length) {
     return FBTypeText(text, typingSpeed, error);
@@ -64,6 +58,39 @@ static BOOL FBTypeTextLettingKeyboardSettle(NSString *text,
   return FBTypeText([text substringFromIndex:NSMaxRange(firstCharacter)], typingSpeed, error);
 }
 #endif
+
+BOOL FBTypeTextRespectingKeyboardOpening(NSString *text,
+                                         NSUInteger typingSpeed,
+                                         XCUIApplication *application,
+                                         BOOL fieldAlreadyFocused,
+                                         NSError **error)
+{
+#if TARGET_OS_IOS
+  if (FBConfiguration.sharedInstance.waitForKeyboardOpening
+      && text.length > 1
+      && application != nil) {
+    NSError *visibilityError = nil;
+    if (!fieldAlreadyFocused) {
+      BOOL keyboardVisible = [FBKeyboard waitUntilVisibleForApplication:application
+                                                               timeout:0
+                                                                 error:&visibilityError];
+      if (!keyboardVisible) {
+        return FBTypeTextLettingKeyboardSettle(text, typingSpeed, error);
+      }
+    } else {
+      // click then setValue can still be inside the opening animation.
+      // The clear shortcut hides the keyboard for good, so a miss stays one burst.
+      [FBKeyboard waitUntilVisibleForApplication:application
+                                        timeout:kFBTypingKeyboardSettleDelay
+                                          error:&visibilityError];
+    }
+  }
+#else
+  (void)application;
+  (void)fieldAlreadyFocused;
+#endif
+  return FBTypeText(text, typingSpeed, error);
+}
 
 @interface NSString (FBRepeat)
 
@@ -156,12 +183,7 @@ static BOOL FBTypeTextLettingKeyboardSettle(NSString *text,
               error:(NSError **)error
 {
   FBXCElementSnapshotWrapper *wrapped = [FBXCElementSnapshotWrapper ensureWrapped:snapshot];
-#if TARGET_OS_IOS
-  NSError *visibilityError = nil;
-  BOOL keyboardWasVisible = [FBKeyboard waitUntilVisibleForApplication:self.application
-                                                              timeout:0
-                                                                error:&visibilityError];
-#endif
+  BOOL fieldAlreadyFocused = wrapped.fb_hasKeyboardFocus;
   [self fb_prepareForTextInputWithSnapshot:wrapped];
   if (shouldClear && ![self fb_clearTextWithSnapshot:wrapped shouldPrepareForInput:NO error:error]) {
     return NO;
@@ -172,7 +194,7 @@ static BOOL FBTypeTextLettingKeyboardSettle(NSString *text,
   [self typeText:text];
   return YES;
 #elif TARGET_OS_IOS
-  return FBTypeTextLettingKeyboardSettle(text, frequency, keyboardWasVisible, error);
+  return FBTypeTextRespectingKeyboardOpening(text, frequency, self.application, fieldAlreadyFocused, error);
 #else
   return FBTypeText(text, frequency, error);
 #endif

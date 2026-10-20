@@ -556,7 +556,8 @@
   NSString *textToType = [request.arguments[@"value"] componentsJoinedByString:@""];
   NSUInteger frequency = [request.arguments[@"frequency"] unsignedIntegerValue] ?: FBConfiguration.sharedInstance.maxTypingFrequency;
   NSError *error;
-  if (!FBTypeText(textToType, frequency, &error)) {
+  XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+  if (!FBTypeTextRespectingKeyboardOpening(textToType, frequency, application, YES, &error)) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description
                                                                            traceback:nil]);
   }
