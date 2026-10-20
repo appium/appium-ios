@@ -118,11 +118,20 @@
     XCTFail(@"Cannot read the original hinge angle");
     return;
   }
+  BOOL (^setAngleAndWait)(NSNumber *) = ^BOOL(NSNumber *angle) {
+    return [device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]
+      && [[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL{
+        NSNumber *reading = [device fb_getSimulatedHingeAngle:nil];
+        return nil != reading && fabs(reading.doubleValue - angle.doubleValue) < 1;
+      }];
+  };
   @try {
     for (NSNumber *angle in (hasHinge ? @[@0, @180] : @[@0])) {
       if (hasHinge) {
-        XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
-        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2]];
+        if (!setAngleAndWait(angle)) {
+          XCTFail(@"Hinge angle did not reach %@", angle);
+          return;
+        }
       }
       for (NSUInteger attempt = 0; attempt < 2; attempt++) {
         [self.testedApplication activate];
@@ -139,7 +148,7 @@
     }
   } @finally {
     if (nil != originalAngle) {
-      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+      XCTAssertTrue(setAngleAndWait(originalAngle));
     }
   }
 }
