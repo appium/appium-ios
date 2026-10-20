@@ -7,6 +7,7 @@ import {JSDOM} from 'jsdom';
 
 import {getAtom, getScriptForAtom} from '../../lib/atoms.js';
 import {executeAtom} from '../../lib/mixins/execute.js';
+import {getAutomationAtomScript} from '../../lib/rpc/automation/atoms.js';
 import {convertJavascriptEvaluationResult} from '../../lib/utils/javascript.js';
 import {patchLayout} from './helpers/layout.js';
 
@@ -753,6 +754,23 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       };
       window.eval(`(${atom})('arguments[0](1);', [], 1000, window.atomsSpecOnDone, true)`);
       assert.strictEqual(calls, 1);
+    });
+  });
+
+  describe('automation atoms', function () {
+    // Automation.evaluateJavaScriptFunction relays only the message of a thrown error
+    it('embeds the W3C state of a thrown BotError in the message of a plain Error', async function () {
+      const atom = window.eval(`(${await getAutomationAtomScript('clear')})`) as (el: unknown) => void;
+      assert.throws(
+        () => atom(window.document.getElementById('somediv')),
+        (err: Error) => {
+          assert.deepStrictEqual(JSON.parse(err.message), {
+            state: 'invalid element state',
+            message: 'Element must be user-editable in order to clear it.',
+          });
+          return true;
+        },
+      );
     });
   });
 

@@ -1,9 +1,9 @@
-function(){"use strict";var AtomExport=(()=>{var o=Object.defineProperty;var u=Object.getOwnPropertyDescriptor;var g=Object.getOwnPropertyNames;var i=Object.prototype.hasOwnProperty;var f=(t,e)=>{for(var n in e)o(t,n,{get:e[n],enumerable:!0})},l=(t,e,n,r)=>{if(e&&typeof e=="object"||typeof e=="function")for(let a of g(e))!i.call(t,a)&&a!==n&&o(t,a,{get:()=>e[a],enumerable:!(r=u(e,a))||r.enumerable});return t};var s=t=>l(o({},"__esModule",{value:!0}),t);var N={};f(N,{default:()=>m});function m(t){return t.tagName.toLowerCase()}return s(N);})();
+function(){var AtomExport=(()=>{var T=Object.defineProperty;var R=Object.getOwnPropertyDescriptor;var L=Object.getOwnPropertyNames;var S=Object.prototype.hasOwnProperty;var e=(E,_)=>{for(var O in _)T(E,O,{get:_[O],enumerable:!0})},n=(E,_,O,A)=>{if(_&&typeof _=="object"||typeof _=="function")for(let N of L(_))!S.call(E,N)&&N!==O&&T(E,N,{get:()=>_[N],enumerable:!(A=R(_,N))||A.enumerable});return E};var D=E=>n(T({},"__esModule",{value:!0}),E);var M={};e(M,{default:()=>I,isBotError:()=>t});function I(E){return E.tagName.toLowerCase()}var U=new WeakSet;function t(E){return typeof E=="object"&&E!==null&&U.has(E)}return D(M);})();
 
 try {
   return AtomExport.default.apply(null,arguments);
 } catch (e) {
-  if (e && e.isAutomationError) {
+  if (AtomExport.isBotError(e)) {
     throw new Error(JSON.stringify({state: e.state, message: e.message}));
   }
   throw e;
