@@ -362,6 +362,11 @@ static bool fb_isLocked;
   }
 }
 
+- (NSDictionary<NSString *, NSNumber *> *)fb_availableButtonNames
+{
+  return fb_availableButtonNames();
+}
+
 - (BOOL)fb_hasButton:(NSString *)buttonName
 {
   return fb_availableButtonNames()[buttonName.lowercaseString] != nil;

@@ -96,6 +96,13 @@ typedef NS_ENUM(NSUInteger, FBUIInterfaceAppearance) {
 - (BOOL)fb_openUrl:(NSString *)url withApplication:(NSString *)bundleId error:(NSError **)error;
 
 /**
+ Returns the mapping of lowercase button names to their platform-specific raw values.
+
+ @return Dictionary of available button names to button enum values
+ */
+- (NSDictionary<NSString *, NSNumber *> *)fb_availableButtonNames;
+
+/**
  Checks if the device has a specific hardware button available.
 
  @param buttonName The name of the button to check (e.g., "home", "volumeUp", "volumeDown", "action", "camera")
