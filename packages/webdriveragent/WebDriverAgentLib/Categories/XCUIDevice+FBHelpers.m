@@ -9,7 +9,9 @@
 #import "XCUIDevice+FBHelpers.h"
 
 #import <arpa/inet.h>
+#import <dlfcn.h>
 #import <ifaddrs.h>
+#import <mach/mach_time.h>
 #include <notify.h>
 #import <objc/runtime.h>
 
@@ -22,10 +24,62 @@
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIDevice.h"
+#import "XCUIDevice+FBHinge.h"
 #import "XCUIApplication.h"
 
 static const NSTimeInterval FBHomeButtonCoolOffTime = 1.;
 static const NSTimeInterval FBScreenLockTimeout = 5.;
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+// Workaround tracked in https://github.com/appium/appium/issues/22857.
+// Reproduced on the iOS 27.1 Duo simulator with Xcode 27.1: XCTest's Home
+// request returns without backgrounding the app. This direct HID path is also
+// enabled on physical hinged devices, but Home behavior there is unverified.
+// The affected Xcode/runtime version range has not been established. Remove
+// the Home workaround when XCTest-only presses pass testHomeButtonBackgroundsApplication
+// on supported Duo environments, including physical devices and both panels.
+static BOOL FBPressDuoButton(uint32_t usage, NSError **error)
+{
+  static CFTypeRef (*createEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
+  static CFTypeRef (*createClient)(CFAllocatorRef);
+  static void (*dispatchEvent)(CFTypeRef, CFTypeRef);
+  static void (*setTimestamp)(CFTypeRef, uint64_t);
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    void *handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    if (NULL != handle) {
+      createEvent = dlsym(handle, "IOHIDEventCreateKeyboardEvent");
+      createClient = dlsym(handle, "IOHIDEventSystemClientCreate");
+      dispatchEvent = dlsym(handle, "IOHIDEventSystemClientDispatchEvent");
+      setTimestamp = dlsym(handle, "IOHIDEventSetTimeStamp");
+    }
+  });
+  if (NULL == createEvent || NULL == createClient || NULL == dispatchEvent || NULL == setTimestamp) {
+    return [[FBErrorBuilder.builder withDescription:@"The button HID APIs are unavailable"] buildError:error];
+  }
+  CFTypeRef client = createClient(kCFAllocatorDefault);
+  CFTypeRef down = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, usage, YES, 0);
+  CFTypeRef up = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, usage, NO, 0);
+  BOOL ready = NULL != client && NULL != down && NULL != up;
+  if (ready) {
+    // Dispatch a short paired press. Holding Power for 0.5s invokes Siri on Duo.
+    dispatchEvent(client, down);
+    [NSThread sleepForTimeInterval:0.03];
+    setTimestamp(up, mach_absolute_time());
+    dispatchEvent(client, up);
+  }
+  if (NULL != down) {
+    CFRelease(down);
+  }
+  if (NULL != up) {
+    CFRelease(up);
+  }
+  if (NULL != client) {
+    CFRelease(client);
+  }
+  return ready || [[FBErrorBuilder.builder withDescription:@"Cannot create the button HID event or client"] buildError:error];
+}
+#endif
 
 #if TARGET_OS_WATCH
 static NSString *const FBClockFaceBundleId = @"com.apple.clockface";
@@ -200,7 +254,18 @@ static bool fb_isLocked;
     return YES;
   }
 #if TARGET_OS_SIMULATOR
-  [self pressLockButton];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  // XCTest locking times out on Duo / iOS 27.1 (Xcode 27.1). Remove this
+  // workaround once XCTest alone passes testRepeatedLockUnlockAcrossHingePoses.
+  if (self.fb_supportsHingeAngleReading) {
+    if (!FBPressDuoButton(0x30, error)) {
+      return NO;
+    }
+  } else
+#endif
+  {
+    [self pressLockButton];
+  }
 #else
   if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
     // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
@@ -234,14 +299,19 @@ static bool fb_isLocked;
   if (!fb_isLocked) {
     return YES;
   }
-  [self pressButton:XCUIDeviceButtonHome];
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
-#if !TARGET_OS_TV
-  [self pressButton:XCUIDeviceButtonHome];
-#else
-  [self pressButton:XCUIDeviceButtonHome];
+  for (NSUInteger attempt = 0; attempt < 2; attempt++) {
+#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
+    if (self.fb_supportsHingeAngleReading) {
+      if (!FBPressDuoButton(0x40, error)) {
+        return NO;
+      }
+    } else
 #endif
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
+    {
+      [self pressButton:XCUIDeviceButtonHome];
+    }
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
+  }
   return [[[[FBRunLoopSpinner new]
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets unlocked"]
@@ -408,6 +478,11 @@ static bool fb_isLocked;
              withDescriptionFormat:@"The button '%@' is not supported. The device under test only supports the following buttons: %@", buttonName, sortedKeys]
             buildError:error];
   }
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (buttonValue.unsignedIntegerValue == XCUIDeviceButtonHome && self.fb_supportsHingeAngleReading) {
+    return FBPressDuoButton(0x40, error);
+  }
+#endif
   [self pressButton:(XCUIDeviceButton)[buttonValue unsignedIntegerValue]];
   return YES;
 }
