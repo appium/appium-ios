@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {describe, it, mock} from 'node:test';
 
 import {getScreenshot} from '../../src/commands/screenshot.js';
+import {NativeSimDisplayResolutionError, NativeSimOperationError} from '../../src/errors.js';
 import type {NativeSimctl} from '../../src/native-simctl.js';
 import type {ScreenshotOptions, SimDisplayInfo} from '../../src/types.js';
 
@@ -12,7 +13,11 @@ function fixture() {
   const getDisplays = mock.fn(async () => ports);
   const screenshot = mock.fn(async (options?: {displayId?: string}) => {
     if (!ports.some(({id}) => id === options?.displayId)) {
-      throw new Error('Port no longer exists');
+      throw Object.assign(new Error('Port no longer exists'), {
+        name: 'NativeSimOperationError',
+        domain: 'io.appium.coresim.Screenshot',
+        code: 2,
+      });
     }
     return Buffer.from(options!.displayId!);
   });
@@ -194,17 +199,47 @@ describe('opt-in screenshot display cache', () => {
     assert.equal((await f.capture()).toString(), 'new');
   });
 
-  it('retries a failed cached capture only once and never caches failed fresh captures', async () => {
+  it('does not retry unrelated capture failures or cache failed captures', async () => {
     const f = fixture();
     await f.capture();
     f.screenshot.mock.mockImplementation(async () => {
       throw new Error('Encoder failed');
     });
     await assert.rejects(f.capture(), /Encoder failed/);
-    assert.equal(f.screenshot.mock.callCount(), 3);
+    assert.equal(f.screenshot.mock.callCount(), 2);
+    assert.equal(f.getDisplays.mock.callCount(), 1);
     await assert.rejects(f.capture(), /Encoder failed/);
-    assert.equal(f.screenshot.mock.callCount(), 4);
-    assert.equal(f.getDisplays.mock.callCount(), 3);
+    assert.equal(f.screenshot.mock.callCount(), 3);
+    assert.equal(f.getDisplays.mock.callCount(), 2);
+  });
+
+  for (const [domain, code] of [
+    ['io.appium.coresim.Screenshot', 8],
+    ['NSPOSIXErrorDomain', 2],
+  ] as const) {
+    it(`propagates ${domain}/${code} without refreshing or retrying`, async () => {
+      const f = fixture();
+      await f.capture();
+      f.screenshot.mock.mockImplementation(async () => {
+        throw Object.assign(new Error('capture failed'), {name: 'NativeSimOperationError', domain, code});
+      });
+      await assert.rejects(
+        f.capture(),
+        (err: unknown) => err instanceof NativeSimOperationError && err.domain === domain && err.code === code,
+      );
+      assert.equal(f.getDisplays.mock.callCount(), 1);
+      assert.equal(f.screenshot.mock.callCount(), 2);
+    });
+  }
+
+  it('retries a missing cached port only once', async () => {
+    const f = fixture();
+    await f.capture();
+    f.setPorts([]);
+    f.getDisplays.mock.mockImplementation(async () => [{id: 'missing', screenId: 1, displayClass: 0, isMain: true}]);
+    await assert.rejects(f.capture(), NativeSimDisplayResolutionError);
+    assert.equal(f.screenshot.mock.callCount(), 3);
+    assert.equal(f.getDisplays.mock.callCount(), 2);
   });
 
   it('always resolves default selection afresh and rejects new ambiguity', async () => {

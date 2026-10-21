@@ -140,7 +140,7 @@ export interface ScreenshotOptions extends DisplayOptions {
   /**
    * Cache numeric display-ID lookups per client/device while the observed boot marker is unchanged.
    * Defaults to `false`, which clears the selection. Missing boot metadata disables caching.
-   * Failed cached captures retry once with fresh resolution. Disable during display-topology changes.
+   * Missing cached ports retry once with fresh resolution. Disable during display-topology changes.
    * @see https://github.com/appium/appium-ios/pull/51 for boot-marker limitations and validation.
    */
   cacheDisplayId?: boolean;

@@ -1,8 +1,9 @@
 import {LRUCache} from 'lru-cache';
 
+import {NativeSimDisplayResolutionError} from '../errors.js';
 import type {NativeSimctl} from '../native-simctl.js';
 import {SimDeviceState, type NativeDeviceHandle, type ScreenshotOptions, type SimDisplayInfo} from '../types.js';
-import {resolveDisplayPortId, runCatchingAsync, validateDisplayId} from '../utils/index.js';
+import {resolveDisplayPortId, runCatchingAsync, toTypedError, validateDisplayId} from '../utils/index.js';
 
 const MAX_CACHED_DEVICES = 32;
 interface CachedDisplay {
@@ -65,7 +66,7 @@ export async function getDisplays(this: NativeSimctl, udid: string): Promise<Sim
 
 /**
  * Reuses a successful numeric selection within an observed boot, scoped to this client and UDID.
- * Failures discard the entry; a failed cache hit gets one fresh resolution/capture attempt.
+ * Failures discard the entry; an unresolved cached port gets one fresh resolution/capture attempt.
  * Default selection is always fresh so adding a second default port cannot hide ambiguity.
  */
 async function captureScreenshot(
@@ -100,9 +101,12 @@ async function captureScreenshot(
         }
         return result;
       }
-    } catch {
-      // A replaced port or capture failure invalidates the entry. Retry the same numeric ID
-      // once with fresh resolution; never select another display or loop on capture failures.
+    } catch (err) {
+      const error = toTypedError(err);
+      if (!(error instanceof NativeSimDisplayResolutionError)) {
+        throw error;
+      }
+      // Retry a missing cached port once, using the same numeric display ID.
     }
     bootMarker = readBootMarker(device);
   }

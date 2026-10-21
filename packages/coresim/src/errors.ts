@@ -68,6 +68,11 @@ export class NativeSimOperationError extends NativeSimError {
   }
 }
 
+/** The requested display port could not be resolved by the native capture API. */
+export class NativeSimDisplayResolutionError extends NativeSimOperationError {
+  public override name = 'NativeSimDisplayResolutionError';
+}
+
 /** Re-throws a raw error surfaced by the native addon as the matching typed {@link NativeSimError}. */
 export function wrapNativeError(err: unknown): never {
   if (err instanceof NativeSimError) {
@@ -86,6 +91,9 @@ export function wrapNativeError(err: unknown): never {
     case 'NativeSimDispatchError':
       throw new NativeSimDispatchError(message, String(error.exceptionName ?? ''), String(error.reason ?? ''));
     case 'NativeSimOperationError':
+      if (error.domain === 'io.appium.coresim.Screenshot' && (error.code === 2 || error.code === 3)) {
+        throw new NativeSimDisplayResolutionError(message, error.domain, error.code);
+      }
       throw new NativeSimOperationError(message, String(error.domain ?? ''), Number(error.code ?? 0));
     default:
       throw new NativeSimError(message);
