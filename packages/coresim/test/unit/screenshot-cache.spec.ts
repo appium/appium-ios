@@ -214,6 +214,8 @@ describe('opt-in screenshot display cache', () => {
   });
 
   for (const [domain, code] of [
+    ['io.appium.coresim.Screenshot', 2],
+    ['io.appium.coresim.Screenshot', 3],
     ['io.appium.coresim.Screenshot', 8],
     ['NSPOSIXErrorDomain', 2],
   ] as const) {
@@ -225,7 +227,11 @@ describe('opt-in screenshot display cache', () => {
       });
       await assert.rejects(
         f.capture(),
-        (err: unknown) => err instanceof NativeSimOperationError && err.domain === domain && err.code === code,
+        (err: unknown) =>
+          err instanceof NativeSimOperationError &&
+          !(err instanceof NativeSimDisplayResolutionError) &&
+          err.domain === domain &&
+          err.code === code,
       );
       assert.equal(f.getDisplays.mock.callCount(), 1);
       assert.equal(f.screenshot.mock.callCount(), 2);
