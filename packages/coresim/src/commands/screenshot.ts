@@ -1,20 +1,7 @@
-import {LRUCache} from 'lru-cache';
-
-import {NativeSimDisplayResolutionError} from '../errors.js';
 import type {NativeSimctl} from '../native-simctl.js';
-import {SimDeviceState, type NativeDeviceHandle, type ScreenshotOptions, type SimDisplayInfo} from '../types.js';
-import {resolveDisplayPortId, runCatchingAsync, toTypedError, validateDisplayId} from '../utils/index.js';
-
-const MAX_CACHED_DEVICES = 32;
-interface CachedDisplay {
-  screenId: number;
-  portId: string;
-  bootMarker: number;
-}
-interface DisplayCacheEntry {
-  display?: CachedDisplay;
-}
-const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, DisplayCacheEntry>>();
+import type {ScreenshotOptions, SimDisplayInfo} from '../types.js';
+import {runCatchingAsync, validateDisplayId} from '../utils/index.js';
+import {captureScreenshot} from '../utils/screenshot-display-cache.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -27,7 +14,7 @@ declare module '../native-simctl.js' {
  * Captures a device display as an image — the native equivalent of `simctl io <udid> screenshot`
  * (see native/sim_screenshot.mm for how this reads the framebuffer directly, with no temp file or
  * subprocess). Rejects if the resolved display has no renderable surface yet (e.g. not booted).
- * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
+ * Display selection follows {@link validateDisplayId}; numeric IDs resolve to display port UUIDs.
  * See {@link ScreenshotOptions.cacheDisplayId} for optional boot-scoped numeric-ID caching.
  *
  * @param udid — UDID of the device to capture; must be booted
@@ -62,76 +49,4 @@ export async function getScreenshot(
  */
 export async function getDisplays(this: NativeSimctl, udid: string): Promise<SimDisplayInfo[]> {
   return runCatchingAsync(async () => (await this._findDevice(udid)).getDisplays());
-}
-
-/**
- * Reuses a successful numeric selection within an observed boot, scoped to this client and UDID.
- * Failures discard the entry; an unresolved cached port gets one fresh resolution/capture attempt.
- * Default selection is always fresh so adding a second default port cannot hide ambiguity.
- */
-async function captureScreenshot(
-  client: NativeSimctl,
-  udid: string,
-  {cacheDisplayId, ...options}: ScreenshotOptions,
-): Promise<Buffer> {
-  const key = udid.toLowerCase();
-  let cache = displayCaches.get(client);
-  if (!cacheDisplayId || typeof options.displayId !== 'number') {
-    cache?.delete(key);
-    const device = await client._findDevice(udid);
-    const displayId = await resolveDisplayPortId(device, options.displayId);
-    return await device.screenshot({...options, displayId});
-  }
-  if (!cache) {
-    cache = new LRUCache<string, DisplayCacheEntry>({max: MAX_CACHED_DEVICES});
-    displayCaches.set(client, cache);
-  }
-  const cached = cache.get(key)?.display;
-  // Reserve ownership before device lookup; later captures or invalidation supersede it.
-  const entry: DisplayCacheEntry = {};
-  cache.set(key, entry);
-  const device = await client._findDevice(udid);
-  let bootMarker = readBootMarker(device);
-  if (bootMarker !== null && cached && cached.screenId === options.displayId && bootMarker === cached.bootMarker) {
-    try {
-      const result = await device.screenshot({...options, displayId: cached.portId});
-      if (readBootMarker(device) === bootMarker) {
-        if (cache.peek(key) === entry) {
-          entry.display = cached;
-        }
-        return result;
-      }
-    } catch (err) {
-      const error = toTypedError(err);
-      if (!(error instanceof NativeSimDisplayResolutionError)) {
-        throw error;
-      }
-      // Retry a missing cached port once, using the same numeric display ID.
-    }
-    bootMarker = readBootMarker(device);
-  }
-  const displayId = await resolveDisplayPortId(device, options.displayId);
-  const result = await device.screenshot({...options, displayId});
-  if (cache.peek(key) === entry && displayId && bootMarker !== null && readBootMarker(device) === bootMarker) {
-    entry.display = {screenId: options.displayId, portId: displayId, bootMarker};
-  }
-  return result;
-}
-
-/**
- * Returns a boot marker only while the device is Booted. Unsupported or unreadable metadata
- * disables caching. The timestamp persists after shutdown and is not a guaranteed unique UUID.
- */
-function readBootMarker(device: NativeDeviceHandle): number | null {
-  try {
-    if (device.state() !== SimDeviceState.Booted) {
-      return null;
-    }
-    const marker = device.lastBootedAt();
-    return marker !== null && Number.isFinite(marker) && marker > 0 && device.state() === SimDeviceState.Booted
-      ? marker
-      : null;
-  } catch {
-    return null;
-  }
 }
