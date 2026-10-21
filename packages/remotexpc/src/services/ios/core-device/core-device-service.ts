@@ -95,9 +95,18 @@ export abstract class CoreDeviceService extends BaseService {
     this.serviceName = serviceName;
   }
 
+  /**
+   * Closes the current connection, if any. Safe to call more than once.
+   *
+   * A connection still being opened is awaited first, since it would otherwise
+   * be stored after this returns. Its failure does not matter here, the point
+   * is only that it has settled, so it is logged rather than raised: closing
+   * must not fail because a connection nobody will use could not be opened.
+   */
   async close(): Promise<void> {
-    // A connection still being opened would otherwise be stored after close().
-    await this.pendingTransport?.catch((): void => undefined);
+    await this.pendingTransport?.catch((err: Error) => {
+      log.debug(`A connection still being opened failed while closing: ${err.message}`);
+    });
     if (!this.transport) {
       return;
     }

@@ -1,5 +1,9 @@
 import {DATA_CHANNEL_HEADER_SIZE, DATA_CHANNEL_MAGIC, DATA_CHANNEL_MESSAGE_TYPE} from './constants.js';
 
+/** Progress of {@link FileDataDecoder} through one reply of the data service. */
+type DecoderState = 'header' | 'body' | 'confirmation' | 'done';
+
+/** Fixed-size header that precedes every message on the file service data channel. */
 export interface DataChannelHeader {
   type: bigint;
   fileId: bigint;
@@ -73,8 +77,6 @@ export function assertUploadConfirmation(buffer: Buffer, fileId: bigint): void {
   }
 }
 
-type DecoderState = 'header' | 'body' | 'confirmation' | 'done';
-
 /**
  * Incremental decoder for the device's reply to a file data request:
  * a `FILE_DATA` header carrying the file size, the file bytes, then a
@@ -142,6 +144,12 @@ export class FileDataDecoder {
     return payload;
   }
 
+  /**
+   * Decodes the header expected in the current state and checks it belongs to
+   * this transfer.
+   *
+   * @throws {Error} If the type is not the expected one, or the file id differs.
+   */
   private parseHeader(buffer: Buffer): DataChannelHeader {
     const header = decodeDataChannelHeader(buffer);
     const expectedType =

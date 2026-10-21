@@ -62,6 +62,12 @@ export function parseRetrievedFileMetadata(reply: XPCDictionary, size: number): 
   };
 }
 
+/**
+ * Converts one `FileList` node into an entry, or returns nothing when the node
+ * carries no path. A directory is recognised by the trailing slash of its
+ * relative url or by its `resources` bit field, and `metadata` is only set when
+ * the node carries it, which a listed regular file does not.
+ */
 function parseFileNode(node: XPCDictionary | undefined): FileServiceEntry | undefined {
   const relativeUrl = asString(asDictionary(node?.url)?.relative);
   if (!node || !relativeUrl) {
@@ -86,6 +92,7 @@ function parseFileNode(node: XPCDictionary | undefined): FileServiceEntry | unde
   return entry;
 }
 
+/** Percent-decodes a node's relative url, which is how the device sends names. */
 function decodeRelativeUrl(value: string): string {
   // Keep a name that is not valid percent-encoding as the device sent it
   try {

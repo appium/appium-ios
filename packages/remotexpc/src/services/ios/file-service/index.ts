@@ -73,9 +73,28 @@ const log = getLogger('CoreDeviceFileService');
 /** How often the data channel's idle timeout is checked. */
 const WATCHDOG_INTERVAL_MS = 250;
 
+/** The session on one connection. Sessions die with the connection they were created on. */
 interface FileServiceSession {
   transport: RemoteXpcFramedTransport;
+  /** Resolves once the device has answered `CreateSession`. */
   id: Promise<string>;
+}
+
+/** What a push uploads: the bytes, their size, and the metadata of the new file. */
+interface UploadSource {
+  stream: Readable;
+  size: number;
+  permissions: number;
+  modifiedAtSeconds: number;
+}
+
+/** Where a pull writes, while it is running and once it is complete. */
+interface LocalDestination {
+  stream: fs.WriteStream;
+  /** Where the file goes once it is complete. */
+  path: string;
+  /** Where it is written until then. */
+  temporaryPath: string;
 }
 
 /**
@@ -377,6 +396,12 @@ export class CoreDeviceFileService extends CoreDeviceService {
     await this.runFileSystemOperation(FILE_SYSTEM_OPERATION.REMOVE_DIRECTORY, {Path: target}, options);
   }
 
+  /**
+   * Downloads one file: opens the local destination, connects the data channel,
+   * asks the device for the file and streams it. On failure the destination is
+   * destroyed, a temporary local file removed, and a transfer cut short takes
+   * the control connection with it, since the device resets it anyway.
+   */
   private async pullFile(
     remotePath: string,
     destination: string | Writable,
@@ -429,6 +454,12 @@ export class CoreDeviceFileService extends CoreDeviceService {
     }
   }
 
+  /**
+   * Uploads one file: announces it under a temporary name, sends the bytes over
+   * the data channel and renames it into place, so an existing file is only
+   * replaced by a complete upload. An empty file needs no data channel. On
+   * failure the file the announcement created is removed again.
+   */
   private async pushFile(
     source: string | Buffer | Readable,
     remotePath: string,
@@ -587,6 +618,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     }
   }
 
+  /** Sends one `FileSystemOperation`, the command behind rm, mkdir and rename. */
   private async runFileSystemOperation(
     operationType: string,
     fields: XPCDictionary,
@@ -595,6 +627,13 @@ export class CoreDeviceFileService extends CoreDeviceService {
     await this.request(FILE_SERVICE_COMMAND.FILE_SYSTEM_OPERATION, {...fields, OperationType: operationType}, options);
   }
 
+  /**
+   * Sends one command of the control protocol and returns its reply, or throws
+   * the error the reply carries.
+   *
+   * @param onPeerMessage Called for a request the device makes of its own while
+   * the command runs, which a listing answers.
+   */
   private async request(
     command: string,
     fields: XPCDictionary,
@@ -770,13 +809,6 @@ async function waitForDrain(output: Writable, signal: AbortSignal): Promise<void
     output.on('close', done);
     signal.addEventListener('abort', done, {once: true});
   });
-}
-
-interface UploadSource {
-  stream: Readable;
-  size: number;
-  permissions: number;
-  modifiedAtSeconds: number;
 }
 
 /**
@@ -1015,14 +1047,6 @@ function assertInWritableAppContainerDirectory(remotePath: string): void {
   }
 }
 
-interface LocalDestination {
-  stream: fs.WriteStream;
-  /** Where the file goes once it is complete. */
-  path: string;
-  /** Where it is written until then. */
-  temporaryPath: string;
-}
-
 /**
  * Opens a temporary file next to `localPath` for writing, creating its parent
  * directories. It is renamed to `localPath` once the download is complete.
@@ -1100,6 +1124,7 @@ function isSessionRoot(remotePath: string): boolean {
   return target === '' || target === '.';
 }
 
+/** Whether a listed path is a direct child of the directory it was listed from. */
 function isDirectChild(relativePath: string): boolean {
   return !relativePath.includes('/');
 }
@@ -1112,6 +1137,11 @@ function isDirectoryMode(mode: XPCValue | undefined): boolean {
   return ((asNumber(mode) ?? 0) & fs.constants.S_IFMT) === fs.constants.S_IFDIR;
 }
 
+/**
+ * Reads the file id of a reply, which keys the transfer on the data channel.
+ *
+ * @throws {CoreDeviceError} If the reply carries no usable id.
+ */
 function asFileId(value: XPCValue | undefined, command: string): bigint {
   const fileId = typeof value === 'bigint' ? value : asNumber(value);
   if (fileId === undefined || fileId < 0 || !Number.isInteger(Number(fileId))) {

@@ -16,6 +16,7 @@ export interface FileServiceSessionOptions {
   username?: string;
 }
 
+/** Options every file service command accepts. */
 export interface FileServiceRequestOptions {
   /**
    * Maximum time without a message from the device on the control channel, and
@@ -24,6 +25,7 @@ export interface FileServiceRequestOptions {
   timeoutMs?: number;
 }
 
+/** Options a pull or a push accepts on top of {@link FileServiceRequestOptions}. */
 export interface FileServiceTransferOptions extends FileServiceRequestOptions {
   /**
    * Maximum time the data channel may stall while a file is transferred. Time
@@ -33,6 +35,7 @@ export interface FileServiceTransferOptions extends FileServiceRequestOptions {
   idleTimeoutMs?: number;
 }
 
+/** Options a listing accepts. */
 export interface FileServiceListOptions extends FileServiceRequestOptions {
   /**
    * Whether to include everything below the listed directory instead of only
@@ -42,6 +45,7 @@ export interface FileServiceListOptions extends FileServiceRequestOptions {
   recursive?: boolean;
 }
 
+/** Options a removal accepts. */
 export interface FileServiceRemoveOptions extends FileServiceRequestOptions {
   /**
    * Whether to remove a directory together with everything below it. Without
@@ -50,6 +54,7 @@ export interface FileServiceRemoveOptions extends FileServiceRequestOptions {
   recursive?: boolean;
 }
 
+/** Options a push accepts, including the metadata of the new file. */
 export interface FileServicePushOptions extends FileServiceTransferOptions {
   /**
    * Size of the data in bytes. Required when the source is a stream, because
@@ -68,6 +73,7 @@ export interface FileServicePushOptions extends FileServiceTransferOptions {
   modifiedAt?: Date;
 }
 
+/** Metadata of a file the device reported, from a listing or a download. */
 export interface FileServiceFileMetadata {
   /** Size in bytes. */
   size: number;
@@ -78,6 +84,7 @@ export interface FileServiceFileMetadata {
   modifiedAt: Date;
 }
 
+/** One entry of a listing: its path, whether it is a directory, and its metadata when the device sent any. */
 export interface FileServiceEntry {
   /** Path relative to the listed directory, without a trailing slash. Names are in Unicode NFD. */
   path: string;
