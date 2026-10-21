@@ -10,12 +10,12 @@
 #import <UIKit/UIKit.h>
 
 /**
- HID paths for Home, simulator lock/unlock, and rotation on hinged iOS devices.
+ HID paths for Home, lock/unlock, and rotation on hinged iOS devices.
 
  Remove each workaround once its XCTest-only path passes the corresponding regression
  test on supported runtimes and both panels: testHomeButtonBackgroundsApplication,
  testRepeatedLockUnlockAcrossHingePoses, and testRotationOnSelectedDuoDisplay.
- Physical-device Home and rotation behavior also require verification.
+ Physical-device Home, lock/unlock, and rotation behavior require verification.
 
  Once all paths are obsolete, remove the FBHIDOperations branches and imports from
  XCUIDevice+FBHelpers.m and XCUIDevice+FBRotation.m, then delete this module and its
@@ -26,10 +26,8 @@
  */
 @interface FBHIDOperations : NSObject
 
-// Home and rotation apply to hinged iOS devices, including physical devices.
+// All operations apply to hinged iOS devices, including physical devices.
 + (BOOL)appliesToDevice:(XCUIDevice *)device;
-// Lock/unlock use direct button events only on hinged iOS simulators.
-+ (BOOL)usesSimulatedButtonsForDevice:(XCUIDevice *)device;
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 // Call only after the corresponding applicability check succeeds.

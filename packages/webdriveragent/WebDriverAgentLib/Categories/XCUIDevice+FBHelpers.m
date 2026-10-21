@@ -200,32 +200,32 @@ static bool fb_isLocked;
   if (fb_isLocked) {
     return YES;
   }
-#if TARGET_OS_SIMULATOR
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-  if ([FBHIDOperations usesSimulatedButtonsForDevice:self]) {
+  if ([FBHIDOperations appliesToDevice:self]) {
     if (![FBHIDOperations pressLockWithError:error]) {
       return NO;
     }
   } else
 #endif
   {
+#if TARGET_OS_SIMULATOR
     [self pressLockButton];
-  }
 #else
-  if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
-    // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
-    // A 0.5s hold can invoke Siri instead of locking the screen.
-    const NSTimeInterval duration = 0.2;
-    if (![self fb_performIOHIDEventWithPage:0x0C
-                                      usage:0x30
-                                   duration:duration
-                                      error:error]) {
-      return NO;
+    if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
+      // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
+      // A 0.5s hold can invoke Siri instead of locking the screen.
+      const NSTimeInterval duration = 0.2;
+      if (![self fb_performIOHIDEventWithPage:0x0C
+                                        usage:0x30
+                                     duration:duration
+                                        error:error]) {
+        return NO;
+      }
+    } else {
+      [self pressLockButton];
     }
-  } else {
-    [self pressLockButton];
-  }
 #endif
+  }
   return [[[[FBRunLoopSpinner new]
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets locked"]
@@ -245,8 +245,8 @@ static bool fb_isLocked;
     return YES;
   }
   for (NSUInteger attempt = 0; attempt < 2; attempt++) {
-#if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
-    if ([FBHIDOperations usesSimulatedButtonsForDevice:self]) {
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+    if ([FBHIDOperations appliesToDevice:self]) {
       if (![FBHIDOperations pressHomeWithError:error]) {
         return NO;
       }

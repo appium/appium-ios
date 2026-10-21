@@ -68,6 +68,13 @@ static const FBHIDAPI *FBGetHIDAPI(void)
   return &api;
 }
 
+static void FBLogUnverifiedPhysicalHIDOperation(NSString *operation)
+{
+#if !TARGET_OS_SIMULATOR
+  [FBLogger logFmt:@"HID %@ on physical hinged devices: not verified yet.", operation];
+#endif
+}
+
 static BOOL FBWaitForStableInterfaceOrientation(XCUIApplication *application,
                                                UIInterfaceOrientation orientation)
 {
@@ -194,23 +201,16 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 #endif
 }
 
-+ (BOOL)usesSimulatedButtonsForDevice:(XCUIDevice *)device
-{
-#if TARGET_OS_SIMULATOR
-  return [self appliesToDevice:device];
-#else
-  return NO;
-#endif
-}
-
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 + (BOOL)pressHomeWithError:(NSError **)error
 {
+  FBLogUnverifiedPhysicalHIDOperation(@"Home");
   return FBPressHIDButton(FBHIDHomeUsage, error);
 }
 
 + (BOOL)pressLockWithError:(NSError **)error
 {
+  FBLogUnverifiedPhysicalHIDOperation(@"lock");
   // XCTest locking times out on Duo / iOS 27.1 (Xcode 27.1). Remove this
   // workaround once XCTest alone passes testRepeatedLockUnlockAcrossHingePoses.
   return FBPressHIDButton(FBHIDPowerUsage, error);
@@ -219,22 +219,15 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
      interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
+  FBLogUnverifiedPhysicalHIDOperation(@"rotation");
   XCUIApplication *application = XCUIApplication.fb_activeApplication;
   // Point-based detection can select the cover SpringBoard while the app
   // is on the inner panel. Prefer the session's active application.
   application = FBSession.activeSession.activeApplication ?: application;
   // Keep XCTest's reported device orientation in sync on the simulator too.
   [XCUIDevice sharedDevice].orientation = orientation;
-#if !TARGET_OS_SIMULATOR
-  if (FBWaitForStableInterfaceOrientation(application, interfaceOrientation)) {
-    return YES;
-  }
-  [FBLogger logFmt:@"XCTest did not rotate the app to device orientation %ld on a physical Duo device. "
-    @"Falling back to the vendor HID orientation event; physical-device support is unverified.",
-    (long)orientation];
-#endif
   // On Duo simulators XCTest can update its value without rotating the app.
-  // Dispatch directly instead of waiting for the XCTest path to fail.
+  // Use the same direct HID path on simulators and physical hinged devices.
   if (!FBDispatchHIDOrientation(orientation)) {
     return NO;
   }
