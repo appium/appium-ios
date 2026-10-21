@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.5...appium-webdriveragent@16.17.0) (2026-10-21)
+
+### Features
+
+* **webdriveragent:** add route for retrieving pressButton values ([#102](https://github.com/appium/appium-ios/issues/102)) ([5b4eaaa](https://github.com/appium/appium-ios/commit/5b4eaaacc7b97d571ab269f98a4e23396be7bae1))
+
+
 ## [16.16.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.4...appium-webdriveragent@16.16.5) (2026-10-21)
 
 ### Code Refactoring
