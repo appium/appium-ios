@@ -11,7 +11,6 @@
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
-#import "FBKeyboard.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
 #import "FBRunLoopSpinner.h"
@@ -556,8 +555,14 @@
   NSString *textToType = [request.arguments[@"value"] componentsJoinedByString:@""];
   NSUInteger frequency = [request.arguments[@"frequency"] unsignedIntegerValue] ?: FBConfiguration.sharedInstance.maxTypingFrequency;
   NSError *error;
-  XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  if (!FBTypeTextRespectingKeyboardOpening(textToType, frequency, application, YES, &error)) {
+#if TARGET_OS_IOS
+  NSTimeInterval keyboardWait = FBConfiguration.sharedInstance.keyboardWaitTimeout;
+  if (keyboardWait > 0) {
+    XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+    FBWaitForHittableKey(application, keyboardWait);
+  }
+#endif
+  if (!FBTypeText(textToType, frequency, &error)) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description
                                                                            traceback:nil]);
   }

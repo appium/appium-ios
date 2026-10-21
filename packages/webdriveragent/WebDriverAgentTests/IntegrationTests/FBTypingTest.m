@@ -27,7 +27,7 @@
 
 - (void)tearDown
 {
-  FBConfiguration.sharedInstance.waitForKeyboardOpening = NO;
+  FBConfiguration.sharedInstance.keyboardWaitTimeout = 0;
   [super tearDown];
 }
 
@@ -69,11 +69,10 @@
   XCTAssertEqualObjects(textField.value, text);
 }
 
-- (void)testTextTypingWithWaitForKeyboardOpening
+- (void)testTextTypingWithKeyboardWaitTimeout
 {
-  // The field is a storyboard UIKit text field. The setting is on and the string still arrives.
-  // This does not reproduce a dropped character.
-  FBConfiguration.sharedInstance.waitForKeyboardOpening = YES;
+  // The field is a storyboard UIKit text field. This does not reproduce a dropped character.
+  FBConfiguration.sharedInstance.keyboardWaitTimeout = 0.5;
   NSString *text = @"TheQuickBrownFox123!";
   XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
   [textField tap];

@@ -8,6 +8,8 @@
 
 #import "FBSettingsHandler.h"
 
+#import <math.h>
+
 #import "FBActiveAppDetectionPoint.h"
 #import "FBClassChainQueryParser.h"
 #import "FBCommandStatus.h"
@@ -35,6 +37,7 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
       FB_SETTING_DISMISS_ALERT_BUTTON_SELECTOR,
       FB_SETTING_AUTO_CLICK_ALERT_SELECTOR,
       FB_SETTING_CURRENT_DISPLAY_ID,
+      FB_SETTING_KEYBOARD_WAIT_TIMEOUT,
       nil];
   });
   return keys;
@@ -160,8 +163,22 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
       FBConfiguration.sharedInstance.maxTypingFrequency = [value unsignedIntegerValue];
       return nil;
     };
-    map[FB_SETTING_WAIT_FOR_KEYBOARD_OPENING] = ^FBCommandStatus *(FBSession *session, id value) {
-      FBConfiguration.sharedInstance.waitForKeyboardOpening = [value boolValue];
+    map[FB_SETTING_KEYBOARD_WAIT_TIMEOUT] = ^FBCommandStatus *(FBSession *session, id value) {
+      if (nil == value) {
+        FBConfiguration.sharedInstance.keyboardWaitTimeout = 0;
+        return nil;
+      }
+      if (![value isKindOfClass:NSNumber.class]
+          || CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:@"keyboardWaitTimeout must be a non-negative number of seconds"
+                                                      traceback:nil];
+      }
+      double timeout = [(NSNumber *)value doubleValue];
+      if (timeout < 0 || !isfinite(timeout)) {
+        return [FBCommandStatus invalidArgumentErrorWithMessage:@"keyboardWaitTimeout must be a non-negative number of seconds"
+                                                      traceback:nil];
+      }
+      FBConfiguration.sharedInstance.keyboardWaitTimeout = timeout;
       return nil;
     };
     map[FB_SETTING_USE_CLEAR_TEXT_SHORTCUT] = ^FBCommandStatus *(FBSession *session, id value) {
@@ -308,8 +325,8 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
     map[FB_SETTING_MAX_TYPING_FREQUENCY] = ^id(FBSession *session) {
       return @(FBConfiguration.sharedInstance.maxTypingFrequency);
     };
-    map[FB_SETTING_WAIT_FOR_KEYBOARD_OPENING] = ^id(FBSession *session) {
-      return @(FBConfiguration.sharedInstance.waitForKeyboardOpening);
+    map[FB_SETTING_KEYBOARD_WAIT_TIMEOUT] = ^id(FBSession *session) {
+      return @(FBConfiguration.sharedInstance.keyboardWaitTimeout);
     };
     map[FB_SETTING_RESPECT_SYSTEM_ALERTS] = ^id(FBSession *session) {
       return @(FBConfiguration.sharedInstance.shouldRespectSystemAlerts);
