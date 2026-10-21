@@ -139,3 +139,30 @@ We have not had access to a physical Duo for testing. If you have access to one,
 we would appreciate [reports of its display and capture behavior](https://github.com/appium/WebDriverAgent/issues),
 including the device model, iOS/Xcode and WDA versions, selected display IDs,
 requests and responses, and observed results.
+
+### Rotation on Duo devices
+
+On Duo Simulator 27.1, assigning `XCUIDevice.orientation` can update XCTest's
+reported orientation without rotating the application. On Duo simulators with
+an available hinge sensor, WDA directly dispatches the vendor-defined
+`orientation-picker-control` event used by Xcode 27.1's Duo controls, while also
+keeping XCTest's reported device orientation in sync.
+
+On physical devices with an available hinge sensor, WDA first uses XCTest and
+checks the application's interface orientation after waiting for stability.
+Only if that check fails does WDA log the transition to the vendor HID fallback
+and attempt it. Devices without a hinge retain the XCTest path.
+
+The vendor event has only been verified on the Duo simulator. Its
+`com.apple.Virtualization.VirtualMachines` receiver may not exist on physical
+hardware. Physical-device feedback is welcome; availability of the IOKit APIs
+or successful event submission does not establish that rotation works.
+
+Select the active panel with `currentDisplayId` before rotating. The inner
+panel's native orientation is a quarter turn from the cover panel, so WDA
+translates the requested orientation for the selected display. Both orientation
+and numeric rotation commands use the same path. WDA waits up to five seconds
+for the application's interface orientation to match, then waits for stability;
+event submission alone is not success. An app or panel that does not support
+the requested orientation still returns an error. In particular, the tested
+cover panel did not adopt upside-down portrait.
