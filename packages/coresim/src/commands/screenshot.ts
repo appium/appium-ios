@@ -1,7 +1,8 @@
+import {NativeSimDisplayResolutionError} from '../errors.js';
 import type {NativeSimctl} from '../native-simctl.js';
 import type {ScreenshotOptions, SimDisplayInfo} from '../types.js';
+import {beginDisplaySelection} from '../utils/display-cache.js';
 import {runCatchingAsync, validateDisplayId} from '../utils/index.js';
-import {captureScreenshot} from '../utils/screenshot-display-cache.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -49,4 +50,32 @@ export async function getScreenshot(
  */
 export async function getDisplays(this: NativeSimctl, udid: string): Promise<SimDisplayInfo[]> {
   return runCatchingAsync(async () => (await this._findDevice(udid)).getDisplays());
+}
+
+/** Capture policy stays here; display resolution and cache ownership are operation-independent. */
+async function captureScreenshot(
+  client: NativeSimctl,
+  udid: string,
+  {cacheDisplayId, ...options}: ScreenshotOptions,
+): Promise<Buffer> {
+  const selection = await beginDisplaySelection(client, udid, options.displayId, cacheDisplayId);
+  if (selection.cachedPortId !== undefined) {
+    try {
+      const result = await runCatchingAsync(async () =>
+        selection.device.screenshot({...options, displayId: selection.cachedPortId}),
+      );
+      if (selection.commit(selection.cachedPortId)) {
+        return result;
+      }
+    } catch (err) {
+      if (!(err instanceof NativeSimDisplayResolutionError)) {
+        throw err;
+      }
+    }
+    // Retry a missing cached port or a capture spanning a reboot once, using the same numeric ID.
+  }
+  const displayId = await selection.resolveFresh();
+  const result = await selection.device.screenshot({...options, displayId});
+  selection.commit(displayId);
+  return result;
 }
