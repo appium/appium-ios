@@ -96,7 +96,8 @@ id ResolveDisplayDescriptor(NSArray<NSDictionary*>* candidates, NSString* displa
         return candidate[kCandidateDescriptorKey];
       }
     }
-    *error = MakeError(kScreenshotDisplayNotFound, [NSString stringWithFormat:@"No display with id '%@' was found on this device", displayId]);
+    *error = MakeError(kScreenshotDisplayNotFound,
+                       [NSString stringWithFormat:@"No display with id '%@' was found on this device", displayId]);
     return nil;
   }
   id fallback = nil;
