@@ -13,6 +13,7 @@
         "src/native/addon.cc",
         "src/native/h264_encoder.cc",
         "src/native/openh264_encoder.cc",
+        "src/native/audio_pipeline.cc",
         "src/native/pipeline.cc"
       ],
       "include_dirs": [

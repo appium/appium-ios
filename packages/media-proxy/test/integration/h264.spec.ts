@@ -8,7 +8,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
 import {loadNative} from '../../src/native.js';
-import {createTranscoder} from '../../src/transcoder.js';
+import {createTranscoder, resolveOptions} from '../../src/transcoder.js';
 import type {NativeConfig, NativeUnit, NalAccessUnit, VideoAccessUnit} from '../../src/types.js';
 import {h264NalTypes, H264_ENCODERS, readHevcFixture} from '../helpers/annexb.js';
 
@@ -206,7 +206,7 @@ eachEncoder('HEVC -> H.264', (encoder) => {
 
 // Drives the addon directly: these paths (key-frame requests, output overflow) have no public API.
 eachEncoder('native H.264 key-frame handling', () => {
-  const config: NativeConfig = {outputCodec: 'h264', fps: 60, bitrate: 4_000_000, quality: 80, scale: 100};
+  const config: NativeConfig = resolveOptions({codec: 'h264'});
 
   function open() {
     const units: NativeUnit[] = [];

@@ -25,6 +25,19 @@ const video: VideoAccessUnit = {
 const jpeg: JpegFrame = {data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]), sequence: 2, timestampMicros: 40};
 
 describe('APST framing', () => {
+  it('puts audio units on the audio track', () => {
+    const audio: VideoAccessUnit = {
+      track: 'audio',
+      data: Buffer.from([0xff, 0xf1, 1]),
+      isKeyFrame: true,
+      sequence: 0,
+      timestampMicros: 0,
+    };
+    const buf = encodeApstFrameBuffer(audio);
+    assert.strictEqual(buf.readUInt8(5), 2);
+    assert.strictEqual(buf.readUInt8(6) & 0x02, 0x02);
+  });
+
   it('matches the Android wire layout', () => {
     const buf = encodeApstFrameBuffer(video);
     assert.strictEqual(buf.subarray(0, 4).toString('ascii'), 'APST');

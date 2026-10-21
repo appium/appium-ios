@@ -3,7 +3,7 @@
 ## FFmpeg
 
 Prebuilds ship FFmpeg's libavcodec, libavutil and libswscale as shared libraries, built with
-`--disable-gpl --disable-nonfree --disable-version3` (HEVC decoder, MJPEG encoder and swscale only)
+`--disable-gpl --disable-nonfree --disable-version3` (HEVC and AAC decoders, MJPEG and AAC encoders, and swscale only; the AAC encoder is FFmpeg's own, not FDK)
 and licensed under the GNU LGPL v2.1 or later.
 
 - Version: 8.1.3, source https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz

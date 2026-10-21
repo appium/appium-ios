@@ -6,6 +6,8 @@ already produced by `@appium/coresim` (simulators) and the Android settings app:
 - **H.264**: Annex-B, 4-byte start codes, one picture per unit, no B-frames, SPS/PPS inline on every
   keyframe.
 - **MJPEG**: one standalone JPEG per frame.
+- **Audio** (optional, with H.264): the device's AAC-ELD re-encoded to ADTS-framed AAC-LC units, interleaved into the same
+  sequence like coresim's `audio` option.
 
 The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCapture`
 (iOS 27+ real devices). Supported platforms: darwin, linux, win32 on x64 and arm64.
@@ -37,13 +39,15 @@ const server = await serveMjpeg(frames, {port: 0});
 console.log(server.url);
 ```
 
+Audio: pass `audio: true` and the audio source as the fourth argument (see [Audio](#audio)).
+
 Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `units()`, `end()`
 (flush, then finish) and `close()` (stop consuming and discard output now; the promise resolves once the
 native side has drained its few queued units and freed the codecs). Always call one of them.
 
 ## Building from source
 
-The addon links a minimal LGPL FFmpeg (HEVC decoder, MJPEG encoder, swscale) pinned in
+The addon links a minimal LGPL FFmpeg (HEVC and AAC decoders, MJPEG and AAC encoders, swscale) pinned in
 `scripts/ci/build-ffmpeg.sh`; there is no system FFmpeg dependency.
 
 ```sh
@@ -63,9 +67,31 @@ libs it needs (and `ffmpeg-build-info.txt`, the exact `configure` line).
 | `bitrate` (h264)     | 4,000,000 | bits/sec, > 0 and <= 2^31-1                           |
 | `quality` (mjpeg)    | 80        | 0-100                                                 |
 | `scale` (mjpeg)      | 100       | Percent of the source resolution, > 0 and <= 100      |
+| `audio` (h264)       | false     | Also transcode the device audio, see [Audio](#audio)  |
+| `audioSpecificConfig` (h264) | 480-sample ELD | `AudioSpecificConfig` of the pushed audio  |
 
 Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
-`JpegStreamOptions`. Android-only options (`resolution`, `localPort`, audio, ...) are not supported.
+`JpegStreamOptions`. Android-only options (`resolution`, `localPort`, ...) are not supported.
+
+## Audio
+
+```ts
+const audio = await AudioStreamCapture.start(display);
+for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', audio: true}, signal, audio.accessUnits())) {
+  // unit.track is 'video' or 'audio'; audio units are ADTS AAC-LC (48 kHz stereo, 128 kbps), isKeyFrame always true
+}
+```
+
+With `createTranscoder` call `pushAudio({data, timestamp, receivedAt})` next to `push()`. `sequence` counts per track;
+`timestampMicros` is on one clock. Each track is rebased with its own RTP clock (90 kHz video, 48 kHz audio) and the tracks
+are offset by when their first unit arrived (`receivedAt`, the `performance.now()` remotexpc stamps; the push time
+otherwise), since remotexpc exposes no RTCP sender report to map the two clocks. The audio source ends with the video and a
+failing audio source fails the stream. Audio is never dropped by a video resync.
+
+The native `aac` decoder reads the device's AAC-ELD with its **480-sample** frames, which is why the default
+`AudioSpecificConfig` differs from the one the device advertises (see remotexpc `aac-eld.ts`). A gap of lost packets up to
+1 s is filled with silence so audio keeps its place on the clock; a longer one restarts the audio timeline. Added latency is
+one AAC frame (1024 samples, ~21 ms) plus the ELD unit being waited for (≤ 10 ms). AAC is patent-encumbered like HEVC/H.264.
 
 ### Framing helpers
 
@@ -116,6 +142,8 @@ encoder for diagnostics. OpenH264 output is multi-slice (one slice per core, up 
 | H.264 VideoToolbox        | ~8 ms   | ~11 ms   | low-latency rate control; the first few frames after start-up may be dropped |
 | H.264 OpenH264 (software) | ~15 ms  | ~20 ms   | needs ~4 cores; fast-changing content (video, games) can fall behind 60 fps  |
 
+Audio (ELD → AAC-LC): p50 ~22 ms, p95 ~24 ms from the last input unit of a frame; negligible CPU.
+
 RSS stays flat over a 60 s soak. The pipeline itself (decode, colour conversion) costs under 2 ms per frame, so latency is
 the encoder's.
 
@@ -126,5 +154,5 @@ The package is Apache-2.0. The native addon links FFmpeg built **LGPL-only** (no
 `THIRD_PARTY_NOTICES.md`. x264 is never bundled. H.264 uses the platform's encoder (VideoToolbox on macOS, Media Foundation on Windows: both system components). The software fallback uses Cisco's OpenH264,
 which the client downloads at runtime (not redistributed by this package) to be covered by Cisco's patent grant.
 
-Note that HEVC and H.264 are patent-encumbered formats; hardware codecs rely on the platform's
+Note that HEVC, H.264 and AAC are patent-encumbered formats; hardware codecs rely on the platform's
 licenses, while software decode/encode carries none from this package.

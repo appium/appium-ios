@@ -59,7 +59,7 @@ rm -rf "ffmpeg-$FFMPEG_VERSION"
 tar xf "$TARBALL"
 cd "ffmpeg-$FFMPEG_VERSION"
 
-# Only what the transcoder needs: HEVC decode, MJPEG encode, swscale. No GPL/nonfree parts.
+# Only what the transcoder needs: HEVC decode, MJPEG encode, swscale, AAC (ELD in, LC out). No GPL/nonfree parts.
 ARGS=(
   --prefix="$PREFIX"
   --disable-everything --disable-autodetect --disable-programs --disable-doc --disable-debug
@@ -69,8 +69,8 @@ ARGS=(
   # Private library names (libavcodec-appium...): never shadowed by, or confused with, another FFmpeg in the process.
   --build-suffix=-appium
   --enable-avcodec --enable-avutil --enable-swscale
-  --enable-decoder=hevc --enable-parser=hevc
-  --enable-encoder=mjpeg
+  --enable-decoder=hevc,aac --enable-parser=hevc
+  --enable-encoder=mjpeg,aac
 )
 
 case "$PLATFORM" in
