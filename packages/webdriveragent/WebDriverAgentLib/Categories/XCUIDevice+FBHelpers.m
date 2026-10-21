@@ -32,7 +32,7 @@ static NSString *const FBClockFaceBundleId = @"com.apple.clockface";
 #endif
 
 #if TARGET_OS_TV
-NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
+NSDictionary<NSString *, NSNumber *> *FBAvailableButtonNames(void) {
   static dispatch_once_t onceToken;
   static NSDictionary *result;
   dispatch_once(&onceToken, ^{
@@ -63,7 +63,7 @@ NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
   return result;
 }
 #else
-NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
+NSDictionary<NSString *, NSNumber *> *FBAvailableButtonNames(void) {
   static dispatch_once_t onceToken;
   static NSDictionary *result;
   dispatch_once(&onceToken, ^{
@@ -362,14 +362,9 @@ static bool fb_isLocked;
   }
 }
 
-- (NSDictionary<NSString *, NSNumber *> *)fb_availableButtonNames
-{
-  return fb_availableButtonNames();
-}
-
 - (BOOL)fb_hasButton:(NSString *)buttonName
 {
-  return fb_availableButtonNames()[buttonName.lowercaseString] != nil;
+  return FBAvailableButtonNames()[buttonName.lowercaseString] != nil;
 }
 
 - (BOOL)fb_pressButton:(NSString *)buttonName
@@ -380,7 +375,7 @@ static bool fb_isLocked;
   return [self fb_pressButton:buttonName error:error];
 #else
 
-  NSDictionary<NSString *, NSNumber *> *availableButtons = fb_availableButtonNames();
+  NSDictionary<NSString *, NSNumber *> *availableButtons = FBAvailableButtonNames();
   NSNumber *buttonValue = availableButtons[buttonName.lowercaseString];
   
   if (!buttonValue) {
@@ -404,7 +399,7 @@ static bool fb_isLocked;
 - (BOOL)fb_pressButton:(NSString *)buttonName
                  error:(NSError **)error
 {
-  NSDictionary<NSString *, NSNumber *> *availableButtons = fb_availableButtonNames();
+  NSDictionary<NSString *, NSNumber *> *availableButtons = FBAvailableButtonNames();
   NSNumber *buttonValue = availableButtons[buttonName.lowercaseString];
   
   if (!buttonValue) {

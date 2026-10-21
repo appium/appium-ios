@@ -67,8 +67,8 @@
     [[FBRoute GET:@"/wda/batteryInfo"] respondWithTarget:self action:@selector(handleGetBatteryInfo:)],
 #endif
     [[FBRoute POST:@"/wda/pressButton"] respondWithTarget:self action:@selector(handlePressButtonCommand:)],
-    [[FBRoute GET:@"/wda/pressableButtons"].standalone respondWithTarget:self action:@selector(handleGetPressableButtons:)],
-    [[FBRoute GET:@"/wda/pressableButtons"].withoutSession.standalone respondWithTarget:self action:@selector(handleGetPressableButtons:)],
+    [[FBRoute GET:@"/wda/pressableButtons"] respondWithTarget:self action:@selector(handleGetPressableButtons:)],
+    [[FBRoute GET:@"/wda/pressableButtons"].withoutSession respondWithTarget:self action:@selector(handleGetPressableButtons:)],
 #if TARGET_OS_WATCH
     [[FBRoute POST:@"/wda/rotateDigitalCrown"] respondWithTarget:self action:@selector(handleRotateDigitalCrownCommand:)],
     [[FBRoute POST:@"/wda/performHandGesture"] respondWithTarget:self action:@selector(handlePerformHandGestureCommand:)],
@@ -356,12 +356,8 @@
 
 + (id<FBResponsePayload>)handleGetPressableButtons:(FBRouteRequest *)request
 {
-  NSDictionary<NSString *, NSNumber *> *availableButtons = [XCUIDevice.sharedDevice fb_availableButtonNames];
-  NSArray *xctestButtonNames = [availableButtons.allKeys sortedArrayUsingSelector:@selector(compare:)];
-
-  return FBResponseWithObject(@{
-    @"xctest": xctestButtonNames,
-  });
+  NSArray *xctestButtonNames = [FBAvailableButtonNames().allKeys sortedArrayUsingSelector:@selector(compare:)];
+  return FBResponseWithObject(@{@"xctest": xctestButtonNames, @"iohid": @[]});
 }
 
 #if TARGET_OS_WATCH
