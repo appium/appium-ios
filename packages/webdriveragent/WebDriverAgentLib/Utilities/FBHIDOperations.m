@@ -24,6 +24,50 @@
 #import "XCUIElement+FBUtilities.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+
+static const uint32_t FBHIDConsumerUsagePage = 0x0C;
+static const uint32_t FBHIDHomeUsage = 0x40;
+static const uint32_t FBHIDPowerUsage = 0x30;
+static const uint32_t FBHIDOrientationUsagePage = 0xff61;
+static const uint32_t FBHIDOrientationUsage = 0x5b;
+static const CFOptionFlags FBHIDBinarySerialization = 1;
+static const NSTimeInterval FBHIDButtonPressDuration = 0.03;
+static const NSTimeInterval FBHIDRotationTimeout = 5.0;
+
+typedef struct {
+  CFTypeRef (*createKeyboardEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
+  CFTypeRef (*createVendorEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t,
+                               uint32_t, uint8_t *, CFIndex, uint32_t);
+  CFTypeRef (*createClient)(CFAllocatorRef);
+  void (*dispatchEvent)(CFTypeRef, CFTypeRef);
+  void (*setTimestamp)(CFTypeRef, uint64_t);
+  CFDataRef (*serialize)(CFTypeRef, CFOptionFlags);
+} FBHIDAPI;
+
+static const FBHIDAPI *FBGetHIDAPI(void)
+{
+  static FBHIDAPI api;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    // Keep the framework loaded for the lifetime of the cached function pointers.
+    void *handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    if (NULL == handle) {
+      return;
+    }
+    api.createKeyboardEvent = (CFTypeRef (*)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t))
+      dlsym(handle, "IOHIDEventCreateKeyboardEvent");
+    api.createVendorEvent = (CFTypeRef (*)(CFAllocatorRef, uint64_t, uint32_t, uint32_t,
+                                         uint32_t, uint8_t *, CFIndex, uint32_t))
+      dlsym(handle, "IOHIDEventCreateVendorDefinedEvent");
+    api.createClient = (CFTypeRef (*)(CFAllocatorRef))dlsym(handle, "IOHIDEventSystemClientCreate");
+    api.dispatchEvent = (void (*)(CFTypeRef, CFTypeRef))dlsym(handle, "IOHIDEventSystemClientDispatchEvent");
+    api.setTimestamp = (void (*)(CFTypeRef, uint64_t))dlsym(handle, "IOHIDEventSetTimeStamp");
+    api.serialize = (CFDataRef (*)(CFTypeRef, CFOptionFlags))dlsym(handle, "IOCFSerialize");
+  });
+  // Each operation checks only the symbols it needs.
+  return &api;
+}
+
 // Workaround tracked in https://github.com/appium/appium/issues/22857.
 // Reproduced on the iOS 27.1 Duo simulator with Xcode 27.1: XCTest's Home
 // request returns without backgrounding the app. This direct HID path is also
@@ -33,33 +77,20 @@
 // on supported Duo environments, including physical devices and both panels.
 static BOOL FBPressDuoButton(uint32_t usage, NSError **error)
 {
-  static CFTypeRef (*createEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
-  static CFTypeRef (*createClient)(CFAllocatorRef);
-  static void (*dispatchEvent)(CFTypeRef, CFTypeRef);
-  static void (*setTimestamp)(CFTypeRef, uint64_t);
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    void *handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
-    if (NULL != handle) {
-      createEvent = dlsym(handle, "IOHIDEventCreateKeyboardEvent");
-      createClient = dlsym(handle, "IOHIDEventSystemClientCreate");
-      dispatchEvent = dlsym(handle, "IOHIDEventSystemClientDispatchEvent");
-      setTimestamp = dlsym(handle, "IOHIDEventSetTimeStamp");
-    }
-  });
-  if (NULL == createEvent || NULL == createClient || NULL == dispatchEvent || NULL == setTimestamp) {
+  const FBHIDAPI *api = FBGetHIDAPI();
+  if (NULL == api->createKeyboardEvent || NULL == api->createClient || NULL == api->dispatchEvent || NULL == api->setTimestamp) {
     return [[FBErrorBuilder.builder withDescription:@"The button HID APIs are unavailable"] buildError:error];
   }
-  CFTypeRef client = createClient(kCFAllocatorDefault);
-  CFTypeRef down = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, usage, YES, 0);
-  CFTypeRef up = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0x0C, usage, NO, 0);
+  CFTypeRef client = api->createClient(kCFAllocatorDefault);
+  CFTypeRef down = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDConsumerUsagePage, usage, YES, 0);
+  CFTypeRef up = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDConsumerUsagePage, usage, NO, 0);
   BOOL ready = NULL != client && NULL != down && NULL != up;
   if (ready) {
     // Dispatch a short paired press. Holding Power for 0.5s invokes Siri on Duo.
-    dispatchEvent(client, down);
-    [NSThread sleepForTimeInterval:0.03];
-    setTimestamp(up, mach_absolute_time());
-    dispatchEvent(client, up);
+    api->dispatchEvent(client, down);
+    [NSThread sleepForTimeInterval:FBHIDButtonPressDuration];
+    api->setTimestamp(up, mach_absolute_time());
+    api->dispatchEvent(client, up);
   }
   if (NULL != down) {
     CFRelease(down);
@@ -105,23 +136,8 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
       return NO;
   }
 
-  static CFDataRef (*serialize)(CFTypeRef, CFOptionFlags);
-  static CFTypeRef (*createEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t,
-                                  uint32_t, uint8_t *, CFIndex, uint32_t);
-  static CFTypeRef (*createClient)(CFAllocatorRef);
-  static void (*dispatchEvent)(CFTypeRef, CFTypeRef);
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    void *handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
-    if (NULL != handle) {
-      serialize = (CFDataRef (*)(CFTypeRef, CFOptionFlags))dlsym(handle, "IOCFSerialize");
-      createEvent = (CFTypeRef (*)(CFAllocatorRef, uint64_t, uint32_t, uint32_t,
-                                  uint32_t, uint8_t *, CFIndex, uint32_t))dlsym(handle, "IOHIDEventCreateVendorDefinedEvent");
-      createClient = (CFTypeRef (*)(CFAllocatorRef))dlsym(handle, "IOHIDEventSystemClientCreate");
-      dispatchEvent = (void (*)(CFTypeRef, CFTypeRef))dlsym(handle, "IOHIDEventSystemClientDispatchEvent");
-    }
-  });
-  if (NULL == serialize || NULL == createEvent || NULL == createClient || NULL == dispatchEvent) {
+  const FBHIDAPI *api = FBGetHIDAPI();
+  if (NULL == api->serialize || NULL == api->createVendorEvent || NULL == api->createClient || NULL == api->dispatchEvent) {
     return NO;
   }
   NSDictionary *payload = @{
@@ -131,17 +147,17 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
     @"value": value,
   };
   // The receiver expects IOCF binary serialization, not a binary plist.
-  CFDataRef data = serialize((__bridge CFTypeRef)payload, 1);
+  CFDataRef data = api->serialize((__bridge CFTypeRef)payload, FBHIDBinarySerialization);
   if (NULL == data) {
     return NO;
   }
-  CFTypeRef event = createEvent(kCFAllocatorDefault, mach_absolute_time(), 0xff61, 0x5b, 0,
+  CFTypeRef event = api->createVendorEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDOrientationUsagePage, FBHIDOrientationUsage, 0,
                                 (uint8_t *)CFDataGetBytePtr(data), CFDataGetLength(data), 0);
   CFRelease(data);
-  CFTypeRef client = createClient(kCFAllocatorDefault);
+  CFTypeRef client = api->createClient(kCFAllocatorDefault);
   BOOL canDispatch = NULL != event && NULL != client;
   if (canDispatch) {
-    dispatchEvent(client, event);
+    api->dispatchEvent(client, event);
   }
   if (NULL != event) {
     CFRelease(event);
@@ -177,14 +193,14 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 + (BOOL)pressHomeWithError:(NSError **)error
 {
-  return FBPressDuoButton(0x40, error);
+  return FBPressDuoButton(FBHIDHomeUsage, error);
 }
 
 + (BOOL)pressLockWithError:(NSError **)error
 {
   // XCTest locking times out on Duo / iOS 27.1 (Xcode 27.1). Remove this
   // workaround once XCTest alone passes testRepeatedLockUnlockAcrossHingePoses.
-  return FBPressDuoButton(0x30, error);
+  return FBPressDuoButton(FBHIDPowerUsage, error);
 }
 
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
@@ -211,7 +227,7 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
     return NO;
   }
   // Event dispatch is asynchronous. Check the app, not just XCTest's value.
-  if (![[[FBRunLoopSpinner new] timeout:5.0] spinUntilTrue:^BOOL{
+  if (![[[FBRunLoopSpinner new] timeout:FBHIDRotationTimeout] spinUntilTrue:^BOOL{
     return application.interfaceOrientation == interfaceOrientation;
   }]) {
     return NO;

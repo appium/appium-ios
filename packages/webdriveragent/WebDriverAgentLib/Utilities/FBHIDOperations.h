@@ -10,7 +10,7 @@
 #import <UIKit/UIKit.h>
 
 /**
- Temporary HID paths for Home, simulator lock/unlock, and rotation on hinged iOS devices.
+ HID paths for Home, simulator lock/unlock, and rotation on hinged iOS devices.
 
  Remove each workaround once its XCTest-only path passes the corresponding regression
  test on supported runtimes and both panels: testHomeButtonBackgroundsApplication,
