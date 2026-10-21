@@ -90,10 +90,9 @@ export function wrapNativeError(err: unknown): never {
       );
     case 'NativeSimDispatchError':
       throw new NativeSimDispatchError(message, String(error.exceptionName ?? ''), String(error.reason ?? ''));
+    case 'NativeSimDisplayResolutionError':
+      throw new NativeSimDisplayResolutionError(message, String(error.domain ?? ''), Number(error.code ?? 0));
     case 'NativeSimOperationError':
-      if (error.domain === 'io.appium.coresim.Screenshot' && (error.code === 2 || error.code === 3)) {
-        throw new NativeSimDisplayResolutionError(message, error.domain, error.code);
-      }
       throw new NativeSimOperationError(message, String(error.domain ?? ''), Number(error.code ?? 0));
     default:
       throw new NativeSimError(message);
