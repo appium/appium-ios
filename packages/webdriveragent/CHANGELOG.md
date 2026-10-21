@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.16.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.3...appium-webdriveragent@16.16.4) (2026-10-21)
+
+### Bug Fixes
+
+* **webdriveragent:** dispatch Home button HID events on Duo simulators ([#78](https://github.com/appium/appium-ios/issues/78)) ([19ce62f](https://github.com/appium/appium-ios/commit/19ce62f69b657e5b0fe2f7f74545c56f9631beb6)), closes [#85](https://github.com/appium/appium-ios/issues/85)
+* **webdriveragent:** fall back to vendor HID events for Duo rotation ([#81](https://github.com/appium/appium-ios/issues/81)) ([71d1ae0](https://github.com/appium/appium-ios/commit/71d1ae01dd1cea5b85063ed74c1b51f02134c6c5))
+
+
 ## [16.16.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.2...appium-webdriveragent@16.16.3) (2026-10-19)
 
 ### Bug Fixes
