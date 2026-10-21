@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.16.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.4...appium-webdriveragent@16.16.5) (2026-10-21)
+
+### Code Refactoring
+
+* move HID related implementation in a separate module ([#103](https://github.com/appium/appium-ios/issues/103)) ([701eb60](https://github.com/appium/appium-ios/commit/701eb601455c7ab04c283dbc8a0da055eb7e3199))
+
+
 ## [16.16.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.3...appium-webdriveragent@16.16.4) (2026-10-21)
 
 ### Bug Fixes
