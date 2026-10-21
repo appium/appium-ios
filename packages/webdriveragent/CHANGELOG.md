@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.0...appium-webdriveragent@16.17.1) (2026-10-21)
+
+### Bug Fixes
+
+* **webdriveragent:** do not embed lib_TestingInterop.dylib on Xcode 26.0-26.3 ([#104](https://github.com/appium/appium-ios/issues/104)) ([a78d1fe](https://github.com/appium/appium-ios/commit/a78d1fee46b483613b2e659936b490573cfc81d6))
+
+
 ## [16.17.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.5...appium-webdriveragent@16.17.0) (2026-10-21)
 
 ### Features
