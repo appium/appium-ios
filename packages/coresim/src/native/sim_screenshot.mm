@@ -7,15 +7,14 @@
 
 #include "objc_runtime.h"
 #include "safe_dispatch.h"
+#include "screenshot_errors.h"
 
 namespace coresim {
 
 namespace {
 
-NSString* const kScreenshotErrorDomain = @"io.appium.coresim.Screenshot";
-
-NSError* MakeError(NSInteger code, NSString* message) {
-  return [NSError errorWithDomain:kScreenshotErrorDomain code:code userInfo:@{NSLocalizedDescriptionKey : message}];
+NSError* MakeError(ScreenshotErrorCode code, NSString* message) {
+  return [NSError errorWithDomain:@(kScreenshotErrorDomain) code:code userInfo:@{NSLocalizedDescriptionKey : message}];
 }
 
 id IdGetter(id target, const std::string& selectorName) {
@@ -56,7 +55,7 @@ NSString* const kCandidateDescriptorKey = @"descriptor";
 NSArray<NSDictionary*>* RenderableDisplayCandidates(id device, NSError** error) {
   id ioClient = IdGetter(device, "io");
   if (ioClient == nil) {
-    *error = MakeError(1, @"Device has no IO client available — is it booted?");
+    *error = MakeError(kScreenshotNoIOClient, @"Device has no IO client available — is it booted?");
     return nil;
   }
 
@@ -97,7 +96,7 @@ id ResolveDisplayDescriptor(NSArray<NSDictionary*>* candidates, NSString* displa
         return candidate[kCandidateDescriptorKey];
       }
     }
-    *error = MakeError(2, [NSString stringWithFormat:@"No display with id '%@' was found on this device", displayId]);
+    *error = MakeError(kScreenshotDisplayNotFound, [NSString stringWithFormat:@"No display with id '%@' was found on this device", displayId]);
     return nil;
   }
   id fallback = nil;
@@ -110,7 +109,7 @@ id ResolveDisplayDescriptor(NSArray<NSDictionary*>* candidates, NSString* displa
     }
   }
   if (fallback == nil) {
-    *error = MakeError(3, @"No renderable display port was found on this device");
+    *error = MakeError(kScreenshotNoRenderableDisplay, @"No renderable display port was found on this device");
   }
   return fallback;
 }
@@ -159,7 +158,7 @@ id ResolveScreenCaptureService(id device, NSError** error) {
       "startRecordingFromScreen:maskPolicy:assetWriterOutputSettings:outputFile:completionQueue:completionHandler:";
   id ioClient = IdGetter(device, "io");
   if (ioClient == nil) {
-    *error = MakeError(11, @"Device has no IO client available — is it booted?");
+    *error = MakeError(kScreenshotNoCaptureServiceIOClient, @"Device has no IO client available — is it booted?");
     return nil;
   }
   NSArray* ports = IdGetter(ioClient, "ioPorts");
@@ -214,7 +213,7 @@ NSData* EncodeImage(CGImageRef cgImage, ScreenshotFormat format, NSNumber* jpegQ
   CGImageDestinationRef destination =
       CGImageDestinationCreateWithData((__bridge CFMutableDataRef)imageData, (__bridge CFStringRef)uti, 1, NULL);
   if (destination == nullptr) {
-    *error = MakeError(7, @"Failed to create an image encoder");
+    *error = MakeError(kScreenshotEncoderCreationFailed, @"Failed to create an image encoder");
     return nil;
   }
   // kCGImageDestinationLossyCompressionQuality is meaningless for PNG (always lossless) — ImageIO
@@ -228,7 +227,7 @@ NSData* EncodeImage(CGImageRef cgImage, ScreenshotFormat format, NSNumber* jpegQ
   BOOL ok = CGImageDestinationFinalize(destination);
   CFRelease(destination);
   if (!ok) {
-    *error = MakeError(8, @"Failed to encode the image");
+    *error = MakeError(kScreenshotEncodingFailed, @"Failed to encode the image");
     return nil;
   }
   return imageData;
@@ -243,14 +242,14 @@ NSData* CaptureScreenshot(id device, NSString* displayId, ScreenshotFormat forma
 
   id surfaceObj = RenderableSurface(descriptor);
   if (surfaceObj == nil) {
-    *error = MakeError(4, @"The device's display surface is not available yet");
+    *error = MakeError(kScreenshotSurfaceUnavailable, @"The device's display surface is not available yet");
     return nil;
   }
 
   IOSurfaceRef surfaceRef = (__bridge IOSurfaceRef)surfaceObj;
   CIImage* ciImage = [CIImage imageWithIOSurface:surfaceRef];
   if (ciImage == nil) {
-    *error = MakeError(5, @"Failed to wrap the device's display surface as an image");
+    *error = MakeError(kScreenshotImageCreationFailed, @"Failed to wrap the device's display surface as an image");
     return nil;
   }
 
@@ -260,7 +259,7 @@ NSData* CaptureScreenshot(id device, NSString* displayId, ScreenshotFormat forma
   static CIContext* context = [CIContext contextWithOptions:nil];
   CGImageRef cgImage = [context createCGImage:ciImage fromRect:ciImage.extent];
   if (cgImage == nil) {
-    *error = MakeError(6, @"Failed to render the device's display surface");
+    *error = MakeError(kScreenshotRenderingFailed, @"Failed to render the device's display surface");
     return nil;
   }
 

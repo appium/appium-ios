@@ -14,7 +14,7 @@ function fixture() {
   const screenshot = mock.fn(async (options?: {displayId?: string}) => {
     if (!ports.some(({id}) => id === options?.displayId)) {
       throw Object.assign(new Error('Port no longer exists'), {
-        name: 'NativeSimOperationError',
+        name: 'NativeSimDisplayResolutionError',
         domain: 'io.appium.coresim.Screenshot',
         code: 2,
       });
