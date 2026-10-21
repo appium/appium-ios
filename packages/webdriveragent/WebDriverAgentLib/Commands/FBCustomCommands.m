@@ -357,7 +357,7 @@
 + (id<FBResponsePayload>)handleGetPressableButtons:(FBRouteRequest *)request
 {
   NSArray *xctestButtonNames = [FBAvailableButtonNames().allKeys sortedArrayUsingSelector:@selector(compare:)];
-  return FBResponseWithObject(@{@"xctest": xctestButtonNames, @"iohid": @[]});
+  return FBResponseWithObject(@{@"xctest": xctestButtonNames});
 }
 
 #if TARGET_OS_WATCH
