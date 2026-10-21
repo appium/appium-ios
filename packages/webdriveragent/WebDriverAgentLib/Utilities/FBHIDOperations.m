@@ -68,6 +68,13 @@ static const FBHIDAPI *FBGetHIDAPI(void)
   return &api;
 }
 
+static BOOL FBWaitForStableInterfaceOrientation(XCUIApplication *application,
+                                               UIInterfaceOrientation orientation)
+{
+  [application fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
+  return application.interfaceOrientation == orientation;
+}
+
 // Workaround tracked in https://github.com/appium/appium/issues/22857.
 // Reproduced on the iOS 27.1 Duo simulator with Xcode 27.1: XCTest's Home
 // request returns without backgrounding the app. This direct HID path is also
@@ -75,15 +82,18 @@ static const FBHIDAPI *FBGetHIDAPI(void)
 // The affected Xcode/runtime version range has not been established. Remove
 // the Home workaround when XCTest-only presses pass testHomeButtonBackgroundsApplication
 // on supported Duo environments, including physical devices and both panels.
-static BOOL FBPressDuoButton(uint32_t usage, NSError **error)
+static BOOL FBPressHIDButton(uint32_t usage, NSError **error)
 {
   const FBHIDAPI *api = FBGetHIDAPI();
-  if (NULL == api->createKeyboardEvent || NULL == api->createClient || NULL == api->dispatchEvent || NULL == api->setTimestamp) {
+  if (NULL == api->createKeyboardEvent || NULL == api->createClient
+      || NULL == api->dispatchEvent || NULL == api->setTimestamp) {
     return [[FBErrorBuilder.builder withDescription:@"The button HID APIs are unavailable"] buildError:error];
   }
   CFTypeRef client = api->createClient(kCFAllocatorDefault);
-  CFTypeRef down = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDConsumerUsagePage, usage, YES, 0);
-  CFTypeRef up = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDConsumerUsagePage, usage, NO, 0);
+  CFTypeRef down = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(),
+                                           FBHIDConsumerUsagePage, usage, YES, 0);
+  CFTypeRef up = api->createKeyboardEvent(kCFAllocatorDefault, mach_absolute_time(),
+                                           FBHIDConsumerUsagePage, usage, NO, 0);
   BOOL ready = NULL != client && NULL != down && NULL != up;
   if (ready) {
     // Dispatch a short paired press. Holding Power for 0.5s invokes Siri on Duo.
@@ -101,13 +111,14 @@ static BOOL FBPressDuoButton(uint32_t usage, NSError **error)
   if (NULL != client) {
     CFRelease(client);
   }
-  return ready || [[FBErrorBuilder.builder withDescription:@"Cannot create the button HID event or client"] buildError:error];
+  return ready || [[FBErrorBuilder.builder
+                    withDescription:@"Cannot create the button HID event or client"] buildError:error];
 }
 
 // Work around XCTest updating Duo device orientation without rotating the app.
 // Reproduction details and checks required before removing this workaround:
 // https://github.com/appium/appium-ios/pull/81
-static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
+static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 {
   XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
   if (nil == screen) {
@@ -137,7 +148,8 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
   }
 
   const FBHIDAPI *api = FBGetHIDAPI();
-  if (NULL == api->serialize || NULL == api->createVendorEvent || NULL == api->createClient || NULL == api->dispatchEvent) {
+  if (NULL == api->serialize || NULL == api->createVendorEvent
+      || NULL == api->createClient || NULL == api->dispatchEvent) {
     return NO;
   }
   NSDictionary *payload = @{
@@ -151,8 +163,9 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
   if (NULL == data) {
     return NO;
   }
-  CFTypeRef event = api->createVendorEvent(kCFAllocatorDefault, mach_absolute_time(), FBHIDOrientationUsagePage, FBHIDOrientationUsage, 0,
-                                (uint8_t *)CFDataGetBytePtr(data), CFDataGetLength(data), 0);
+  CFTypeRef event = api->createVendorEvent(kCFAllocatorDefault, mach_absolute_time(),
+                                         FBHIDOrientationUsagePage, FBHIDOrientationUsage, 0,
+                                         (uint8_t *)CFDataGetBytePtr(data), CFDataGetLength(data), 0);
   CFRelease(data);
   CFTypeRef client = api->createClient(kCFAllocatorDefault);
   BOOL canDispatch = NULL != event && NULL != client;
@@ -193,14 +206,14 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 + (BOOL)pressHomeWithError:(NSError **)error
 {
-  return FBPressDuoButton(FBHIDHomeUsage, error);
+  return FBPressHIDButton(FBHIDHomeUsage, error);
 }
 
 + (BOOL)pressLockWithError:(NSError **)error
 {
   // XCTest locking times out on Duo / iOS 27.1 (Xcode 27.1). Remove this
   // workaround once XCTest alone passes testRepeatedLockUnlockAcrossHingePoses.
-  return FBPressDuoButton(FBHIDPowerUsage, error);
+  return FBPressHIDButton(FBHIDPowerUsage, error);
 }
 
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
@@ -213,8 +226,7 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
   // Keep XCTest's reported device orientation in sync on the simulator too.
   [XCUIDevice sharedDevice].orientation = orientation;
 #if !TARGET_OS_SIMULATOR
-  [application fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  if (application.interfaceOrientation == interfaceOrientation) {
+  if (FBWaitForStableInterfaceOrientation(application, interfaceOrientation)) {
     return YES;
   }
   [FBLogger logFmt:@"XCTest did not rotate the app to device orientation %ld on a physical Duo device. "
@@ -223,7 +235,7 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
 #endif
   // On Duo simulators XCTest can update its value without rotating the app.
   // Dispatch directly instead of waiting for the XCTest path to fail.
-  if (!FBDispatchDuoOrientation(orientation)) {
+  if (!FBDispatchHIDOrientation(orientation)) {
     return NO;
   }
   // Event dispatch is asynchronous. Check the app, not just XCTest's value.
@@ -232,8 +244,7 @@ static BOOL FBDispatchDuoOrientation(UIDeviceOrientation orientation)
   }]) {
     return NO;
   }
-  [application fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  return application.interfaceOrientation == interfaceOrientation;
+  return FBWaitForStableInterfaceOrientation(application, interfaceOrientation);
 }
 #endif
 
