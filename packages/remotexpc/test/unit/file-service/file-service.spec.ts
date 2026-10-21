@@ -46,8 +46,6 @@ class FakeFileServiceTransport extends EventEmitter {
   sessionId = 'SESSION-1';
   /** Rejects a request carrying a session id this connection did not create. */
   isSessionIdChecked = false;
-  /** Sends the listing, then rejects the listing command once, as a stale session would. */
-  rejectListingAfterFileList = false;
   /** Never answers listing commands. */
   isListingSilent = false;
   /** Listings for the next listing commands, one per command; `listing` once they run out. */
@@ -131,12 +129,6 @@ class FakeFileServiceTransport extends EventEmitter {
         }
         if (this.listingQueue.length > 0) {
           this.listing = this.listingQueue.shift()!;
-        }
-        if (this.rejectListingAfterFileList) {
-          this.rejectListingAfterFileList = false;
-          this.emitListing(body);
-          this.replyWithStaleSession(id);
-          return;
         }
         if (this.listing.length === 0) {
           this.reply(id, {Response: 1});
@@ -253,7 +245,7 @@ describe('CoreDeviceFileService', function () {
     );
   });
 
-  it('starts a new session for a request whose connection was replaced while it waited', async function () {
+  it('sends a request on the session of the connection it goes out on', async function () {
     const stuck = new FakeFileServiceTransport();
     stuck.isListingSilent = true;
     const service = new TestFileService(stuck);
@@ -262,8 +254,9 @@ describe('CoreDeviceFileService', function () {
     fresh.isSessionIdChecked = true;
     service.nextFakes.push(fresh);
 
-    // The listing times out and drops the connection. The mkdir waiting behind it
-    // in the invocation queue was handed that connection's session id.
+    // The listing times out and drops the connection while the mkdir waits its
+    // turn in the invocation queue. The mkdir resolves its session only once it
+    // has that turn, so it never carries the dropped connection's id.
     const listing = assert.rejects(service.listFilePaths('.', {timeoutMs: 50}), /timed out after 50ms/);
     const mkdir = service.mkdir('tmp/new');
 
@@ -273,15 +266,13 @@ describe('CoreDeviceFileService', function () {
     assert.deepStrictEqual(
       fresh.requests().map(({body}) => [String(body.Cmd), body.SessionID]),
       [
-        // Rejected: the id belongs to the connection that was dropped
-        ['FileSystemOperation', 'SESSION-1'],
         ['CreateSession', undefined],
         ['FileSystemOperation', 'SESSION-2'],
       ],
     );
   });
 
-  it('keeps a session another request created while a stale one was rejected', async function () {
+  it('reuses one session for the requests queued behind a dropped connection', async function () {
     const stuck = new FakeFileServiceTransport();
     stuck.isListingSilent = true;
     const service = new TestFileService(stuck);
@@ -291,9 +282,9 @@ describe('CoreDeviceFileService', function () {
     fresh.listing = [['a.txt']];
     service.nextFakes.push(fresh);
 
-    // Two requests queue up behind the listing that drops the connection, both
-    // holding its session id. The first to be rejected starts SESSION-2; the
-    // second must reuse it rather than forget it and create a third.
+    // Two requests queue up behind the listing that drops the connection. The
+    // first to get its turn starts the session on the new connection, and the
+    // second has to reuse it rather than start a third.
     const listing = assert.rejects(service.listFilePaths('.', {timeoutMs: 50}), /timed out after 50ms/);
     const first = service.mkdir('tmp/one');
     const second = service.mkdir('tmp/two');
@@ -307,15 +298,6 @@ describe('CoreDeviceFileService', function () {
       fresh.requests().filter(({body}) => body.Cmd === 'FileSystemOperation' && body.SessionID === 'SESSION-2').length,
       2,
     );
-  });
-
-  it('does not repeat entries when a listing is sent before the session is rejected', async function () {
-    const fake = new FakeFileServiceTransport();
-    fake.listing = [['a.txt', 'b.txt']];
-    fake.rejectListingAfterFileList = true;
-    const service = new TestFileService(fake);
-
-    assert.deepStrictEqual(await service.listFilePaths(), ['a.txt', 'b.txt']);
   });
 
   it('opens a single connection for concurrent first calls', async function () {
@@ -724,29 +706,42 @@ describe('CoreDeviceFileService', function () {
       assert.strictEqual(stream.destroyed, true);
     });
 
-    it('does not resend a RetrieveFile whose data channel is already open', async function () {
+    it('sends a pull on the session of the connection it goes out on', async function () {
       let connections = 0;
       server.removeAllListeners('connection');
       server.on('connection', (socket) => {
         connections++;
-        socket.once('data', () => socket.end(Buffer.from('not a header at all, but long enough to parse!')));
+        socket.once('data', (request: Buffer) => {
+          const {fileId} = decodeDataChannelHeader(request);
+          socket.write(encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.FILE_DATA, fileId, size: 2n}));
+          socket.write(Buffer.from('ok'));
+          socket.write(encodeDataChannelHeader({type: DATA_CHANNEL_MESSAGE_TYPE.TRANSFER_COMPLETE, fileId, size: 2n}));
+        });
       });
-      const service = newService();
-      await service.listFilePaths();
-      // Every further request now carries a session id this connection rejects
-      service.fake.isSessionIdChecked = true;
-      service.fake.sessionId = 'SESSION-2';
+      const stuck = new FakeFileServiceTransport();
+      stuck.isListingSilent = true;
+      const service = new TestFileService(stuck);
+      service.dataPort = (server.address() as net.AddressInfo).port;
+      const fresh = new FakeFileServiceTransport();
+      fresh.sessionId = 'SESSION-2';
+      fresh.isSessionIdChecked = true;
+      service.nextFakes.push(fresh);
 
-      await assert.rejects(service.pull('a', path.join(tmpDir, 'stale.mov')), /session ID is not valid/);
+      // The listing times out and drops the connection while the pull waits its
+      // turn in the invocation queue, and the pull resolves its session only
+      // once it has that turn.
+      const destination = path.join(tmpDir, 'resent.mov');
+      const [, pull] = await Promise.allSettled([
+        service.listFilePaths('.', {timeoutMs: 50}),
+        service.pull('a', destination),
+      ]);
 
-      // Resending would ask for a file id of the new session over a data channel
-      // opened for the old connection. The dead session is still dropped, so the
-      // next request starts a new one instead of failing the same way.
-      await service.listFilePaths();
-
+      assert.strictEqual(pull.status, 'fulfilled', `pull failed: ${(pull as PromiseRejectedResult).reason}`);
+      assert.deepStrictEqual(await fs.promises.readFile(destination), Buffer.from('ok'));
+      // No request carries SESSION-1, so the fake never has to reject one
       assert.deepStrictEqual(
-        service.fake.requests().map(({body}) => String(body.Cmd)),
-        ['CreateSession', 'RetrieveDirectoryList', 'RetrieveFile', 'CreateSession', 'RetrieveDirectoryList'],
+        fresh.requests().map(({body}) => `${body.Cmd}:${body.SessionID ?? '-'}`),
+        ['CreateSession:-', 'RetrieveFile:SESSION-2'],
       );
       assert.strictEqual(connections, 1);
     });
@@ -1156,6 +1151,31 @@ describe('CoreDeviceFileService', function () {
         /must be a local file path, a Buffer or a readable stream/,
       );
       assert.deepStrictEqual(proposals(service), []);
+    });
+
+    it('sends a push on the session of the connection it goes out on', async function () {
+      const stuck = new FakeFileServiceTransport();
+      stuck.isListingSilent = true;
+      const service = new TestFileService(stuck);
+      service.dataPort = (server.address() as net.AddressInfo).port;
+      const fresh = new FakeFileServiceTransport();
+      fresh.sessionId = 'SESSION-2';
+      fresh.isSessionIdChecked = true;
+      service.nextFakes.push(fresh);
+
+      const [, push] = await Promise.allSettled([
+        service.listFilePaths('.', {timeoutMs: 50}),
+        service.push(Buffer.from('bytes'), 'tmp/resent.txt'),
+      ]);
+
+      assert.strictEqual(push.status, 'fulfilled', `push failed: ${(push as PromiseRejectedResult).reason}`);
+      assert.deepStrictEqual(
+        fresh
+          .requests()
+          .map(({body}) => `${body.Cmd}:${body.SessionID ?? '-'}`)
+          .filter((entry) => entry.startsWith('Propose') || entry.startsWith('CreateSession')),
+        ['CreateSession:-', 'ProposeFile:SESSION-2'],
+      );
     });
 
     it('fails when the device will not create the file', async function () {

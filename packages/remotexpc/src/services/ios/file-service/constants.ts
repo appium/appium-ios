@@ -56,15 +56,6 @@ export const END_SESSION_TIMEOUT_MS = 5000;
  */
 export const DEFAULT_TRANSFER_IDLE_TIMEOUT_MS = 30_000;
 
-/** Error domain of the device's own remote service errors. */
-export const REMOTE_SERVICES_ERROR_DOMAIN = 'com.apple.dt.remoteservices.error';
-
-/**
- * `The provided session ID is not valid`, which the device answers when a
- * request carries the session id of a connection it no longer holds.
- */
-export const DEVICE_INVALID_SESSION = 11004;
-
 /**
  * A transfer cut short makes the device hold up its next session, from any
  * client, for about 10 seconds. So when the destination of a pull fails, the

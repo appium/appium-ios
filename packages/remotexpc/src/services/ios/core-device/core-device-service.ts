@@ -141,20 +141,44 @@ export abstract class CoreDeviceService extends BaseService {
    * reply to an earlier request is never returned. When the exchange fails
    * (timeout, transport error, closed connection), the connection is dropped,
    * because the device may still be sending on it; the next call reconnects.
+   *
+   * `body` may be a function, which is called with the connection the request
+   * is about to go out on, once the call has its turn. A session-oriented
+   * service builds its body there, so what it puts in it cannot belong to a
+   * connection that was replaced while the call waited.
    */
   protected async sendReceiveOnConnection(
-    body: XPCDictionary,
+    body: XPCDictionary | ((transport: RemoteXpcFramedTransport) => Promise<XPCDictionary>),
     options: CoreDeviceInvokeOptions = {},
     onPeerMessage?: CoreDevicePeerMessageHandler,
   ): Promise<XPCDictionary> {
     return this.enqueueInvocation(async () => {
       try {
-        return await this.exchange(() => this.getTransport(), body, options, {matchReplyId: true, onPeerMessage});
+        const transport = await this.getTransport();
+        const resolved = typeof body === 'function' ? await body(transport) : body;
+        return await this.exchange(() => Promise.resolve(transport), resolved, options, {
+          matchReplyId: true,
+          onPeerMessage,
+        });
       } catch (err) {
         await this.dropTransport();
         throw err;
       }
     });
+  }
+
+  /**
+   * Sends on a connection the caller already has, without waiting for a turn in
+   * the invocation queue. Only for a request made from inside a queued call, as
+   * a session-oriented service does when it has to create its session before it
+   * can send anything else on that connection.
+   */
+  protected async sendReceiveOnTransport(
+    transport: RemoteXpcFramedTransport,
+    body: XPCDictionary,
+    options: CoreDeviceInvokeOptions = {},
+  ): Promise<XPCDictionary> {
+    return await this.exchange(() => Promise.resolve(transport), body, options, {matchReplyId: true});
   }
 
   /**

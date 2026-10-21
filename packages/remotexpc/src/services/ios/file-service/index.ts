@@ -26,7 +26,6 @@ import {
   DEFAULT_PUSHED_FILE_PERMISSIONS,
   DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
   DEVICE_ENOTEMPTY,
-  DEVICE_INVALID_SESSION,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
   FILE_SERVICE_COMMAND,
@@ -37,7 +36,6 @@ import {
   PERMISSION_BITS_MASK,
   POSIX_ERROR_DOMAIN,
   PUSHED_FILE_PERMISSION_BITS_MASK,
-  REMOTE_SERVICES_ERROR_DOMAIN,
 } from './constants.js';
 import {
   FileDataDecoder,
@@ -74,14 +72,6 @@ const log = getLogger('CoreDeviceFileService');
 
 /** How often the data channel's idle timeout is checked. */
 const WATCHDOG_INTERVAL_MS = 250;
-
-interface FileServiceRequestHooks {
-  onPeerMessage?: CoreDevicePeerMessageHandler;
-  /** Runs before every attempt, to drop what a rejected one collected. */
-  onAttempt?: () => void;
-  /** Whether a request rejected for a stale session may be sent again. */
-  isResendable?: boolean;
-}
 
 interface FileServiceSession {
   transport: RemoteXpcFramedTransport;
@@ -405,10 +395,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
     try {
       // devicectl connects the data channel before it asks for the file.
       socket = await this.openDataChannel(requestOptions.timeoutMs ?? DEFAULT_INVOKE_TIMEOUT_MS, signal);
-      // The data channel above was opened for the current connection
-      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions, {
-        isResendable: false,
-      });
+      const reply = await this.request(FILE_SERVICE_COMMAND.RETRIEVE_FILE, {Path: remotePath}, requestOptions);
       if (isDirectoryMode(reply.FilePermissions)) {
         throw new CoreDeviceError(`'${remotePath}' is a directory, not a file`, reply);
       }
@@ -495,8 +482,6 @@ export class CoreDeviceFileService extends CoreDeviceService {
           FILE_SERVICE_COMMAND.PROPOSE_FILE,
           {...fields, FileSize: BigInt(upload.size)},
           requestOptions,
-          // The data channel above was opened for the current connection
-          {isResendable: false},
         );
         // The device answers without a file ID when it will not create the file there
         if (reply.NewFileID === undefined) {
@@ -535,9 +520,6 @@ export class CoreDeviceFileService extends CoreDeviceService {
    * reply: it first sends it as one or more requests of its own that carry the
    * command's `MessageUUID` and a `FileList`. Each must be answered, or the
    * device stops reading from the connection; the reply to the command follows.
-   *
-   * A request the device rejects is sent again, and answered with the whole
-   * listing again, so what the rejected attempt collected is dropped first.
    */
   private async requestFileList(
     command: string,
@@ -546,20 +528,15 @@ export class CoreDeviceFileService extends CoreDeviceService {
   ): Promise<XPCValue[]> {
     const messageUuid = randomUUID().toUpperCase();
     const fileList: XPCValue[] = [];
-    await this.request(command, {Path: remotePath, MessageUUID: messageUuid}, options, {
-      onPeerMessage: (body, respond) => {
-        if (body.MessageUUID !== messageUuid) {
-          log.debug(`Ignoring an unexpected file service message: ${Object.keys(body).join(', ')}`);
-          return;
-        }
-        if (Array.isArray(body.FileList)) {
-          fileList.push(...body.FileList);
-        }
-        respond({MessageUUID: messageUuid});
-      },
-      onAttempt: () => {
-        fileList.length = 0;
-      },
+    await this.request(command, {Path: remotePath, MessageUUID: messageUuid}, options, (body, respond) => {
+      if (body.MessageUUID !== messageUuid) {
+        log.debug(`Ignoring an unexpected file service message: ${Object.keys(body).join(', ')}`);
+        return;
+      }
+      if (Array.isArray(body.FileList)) {
+        fileList.push(...body.FileList);
+      }
+      respond({MessageUUID: messageUuid});
     });
     return fileList;
   }
@@ -622,50 +599,35 @@ export class CoreDeviceFileService extends CoreDeviceService {
     command: string,
     fields: XPCDictionary,
     options: FileServiceRequestOptions,
-    {onPeerMessage, onAttempt, isResendable = true}: FileServiceRequestHooks = {},
+    onPeerMessage?: CoreDevicePeerMessageHandler,
   ): Promise<XPCDictionary> {
-    // The session id is resolved before the request waits its turn in the
-    // invocation queue, so the connection it belongs to can be replaced while it
-    // waits (by a timed-out request, or a transfer cut short). The device then
-    // rejects the stale id, and since it rejects the request without running it,
-    // a session on the new connection is created and the request sent once more.
-    //
-    // `isResendable` is false for a request whose data channel is already open:
-    // resending it would ask the device for a file id of the new session over a
-    // connection opened for the old one, which is untested behaviour.
-    for (let isRetry = false; ; isRetry = true) {
-      onAttempt?.();
-      const sessionId = await this.ensureSession(options);
-      try {
-        const reply = await this.sendReceiveOnConnection(
-          {MessageUUID: randomUUID().toUpperCase(), ...fields, Cmd: command, SessionID: sessionId},
-          {actionIdentifier: command, timeoutMs: options.timeoutMs},
-          onPeerMessage,
-        );
-        return assertSuccessfulReply(command, reply);
-      } catch (err) {
-        if (!isInvalidSessionError(err)) {
-          throw err;
-        }
-        // Drop the session either way: keeping it would fail every later request
-        // on this instance the same way, resendable or not.
-        await this.forgetSession(sessionId);
-        if (isRetry || !isResendable) {
-          throw err;
-        }
-        log.debug(`The file service session is no longer valid, starting a new one: ${(err as Error).message}`);
-      }
-    }
+    // The session is resolved on the connection the request is about to go out
+    // on, once this call has its turn, so a connection replaced while it waited
+    // (by a timed-out request, or a transfer cut short) cannot leave it carrying
+    // the session id of a connection that is gone.
+    const reply = await this.sendReceiveOnConnection(
+      async (transport) => ({
+        MessageUUID: randomUUID().toUpperCase(),
+        ...fields,
+        Cmd: command,
+        SessionID: await this.ensureSessionOn(transport, options),
+      }),
+      {actionIdentifier: command, timeoutMs: options.timeoutMs},
+      onPeerMessage,
+    );
+    return assertSuccessfulReply(command, reply);
   }
 
   /**
-   * Returns the id of the session on the current connection, creating the
-   * connection and the session when needed. Sessions die with their connection.
+   * Returns the id of the session on `transport`, creating it when needed.
+   * Sessions die with their connection, so each one gets its own.
    */
-  private async ensureSession(options: FileServiceRequestOptions): Promise<string> {
-    const transport = await this.getTransport();
+  private async ensureSessionOn(
+    transport: RemoteXpcFramedTransport,
+    options: FileServiceRequestOptions,
+  ): Promise<string> {
     if (this.session?.transport !== transport) {
-      const session: FileServiceSession = {transport, id: this.createSession(options)};
+      const session: FileServiceSession = {transport, id: this.createSessionOn(transport, options)};
       session.id.catch(() => {
         if (this.session === session) {
           this.session = undefined;
@@ -676,24 +638,17 @@ export class CoreDeviceFileService extends CoreDeviceService {
     return await this.session.id;
   }
 
-  /**
-   * Forgets the cached session when it is still the one the device rejected, so
-   * the next request creates a new one. A session another call has meanwhile
-   * created on a newer connection is left alone.
-   */
-  private async forgetSession(sessionId: string): Promise<void> {
-    const rejected = this.session;
-    if (rejected && (await rejected.id.catch((): undefined => undefined)) === sessionId && this.session === rejected) {
-      this.session = undefined;
-    }
-  }
-
-  private async createSession(options: FileServiceRequestOptions): Promise<string> {
+  /** Creates the session on `transport`, which the caller is already sending on. */
+  private async createSessionOn(
+    transport: RemoteXpcFramedTransport,
+    options: FileServiceRequestOptions,
+  ): Promise<string> {
     const {domain, identifier = '', username = DEFAULT_FILE_SERVICE_USERNAME} = this.sessionOptions;
     const command = FILE_SERVICE_COMMAND.CREATE_SESSION;
     const reply = assertSuccessfulReply(
       command,
-      await this.sendReceiveOnConnection(
+      await this.sendReceiveOnTransport(
+        transport,
         {
           Cmd: command,
           Domain: BigInt(FILE_SERVICE_DOMAIN[domain]),
@@ -1136,19 +1091,6 @@ function isDirectoryNotEmptyError(err: unknown): boolean {
     err instanceof CoreDeviceError &&
     asString(underlying?.ErrorDomain) === POSIX_ERROR_DOMAIN &&
     asNumber(underlying?.ErrorCode) === DEVICE_ENOTEMPTY
-  );
-}
-
-/**
- * Whether the device rejected a request because its session id is not the one
- * of the connection the request arrived on.
- */
-function isInvalidSessionError(err: unknown): boolean {
-  const encodedError = asDictionary((err as CoreDeviceError)?.response?.EncodedError);
-  return (
-    err instanceof CoreDeviceError &&
-    asString(encodedError?.ErrorDomain) === REMOTE_SERVICES_ERROR_DOMAIN &&
-    asNumber(encodedError?.ErrorCode) === DEVICE_INVALID_SESSION
   );
 }
 
