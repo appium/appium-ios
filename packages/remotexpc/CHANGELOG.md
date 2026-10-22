@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.26.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.5...appium-ios-remotexpc@5.26.0) (2026-10-22)
+
+### Features
+
+* add CoreDevice file service for listing, pulling and pushing files ([#52](https://github.com/appium/appium-ios/issues/52)) ([f7b6b64](https://github.com/appium/appium-ios/commit/f7b6b64a6b3551ce6d179abffcc4151ba5914cdb))
+
+
 ## [5.25.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.4...appium-ios-remotexpc@5.25.5) (2026-10-19)
 
 ### Bug Fixes
