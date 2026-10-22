@@ -48,6 +48,7 @@
     "test:companion-proxy": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/companion-proxy.spec.js\"",
     "test:coredevice-device-info": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/device-info-coredevice.spec.js\"",
     "test:device-control": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/device-control.spec.js\"",
+    "test:file-service": "node --enable-source-maps --test --test-timeout=120000 \"build/test/integration/file-service.spec.js\"",
     "test:configuration": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/configuration.spec.js\"",
     "test:crash-reports": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/crash-reports.spec.js\"",
     "test:display": "node --enable-source-maps --test --test-timeout=180000 \"build/test/integration/display-service.spec.js\"",
