@@ -1,10 +1,15 @@
 #include "nserror_bridge.h"
 
+#include "screenshot_errors.h"
+
 namespace coresim {
 
 Napi::Error NSErrorExceptionToJsError(Napi::Env env, const NSErrorException& error) {
   Napi::Error jsError = Napi::Error::New(env, error.what());
-  jsError.Set("name", "NativeSimOperationError");
+  const bool isDisplayResolutionError =
+      error.domain == kScreenshotErrorDomain &&
+      (error.code == kScreenshotDisplayNotFound || error.code == kScreenshotNoRenderableDisplay);
+  jsError.Set("name", isDisplayResolutionError ? "NativeSimDisplayResolutionError" : "NativeSimOperationError");
   jsError.Set("domain", error.domain);
   jsError.Set("code", static_cast<double>(error.code));
   return jsError;

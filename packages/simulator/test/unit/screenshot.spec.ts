@@ -16,6 +16,13 @@ describe('simulator display capture', function () {
     });
   }
 
+  it('forwards the display cache opt-in to CoreSim', async function () {
+    const capture = sinon.stub().resolves(Buffer.from('screenshot'));
+    const simulator = {udid: 'sim-1', _native: {getScreenshot: capture}} as any;
+    await getScreenshot.call(simulator, {displayId: 1, cacheDisplayId: true});
+    sinon.assert.calledOnceWithExactly(capture, 'sim-1', {displayId: 1, cacheDisplayId: true});
+  });
+
   it('propagates CoreSim capture failures', async function () {
     const error = new Error('Cannot uniquely resolve guest screen ID 3');
     const simulator = {udid: 'sim-1', _native: {getScreenshot: sinon.stub().rejects(error)}} as any;
