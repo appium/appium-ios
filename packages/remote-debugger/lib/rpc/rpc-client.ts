@@ -2,8 +2,7 @@ import {EventEmitter} from 'node:events';
 
 import {util, timing} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import AsyncLock from 'async-lock';
-import {sleep, waitForCondition, withTimeout} from 'asyncbox';
+import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
 import type {
