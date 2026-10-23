@@ -421,6 +421,17 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
         || (nil != snapshot.label && [keyNames containsObject:snapshot.label]);
     }];
     NSArray *matchedKeys = findMatchingKeys(searchPredicate);
+#if TARGET_OS_WATCH
+    // watchOS presents the keyboard's accessory bar - `Cancel` and `Done` - as a *sibling* of
+    // `XCUIElementTypeKeyboard` instead of a descendant of it, so the query above, which is
+    // scoped to the keyboard, never sees it. That bar holds `Done`, the only control that
+    // dismisses the keyboard and commits a text field on the platform, so look in the whole
+    // application when the keyboard itself has nothing matching the requested names.
+    if (0 == matchedKeys.count) {
+      matchedKeys = [[self.fb_query descendantsMatchingType:XCUIElementTypeAny]
+                     matchingPredicate:searchPredicate].allElementsBoundByIndex;
+    }
+#endif
     if (matchedKeys.count > 0) {
       for (XCUIElement *matchedKey in matchedKeys) {
         if (!matchedKey.exists) {

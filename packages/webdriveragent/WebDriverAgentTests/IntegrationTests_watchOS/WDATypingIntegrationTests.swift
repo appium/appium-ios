@@ -70,4 +70,23 @@ final class WDATypingIntegrationTests: WDAWatchInProcessTestCase {
 
     backOutOfKeyboardIfPresented()
   }
+
+  func testDismissingTheKeyboardTapsTheAccessoryBarDoneButton() throws {
+    // The control that closes the watch keyboard is the accessory bar's `Done` button, which
+    // watchOS reports as a *sibling* of XCUIElementTypeKeyboard rather than a descendant of it, so
+    // the helper has to look outside `keyboard` to find it. `done` is what WebDriverAgent asks for
+    // by default (the iOS keyboard's key) and `Done` is what UIKit names this button; the driver
+    // sends both on watchOS. Regression test for the app-wide fallback in
+    // `fb_dismissKeyboardWithKeyNames:`.
+    typingField.tap()
+    XCTAssertTrue(
+      app.buttons["Cancel"].waitForExistence(timeout: 5),
+      "expected tapping the text field to open the keyboard"
+    )
+
+    // The BOOL-return plus `error:` form bridges to a throwing call without a return value, so
+    // success is the absence of a thrown error, confirmed by the accessory bar disappearing below.
+    try app.fb_dismissKeyboard(withKeyNames: ["done", "Done"])
+    XCTAssertFalse(app.buttons["Cancel"].exists, "expected the keyboard to be dismissed")
+  }
 }
