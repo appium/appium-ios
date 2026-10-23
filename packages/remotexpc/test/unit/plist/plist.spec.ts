@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {fs, node} from '@appium/support';
 
 import {
+  PlistUID,
   createBinaryPlist,
   createPlist,
   createXmlPlist,
@@ -231,6 +232,13 @@ describe('Plist Module', function () {
         inArray: [{type: 'WiFi', name: 'en0'}],
         inDict: {nested: {type: 'WiFi', name: 'en0'}},
       });
+    });
+  });
+
+  describe('Binary Plist UIDs', function () {
+    it('should parse a UID as a PlistUID distinct from an integer of the same value', function () {
+      const parsed = parseBinaryPlist(createBinaryPlist({uid: new PlistUID(2), int: 2}));
+      assert.deepStrictEqual(parsed, {uid: new PlistUID(2), int: 2});
     });
   });
 

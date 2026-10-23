@@ -1,4 +1,5 @@
 import {getLogger} from '../../../lib/logger.js';
+import {refIndex, uidIndex} from './utils.js';
 
 const log = getLogger('NSKeyedArchiverDecoder');
 const MAX_DECODE_DEPTH = 1000;
@@ -13,13 +14,6 @@ const MAX_DECODE_DEPTH = 1000;
  * - $top: Root object references
  * - $objects: Array of all objects with cross-references
  */
-/**
- * `NSValue` keys whose value is a UID pointing at the struct's string form.
- *
- * `NS.special` discriminates which one is present: 1 point, 2 size, 3 rect.
- */
-const NSVALUE_STRUCT_KEYS = new Set(['NS.rectval', 'NS.pointval', 'NS.sizeval']);
-
 export class NSKeyedArchiverDecoder {
   private readonly objects: any[];
   private readonly decoded: Map<number, any>;
@@ -56,22 +50,7 @@ export class NSKeyedArchiverDecoder {
       return null;
     }
 
-    // Extract root reference from $top
-    let rootIndex: number | null = null;
-
-    if (this.archive.$top && typeof this.archive.$top === 'object') {
-      const top = this.archive.$top;
-      if ('root' in top) {
-        const root = top.root;
-        if (typeof root === 'number') {
-          rootIndex = root;
-        } else if (typeof root === 'object' && root && 'CF$UID' in root) {
-          rootIndex = (root as any).CF$UID;
-        }
-      }
-    }
-
-    // If we found the root index, decode it
+    const rootIndex = refIndex(this.archive.$top?.root);
     if (rootIndex !== null) {
       return this.decodeObject(rootIndex);
     }
@@ -126,11 +105,9 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    // Handle UID references
-    if ('CF$UID' in obj) {
-      const result = this.decodeObject(obj.CF$UID, visited, depth + 1);
+    if (uidIndex(obj) !== null) {
       visited.delete(index);
-      return result;
+      return obj;
     }
 
     // Handle NSDictionary (NS.keys + NS.objects) - check this FIRST before NSArray
@@ -156,40 +133,21 @@ export class NSKeyedArchiverDecoder {
         continue; // Skip class metadata
       }
 
-      if (typeof value === 'number' && NSVALUE_STRUCT_KEYS.has(key)) {
-        // An NSValue stores its struct as a string ("{{0, 0}, {18, 18}}") and
-        // points at it by UID. The parser cannot tell a UID from an integer, and
-        // the heuristic below only follows references to objects, so these keys
-        // would keep the raw index. They always reference a string.
-        const referenced = value >= 0 && value < this.objects.length ? this.objects[value] : undefined;
-        result[key] = typeof referenced === 'string' ? referenced : value;
-      } else if (typeof value === 'number') {
-        // Could be a reference or primitive
-        if (value < this.objects.length && value >= 0) {
-          const referenced = this.objects[value];
-          if (referenced && typeof referenced === 'object' && referenced !== '$null' && !visited.has(value)) {
-            result[key] = this.decodeObject(value, visited, depth + 1);
-          } else {
-            result[key] = value;
-          }
-        } else {
-          result[key] = value;
-        }
-      } else if (typeof value === 'object' && value && 'CF$UID' in value) {
-        const uid = (value as any).CF$UID;
-        if (typeof uid === 'number' && !visited.has(uid)) {
-          result[key] = this.decodeObject(uid, visited, depth + 1);
-        } else {
-          result[key] = value;
-        }
-      } else {
-        result[key] = value;
-      }
+      const uid = uidIndex(value);
+      result[key] = uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1);
     }
 
     this.decoded.set(index, result);
     visited.delete(index);
     return result;
+  }
+
+  /**
+   * Decode the object a collection member references, or return the member unchanged when it is not a reference
+   */
+  private decodeRef(ref: any, visited: Set<number>, depth: number): any {
+    const index = refIndex(ref);
+    return index === null ? ref : this.decodeObject(index, visited, depth);
   }
 
   /**
@@ -200,14 +158,7 @@ export class NSKeyedArchiverDecoder {
       return [];
     }
 
-    return refs.map((ref) => {
-      if (typeof ref === 'number') {
-        return this.decodeObject(ref, visited, depth + 1);
-      } else if (typeof ref === 'object' && ref && 'CF$UID' in ref) {
-        return this.decodeObject(ref.CF$UID, visited, depth + 1);
-      }
-      return ref;
-    });
+    return refs.map((ref) => this.decodeRef(ref, visited, depth + 1));
   }
 
   /**
@@ -221,8 +172,8 @@ export class NSKeyedArchiverDecoder {
     const result: any = {};
 
     for (let i = 0; i < keyRefs.length && i < valueRefs.length; i++) {
-      const key = this.decodeObject(keyRefs[i], visited, depth + 1);
-      const value = this.decodeObject(valueRefs[i], visited, depth + 1);
+      const key = this.decodeRef(keyRefs[i], visited, depth + 1);
+      const value = this.decodeRef(valueRefs[i], visited, depth + 1);
 
       // Object keys are strings in JS. Coerce primitive keys (e.g. the integer
       // pids used by the sysmontap `Processes` map) so they are not dropped.
