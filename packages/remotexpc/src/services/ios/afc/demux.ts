@@ -1,6 +1,6 @@
 import type net from 'node:net';
 
-import AsyncLock from 'async-lock';
+import {AsyncLock} from 'asyncbox';
 
 import {getLogger} from '../../../lib/logger.js';
 import {fatalizeAfcSocket, readAfcHeader, readExact, readUInt64LE, sendAfcPacket} from './codec.js';

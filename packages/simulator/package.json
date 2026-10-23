@@ -51,15 +51,13 @@
     "@appium/support": "^7.2.7",
     "@xmldom/xmldom": "^0.x",
     "appium-xcode": "^7.2.3",
-    "async-lock": "^1.0.0",
-    "asyncbox": "^6.4.3",
+    "asyncbox": "^6.5.0",
     "semver": "^7.8.5",
     "teen_process": "^4.2.0"
   },
   "devDependencies": {
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.0.0-rc.1",
-    "@types/async-lock": "^1.4.2",
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.0",
     "pem": "^1.8.3",

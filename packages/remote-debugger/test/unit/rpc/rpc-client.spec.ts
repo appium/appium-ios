@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {describe, it} from 'node:test';
 
-import AsyncLock from 'async-lock';
+import {AsyncLock} from 'asyncbox';
 import sinon from 'sinon';
 
 import {RpcClient} from '../../../lib/rpc/rpc-client.js';

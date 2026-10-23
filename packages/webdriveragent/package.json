@@ -64,8 +64,7 @@
     "@appium/base-driver": "^10.8.0",
     "@appium/strongbox": "^2.0.0",
     "@appium/support": "^7.2.6",
-    "async-lock": "^1.0.0",
-    "asyncbox": "^6.4.3",
+    "asyncbox": "^6.5.0",
     "axios": "^1.18.0",
     "teen_process": "^4.2.0"
   },
@@ -74,7 +73,6 @@
     "@appium/oxc-config": "^1.1.0",
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.0.0-rc.1",
-    "@types/async-lock": "^1.4.2",
     "@types/node": "^26.0.0",
     "@types/sinon": "^22.0.0",
     "appium-xcode": "^7.2.3",
