@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.2...appium-webdriveragent@16.17.3) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
 ## [16.17.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.1...appium-webdriveragent@16.17.2) (2026-10-23)
 
 ### Bug Fixes

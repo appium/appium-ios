@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [7.2.4](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.3...appium-xcode@7.2.4) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
 ## [7.2.3](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.2...appium-xcode@7.2.3) (2026-10-02)
 
 ### Miscellaneous Chores
