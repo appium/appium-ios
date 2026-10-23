@@ -65,7 +65,7 @@
     "test:dvt:notifications": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/dvt-instruments/notifications.spec.js\"",
     "test:dvt:screenshot": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/dvt-instruments/screenshot.spec.js\"",
     "test:dvt:sysmontap": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/dvt-instruments/sysmontap.spec.js\"",
-    "test:dvt": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/dvt-instruments/**/*.spec.js\"",
+    "test:dvt": "node --enable-source-maps --test --test-concurrency=1 --test-timeout=60000 \"build/test/integration/dvt-instruments/**/*.spec.js\"",
     "test:hid-indigo": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/hid-indigo.spec.js\"",
     "test:house-arrest": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/house-arrest.spec.js\"",
     "test:installation-proxy": "node --enable-source-maps --test --test-timeout=60000 \"build/test/integration/installation-proxy.spec.js\"",

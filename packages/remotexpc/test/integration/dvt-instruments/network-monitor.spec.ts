@@ -14,24 +14,36 @@ log.level = 'debug';
 async function findEventOfType<K extends NetworkEvent['type']>(
   networkMonitor: any,
   eventType: K,
-  maxAttempts: number = 50,
   timeoutMs: number = 10000,
 ): Promise<Extract<NetworkEvent, {type: K}>> {
-  const startTime = Date.now();
-  let eventCount = 0;
+  let stopOutcome: Promise<unknown> | undefined;
+  const timer = setTimeout(() => {
+    stopOutcome = networkMonitor.stop().then(
+      (): undefined => undefined,
+      (error: unknown): unknown => error,
+    );
+  }, timeoutMs);
+  let match: Extract<NetworkEvent, {type: K}> | undefined;
 
-  for await (const event of networkMonitor.events()) {
-    if (event.type === eventType) {
-      return event as Extract<NetworkEvent, {type: K}>;
+  try {
+    for await (const event of networkMonitor.events()) {
+      if (event.type === eventType) {
+        match = event as Extract<NetworkEvent, {type: K}>;
+        break;
+      }
     }
-
-    eventCount++;
-    if (eventCount >= maxAttempts || Date.now() - startTime > timeoutMs) {
-      throw new Error(`Failed to receive ${eventType} event within ${maxAttempts} attempts or ${timeoutMs}ms timeout`);
-    }
+  } finally {
+    clearTimeout(timer);
   }
 
-  throw new Error(`Event stream ended without receiving ${eventType} event`);
+  const stopError = await stopOutcome;
+  if (stopError) {
+    throw stopError;
+  }
+  if (match) {
+    return match;
+  }
+  throw new Error(`Failed to receive ${eventType} event within ${timeoutMs}ms`);
 }
 
 describe('NetworkMonitor', {timeout: 60000}, function () {
@@ -53,7 +65,7 @@ describe('NetworkMonitor', {timeout: 60000}, function () {
   });
 
   // When running the tests, perform some network activity on the device like opening Safari and navigating to a website.
-  // Some event types may take time to be received, increase maxAttempts and timeoutMs accordingly.
+  // Some event types may take time to be received, increase timeoutMs accordingly.
   describe('Network Monitoring', function () {
     it('should stop an active iterator without waiting for new events', async function () {
       const networkMonitor = dvtServiceConnection!.networkMonitor;
@@ -118,7 +130,7 @@ describe('NetworkMonitor', {timeout: 60000}, function () {
     it('should receive interface detection events', async function () {
       const networkMonitor = dvtServiceConnection!.networkMonitor;
 
-      const interfaceEvent = await findEventOfType(networkMonitor, NetworkMessageType.INTERFACE_DETECTION, 250);
+      const interfaceEvent = await findEventOfType(networkMonitor, NetworkMessageType.INTERFACE_DETECTION);
 
       assert.strictEqual(interfaceEvent.type, NetworkMessageType.INTERFACE_DETECTION);
       assert.ok('interfaceIndex' in interfaceEvent);
@@ -128,7 +140,7 @@ describe('NetworkMonitor', {timeout: 60000}, function () {
     it('should receive connection detection events', async function () {
       const networkMonitor = dvtServiceConnection!.networkMonitor;
 
-      const connectionEvent = await findEventOfType(networkMonitor, NetworkMessageType.CONNECTION_DETECTION, 30);
+      const connectionEvent = await findEventOfType(networkMonitor, NetworkMessageType.CONNECTION_DETECTION);
 
       assert.ok('address' in connectionEvent.localAddress);
       assert.ok('port' in connectionEvent.localAddress);
@@ -140,15 +152,23 @@ describe('NetworkMonitor', {timeout: 60000}, function () {
 
     it('should receive connection update events', async function () {
       const networkMonitor = dvtServiceConnection!.networkMonitor;
+      const safariPid = await dvtServiceConnection!.processControl.launch({
+        bundleId: 'com.apple.mobilesafari',
+        killExisting: true,
+      });
 
-      const updateEvent = await findEventOfType(networkMonitor, NetworkMessageType.CONNECTION_UPDATE, 200);
+      try {
+        const updateEvent = await findEventOfType(networkMonitor, NetworkMessageType.CONNECTION_UPDATE);
 
-      assert.ok('rxPackets' in updateEvent);
-      assert.ok('rxBytes' in updateEvent);
-      assert.ok('txPackets' in updateEvent);
-      assert.ok('txBytes' in updateEvent);
-      assert.ok('connectionSerial' in updateEvent);
-      assert.ok('time' in updateEvent);
+        assert.ok('rxPackets' in updateEvent);
+        assert.ok('rxBytes' in updateEvent);
+        assert.ok('txPackets' in updateEvent);
+        assert.ok('txBytes' in updateEvent);
+        assert.ok('connectionSerial' in updateEvent);
+        assert.ok('time' in updateEvent);
+      } finally {
+        await dvtServiceConnection!.processControl.kill(safariPid);
+      }
     });
   });
 });
