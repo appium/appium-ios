@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.1...appium-webdriveragent@16.17.2) (2026-10-23)
+
+### Bug Fixes
+
+* wait for a hittable key only when keyboardWaitTimeout is set ([#93](https://github.com/appium/appium-ios/issues/93)) ([5a3eed4](https://github.com/appium/appium-ios/commit/5a3eed4b07172fce2413f4d55c1686da68fe6140))
+
+
 ## [16.17.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.0...appium-webdriveragent@16.17.1) (2026-10-21)
 
 ### Bug Fixes
