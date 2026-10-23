@@ -46,6 +46,7 @@ export class EnergyMonitor extends BaseInstrument {
   /**
    * Start energy sampling for the given PIDs.
    * Idempotent: a second call while already sampling is a no-op.
+   * Resolves once the device acknowledges, so a stop sent just before cannot land after it.
    */
   async startSampling(pids: number[]): Promise<void> {
     if (this.sampling) {
@@ -55,13 +56,15 @@ export class EnergyMonitor extends BaseInstrument {
     await this.initialize();
     const channel = this.requireChannel();
     this.stopRequested = false;
-    await channel.call('startSamplingForPIDs_')(new MessageAux().appendObj(pids), false);
+    const messageId = await channel.call('startSamplingForPIDs_')(new MessageAux().appendObj(pids));
+    await channel.receiveReply(messageId);
     this.sampling = true;
   }
 
   /**
    * Stop energy sampling for the given PIDs.
    * Safe to call when not sampling or before initialization.
+   * Resolves once the device acknowledges, so a later start cannot be undone by this stop.
    */
   async stopSampling(pids: number[]): Promise<void> {
     this.stopRequested = true;
@@ -74,7 +77,8 @@ export class EnergyMonitor extends BaseInstrument {
 
     if (this.channel) {
       try {
-        await this.channel.call('stopSamplingForPIDs_')(new MessageAux().appendObj(pids), false);
+        const messageId = await this.channel.call('stopSamplingForPIDs_')(new MessageAux().appendObj(pids));
+        await this.channel.receiveReply(messageId);
       } catch (error) {
         log.debug(
           'energy monitor stopSampling() could not notify the device:',
