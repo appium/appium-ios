@@ -10,7 +10,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
+#if !TARGET_OS_TV
 @interface FBW3CActionsSynthesizer : FBBaseActionsSynthesizer
 
 @end

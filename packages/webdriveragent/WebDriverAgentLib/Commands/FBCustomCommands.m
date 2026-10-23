@@ -59,11 +59,13 @@
     [[FBRoute GET:@"/wda/screens"].withoutSession.standalone respondWithTarget:self action:@selector(handleGetScreens:)],
     [[FBRoute GET:@"/wda/activeAppInfo"] respondWithTarget:self action:@selector(handleActiveAppInfo:)],
     [[FBRoute GET:@"/wda/activeAppInfo"].withoutSession respondWithTarget:self action:@selector(handleActiveAppInfo:)],
-#if !TARGET_OS_TV && !TARGET_OS_WATCH // tvOS/watchOS do not provide relevant APIs
+#if !TARGET_OS_TV && !TARGET_OS_WATCH // tvOS/watchOS do not provide UIPasteboard
     [[FBRoute POST:@"/wda/setPasteboard"] respondWithTarget:self action:@selector(handleSetPasteboard:)],
     [[FBRoute POST:@"/wda/setPasteboard"].withoutSession respondWithTarget:self action:@selector(handleSetPasteboard:)],
     [[FBRoute POST:@"/wda/getPasteboard"] respondWithTarget:self action:@selector(handleGetPasteboard:)],
     [[FBRoute POST:@"/wda/getPasteboard"].withoutSession respondWithTarget:self action:@selector(handleGetPasteboard:)],
+#endif
+#if !TARGET_OS_TV // watchOS reads the battery through WatchKit rather than UIDevice
     [[FBRoute GET:@"/wda/batteryInfo"] respondWithTarget:self action:@selector(handleGetBatteryInfo:)],
 #endif
     [[FBRoute POST:@"/wda/pressButton"] respondWithTarget:self action:@selector(handlePressButtonCommand:)],
@@ -330,9 +332,24 @@
   }
   return FBResponseWithObject([result base64EncodedStringWithOptions:(NSDataBase64EncodingOptions)0]);
 }
+#endif
 
+#if !TARGET_OS_TV
 + (id<FBResponsePayload>)handleGetBatteryInfo:(FBRouteRequest *)request
 {
+#if TARGET_OS_WATCH
+  // UIDevice is unavailable on watchOS; WatchKit exposes the same three readings. Its battery-state
+  // enumerators are declared in the same order as UIDeviceBatteryState, so the numbers WDA reports
+  // stay comparable across platforms.
+  WKInterfaceDevice *device = WKInterfaceDevice.currentDevice;
+  if (!device.isBatteryMonitoringEnabled) {
+    device.batteryMonitoringEnabled = YES;
+  }
+  return FBResponseWithObject(@{
+    @"level": @(device.batteryLevel),
+    @"state": @(device.batteryState)
+  });
+#else
   if (![[UIDevice currentDevice] isBatteryMonitoringEnabled]) {
     [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
   }
@@ -340,6 +357,7 @@
     @"level": @([UIDevice currentDevice].batteryLevel),
     @"state": @([UIDevice currentDevice].batteryState)
   });
+#endif
 }
 #endif
 

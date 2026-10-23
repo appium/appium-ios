@@ -25,7 +25,7 @@
 #import "XCUIElement.h"
 #import "XCUIElement+FBUtilities.h"
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
+#if !TARGET_OS_TV
 
 /**
  Maps a drag XCUIGestureVelocity to the speed XCTest drags at. XCTest calls the result "pixels per
@@ -147,13 +147,20 @@ static BOOL FBIsFinitePoint(CGPoint point)
   long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
     ? referencedElement.displayID
     : 0;
+#if TARGET_OS_WATCH
+  // watchOS has no UIInterfaceOrientation and its panel never rotates, so events are recorded
+  // in the only orientation the platform has.
+  FBEventInterfaceOrientation orientation = FBEventInterfaceOrientationPortrait;
+#else
+  FBEventInterfaceOrientation orientation = self.interfaceOrientation;
+#endif
   XCSynthesizedEventRecord *event = [self.class fb_pressDragEventFromPoint:startPoint
                                                                forDuration:pressDuration
                                                                    toPoint:endPoint
                                                            pointsPerSecond:pointsPerSecond
                                                        thenHoldForDuration:holdDuration
                                                                  displayID:displayID
-                                                      interfaceOrientation:self.interfaceOrientation];
+                                                      interfaceOrientation:orientation];
   if (![self fb_synthesizeEvent:event error:error]) {
     return NO;
   }
@@ -167,7 +174,7 @@ static BOOL FBIsFinitePoint(CGPoint point)
                                          pointsPerSecond:(CGFloat)pointsPerSecond
                                      thenHoldForDuration:(NSTimeInterval)holdDuration
                                                displayID:(long long)displayID
-                                    interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+                                    interfaceOrientation:(FBEventInterfaceOrientation)interfaceOrientation
 {
   // Mirrors XCTest's own press-hold-drag event builder
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:startPoint offset:0];
@@ -180,11 +187,19 @@ static BOOL FBIsFinitePoint(CGPoint point)
   [path liftUpAtOffset:dragEndOffset + holdDuration];
 
   NSString *name = @"Press, drag and hold";
+#if TARGET_OS_WATCH
+  // No UIInterfaceOrientation on watchOS; the panel never rotates, so the display alone
+  // identifies where the event goes.
+  (void)interfaceOrientation;
+  XCSynthesizedEventRecord *event = [[XCSynthesizedEventRecord alloc] initWithName:name
+                                                                         displayID:(unsigned long long)displayID];
+#else
   XCSynthesizedEventRecord *event = [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]
     ? [[XCSynthesizedEventRecord alloc] initWithName:name
                                            displayID:(unsigned long long)displayID
                                 interfaceOrientation:interfaceOrientation]
     : [[XCSynthesizedEventRecord alloc] initWithName:name interfaceOrientation:interfaceOrientation];
+#endif
   [event addPointerEventPath:path];
   return event;
 }

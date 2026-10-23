@@ -65,7 +65,7 @@ static NSString *const FB_KEY_PARAMETERS = @"parameters";
 static NSString *const FB_KEY_ACTIONS = @"actions";
 
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
+#if !TARGET_OS_TV
 @interface FBW3CGestureItem : FBBaseGestureItem
 
 @property (nullable, readonly, nonatomic) FBW3CGestureItem *previousItem;
@@ -956,6 +956,13 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   if (nil == screen) {
     return nil;
   }
+#if TARGET_OS_WATCH
+  // watchOS has no UIInterfaceOrientation and a fixed panel that never rotates, so the event
+  // record is created against the display only and no cross-display correction is needed.
+  self.displayCorrection = CGVectorMake(0, 0);
+  return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                             displayID:(unsigned long long)screen.displayID];
+#else
   XCSynthesizedEventRecord *eventRecord;
   self.displayCorrection = CGVectorMake(0, 0);
   if (screen.displayID == XCUIScreen.mainScreen.displayID) {
@@ -982,6 +989,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
       eventRecord.interfaceOrientation);
   }
   return eventRecord;
+#endif
 }
 
 - (nullable XCSynthesizedEventRecord *)synthesizeWithError:(NSError **)error

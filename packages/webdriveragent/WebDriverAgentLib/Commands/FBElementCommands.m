@@ -75,16 +75,12 @@
 #if TARGET_OS_TV
     [[FBRoute GET:@"/element/:uuid/attribute/focused"] respondWithTarget:self action:@selector(handleGetFocused:)],
     [[FBRoute POST:@"/wda/element/:uuid/focuse"] respondWithTarget:self action:@selector(handleFocuse:)],
-#elif !TARGET_OS_WATCH
-    // Gesture synthesis isn't supported on watchOS - only /element/:uuid/click is available.
+#else
+    // Gesture synthesis works on watchOS - verified on watchOS 26.5 with
+    // WDAWatchGestureSpikeTests. Only the gestures whose hardware does not exist on a watch, or
+    // whose synthesis has never been observed to complete there, stay out of the watch build.
     [[FBRoute POST:@"/wda/element/:uuid/swipe"] respondWithTarget:self action:@selector(handleSwipe:)],
     [[FBRoute POST:@"/wda/swipe"] respondWithTarget:self action:@selector(handleSwipe:)],
-
-    [[FBRoute POST:@"/wda/element/:uuid/pinch"] respondWithTarget:self action:@selector(handlePinch:)],
-    [[FBRoute POST:@"/wda/pinch"] respondWithTarget:self action:@selector(handlePinch:)],
-
-    [[FBRoute POST:@"/wda/element/:uuid/rotate"] respondWithTarget:self action:@selector(handleRotate:)],
-    [[FBRoute POST:@"/wda/rotate"] respondWithTarget:self action:@selector(handleRotate:)],
 
     [[FBRoute POST:@"/wda/element/:uuid/doubleTap"] respondWithTarget:self action:@selector(handleDoubleTap:)],
     [[FBRoute POST:@"/wda/doubleTap"] respondWithTarget:self action:@selector(handleDoubleTap:)],
@@ -111,13 +107,25 @@
     [[FBRoute POST:@"/wda/element/:uuid/pressAndDragWithVelocity"] respondWithTarget:self action:@selector(handlePressAndDragWithVelocity:)],
     [[FBRoute POST:@"/wda/pressAndDragWithVelocity"] respondWithTarget:self action:@selector(handlePressAndDragCoordinateWithVelocity:)],
 
-    [[FBRoute POST:@"/wda/element/:uuid/forceTouch"] respondWithTarget:self action:@selector(handleForceTouch:)],
-    [[FBRoute POST:@"/wda/forceTouch"] respondWithTarget:self action:@selector(handleForceTouch:)],
-
     [[FBRoute POST:@"/wda/element/:uuid/tap"] respondWithTarget:self action:@selector(handleTap:)],
     [[FBRoute POST:@"/wda/tap"] respondWithTarget:self action:@selector(handleTap:)],
+#if !TARGET_OS_WATCH
+    // The two-finger primitives below do synthesise without error on watchOS 26.5, but nothing on a
+    // watch panel can show a pinch or a rotation, so their effect has never been observed. Keep them
+    // out of the watch build (and the matching driver capability gated) until there is proof.
+    [[FBRoute POST:@"/wda/element/:uuid/pinch"] respondWithTarget:self action:@selector(handlePinch:)],
+    [[FBRoute POST:@"/wda/pinch"] respondWithTarget:self action:@selector(handlePinch:)],
 
+    [[FBRoute POST:@"/wda/element/:uuid/rotate"] respondWithTarget:self action:@selector(handleRotate:)],
+    [[FBRoute POST:@"/wda/rotate"] respondWithTarget:self action:@selector(handleRotate:)],
+
+    [[FBRoute POST:@"/wda/element/:uuid/forceTouch"] respondWithTarget:self action:@selector(handleForceTouch:)],
+    [[FBRoute POST:@"/wda/forceTouch"] respondWithTarget:self action:@selector(handleForceTouch:)],
+#endif
+#if !TARGET_OS_WATCH
+    // -adjustToPickerWheelValue: only exists where UIKit has a picker wheel.
     [[FBRoute POST:@"/wda/pickerwheel/:uuid/select"] respondWithTarget:self action:@selector(handleWheelSelect:)],
+#endif
 #endif
     [[FBRoute POST:@"/wda/keys"] respondWithTarget:self action:@selector(handleKeys:)],
   ];

@@ -112,6 +112,7 @@
 		1E668A3BF614D719AE5B4450 /* XCTMessagingRole_UIAutomationRunnerEventReporting-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 4951F55904679A17CDFEC186 /* XCTMessagingRole_UIAutomationRunnerEventReporting-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		1E6EBAA448D2632F362FFAA7 /* FBKeyboard.h in Headers */ = {isa = PBXBuildFile; fileRef = EE3A18641CDE734B00DE4205 /* FBKeyboard.h */; };
 		1EBB250E6F79EBCBA11FCE9E /* FBW3CActionsSynthesizer.m in Sources */ = {isa = PBXBuildFile; fileRef = 7140974A1FAE1B51008FB2C5 /* FBW3CActionsSynthesizer.m */; };
+		AA11BB44CC55DD66EE77FF01 /* FBW3CActionsHelpers.m in Sources */ = {isa = PBXBuildFile; fileRef = 713AE574243A53BE0000D657 /* FBW3CActionsHelpers.m */; };
 		1F545FFB67878CBAF4D6E6A0 /* FBLogger.h in Headers */ = {isa = PBXBuildFile; fileRef = EE9B76A31CF7A43900275851 /* FBLogger.h */; };
 		1F9DD4891B8B19D8E13066E9 /* FBXCElementSnapshot.m in Sources */ = {isa = PBXBuildFile; fileRef = 13DE7A4E287C46BB003243C6 /* FBXCElementSnapshot.m */; };
 		203561B6C2B8456509B60AD7 /* XCTScreenCapturePolicy.h in Headers */ = {isa = PBXBuildFile; fileRef = FDB15E393EA0850C004D26B2 /* XCTScreenCapturePolicy.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -880,6 +881,7 @@
 		A9BCCC677A46E48D4D2B05A9 /* FBActiveAppDetectionPoint.m in Sources */ = {isa = PBXBuildFile; fileRef = 13815F6E2328D20400CDAB61 /* FBActiveAppDetectionPoint.m */; };
 		AA11BB22CC33DD44EE55FF02 /* FBMjpegServer.m in Sources */ = {isa = PBXBuildFile; fileRef = 7155D702211DCEF400166C20 /* FBMjpegServer.m */; };
 		AA11BB22CC33DD44EE55FF04 /* WDAMjpegStreamingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */; };
+		AA11BB33CC44DD55EE66FF02 /* WDAWatchGestureSpikeTests.m in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */; };
 		AAA213E600F40AB7F43D1015 /* WebDriverAgentLib_tvOS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 641EE6F82240C5CA00173FCB /* WebDriverAgentLib_tvOS.framework */; };
 		AABBCCDDEEFF001122334457 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBCCDDEEFF001122334456 /* SceneDelegate.m */; };
 		AB126E96C642B235EE02B4F1 /* _XCTestObservationPrivate-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = C840A8703A7C8D48897E158A /* _XCTestObservationPrivate-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1762,6 +1764,7 @@
 		A8230FDD93639CE2E9EFE311 /* XCUILocation.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = XCUILocation.h; sourceTree = "<group>"; };
 		A87AE5544E9A5CA7C9168DDF /* SceneDelegate.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
 		AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WDAMjpegStreamingIntegrationTests.swift; sourceTree = "<group>"; };
+		AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = WDAWatchGestureSpikeTests.m; sourceTree = "<group>"; };
 		AA2351C66A4616534FB81AE4 /* XCTMessagingRole_ForcePressureSupportQuerying-Protocol.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "XCTMessagingRole_ForcePressureSupportQuerying-Protocol.h"; sourceTree = "<group>"; };
 		AABBCCDDEEFF001122334455 /* SceneDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
 		AABBCCDDEEFF001122334456 /* SceneDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
@@ -2392,6 +2395,7 @@
 				912F32C353FE7C3E7C841405 /* WDATypingIntegrationTests.swift */,
 				75F677B5B7737E7E1F321C20 /* WDAScreenshotAndSourceIntegrationTests.swift */,
 				AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */,
+				AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */,
 				EB1B9A793C9EFB7853C1AA13 /* WDAAppLifecycleIntegrationTests.swift */,
 				646D714BC17FE9258CFBDF55 /* WDADeviceIntegrationTests.swift */,
 				28F75AEC6442F32A3C4394AD /* WDAAlertIntegrationTests.swift */,
@@ -4618,6 +4622,7 @@
 				6EDF83DA0A6C7A7E67C30AF6 /* WDADeviceIntegrationTests.swift in Sources */,
 				FBFEC05ED2C01D1EAE34BE9A /* WDAScreenshotAndSourceIntegrationTests.swift in Sources */,
 				AA11BB22CC33DD44EE55FF04 /* WDAMjpegStreamingIntegrationTests.swift in Sources */,
+				AA11BB33CC44DD55EE66FF02 /* WDAWatchGestureSpikeTests.m in Sources */,
 				D22FED0B3856919DA4BCFA67 /* WDATypingIntegrationTests.swift in Sources */,
 				68EB0B8D53270CB68C53D028 /* WDAAlertIntegrationTests.swift in Sources */,
 			);
@@ -4627,6 +4632,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA11BB44CC55DD66EE77FF01 /* FBW3CActionsHelpers.m in Sources */,
 				0C120FA673A94DB66CB0E6B0 /* XCUIElement+FBCustomActions.m in Sources */,
 				9D87A03130302556CA52D1D2 /* NSDictionary+FBUtf8SafeDictionary.m in Sources */,
 				8934D96BE720E53106DCFA6C /* XCUIElement+FBResolve.m in Sources */,

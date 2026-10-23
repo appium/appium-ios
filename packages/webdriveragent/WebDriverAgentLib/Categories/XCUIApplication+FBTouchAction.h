@@ -53,7 +53,22 @@ NS_ASSUME_NONNULL_BEGIN
          thenHoldForDuration:(NSTimeInterval)holdDuration
                        error:(NSError * _Nullable*)error;
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
+/**
+ Orientation a synthesized event is expressed in.
+
+ watchOS has no `UIInterfaceOrientation` - the platform header marks the whole type
+ unavailable - and its apps only ever render in the panel's fixed orientation. Events are
+ therefore recorded with the raw `UIInterfaceOrientationPortrait` value there, so the type
+ name never reaches a watchOS compilation unit. Everywhere else it stays the UIKit enum.
+*/
+#if TARGET_OS_WATCH || TARGET_OS_TV
+typedef long long FBEventInterfaceOrientation;
+#define FBEventInterfaceOrientationPortrait ((FBEventInterfaceOrientation)1)
+#else
+typedef UIInterfaceOrientation FBEventInterfaceOrientation;
+#define FBEventInterfaceOrientationPortrait UIInterfaceOrientationPortrait
+#endif
+#if !TARGET_OS_TV
 /**
  Builds the synthesized event used by
  -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:
@@ -74,7 +89,7 @@ NS_ASSUME_NONNULL_BEGIN
                                          pointsPerSecond:(CGFloat)pointsPerSecond
                                      thenHoldForDuration:(NSTimeInterval)holdDuration
                                                displayID:(long long)displayID
-                                    interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation;
+                                   interfaceOrientation:(FBEventInterfaceOrientation)interfaceOrientation;
 #endif
 
 @end
