@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.26.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.1...appium-ios-remotexpc@5.26.2) (2026-10-23)
+
+### Bug Fixes
+
+* **remotexpc:** wait for EnergyMonitor start/stop replies, run DVT integration suites serially ([#106](https://github.com/appium/appium-ios/issues/106)) ([d07637d](https://github.com/appium/appium-ios/commit/d07637d9dad27008e78131fdc8ecd02adfbf38e8))
+
+
 ## [5.26.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.0...appium-ios-remotexpc@5.26.1) (2026-10-23)
 
 ### Bug Fixes
