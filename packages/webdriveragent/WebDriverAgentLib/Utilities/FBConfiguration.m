@@ -343,6 +343,7 @@ static NSString *const axSettingsClassName = @"AXSettings";
   self.shouldUseCompactResponses = YES;
   self.elementResponseAttributes = @"type,label";
   self.maxTypingFrequencyOverride = @(self.defaultTypingFrequency);
+  self.keyboardWaitTimeout = 0;
   self.screenshotQuality = 3;
   self.useFirstMatch = NO;
   self.boundElementsByIndex = NO;

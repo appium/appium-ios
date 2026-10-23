@@ -60,6 +60,8 @@ typedef NS_ENUM(NSInteger, FBConfigurationKeyboardPreference) {
 
 /*! The maximum typing frequency for all typing activities */
 @property (atomic, assign) NSUInteger maxTypingFrequency;
+/*! Seconds to wait for a hittable key before typing on iOS. 0 disables the wait. */
+@property (atomic, assign) NSTimeInterval keyboardWaitTimeout;
 @property (atomic, readonly) NSUInteger defaultTypingFrequency;
 
 /*! Use singleton test manager proxy */
