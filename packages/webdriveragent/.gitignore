@@ -50,6 +50,7 @@ webdriveragent-*.tar.gz
 uncompressed/
 prebuilt-agents/
 WebDriverAgentRunner-Runner.app.zip
+WebDriverAgentRunner-Runner-*-*.zip
 WebDriverAgentRunner-Runner.app/
 
 # Ruby

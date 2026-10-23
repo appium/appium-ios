@@ -48,12 +48,14 @@ async function buildWebDriverAgent(xcodeVersion) {
 
   // Get Xcode version
   xcodeVersion = xcodeVersion || (await xcode.getVersion());
-  LOG.info(`Building WebDriverAgent for iOS using Xcode version '${xcodeVersion}'`);
+  LOG.info(`Building the '${target}' target for the '${sdk}' sdk using Xcode version '${xcodeVersion}'`);
 
-  // Clean and build
+  // Clean and build. `env` replaces the child environment wholesale, so the parent's has to be
+  // spread in: build.sh resolves xcodebuild through PATH, and without DEVELOPER_DIR inherited the
+  // /usr/bin shim runs the Command Line Tools copy, which refuses to build anything.
   try {
     await exec('/bin/bash', ['./Scripts/build.sh'], {
-      env: {TARGET: target, SDK: sdk, DERIVED_DATA_PATH},
+      env: {...process.env, TARGET: target, SDK: sdk, DERIVED_DATA_PATH},
       cwd: ROOT_DIR,
     });
   } catch (e) {
