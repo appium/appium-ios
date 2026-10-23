@@ -11,6 +11,7 @@ import SwiftUI
 struct ContentView: View {
   @State private var resultText = "Idle"
   @State private var typedText = ""
+  @State private var showAlert = false
 
   var body: some View {
     // ScrollView keeps content reachable - WDA's test-launch path shifts the scene down
@@ -23,9 +24,19 @@ struct ContentView: View {
           resultText = "Tapped"
         }
         .accessibilityIdentifier("tapMeButton")
+        Button("Show Alert") {
+          showAlert = true
+        }
+        .accessibilityIdentifier("showAlertButton")
         TextField("Type here", text: $typedText)
           .accessibilityIdentifier("typingField")
       }
+    }
+    .alert("Alert Title", isPresented: $showAlert) {
+      Button("OK") { resultText = "Accepted" }
+      Button("Cancel", role: .cancel) { resultText = "Cancelled" }
+    } message: {
+      Text("Alert message body")
     }
   }
 }

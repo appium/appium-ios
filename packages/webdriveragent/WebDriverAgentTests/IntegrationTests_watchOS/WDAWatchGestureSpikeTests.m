@@ -22,6 +22,12 @@
 //
 // Whether a gesture also *takes effect* is a separate question covered by the driver-level
 // functional suite once the routes exist; this only settles "does the call return".
+//
+// Only primitives measured to return on watchOS 26.5 are invoked. The velocity-carrying swipes are
+// deliberately NOT: `swipeUpWithVelocity:` stalls inside `Synthesize event` for over a minute and
+// then takes the runner down with it ("Restarting after unexpected exit, crash, or test timeout"),
+// which would cost the rest of the matrix and break CI. They are reported by selector presence
+// only, below, together with pinch and rotate, which are known not to be usable on the platform.
 
 @interface WDAWatchGestureSpikeTests : XCTestCase
 @property (nonatomic, strong) XCUIApplication *app;
@@ -77,10 +83,6 @@
   [self probe:@"scroll.swipeDown" body:^{ [scroll swipeDown]; }];
   [self probe:@"scroll.swipeLeft" body:^{ [scroll swipeLeft]; }];
   [self probe:@"scroll.swipeRight" body:^{ [scroll swipeRight]; }];
-  [self probe:@"scroll.swipeUpWithVelocity:" body:^{ [scroll swipeUpWithVelocity:.5]; }];
-  [self probe:@"scroll.swipeDownWithVelocity:" body:^{ [scroll swipeDownWithVelocity:.5]; }];
-  [self probe:@"scroll.pinchWithScale:velocity:" body:^{ [scroll pinchWithScale:2 velocity:1]; }];
-  [self probe:@"scroll.rotateWithVelocity:" body:^{ [scroll rotate:M_PI withVelocity:1]; }];
 
   [self probe:@"coordinate.pressForDuration:thenDragToCoordinate:" body:^{
     [buttonCenter pressForDuration:.3 thenDragToCoordinate:lowerHalf];

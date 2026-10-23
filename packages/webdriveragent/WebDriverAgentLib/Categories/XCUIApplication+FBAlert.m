@@ -115,6 +115,18 @@ static NSString *const FB_LIMITED_ACCESS_PROMPT_BUNDLE_ID = @"com.apple.Contacts
   for (XCUIElement *candidate in candidates) {
     XCUIElementType elementType = candidate.elementType;
     if (elementType == XCUIElementTypeAlert) {
+#if TARGET_OS_WATCH
+      // watchOS keeps a full-screen placeholder element typed `XCUIElementTypeAlert` in the
+      // *system* application's tree at all times - verified on watchOS 26.5: same 208x248 frame,
+      // `accessible = false`, no label and no children, present before, during and after a real
+      // alert. Accepting it makes every alert command answer as if an alert were open, and keeps
+      // FBAlertsMonitor firing on every tick, so only alert elements that actually hold content
+      // count here.
+      id<FBXCElementSnapshot> alertSnapshot = candidate.fb_cachedSnapshot ?: [candidate fb_customSnapshot];
+      if (0 == alertSnapshot.children.count) {
+        continue;
+      }
+#endif
       return candidate;
     } else if (elementType == XCUIElementTypeSheet) {
       [sheets addObject:candidate];
