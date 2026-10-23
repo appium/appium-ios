@@ -1,5 +1,5 @@
 import {getLogger} from '../../../lib/logger.js';
-import {refIndex, uidIndex} from './utils.js';
+import {toRefIndex, toUidIndex} from './utils.js';
 
 const log = getLogger('NSKeyedArchiverDecoder');
 const MAX_DECODE_DEPTH = 1000;
@@ -50,7 +50,7 @@ export class NSKeyedArchiverDecoder {
       return null;
     }
 
-    const rootIndex = refIndex(this.archive.$top?.root);
+    const rootIndex = toRefIndex(this.archive.$top?.root);
     if (rootIndex !== null) {
       return this.decodeObject(rootIndex);
     }
@@ -105,7 +105,7 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    if (uidIndex(obj) !== null) {
+    if (toUidIndex(obj) !== null) {
       visited.delete(index);
       return obj;
     }
@@ -133,7 +133,7 @@ export class NSKeyedArchiverDecoder {
         continue; // Skip class metadata
       }
 
-      const uid = uidIndex(value);
+      const uid = toUidIndex(value);
       result[key] = uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1);
     }
 
@@ -146,7 +146,7 @@ export class NSKeyedArchiverDecoder {
    * Decode the object a collection member references, or return the member unchanged when it is not a reference
    */
   private decodeRef(ref: any, visited: Set<number>, depth: number): any {
-    const index = refIndex(ref);
+    const index = toRefIndex(ref);
     return index === null ? ref : this.decodeObject(index, visited, depth);
   }
 

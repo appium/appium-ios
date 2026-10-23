@@ -19,7 +19,7 @@ export function hasProperties(obj: any, ...props: string[]): boolean {
  * Return the `$objects` index a UID points at, or null when the value is not a UID.
  * Binary plists yield `PlistUID`, XML plists yield `{CF$UID: n}`.
  */
-export function uidIndex(value: any): number | null {
+export function toUidIndex(value: any): number | null {
   if (value instanceof PlistUID) {
     return value.value;
   }
@@ -30,8 +30,8 @@ export function uidIndex(value: any): number | null {
  * Return the `$objects` index of a value in a slot that only ever holds
  * references, such as `NS.objects` members or `$top.root`, so a plain index is accepted too.
  */
-export function refIndex(value: any): number | null {
-  return typeof value === 'number' ? value : uidIndex(value);
+export function toRefIndex(value: any): number | null {
+  return typeof value === 'number' ? value : toUidIndex(value);
 }
 
 /**
@@ -89,8 +89,8 @@ export function extractNSDictionary(dictObj: any, objects: any[]): PlistDictiona
 
   const result: PlistDictionary = {};
   for (let i = 0; i < keysRef.length; i++) {
-    const keyIndex = refIndex(keysRef[i]);
-    const valueIndex = refIndex(valuesRef[i]);
+    const keyIndex = toRefIndex(keysRef[i]);
+    const valueIndex = toRefIndex(valuesRef[i]);
     if (keyIndex === null || valueIndex === null) {
       continue;
     }
