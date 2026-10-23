@@ -1,7 +1,36 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
+import {PlistUID, createBinaryPlist, parseBinaryPlist} from '../../src/lib/plist/index.js';
 import {NSKeyedArchiverDecoder, decodeNSKeyedArchiver} from '../../src/services/ios/dvt/index.js';
+
+/**
+ * Round-trips an NSKeyedArchiver object graph through a real binary plist, so
+ * UIDs reach the decoder exactly as the binary parser emits them.
+ */
+function parseBinaryArchive(objects: any[]): any {
+  return parseBinaryPlist(
+    createBinaryPlist({
+      $version: 100000,
+      $archiver: 'NSKeyedArchiver',
+      $top: {root: new PlistUID(1)},
+      $objects: objects,
+    }),
+  );
+}
+
+/**
+ * Builds an archived NSError whose NSCode equals the index of its $class
+ * object, NSDomain is a UID to a string and NSUserInfo is a UID to $null.
+ */
+function archivedNSError(): any {
+  return parseBinaryArchive([
+    '$null',
+    {$class: new PlistUID(3), NSCode: 3, NSDomain: new PlistUID(2), NSUserInfo: new PlistUID(0)},
+    'DTXMessage',
+    {$classname: 'NSError', $classes: ['NSError', 'NSObject']},
+  ]);
+}
 
 describe('NSKeyedArchiver Decoder', () => {
   describe('isNSKeyedArchive', () => {
@@ -236,6 +265,46 @@ describe('NSKeyedArchiver Decoder', () => {
       assert.strictEqual(result[1].profiles.length, 1);
       assert.strictEqual(result[1].profiles[0].identifier, 'GPUPerformanceStateMin');
       assert.strictEqual(result[1].profiles[0].description, 'Minimum GPU Performance');
+    });
+  });
+
+  describe('binary plist UIDs', () => {
+    it('should resolve a UID property that points at a string', () => {
+      assert.strictEqual(decodeNSKeyedArchiver(archivedNSError()).NSDomain, 'DTXMessage');
+    });
+
+    it('should keep an integer property that matches an object index', () => {
+      assert.strictEqual(decodeNSKeyedArchiver(archivedNSError()).NSCode, 3);
+    });
+
+    it('should resolve a UID property that points at $null to null', () => {
+      assert.strictEqual(decodeNSKeyedArchiver(archivedNSError()).NSUserInfo, null);
+    });
+
+    it('should return a UID stored as an $objects entry unchanged', () => {
+      const archive = parseBinaryArchive([
+        '$null',
+        {$class: new PlistUID(3), formatVersion: new PlistUID(2)},
+        new PlistUID(2),
+        {$classname: 'XCTestConfiguration', $classes: ['XCTestConfiguration', 'NSObject']},
+      ]);
+
+      assert.deepStrictEqual(decodeNSKeyedArchiver(archive), {formatVersion: new PlistUID(2)});
+    });
+
+    it('should decode collections whose members are UIDs', () => {
+      const archive = parseBinaryArchive([
+        '$null',
+        {'NS.keys': [new PlistUID(2)], 'NS.objects': [new PlistUID(3)], $class: new PlistUID(7)},
+        'items',
+        {'NS.objects': [new PlistUID(4), new PlistUID(5)], $class: new PlistUID(6)},
+        'first',
+        42,
+        {$classname: 'NSArray', $classes: ['NSArray', 'NSObject']},
+        {$classname: 'NSDictionary', $classes: ['NSDictionary', 'NSObject']},
+      ]);
+
+      assert.deepStrictEqual(decodeNSKeyedArchiver(archive), {items: ['first', 42]});
     });
   });
 });
