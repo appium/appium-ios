@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.26.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.0...appium-ios-remotexpc@5.26.1) (2026-10-23)
+
+### Bug Fixes
+
+* **remotexpc:** keep binary plist UIDs apart from integers in NSKeyedArchiver decoding ([#105](https://github.com/appium/appium-ios/issues/105)) ([f04fd44](https://github.com/appium/appium-ios/commit/f04fd44664025f548f62f36f19f6b9865569896b))
+
+
 ## [5.26.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.5...appium-ios-remotexpc@5.26.0) (2026-10-22)
 
 ### Features
