@@ -80,6 +80,15 @@ export class SimulatorXcode15 extends BaseSimulator implements CoreSimulator {
   }
 
   /**
+   * Identifies iPhone Duo by device type, independently of its name or hinge readings.
+   * Does not guarantee runtime HID service availability.
+   * @returns Whether this simulator has the iPhone Duo device type.
+   */
+  async isDuo(): Promise<boolean> {
+    return this._native.isDuo(this.udid);
+  }
+
+  /**
    * @returns The unique device identifier (UDID) of the simulator.
    */
   get udid(): string {

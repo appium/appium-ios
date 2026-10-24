@@ -19,7 +19,8 @@ import {
   postDarwinNotification,
   setDarwinNotificationState,
 } from './commands/darwin-notification.js';
-import {pressHidButton, setSimulatedHingeAngle, setHidOrientation} from './commands/hid.js';
+import {isDuo, setSimulatedHingeAngle, setHidOrientation} from './commands/duo.js';
+import {pressHidButton} from './commands/hid.js';
 import {clearLocation, getEnv, openUrl, pushNotification, setLocation} from './commands/interaction.js';
 import {startJpegStream} from './commands/jpeg-stream.js';
 import {addCertificate, addRootCertificate, resetKeychain} from './commands/keychain.js';
@@ -205,6 +206,7 @@ export class NativeSimctl {
 }
 
 Object.assign(NativeSimctl.prototype, {
+  isDuo,
   pressHidButton,
   setSimulatedHingeAngle,
   setHidOrientation,

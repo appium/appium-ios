@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
@@ -31,6 +32,7 @@
 #include "native/objc_runtime.h"
 #include "native/sim_device.h"
 #include "native/sim_device_set.h"
+#include "native/sim_duo.h"
 #include "native/sim_hid.h"
 #include "native/sim_jpeg_stream.h"
 #include "native/sim_orientation.h"
@@ -63,6 +65,19 @@ NSDictionary* OptionsArg(const Napi::CallbackInfo& info, size_t index) {
     return @{};
   }
   return (NSDictionary*)JsValueToNSObject(info.Env(), info[index]);
+}
+
+// Validate before integer conversion: N-API's Uint32Value/Int32Value would truncate or wrap.
+double HIDNumberArg(const Napi::CallbackInfo& info, size_t index, const char* name, double min, double max,
+                    bool integer = false) {
+  if (index >= info.Length() || !info[index].IsNumber()) {
+    throw Napi::TypeError::New(info.Env(), std::string(name) + " must be a number");
+  }
+  double value = info[index].As<Napi::Number>().DoubleValue();
+  if (!std::isfinite(value) || value < min || value > max || (integer && std::trunc(value) != value)) {
+    throw Napi::TypeError::New(info.Env(), std::string(name) + " is outside the supported range");
+  }
+  return value;
 }
 
 // Throws if `!ok && error`, for the common BOOL-returning NSError**-out-param shape — called from
@@ -817,24 +832,33 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
 
   Napi::Value PressHIDButton(const Napi::CallbackInfo& info) {
     id device = device_;
-    uint32_t page = info[0].As<Napi::Number>().Uint32Value();
-    uint32_t usage = info[1].As<Napi::Number>().Uint32Value();
-    double duration = info[2].As<Napi::Number>().DoubleValue();
+    uint32_t page = static_cast<uint32_t>(HIDNumberArg(info, 0, "page", 0, 65535, true));
+    uint32_t usage = static_cast<uint32_t>(HIDNumberArg(info, 1, "usage", 0, 65535, true));
+    double duration = HIDNumberArg(info, 2, "duration", 0, 60);
     return RunAsyncVoid(info.Env(),
                         [device, page, usage, duration]() { coresim::PressHIDButton(device, page, usage, duration); });
   }
   Napi::Value SetSimulatedHingeAngle(const Napi::CallbackInfo& info) {
     id device = device_;
-    double angle = info[0].As<Napi::Number>().DoubleValue();
+    double angle = HIDNumberArg(info, 0, "angle", 0, 180);
     return RunAsyncVoid(info.Env(), [device, angle]() { coresim::SetSimulatedHingeAngle(device, angle); });
   }
   Napi::Value SetHIDOrientation(const Napi::CallbackInfo& info) {
     id device = device_;
-    int32_t orientation = info[0].As<Napi::Number>().Int32Value();
+    int32_t orientation = static_cast<int32_t>(HIDNumberArg(info, 0, "orientation", 1, 4, true));
+    if (info.Length() < 2 || !info[1].IsBoolean()) {
+      throw Napi::TypeError::New(info.Env(), "isMainDisplay must be a boolean");
+    }
     bool isMainDisplay = info[1].As<Napi::Boolean>().Value();
     return RunAsyncVoid(info.Env(), [device, orientation, isMainDisplay]() {
       coresim::SetHIDOrientation(device, orientation, isMainDisplay);
     });
+  }
+  Napi::Value IsDuo(const Napi::CallbackInfo& info) {
+    id device = device_;
+    return RunAsync<bool>(
+        info.Env(), [device]() { return coresim::IsDuoDevice(device); },
+        [](Napi::Env env, bool result) -> Napi::Value { return Napi::Boolean::New(env, result); });
   }
   Napi::Value SetOrientation(const Napi::CallbackInfo& info) {
     id device = device_;
@@ -1770,6 +1794,7 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::ClearLocation>("clearLocation"),
                       InstanceMethod<&NativeDevice::SetOrientation>("setOrientation"),
                       InstanceMethod<&NativeDevice::PressHIDButton>("pressHidButton"),
+                      InstanceMethod<&NativeDevice::IsDuo>("isDuo"),
                       InstanceMethod<&NativeDevice::SetSimulatedHingeAngle>("setSimulatedHingeAngle"),
                       InstanceMethod<&NativeDevice::SetHIDOrientation>("setHidOrientation"),
                       InstanceMethod<&NativeDevice::SendPushNotification>("sendPushNotification"),

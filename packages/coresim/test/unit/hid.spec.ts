@@ -1,27 +1,46 @@
 import assert from 'node:assert/strict';
 import {describe, it, mock} from 'node:test';
 
-import {pressHidButton, setSimulatedHingeAngle, setHidOrientation} from '../../src/commands/hid.js';
+import {setSimulatedHingeAngle, setHidOrientation, isDuo} from '../../src/commands/duo.js';
+import {pressHidButton} from '../../src/commands/hid.js';
+import {NativeSimctl} from '../../src/index.js';
 
 describe('simulator HID input boundaries', () => {
-  it('rejects malformed input before looking up or touching a simulator', async () => {
-    const find = mock.fn(async () => {
-      throw new Error('unexpected native call');
-    });
-    const sim = {_findDevice: find} as any;
-    for (const angle of [-1, 181, NaN, Infinity, '90', null]) {
-      await assert.rejects(setSimulatedHingeAngle.call(sim, 'test', angle as any), TypeError);
+  it('validates raw native calls before conversion or HID dispatch', async () => {
+    const sim = new NativeSimctl();
+    const devices = await sim.getDevices();
+    assert.ok(devices.length);
+    const device = await sim._findDevice(devices[0].udid);
+    for (const value of [-1, 65536, 2 ** 32, 1.5, NaN, Infinity, '12', null, undefined]) {
+      assert.throws(() => device.pressHidButton(value as any, 64, 0.1), TypeError);
+      assert.throws(() => device.pressHidButton(12, value as any, 0.1), TypeError);
     }
-    for (const value of [-1, 65536, 1.5, NaN]) {
-      await assert.rejects(pressHidButton.call(sim, 'test', value, 64), TypeError);
-      await assert.rejects(pressHidButton.call(sim, 'test', 12, value), TypeError);
+    for (const value of [-1, 61, NaN, Infinity, '1', null, undefined]) {
+      assert.throws(() => device.pressHidButton(12, 64, value as any), TypeError);
     }
-    for (const duration of [-1, 61, NaN, Infinity]) {
-      await assert.rejects(pressHidButton.call(sim, 'test', 12, 64, duration), TypeError);
+    for (const value of [-1, 181, NaN, Infinity, '90', null, undefined]) {
+      assert.throws(() => device.setSimulatedHingeAngle(value as any), TypeError);
     }
-    await assert.rejects(setHidOrientation.call(sim, 'test', 0 as any, true), TypeError);
-    await assert.rejects(setHidOrientation.call(sim, 'test', 1, undefined as any), TypeError);
-    assert.equal(find.mock.callCount(), 0);
+    for (const value of [0, 5, 1.5, 2 ** 32 + 1, NaN, Infinity, '1', null, undefined]) {
+      assert.throws(() => device.setHidOrientation(value as any, true), TypeError);
+    }
+    for (const value of [0, 'true', null, undefined]) {
+      assert.throws(() => device.setHidOrientation(1, value as any), TypeError);
+    }
+  });
+  it('identifies Duo by device type without booting and rejects controls on other types', async () => {
+    const sim = new NativeSimctl();
+    const devices = await sim.getDevices();
+    for (const device of devices) {
+      assert.equal(
+        await sim.isDuo(device.udid),
+        device.deviceTypeIdentifier === 'com.apple.CoreSimulator.SimDeviceType.iPhone-Duo',
+      );
+    }
+    const ordinary = devices.find((d) => d.deviceTypeIdentifier && !d.deviceTypeIdentifier.endsWith('.iPhone-Duo'));
+    assert.ok(ordinary);
+    await assert.rejects(sim.setSimulatedHingeAngle(ordinary.udid, 90), /iPhone Duo/);
+    await assert.rejects(sim.setHidOrientation(ordinary.udid, 1, true), /iPhone Duo/);
   });
   it('preserves fractional angles and the selected panel across native dispatch', async () => {
     const angle = mock.fn(async (_angle: number) => {});
@@ -32,8 +51,10 @@ describe('simulator HID input boundaries', () => {
         setSimulatedHingeAngle: angle,
         setHidOrientation: orientation,
         pressHidButton: button,
+        isDuo: async () => true,
       }),
     } as any;
+    assert.equal(await isDuo.call(sim, 'test'), true);
     await setSimulatedHingeAngle.call(sim, 'test', 90.5);
     await setHidOrientation.call(sim, 'test', 3, false);
     await pressHidButton.call(sim, 'test', 12, 64);

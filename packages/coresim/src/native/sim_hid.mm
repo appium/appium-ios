@@ -83,33 +83,19 @@ class HIDConnection {
   xpc_connection_t connection_;
 };
 
-void SendVendorControl(id device, NSString* source, NSString* type, id value) {
-  // IOCF binary serialization (option 1), not a binary property list. Preserve
-  // the payload verified by the former WDA implementation on Duo / iOS 27.1.
-  static void* iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY | RTLD_GLOBAL);
-  if (!iokit) throw NativeSimUnavailableError("framework", "IOKit", "Cannot load IOKit");
-  auto serialize = Resolve<CFDataRef (*)(CFTypeRef, CFOptionFlags)>("IOCFSerialize");
-  NSDictionary* control = @{
-    @"provider" : @"com.apple.Virtualization.VirtualMachines",
-    @"source" : source,
-    @"type" : type,
-    @"value" : value
-  };
-  CFDataRef data = serialize((__bridge CFTypeRef)control, 1);
-  if (!data) throw NSErrorException(HIDError(@"Cannot serialize simulator HID control"));
+}  // namespace
+
+void SendVendorHIDEvent(id device, uint32_t page, uint32_t usage, uint64_t version, NSData* data) {
   xpc_object_t payload = xpc_dictionary_create(nullptr, nullptr, 0);
-  xpc_dictionary_set_uint64(payload, "usagePage", 0xff61);
-  xpc_dictionary_set_uint64(payload, "usage", 0x5b);
-  xpc_dictionary_set_uint64(payload, "version", 0);
-  xpc_dictionary_set_data(payload, "data", CFDataGetBytePtr(data), CFDataGetLength(data));
-  CFRelease(data);
+  xpc_dictionary_set_uint64(payload, "usagePage", page);
+  xpc_dictionary_set_uint64(payload, "usage", usage);
+  xpc_dictionary_set_uint64(payload, "version", version);
+  xpc_dictionary_set_data(payload, "data", data.bytes, data.length);
   NSString* service = @"com.apple.coredevice.feature.remote.hid.vendordefined";
   HIDConnection connection(device, service);
   connection.Send(@"IndigoVendorDefinedEvent", service, payload);
   connection.Finish();
 }
-}  // namespace
-
 void PressHIDButton(id device, uint32_t page, uint32_t usage, double duration) {
   NSString* service = @"com.apple.coredevice.feature.remote.hid.button";
   HIDConnection connection(device, service);
@@ -126,30 +112,5 @@ void PressHIDButton(id device, uint32_t page, uint32_t usage, double duration) {
     }
   }
   connection.Finish();
-}
-void SetSimulatedHingeAngle(id device, double angle) {
-  SendVendorControl(device, @"hinge-slider-control", @"range", @(angle));
-}
-void SetHIDOrientation(id device, int32_t orientation, bool isMainDisplay) {
-  NSString* value;
-  switch (orientation) {
-    case 1:
-      value = isMainDisplay ? @"portrait" : @"landscape-left";
-      break;
-    case 2:
-      value = isMainDisplay ? @"pud" : @"landscape-right";
-      break;
-    // CoreSimulator DeviceOrientation uses UIInterfaceOrientation numbering:
-    // landscape-right is 3, landscape-left is 4 (the reverse of UIDeviceOrientation).
-    case 3:
-      value = isMainDisplay ? @"landscape-right" : @"portrait";
-      break;
-    case 4:
-      value = isMainDisplay ? @"landscape-left" : @"pud";
-      break;
-    default:
-      throw NSErrorException(HIDError(@"Unsupported interface orientation"));
-  }
-  SendVendorControl(device, @"orientation-picker-control", @"enum", value);
 }
 }  // namespace coresim
