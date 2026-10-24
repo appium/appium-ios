@@ -122,18 +122,17 @@ See [Appium #22857](https://github.com/appium/appium/issues/22857).
 
 Select the active panel with `currentDisplayId` before rotating. The driver passes
 the selected panel to CoreSim, which maps the inner panel's native orientation.
-WDA verifies the application's actual interface orientation, waiting up to five seconds and checking stability
-before returning.
+The driver polls WDA's existing `GET /rotation` endpoint for up to five seconds
+until the application's actual interface orientation matches the request.
 An unsupported app or panel orientation still returns an error.
 
 Direct WDA calls do not apply the host-side simulator workarounds. Real devices
 use XCTest; simulated hinge injection is not supported on physical hardware.
 
-For host-driven rotation, send the CoreSimulator HID control, then POST
-`/orientation` or `/rotation` with `verifyOnly: true` and the usual
-orientation/rotation arguments. The verification request waits for the app scene
-and animations without updating XCTest's device orientation. Ordinary requests
-retain their XCTest behavior.
+For host-driven rotation, send the CoreSimulator HID control, then poll
+`GET /rotation` for the expected result. This does not update XCTest's cached
+device orientation or perform WDA's animation stability wait. Ordinary WDA
+rotation requests retain their XCTest behavior.
 
 `GET /orientation` and `GET /rotation` read the app's actual interface orientation.
 `GET /wda/deviceOrientation` exposes XCTest's cached value, which may remain

@@ -65,11 +65,7 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
 + (id<FBResponsePayload>)handleSetOrientation:(FBRouteRequest *)request
 {
   XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  NSNumber *target = [self _orientationsMapping][[request.arguments[@"orientation"] uppercaseString]];
-  BOOL success = [request.arguments[@"verifyOnly"] boolValue]
-    ? (nil != target && [XCUIDevice.sharedDevice fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)target.integerValue])
-    : [self.class setDeviceOrientation:request.arguments[@"orientation"] forApplication:application];
-  if (success) {
+  if ([self.class setDeviceOrientation:request.arguments[@"orientation"] forApplication:application]) {
     return FBResponseWithOK();
   }
 
@@ -108,11 +104,7 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
   }
 
   XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  NSNumber *target = [XCUIDevice.sharedDevice.fb_rotationMapping allKeysForObject:rotation].firstObject;
-  BOOL success = [request.arguments[@"verifyOnly"] boolValue]
-    ? [XCUIDevice.sharedDevice fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)target.integerValue]
-    : [self.class setDeviceRotation:request.arguments forApplication:application];
-  if (!success) {
+  if (![self.class setDeviceRotation:request.arguments forApplication:application]) {
     NSString *errMessage = [
       NSString stringWithFormat:@"The current rotation cannot be set to %@. Make sure the %@ application supports it",
       rotation, application.bundleID

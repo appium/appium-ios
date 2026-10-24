@@ -9,8 +9,6 @@
 #import "XCUIDevice+FBRotation.h"
 
 #import "FBConfiguration.h"
-#import "FBRunLoopSpinner.h"
-#import "FBSession.h"
 #import "XCUIApplication.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBUtilities.h"
@@ -23,13 +21,8 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
 
 - (BOOL)fb_setDeviceInterfaceOrientation:(UIDeviceOrientation)orientation
 {
+  XCUIApplication *application = XCUIApplication.fb_activeApplication;
   [XCUIDevice sharedDevice].orientation = orientation;
-  return [self fb_verifyDeviceInterfaceOrientation:orientation];
-}
-
-- (BOOL)fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)orientation
-{
-  XCUIApplication *application = FBSession.activeSession.activeApplication ?: XCUIApplication.fb_activeApplication;
   return [self waitUntilInterfaceIsAtOrientation:orientation application:application];
 }
 
@@ -66,16 +59,9 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
 {
   // Tapping elements immediately after rotation may fail due to way UIKit is handling touches.
   // We should wait till UI cools off, before continuing
-  // Verify the actual app scene after either an XCTest update or host HID.
-  // Host-driven rotation does not update XCTest's cached device orientation.
-  UIInterfaceOrientation expected = FBInterfaceOrientationFromDeviceOrientation(orientation);
-  if (![[[FBRunLoopSpinner new] timeout:5.0] spinUntilTrue:^BOOL{
-    return application.interfaceOrientation == expected;
-  }]) {
-    return NO;
-  }
   [application fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  return application.interfaceOrientation == expected;
+
+  return application.interfaceOrientation == FBInterfaceOrientationFromDeviceOrientation(orientation);
 }
 
 - (NSString *)fb_deviceOrientation
