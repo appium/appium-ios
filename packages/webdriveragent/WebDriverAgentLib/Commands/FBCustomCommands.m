@@ -842,8 +842,15 @@
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:
       @"'angle' must be a finite number between 0 and 180 degrees" traceback:nil]);
   }
-  return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:
-    @"Setting a simulated hinge angle requires the host-side @appium/coresim API" traceback:nil]);
+  if (!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection) {
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:
+      @"Setting a simulated hinge angle requires a compatible foldable device" traceback:nil]);
+  }
+  NSError *error;
+  if (![XCUIDevice.sharedDevice fb_setSimulatedHingeAngle:[angle doubleValue] error:&error]) {
+    return FBResponseWithUnknownError(error);
+  }
+  return FBResponseWithOK();
 }
 
 @end

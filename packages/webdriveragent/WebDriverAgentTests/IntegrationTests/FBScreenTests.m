@@ -364,7 +364,7 @@
 
 - (void)testScreenInfoAcrossPortraitAndLandscapeOrientations
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading,
+  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
             @"Foldable orientations are covered by testScreenInfoAcrossFoldStates");
   XCUIElement *window = self.testedApplication.windows.firstMatch;
   (void)window.frame;

@@ -108,7 +108,6 @@
 
 - (void)testHomeButtonBackgroundsApplication
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading, @"Duo Home/lock requires the host simulator HID integration tests");
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL hasHinge = NO;
 #if TARGET_OS_SIMULATOR
@@ -156,7 +155,6 @@
 
 - (void)testLockUnlockScreen
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading, @"Duo Home/lock requires the host simulator HID integration tests");
   XCTAssertFalse([[XCUIDevice sharedDevice] fb_isScreenLocked]);
   NSError *error;
   XCTAssertTrue([[XCUIDevice sharedDevice] fb_lockScreen:&error]);
@@ -169,7 +167,6 @@
 
 - (void)testRepeatedLockUnlockAcrossHingePoses
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading, @"Duo Home/lock requires the host simulator HID integration tests");
   XCTSkipIf(self.class.isRunningInCI, @"Repeated lock/unlock is unreliable on slow CI hosts");
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL hasHinge = NO;

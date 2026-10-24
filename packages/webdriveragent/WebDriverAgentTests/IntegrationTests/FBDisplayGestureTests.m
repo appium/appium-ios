@@ -39,7 +39,7 @@
   [super setUp];
   self.previousDisplayId = FBConfiguration.sharedInstance.currentDisplayId;
   self.actionElementCache = nil;
-  if (!XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
+  if (!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection) {
     [self resetOrientation];
   }
   [self launchApplication];
@@ -201,7 +201,7 @@
 
 - (void)verifyNativeCoordinatesInOrientation:(UIDeviceOrientation)orientation
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading,
+  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
             @"Foldable orientations are covered by testNativeCoordinatesAcrossFoldStates");
   UIDeviceOrientation previousOrientation = XCUIDevice.sharedDevice.orientation;
   [self addTeardownBlock:^{
@@ -315,7 +315,7 @@
 
 - (void)testW3CApplicationOriginAcrossOrientations
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading, @"Covered by fold states");
+  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Covered by fold states");
   [self addTeardownBlock:^{ [self resetOrientation]; }];
   for (NSNumber *orientation in @[@(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
     [self resetOrientation];
@@ -469,7 +469,7 @@
 
 - (void)verifyLandscapeScrolling:(UIDeviceOrientation)orientation
 {
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading,
+  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
             @"Foldable simulator orientations are covered by testGesturesAcrossFoldStates");
   UIDeviceOrientation previousOrientation = XCUIDevice.sharedDevice.orientation;
   [self addTeardownBlock:^{

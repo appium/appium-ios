@@ -15,7 +15,10 @@ NS_ASSUME_NONNULL_BEGIN
 /** Whether a hinge and the CoreMotion angle-reading APIs are available. */
 - (BOOL)fb_supportsHingeAngleReading;
 
-/** Legacy availability probe. Injection now belongs to host-side @appium/coresim. Always NO. */
+/**
+ Whether a hinge and the IOKit APIs needed to attempt injection are available.
+ This does not guarantee event acceptance, particularly on physical devices.
+ */
 - (BOOL)fb_canAttemptSimulatedHingeAngleInjection;
 
 /**
@@ -25,7 +28,12 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (nullable NSNumber *)fb_getSimulatedHingeAngle:(NSError **)error;
 
-/** Legacy entry point. Returns an error; use host-side @appium/coresim. */
+/**
+ Sends a simulated hinge angle in degrees (0 = closed, 180 = fully open).
+ This dispatches the event; the display transition completes asynchronously.
+ Verified on the iPhone Duo simulator; physical-device behavior is unverified.
+ Does not change currentDisplayId.
+ */
 - (BOOL)fb_setSimulatedHingeAngle:(double)angle error:(NSError **)error;
 
 @end
