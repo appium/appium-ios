@@ -23,11 +23,19 @@
 // Whether a gesture also *takes effect* is a separate question covered by the driver-level
 // functional suite once the routes exist; this only settles "does the call return".
 //
-// Only primitives measured to return on watchOS 26.5 are invoked. The velocity-carrying swipes are
-// deliberately NOT: `swipeUpWithVelocity:` stalls inside `Synthesize event` for over a minute and
+// Only primitives measured to return on watchOS 26.5 are invoked here. The velocity-carrying swipes
+// are deliberately NOT: `swipeUpWithVelocity:` stalls inside `Synthesize event` for over a minute and
 // then takes the runner down with it ("Restarting after unexpected exit, crash, or test timeout"),
 // which would cost the rest of the matrix and break CI. They are reported by selector presence
 // only, below, together with pinch and rotate, which are known not to be usable on the platform.
+//
+// `FBElementCommands` also exposes `-pressForDuration:thenDragToElement:withVelocity:thenHoldForDuration:`
+// on watchOS, for `mobile: dragFromToWithVelocity` with `fromElementId`. It belongs to the same
+// velocity-carrying family as the swipes above, so it is invoked by itself in
+// `testSpikeElementVelocityDrag`, where a runner kill would cost one test instead of the matrix.
+// Measured on watchOS 26.5: the selector is present (the watch SDK guards it with
+// `API_UNAVAILABLE(tvos)` only) and the call returns in ~1 s with the runner still alive, so that
+// route stays enabled in the watch build.
 
 @interface WDAWatchGestureSpikeTests : XCTestCase
 @property (nonatomic, strong) XCUIApplication *app;
@@ -100,6 +108,7 @@
   NSArray<NSString *> *selectors = @[
     @"tap", @"doubleTap", @"twoFingerTap", @"tapWithNumberOfTaps:numberOfTouches:",
     @"pressForDuration:", @"pressForDuration:thenDragToElement:",
+    @"pressForDuration:thenDragToElement:withVelocity:thenHoldForDuration:",
     @"swipeUp", @"swipeDown", @"swipeLeft", @"swipeRight",
     @"swipeUpWithVelocity:", @"swipeDownWithVelocity:",
     @"pinchWithScale:velocity:", @"rotate:withVelocity:",
@@ -117,6 +126,32 @@
     NSLog(@"SPIKE[responds %@ on XCUICoordinate] %@", selectorName,
           [buttonCenter respondsToSelector:NSSelectorFromString(selectorName)] ? @"YES" : @"NO");
   }
+}
+
+/// Isolated on purpose: this selector takes a velocity on an `XCUIElement`, the same family whose
+/// swipes are known to stall synthesis and kill the runner on watchOS 26.5. If that happens here,
+/// only this test is lost, and the answer is what `FBElementCommands` needs to know before it keeps
+/// the `pressAndDragWithVelocity` element route in the watch build.
+- (void)testSpikeElementVelocityDrag
+{
+  XCUIElement *button = self.app.buttons[@"tapMeButton"];
+  XCTAssertTrue([button waitForExistenceWithTimeout:20]);
+  SEL selector =
+      NSSelectorFromString(@"pressForDuration:thenDragToElement:withVelocity:thenHoldForDuration:");
+  NSLog(@"SPIKE[responds %@ on XCUIElement] %@",
+        NSStringFromSelector(selector),
+        [button respondsToSelector:selector] ? @"YES" : @"NO");
+  if (![button respondsToSelector:selector]) {
+    return;
+  }
+  // The same call `handlePressAndDragWithVelocity:` makes, with the same shape of arguments.
+  [self probe:@"element.pressForDuration:thenDragToElement:withVelocity:thenHoldForDuration:"
+         body:^{
+           [button pressForDuration:.3
+                  thenDragToElement:button
+                       withVelocity:1000.0
+                thenHoldForDuration:.2];
+         }];
 }
 
 @end

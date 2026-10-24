@@ -76,9 +76,13 @@
     [[FBRoute GET:@"/element/:uuid/attribute/focused"] respondWithTarget:self action:@selector(handleGetFocused:)],
     [[FBRoute POST:@"/wda/element/:uuid/focuse"] respondWithTarget:self action:@selector(handleFocuse:)],
 #else
-    // Gesture synthesis works on watchOS - verified on watchOS 26.5 with
-    // WDAWatchGestureSpikeTests. Only the gestures whose hardware does not exist on a watch, or
-    // whose synthesis has never been observed to complete there, stay out of the watch build.
+    // Gesture synthesis works on watchOS: each route below was probed on watchOS 26.5 in
+    // WDAWatchGestureSpikeTests, including the velocity-carrying drag forms - the element one
+    // (-pressForDuration:thenDragToElement:withVelocity:thenHoldForDuration:, which the watch SDK
+    // declares with API_UNAVAILABLE(tvos) only) returns in about a second without losing the runner.
+    // What stays out is the pinch/rotate/forceTouch family (no watch hardware, or no observable
+    // effect), the picker wheel, and the velocity-carrying *swipes*, which stall inside
+    // `Synthesize event` and take the runner down - see the guard in handleSwipe:.
     [[FBRoute POST:@"/wda/element/:uuid/swipe"] respondWithTarget:self action:@selector(handleSwipe:)],
     [[FBRoute POST:@"/wda/swipe"] respondWithTarget:self action:@selector(handleSwipe:)],
 
