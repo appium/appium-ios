@@ -465,6 +465,15 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
       // there is the previous "did not know how to dismiss the keyboard" failure, never a stray
       // tap into the application under test.
       //
+      // Comparing against the *application* rather than against the keyboard's own process is
+      // deliberate. WDAKeyboardAccessoryBarProcessSpikeTests measures that on watchOS 26.5 and
+      // 27.0 the bar's `Done` and `Cancel` share the keyboard element's process, so the two
+      // criteria pick out the same element today; excluding the application is the one that names
+      // the hazard, and it keeps dismissing the keyboard if a future runtime hosts the bar in a
+      // service of its own. Tree position cannot replace either comparison: the bar's
+      // `pathDescription` roots at the application element, because watchOS grafts it into the
+      // application's tree.
+      //
       // This is a correctness guard, not a security boundary: `keyNames` arrives from the session
       // client, which can already synthesize a tap on any element it can locate or address, so
       // reaching outside the keyboard grants no input the client does not already hold. What the
