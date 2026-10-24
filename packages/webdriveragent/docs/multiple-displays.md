@@ -117,22 +117,24 @@ XCTest defect.
 On Duo / iOS 27.1, XCTest can report success for Home without backgrounding the
 app, or update device orientation without rotating the app scene. The XCUITest
 driver routes simulator workarounds through the Mac-side `@appium/coresim` HID
-service. WDA itself uses XCTest for Home, lock/unlock, and orientation on all devices.
+service. Ordinary WDA Home, lock/unlock, and orientation requests use XCTest.
 See [Appium #22857](https://github.com/appium/appium/issues/22857).
 
-Select the active panel with `currentDisplayId` before rotating. The driver first
-updates XCTest's device orientation, then passes the selected panel to CoreSim,
-which maps the inner panel's native orientation. WDA verifies the application's
-actual interface orientation, waiting up to five seconds and checking stability
+Select the active panel with `currentDisplayId` before rotating. The driver passes
+the selected panel to CoreSim, which maps the inner panel's native orientation.
+WDA verifies the application's actual interface orientation, waiting up to five seconds and checking stability
 before returning.
 An unsupported app or panel orientation still returns an error.
 
 Direct WDA calls do not apply the host-side simulator workarounds. Real devices
 use XCTest; simulated hinge injection is not supported on physical hardware.
 
-For host-driven rotation, first POST a numeric `orientation` (UIDeviceOrientation
-1–4) to `/session/:sessionId/wda/deviceOrientation` to update XCTest without waiting
-for the app. Send the CoreSimulator HID control next, then POST `/orientation` or
-`/rotation` with `verifyOnly: true` and the usual orientation/rotation arguments.
-The verification request waits for the app scene and animations without sending
-another XCTest orientation update. Ordinary requests retain their XCTest behavior.
+For host-driven rotation, send the CoreSimulator HID control, then POST
+`/orientation` or `/rotation` with `verifyOnly: true` and the usual
+orientation/rotation arguments. The verification request waits for the app scene
+and animations without updating XCTest's device orientation. Ordinary requests
+retain their XCTest behavior.
+
+`GET /orientation` and `GET /rotation` read the app's actual interface orientation.
+`GET /wda/deviceOrientation` exposes XCTest's cached value, which may remain
+unknown or stale after host-driven rotation; it is not used to verify the result.

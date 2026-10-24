@@ -48,7 +48,6 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
     [[FBRoute POST:@"/rotation"] respondWithTarget:self action:@selector(handleSetRotation:)],
     [[FBRoute POST:@"/rotation"].withoutSession respondWithTarget:self action:@selector(handleSetRotation:)],
     [[FBRoute GET:@"/wda/deviceOrientation"] respondWithTarget:self action:@selector(handleGetDeviceOrientation:)],
-    [[FBRoute POST:@"/wda/deviceOrientation"] respondWithTarget:self action:@selector(handleSetDeviceOrientation:)],
     [[FBRoute GET:@"/wda/deviceOrientation"].withoutSession respondWithTarget:self action:@selector(handleGetDeviceOrientation:)],
   ];
 }
@@ -121,18 +120,6 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:errMessage
                                                                            traceback:nil]);
   }
-  return FBResponseWithOK();
-}
-
-// Host simulator controls need XCTest's device value updated before HID is sent.
-// This endpoint deliberately does not assert that an application has rotated.
-+ (id<FBResponsePayload>)handleSetDeviceOrientation:(FBRouteRequest *)request
-{
-  NSNumber *orientation = request.arguments[@"orientation"];
-  if (![@[@1, @2, @3, @4] containsObject:orientation]) {
-    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"orientation must be 1, 2, 3 or 4" traceback:nil]);
-  }
-  XCUIDevice.sharedDevice.orientation = (UIDeviceOrientation)orientation.integerValue;
   return FBResponseWithOK();
 }
 

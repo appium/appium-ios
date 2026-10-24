@@ -67,8 +67,8 @@ export async function setSimulatedHingeAngle(this: NativeSimctl, udid: string, a
  *
  * Runs in the Mac process using private XPC transport symbols; missing symbols or services
  * produce an error. No guest helper or WDA entitlement is required.
- * Completion confirms submission only. Update XCTest's device orientation before sending HID,
- * then verify the app scene without updating XCTest again.
+ * Completion confirms submission only; verify the app scene separately. This does not update
+ * XCTest's cached device orientation, which may remain unknown or retain an earlier value.
  *
  * @param udid - Target simulator identifier.
  * @param orientation - CoreSimulator DeviceOrientation value; landscape numbering differs from UIDeviceOrientation.

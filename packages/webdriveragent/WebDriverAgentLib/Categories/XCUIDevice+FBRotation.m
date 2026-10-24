@@ -66,8 +66,8 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
 {
   // Tapping elements immediately after rotation may fail due to way UIKit is handling touches.
   // We should wait till UI cools off, before continuing
-  // Simulator HID is submitted by the host before this request. Wait for the
-  // actual app scene as well as updating XCTest's device orientation above.
+  // Verify the actual app scene after either an XCTest update or host HID.
+  // Host-driven rotation does not update XCTest's cached device orientation.
   UIInterfaceOrientation expected = FBInterfaceOrientationFromDeviceOrientation(orientation);
   if (![[[FBRunLoopSpinner new] timeout:5.0] spinUntilTrue:^BOOL{
     return application.interfaceOrientation == expected;
