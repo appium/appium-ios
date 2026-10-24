@@ -464,6 +464,12 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
       // are considered. Whose process cannot be resolved are dropped as well - the worst case
       // there is the previous "did not know how to dismiss the keyboard" failure, never a stray
       // tap into the application under test.
+      //
+      // This is a correctness guard, not a security boundary: `keyNames` arrives from the session
+      // client, which can already synthesize a tap on any element it can locate or address, so
+      // reaching outside the keyboard grants no input the client does not already hold. What the
+      // guard protects is the *default* behaviour of the command - dismissing a keyboard must not
+      // run application logic that happens to share the requested name.
       pid_t autPid = [self.accessibilityElement processIdentifier];
       NSPredicate *foreignProcessPredicate = [NSPredicate predicateWithBlock:^BOOL(id<FBXCElementSnapshot> snapshot, NSDictionary *bindings) {
         if (![searchPredicate evaluateWithObject:snapshot]) {
@@ -474,6 +480,13 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
       }];
       matchedKeys = [[self.fb_query descendantsMatchingType:XCUIElementTypeAny]
                      matchingPredicate:foreignProcessPredicate].allElementsBoundByIndex;
+      if (matchedKeys.count > 0) {
+        // Recorded because the search that produced the tap is not the one the command names: an
+        // operator reading a dismissal needs to see that it came from outside the keyboard.
+        [FBLogger logFmt:@"Found %@ candidate key(s) named by %@ outside the keyboard, in a process "
+                         @"other than the application under test (pid %@)",
+         @(matchedKeys.count), keyNames, @(autPid)];
+      }
     }
 #endif
     if (matchedKeys.count > 0) {
