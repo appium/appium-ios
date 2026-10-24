@@ -206,10 +206,6 @@ export class NativeSimctl {
 }
 
 Object.assign(NativeSimctl.prototype, {
-  isDuo,
-  pressHidButton,
-  setSimulatedHingeAngle,
-  setHidOrientation,
   // lifecycle
   getDevices,
   getSupportedDeviceTypes,
@@ -304,6 +300,14 @@ Object.assign(NativeSimctl.prototype, {
 
   // spawn
   spawnProcess,
+
+  // To handle Duo specific features
+  isDuo,
+  setSimulatedHingeAngle,
+  setHidOrientation,
+
+  // General HID event sending
+  pressHidButton,
 });
 
 // Loaded lazily (not at module import time) so merely depending on/importing @appium/coresim —
