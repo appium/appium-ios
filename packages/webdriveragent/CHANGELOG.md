@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.3...appium-webdriveragent@16.17.4) (2026-10-24)
+
+### Bug Fixes
+
+* **webdriveragent:** wait for SpringBoard after background apps resume ([#82](https://github.com/appium/appium-ios/issues/82)) ([b8b0b45](https://github.com/appium/appium-ios/commit/b8b0b45294c47882c3d31c023a9fb6912496518d))
+
+
 ## [16.17.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.2...appium-webdriveragent@16.17.3) (2026-10-23)
 
 ### Miscellaneous Chores
