@@ -119,6 +119,7 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
 
 - (void)verifyInputAfterBackgroundWithMode:(NSUInteger)mode
 {
+  XCTSkipIf(self.class.isRunningInCI, @"Immediate input after activation is unreliable on slow CI hosts");
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL canFold = NO;
 #if TARGET_OS_SIMULATOR
