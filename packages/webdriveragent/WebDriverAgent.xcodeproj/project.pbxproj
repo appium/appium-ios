@@ -882,6 +882,7 @@
 		AA11BB22CC33DD44EE55FF02 /* FBMjpegServer.m in Sources */ = {isa = PBXBuildFile; fileRef = 7155D702211DCEF400166C20 /* FBMjpegServer.m */; };
 		AA11BB22CC33DD44EE55FF04 /* WDAMjpegStreamingIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */; };
 		AA11BB33CC44DD55EE66FF02 /* WDAWatchGestureSpikeTests.m in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */; };
+		AA11BB33CC44DD55EE66FF04 /* WDAKeyboardAccessoryBarProcessSpikeTests.m in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB33CC44DD55EE66FF03 /* WDAKeyboardAccessoryBarProcessSpikeTests.m */; };
 		AAA213E600F40AB7F43D1015 /* WebDriverAgentLib_tvOS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 641EE6F82240C5CA00173FCB /* WebDriverAgentLib_tvOS.framework */; };
 		AABBCCDDEEFF001122334457 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = AABBCCDDEEFF001122334456 /* SceneDelegate.m */; };
 		AB126E96C642B235EE02B4F1 /* _XCTestObservationPrivate-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = C840A8703A7C8D48897E158A /* _XCTestObservationPrivate-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1766,6 +1767,7 @@
 		AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WDAMjpegStreamingIntegrationTests.swift; sourceTree = "<group>"; };
 		AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = WDAWatchGestureSpikeTests.m; sourceTree = "<group>"; };
 		AA2351C66A4616534FB81AE4 /* XCTMessagingRole_ForcePressureSupportQuerying-Protocol.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "XCTMessagingRole_ForcePressureSupportQuerying-Protocol.h"; sourceTree = "<group>"; };
+		AA11BB33CC44DD55EE66FF03 /* WDAKeyboardAccessoryBarProcessSpikeTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = WDAKeyboardAccessoryBarProcessSpikeTests.m; sourceTree = "<group>"; };
 		AABBCCDDEEFF001122334455 /* SceneDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
 		AABBCCDDEEFF001122334456 /* SceneDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
 		AADFEA2ED9E61A8C1A99B2D7 /* FBHTTPServer.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = FBHTTPServer.m; sourceTree = "<group>"; };
@@ -2397,6 +2399,7 @@
 				AA11BB22CC33DD44EE55FF03 /* WDAMjpegStreamingIntegrationTests.swift */,
 				AA11BB33CC44DD55EE66FF01 /* WDAWatchGestureSpikeTests.m */,
 				EB1B9A793C9EFB7853C1AA13 /* WDAAppLifecycleIntegrationTests.swift */,
+				AA11BB33CC44DD55EE66FF03 /* WDAKeyboardAccessoryBarProcessSpikeTests.m */,
 				646D714BC17FE9258CFBDF55 /* WDADeviceIntegrationTests.swift */,
 				28F75AEC6442F32A3C4394AD /* WDAAlertIntegrationTests.swift */,
 				167CC387B5F9D62618B48F80 /* IntegrationTests_watchOS-Bridging-Header.h */,
@@ -4624,6 +4627,7 @@
 				AA11BB22CC33DD44EE55FF04 /* WDAMjpegStreamingIntegrationTests.swift in Sources */,
 				AA11BB33CC44DD55EE66FF02 /* WDAWatchGestureSpikeTests.m in Sources */,
 				D22FED0B3856919DA4BCFA67 /* WDATypingIntegrationTests.swift in Sources */,
+				AA11BB33CC44DD55EE66FF04 /* WDAKeyboardAccessoryBarProcessSpikeTests.m in Sources */,
 				68EB0B8D53270CB68C53D028 /* WDAAlertIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
