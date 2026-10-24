@@ -13,7 +13,6 @@
 #include <notify.h>
 #import <objc/runtime.h>
 
-#import "FBHIDOperations.h"
 #import "FBErrorBuilder.h"
 #import "FBImageUtils.h"
 #import "FBMacros.h"
@@ -200,32 +199,23 @@ static bool fb_isLocked;
   if (fb_isLocked) {
     return YES;
   }
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-  if ([FBHIDOperations appliesToDevice:self]) {
-    if (![FBHIDOperations pressLockWithError:error]) {
+#if TARGET_OS_SIMULATOR
+  [self pressLockButton];
+#else
+  if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
+    // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
+    // A 0.5s hold can invoke Siri instead of locking the screen.
+    const NSTimeInterval duration = 0.2;
+    if (![self fb_performIOHIDEventWithPage:0x0C
+                                      usage:0x30
+                                   duration:duration
+                                      error:error]) {
       return NO;
     }
-  } else
-#endif
-  {
-#if TARGET_OS_SIMULATOR
+  } else {
     [self pressLockButton];
-#else
-    if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
-      // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
-      // A 0.5s hold can invoke Siri instead of locking the screen.
-      const NSTimeInterval duration = 0.2;
-      if (![self fb_performIOHIDEventWithPage:0x0C
-                                        usage:0x30
-                                     duration:duration
-                                        error:error]) {
-        return NO;
-      }
-    } else {
-      [self pressLockButton];
-    }
-#endif
   }
+#endif
   return [[[[FBRunLoopSpinner new]
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets locked"]
@@ -245,16 +235,7 @@ static bool fb_isLocked;
     return YES;
   }
   for (NSUInteger attempt = 0; attempt < 2; attempt++) {
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-    if ([FBHIDOperations appliesToDevice:self]) {
-      if (![FBHIDOperations pressHomeWithError:error]) {
-        return NO;
-      }
-    } else
-#endif
-    {
-      [self pressButton:XCUIDeviceButtonHome];
-    }
+    [self pressButton:XCUIDeviceButtonHome];
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
   }
   return [[[[FBRunLoopSpinner new]
@@ -423,11 +404,6 @@ static bool fb_isLocked;
              withDescriptionFormat:@"The button '%@' is not supported. The device under test only supports the following buttons: %@", buttonName, sortedKeys]
             buildError:error];
   }
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-  if (buttonValue.unsignedIntegerValue == XCUIDeviceButtonHome && [FBHIDOperations appliesToDevice:self]) {
-    return [FBHIDOperations pressHomeWithError:error];
-  }
-#endif
   [self pressButton:(XCUIDeviceButton)[buttonValue unsignedIntegerValue]];
   return YES;
 }

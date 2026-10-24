@@ -442,6 +442,9 @@ export interface NativeDeviceHandle {
   openUrl(url: string): Promise<void>;
   setLocation(latitude: number, longitude: number): Promise<void>;
   clearLocation(): Promise<void>;
+  pressHidButton(page: number, usage: number, duration: number): Promise<void>;
+  setSimulatedHingeAngle(angle: number): Promise<void>;
+  setHidOrientation(orientation: number, isMainDisplay: boolean): Promise<void>;
   setOrientation(orientation: number): Promise<void>;
   getOrientation(): Promise<number>;
   sendPushNotification(bundleId: string, payload: PushNotificationPayload): Promise<void>;

@@ -86,3 +86,19 @@ Early stage: core device and app lifecycle is implemented and tested; broader co
 progress.
 
 See [`CLAUDE.md`](./CLAUDE.md) for architecture details.
+
+### Simulator HID controls
+
+`pressHidButton(udid, page, usage, duration = 0.1)` sends a paired press/release
+through the target simulator's CoreDevice HID service. `setSimulatedHingeAngle(udid,
+angle)` requests a fold from 0 to 180 degrees on hinge-capable runtimes.
+`setHidOrientation(udid, orientation, isMainDisplay)` sends Duo's vendor orientation
+control using `DeviceOrientation` and the selected panel's main-display flag.
+The ordinary `setOrientation` API is unchanged.
+
+These APIs run in the Mac process and require the simulator's HID services and
+private XPC transport symbols. Missing services or symbols produce an error.
+Completion confirms submission, not the device's resulting state: callers must
+check hinge readings, lock state, or application orientation separately. For Duo
+rotation, update XCTest's device orientation before sending HID, then verify the
+app scene without updating XCTest again. No guest helper or WDA entitlement is required.

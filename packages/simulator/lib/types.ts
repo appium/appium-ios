@@ -626,6 +626,12 @@ export interface SupportsScreenStreaming {
  */
 export type DeviceOrientation = 'portrait' | 'portrait-upside-down' | 'landscape-left' | 'landscape-right';
 
+export interface SupportsHid {
+  pressHidButton(page: number, usage: number, duration?: number): Promise<void>;
+  setSimulatedHingeAngle(angle: number): Promise<void>;
+  setHidOrientation(orientation: DeviceOrientation, isMainDisplay: boolean): Promise<void>;
+}
+
 export interface SupportsOrientation {
   /**
    * Rotates the device — the same effect as Simulator.app's Hardware > Rotate menu items. The
@@ -691,6 +697,7 @@ export type Simulator = CoreSimulator &
   SupportsScreenRecording &
   SupportsScreenStreaming &
   SupportsOrientation &
+  SupportsHid &
   SupportsGuestProcessSpawn;
 
 interface KeyboardOptions {

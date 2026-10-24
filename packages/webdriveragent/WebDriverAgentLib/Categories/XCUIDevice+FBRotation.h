@@ -21,6 +21,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (BOOL)fb_setDeviceInterfaceOrientation:(UIDeviceOrientation)orientation;
 
+/** Waits for the app scene after the host has submitted a simulator HID rotation. */
+- (BOOL)fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)orientation;
+
 /**
  Sets the devices orientation to the rotation passed.
  

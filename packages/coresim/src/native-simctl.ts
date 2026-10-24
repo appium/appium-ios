@@ -19,6 +19,7 @@ import {
   postDarwinNotification,
   setDarwinNotificationState,
 } from './commands/darwin-notification.js';
+import {pressHidButton, setSimulatedHingeAngle, setHidOrientation} from './commands/hid.js';
 import {clearLocation, getEnv, openUrl, pushNotification, setLocation} from './commands/interaction.js';
 import {startJpegStream} from './commands/jpeg-stream.js';
 import {addCertificate, addRootCertificate, resetKeychain} from './commands/keychain.js';
@@ -70,6 +71,7 @@ import type {
 import './commands/app.js';
 import './commands/biometric.js';
 import './commands/darwin-notification.js';
+import './commands/hid.js';
 import './commands/interaction.js';
 import './commands/jpeg-stream.js';
 import './commands/keychain.js';
@@ -203,6 +205,9 @@ export class NativeSimctl {
 }
 
 Object.assign(NativeSimctl.prototype, {
+  pressHidButton,
+  setSimulatedHingeAngle,
+  setHidOrientation,
   // lifecycle
   getDevices,
   getSupportedDeviceTypes,

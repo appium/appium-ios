@@ -33,6 +33,7 @@
 #include "native/sim_device_set.h"
 #include "native/sim_jpeg_stream.h"
 #include "native/sim_orientation.h"
+#include "native/sim_hid.h"
 #include "native/sim_pasteboard.h"
 #include "native/sim_process.h"
 #include "native/sim_screenshot.h"
@@ -814,6 +815,28 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
     });
   }
 
+  Napi::Value PressHIDButton(const Napi::CallbackInfo& info) {
+    id device = device_;
+    uint32_t page = info[0].As<Napi::Number>().Uint32Value();
+    uint32_t usage = info[1].As<Napi::Number>().Uint32Value();
+    double duration = info[2].As<Napi::Number>().DoubleValue();
+    return RunAsyncVoid(info.Env(), [device, page, usage, duration]() {
+      coresim::PressHIDButton(device, page, usage, duration);
+    });
+  }
+  Napi::Value SetSimulatedHingeAngle(const Napi::CallbackInfo& info) {
+    id device = device_;
+    double angle = info[0].As<Napi::Number>().DoubleValue();
+    return RunAsyncVoid(info.Env(), [device, angle]() { coresim::SetSimulatedHingeAngle(device, angle); });
+  }
+  Napi::Value SetHIDOrientation(const Napi::CallbackInfo& info) {
+    id device = device_;
+    int32_t orientation = info[0].As<Napi::Number>().Int32Value();
+    bool isMainDisplay = info[1].As<Napi::Boolean>().Value();
+    return RunAsyncVoid(info.Env(), [device, orientation, isMainDisplay]() {
+      coresim::SetHIDOrientation(device, orientation, isMainDisplay);
+    });
+  }
   Napi::Value SetOrientation(const Napi::CallbackInfo& info) {
     id device = device_;
     int32_t orientation = info[0].As<Napi::Number>().Int32Value();
@@ -1747,6 +1770,9 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::SetLocation>("setLocation"),
                       InstanceMethod<&NativeDevice::ClearLocation>("clearLocation"),
                       InstanceMethod<&NativeDevice::SetOrientation>("setOrientation"),
+                      InstanceMethod<&NativeDevice::PressHIDButton>("pressHidButton"),
+                      InstanceMethod<&NativeDevice::SetSimulatedHingeAngle>("setSimulatedHingeAngle"),
+                      InstanceMethod<&NativeDevice::SetHIDOrientation>("setHidOrientation"),
                       InstanceMethod<&NativeDevice::SendPushNotification>("sendPushNotification"),
                       InstanceMethod<&NativeDevice::AddCertificate>("addCertificate"),
                       InstanceMethod<&NativeDevice::ResetKeychain>("resetKeychain"),

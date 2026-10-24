@@ -48,6 +48,7 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
     [[FBRoute POST:@"/rotation"] respondWithTarget:self action:@selector(handleSetRotation:)],
     [[FBRoute POST:@"/rotation"].withoutSession respondWithTarget:self action:@selector(handleSetRotation:)],
     [[FBRoute GET:@"/wda/deviceOrientation"] respondWithTarget:self action:@selector(handleGetDeviceOrientation:)],
+    [[FBRoute POST:@"/wda/deviceOrientation"] respondWithTarget:self action:@selector(handleSetDeviceOrientation:)],
     [[FBRoute GET:@"/wda/deviceOrientation"].withoutSession respondWithTarget:self action:@selector(handleGetDeviceOrientation:)],
   ];
 }
@@ -65,7 +66,11 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
 + (id<FBResponsePayload>)handleSetOrientation:(FBRouteRequest *)request
 {
   XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  if ([self.class setDeviceOrientation:request.arguments[@"orientation"] forApplication:application]) {
+  NSNumber *target = [self _orientationsMapping][[request.arguments[@"orientation"] uppercaseString]];
+  BOOL success = [request.arguments[@"verifyOnly"] boolValue]
+    ? (nil != target && [XCUIDevice.sharedDevice fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)target.integerValue])
+    : [self.class setDeviceOrientation:request.arguments[@"orientation"] forApplication:application];
+  if (success) {
     return FBResponseWithOK();
   }
 
@@ -104,7 +109,11 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
   }
 
   XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-  if (![self.class setDeviceRotation:request.arguments forApplication:application]) {
+  NSNumber *target = [XCUIDevice.sharedDevice.fb_rotationMapping allKeysForObject:rotation].firstObject;
+  BOOL success = [request.arguments[@"verifyOnly"] boolValue]
+    ? [XCUIDevice.sharedDevice fb_verifyDeviceInterfaceOrientation:(UIDeviceOrientation)target.integerValue]
+    : [self.class setDeviceRotation:request.arguments forApplication:application];
+  if (!success) {
     NSString *errMessage = [
       NSString stringWithFormat:@"The current rotation cannot be set to %@. Make sure the %@ application supports it",
       rotation, application.bundleID
@@ -112,6 +121,18 @@ const struct FBWDOrientationValues FBWDOrientationValues = {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:errMessage
                                                                            traceback:nil]);
   }
+  return FBResponseWithOK();
+}
+
+// Host simulator controls need XCTest's device value updated before HID is sent.
+// This endpoint deliberately does not assert that an application has rotated.
++ (id<FBResponsePayload>)handleSetDeviceOrientation:(FBRouteRequest *)request
+{
+  NSNumber *orientation = request.arguments[@"orientation"];
+  if (![@[@1, @2, @3, @4] containsObject:orientation]) {
+    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"orientation must be 1, 2, 3 or 4" traceback:nil]);
+  }
+  XCUIDevice.sharedDevice.orientation = (UIDeviceOrientation)orientation.integerValue;
   return FBResponseWithOK();
 }
 
