@@ -9,7 +9,6 @@
 #import "XCUIDevice+FBRotation.h"
 
 #import "FBConfiguration.h"
-#import "FBHIDOperations.h"
 #import "XCUIApplication.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBUtilities.h"
@@ -22,10 +21,6 @@ static UIInterfaceOrientation FBInterfaceOrientationFromDeviceOrientation(UIDevi
 
 - (BOOL)fb_setDeviceInterfaceOrientation:(UIDeviceOrientation)orientation
 {
-  if ([FBHIDOperations appliesToDevice:self]) {
-    return [FBHIDOperations rotateToOrientation:orientation
-                          interfaceOrientation:FBInterfaceOrientationFromDeviceOrientation(orientation)];
-  }
   XCUIApplication *application = XCUIApplication.fb_activeApplication;
   [XCUIDevice sharedDevice].orientation = orientation;
   return [self waitUntilInterfaceIsAtOrientation:orientation application:application];
