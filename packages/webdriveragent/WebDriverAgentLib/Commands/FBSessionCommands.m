@@ -411,7 +411,7 @@
   if (nil != initialUrl) {
     return [self openDeepLink:initialUrl withApplication:bundleID timeout:nil];
   }
-  [app activate];
+  [app fb_activate];
   return nil;
 }
 
