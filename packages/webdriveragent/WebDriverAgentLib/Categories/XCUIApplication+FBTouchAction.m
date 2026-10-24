@@ -189,10 +189,14 @@ static BOOL FBIsFinitePoint(CGPoint point)
   NSString *name = @"Press, drag and hold";
 #if TARGET_OS_WATCH
   // No UIInterfaceOrientation on watchOS; the panel never rotates, so the display alone
-  // identifies where the event goes.
+  // identifies where the event goes. `initWithName:displayID:` is XCTest's newer API and an
+  // older watch runtime answers it with doesNotRecognizeSelector, so keep the plain one as
+  // the fallback - a watch has a single display, so targeting it explicitly is redundant there.
   (void)interfaceOrientation;
-  XCSynthesizedEventRecord *event = [[XCSynthesizedEventRecord alloc] initWithName:name
-                                                                         displayID:(unsigned long long)displayID];
+  XCSynthesizedEventRecord *event = [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:)]
+    ? [[XCSynthesizedEventRecord alloc] initWithName:name
+                                          displayID:(unsigned long long)displayID]
+    : [[XCSynthesizedEventRecord alloc] initWithName:name];
 #else
   XCSynthesizedEventRecord *event = [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]
     ? [[XCSynthesizedEventRecord alloc] initWithName:name

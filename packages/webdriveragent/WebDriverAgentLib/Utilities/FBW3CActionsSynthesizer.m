@@ -960,8 +960,14 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   // watchOS has no UIInterfaceOrientation and a fixed panel that never rotates, so the event
   // record is created against the display only and no cross-display correction is needed.
   self.displayCorrection = CGVectorMake(0, 0);
-  return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
-                                             displayID:(unsigned long long)screen.displayID];
+  // `initWithName:displayID:` is declared for every platform, but it is XCTest's newer API: an
+  // older watch runtime can answer with doesNotRecognizeSelector. FBTypeText already builds its
+  // events with the plain initializer there, so fall back to it instead of crashing the runner.
+  if ([XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:)]) {
+    return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                                displayID:(unsigned long long)screen.displayID];
+  }
+  return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"];
 #else
   XCSynthesizedEventRecord *eventRecord;
   self.displayCorrection = CGVectorMake(0, 0);
