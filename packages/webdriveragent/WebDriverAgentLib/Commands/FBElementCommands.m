@@ -510,10 +510,14 @@
   // -swipeUpWithVelocity: and friends stall inside `Synthesize event` on watchOS 26.5 for over a
   // minute and then take the runner down ("Restarting after unexpected exit, crash, or test
   // timeout"); WDAWatchGestureSpikeTests measures the hazard and deliberately avoids those
-  // selectors. Refuse the argument rather than paying it - the plain swipe below is what was
-  // measured to complete, and silently dropping velocity would hide the reason.
-  if (nil != request.arguments[@"velocity"]) {
-    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"The 'velocity' parameter is not supported on watchOS: XCTest's velocity-carrying swipe stalls inside event synthesis and terminates the runner. Repeat the request without 'velocity' to perform a plain swipe." traceback:nil]);
+  // selectors. Refuse a positive velocity rather than paying it - the plain swipe below is what
+  // was measured to complete, and silently dropping it would hide the reason. A value of zero or
+  // less never reaches those selectors: swipeWithDirection only calls them for a positive
+  // velocity, so refusing it too would turn a request that already means "plain swipe" into an
+  // error, which is what iOS and tvOS do not do.
+  if (nil != request.arguments[@"velocity"]
+      && [request.arguments[@"velocity"] doubleValue] > 0) {
+    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"The 'velocity' parameter is not supported on watchOS: XCTest's velocity-carrying swipe stalls inside event synthesis and terminates the runner. Repeat the request without 'velocity', or with a value of zero or less, to perform a plain swipe." traceback:nil]);
   }
 #endif
   [target fb_swipeWithDirection:direction velocity:request.arguments[@"velocity"]];
