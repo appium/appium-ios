@@ -23,6 +23,34 @@ const TARGETS = ['runner', 'tv_runner', 'watch_runner'];
 const SDKS = ['sim', 'tv_sim', 'watch_sim'];
 
 /**
+ * The environment for the `Scripts/build.sh` child process.
+ *
+ * `teen_process` replaces the child environment wholesale when `env` is given, so this is the
+ * complete set `build.sh` may depend on. Only what the build genuinely needs is forwarded: build.sh
+ * reads a large number of ambient variables (`ACTION` decides the whole dispatch, `DEST` plus the
+ * `*_MODEL`/`*_VERSION` names pick a Simulator destination, `CODE_SIGN`, `ARCHS` and `EXTRA_XC_ARGS`
+ * are appended to the `xcodebuild` command line), and inheriting them would let leftover values in
+ * the caller's shell change what gets built - or whether anything is built at all - while this
+ * script still reported success and zipped whatever an earlier build had left behind.
+ *
+ * @param {string} target The `build.sh` build target, e.g. `watch_runner`
+ * @param {string} sdk The `build.sh` SDK name, e.g. `watch_sim`
+ * @returns {NodeJS.ProcessEnv}
+ */
+function buildScriptEnv(target, sdk) {
+  const {PATH, HOME, TMPDIR, DEVELOPER_DIR} = process.env;
+  return {
+    PATH,
+    HOME,
+    TMPDIR,
+    ...(DEVELOPER_DIR ? {DEVELOPER_DIR} : {}),
+    TARGET: target,
+    SDK: sdk,
+    DERIVED_DATA_PATH,
+  };
+}
+
+/**
  * Build WebDriverAgent and pack the app bundle into a zip archive.
  *
  * @param {string} [xcodeVersion] Xcode version to include in archive name.
@@ -50,12 +78,19 @@ async function buildWebDriverAgent(xcodeVersion) {
   xcodeVersion = xcodeVersion || (await xcode.getVersion());
   LOG.info(`Building the '${target}' target for the '${sdk}' sdk using Xcode version '${xcodeVersion}'`);
 
-  // Clean and build. `env` replaces the child environment wholesale, so the parent's has to be
-  // spread in: build.sh resolves xcodebuild through PATH, and without DEVELOPER_DIR inherited the
-  // /usr/bin shim runs the Command Line Tools copy, which refuses to build anything.
+  // Clean and build. `exec` replaces the child environment wholesale once `env` is set, so the
+  // variables build.sh actually needs are listed explicitly: PATH so it can resolve xcodebuild,
+  // DEVELOPER_DIR so the /usr/bin shim picks a real Xcode instead of the Command Line Tools copy
+  // (which refuses to build), and HOME/TMPDIR for Xcode's own preferences and provisioning lookup.
+  // Everything else is deliberately dropped: build.sh dispatches on an ambient ACTION
+  // (`ACTION=analyze ./Scripts/build.sh` is the documented local flow, so a leftover value would
+  // silently turn this build into a static-analysis run or a fastlane device test while the
+  // bundler still reported success), selects a Simulator from DEST/IPHONE_MODEL/IOS_VERSION/
+  // TV_MODEL/TV_VERSION/WATCH_MODEL/WATCH_VERSION, and forwards CODE_SIGN/ARCHS/EXTRA_XC_ARGS
+  // straight to xcodebuild.
   try {
     await exec('/bin/bash', ['./Scripts/build.sh'], {
-      env: {...process.env, TARGET: target, SDK: sdk, DERIVED_DATA_PATH},
+      env: buildScriptEnv(target, sdk),
       cwd: ROOT_DIR,
     });
   } catch (e) {

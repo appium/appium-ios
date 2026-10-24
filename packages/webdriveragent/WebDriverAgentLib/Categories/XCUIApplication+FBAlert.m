@@ -122,7 +122,21 @@ static NSString *const FB_LIMITED_ACCESS_PROMPT_BUNDLE_ID = @"com.apple.Contacts
       // alert. Accepting it makes every alert command answer as if an alert were open, and keeps
       // FBAlertsMonitor firing on every tick, so only alert elements that actually hold content
       // count here.
-      id<FBXCElementSnapshot> alertSnapshot = candidate.fb_cachedSnapshot ?: [candidate fb_customSnapshot];
+      //
+      // Resolving the snapshot is a live round trip, and fb_customSnapshot raises when the element
+      // cannot be resolved (see XCUIElement+FBUtilities.fb_takeSnapshot:). The caller wraps the
+      // whole scan in one @try, and the system application - which is exactly where the
+      // placeholder lives - is scanned first, so an unguarded raise here would report "no such
+      // alert" for the *tested* app too. A candidate that cannot be inspected is skipped, not fatal.
+      id<FBXCElementSnapshot> alertSnapshot = candidate.fb_cachedSnapshot;
+      if (nil == alertSnapshot) {
+        @try {
+          alertSnapshot = [candidate fb_customSnapshot];
+        } @catch (NSException *e) {
+          [FBLogger logFmt:@"Could not inspect alert-typed candidate on watchOS, skipping it: %@", e.reason];
+          continue;
+        }
+      }
       if (0 == alertSnapshot.children.count) {
         continue;
       }
