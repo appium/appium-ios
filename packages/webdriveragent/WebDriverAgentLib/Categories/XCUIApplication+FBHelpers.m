@@ -425,11 +425,26 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
     // watchOS presents the keyboard's accessory bar - `Cancel` and `Done` - as a *sibling* of
     // `XCUIElementTypeKeyboard` instead of a descendant of it, so the query above, which is
     // scoped to the keyboard, never sees it. That bar holds `Done`, the only control that
-    // dismisses the keyboard and commits a text field on the platform, so look in the whole
-    // application when the keyboard itself has nothing matching the requested names.
+    // dismisses the keyboard and commits a text field on the platform, so look outside the
+    // keyboard when it has nothing matching the requested names.
     if (0 == matchedKeys.count) {
+      // The wider search has to stop at the application's own process. The bar belongs to the
+      // text input service (`com.apple.QuickboardViewService`), while `Done` is a name watch
+      // applications use freely in their own UI; tapping one of those leaves the keyboard open
+      // and runs unrelated application logic, so only elements proven to live in another process
+      // are considered. Whose process cannot be resolved are dropped as well - the worst case
+      // there is the previous "did not know how to dismiss the keyboard" failure, never a stray
+      // tap into the application under test.
+      pid_t autPid = [self.accessibilityElement processIdentifier];
+      NSPredicate *foreignProcessPredicate = [NSPredicate predicateWithBlock:^BOOL(id<FBXCElementSnapshot> snapshot, NSDictionary *bindings) {
+        if (![searchPredicate evaluateWithObject:snapshot]) {
+          return NO;
+        }
+        pid_t pid = [snapshot.accessibilityElement processIdentifier];
+        return autPid > 0 && pid > 0 && pid != autPid;
+      }];
       matchedKeys = [[self.fb_query descendantsMatchingType:XCUIElementTypeAny]
-                     matchingPredicate:searchPredicate].allElementsBoundByIndex;
+                     matchingPredicate:foreignProcessPredicate].allElementsBoundByIndex;
     }
 #endif
     if (matchedKeys.count > 0) {

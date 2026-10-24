@@ -28,6 +28,14 @@ struct ContentView: View {
           showAlert = true
         }
         .accessibilityIdentifier("showAlertButton")
+        // Deliberately labelled `Done`: the same name keyboard dismissal searches for. Tripwire
+        // for the watchOS fallback in `fb_dismissKeyboardWithKeyNames:` - if that helper ever
+        // reaches into the application's own UI instead of the keyboard's accessory bar, the
+        // typing tests observe `resultText` change to `AppDoneTapped` and fail loudly.
+        Button("Done") {
+          resultText = "AppDoneTapped"
+        }
+        .accessibilityIdentifier("appDoneButton")
         TextField("Type here", text: $typedText)
           .accessibilityIdentifier("typingField")
       }

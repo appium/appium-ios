@@ -88,5 +88,14 @@ final class WDATypingIntegrationTests: WDAWatchInProcessTestCase {
     // success is the absence of a thrown error, confirmed by the accessory bar disappearing below.
     try app.fb_dismissKeyboard(withKeyNames: ["done", "Done"])
     XCTAssertFalse(app.buttons["Cancel"].exists, "expected the keyboard to be dismissed")
+    // The helper searches the whole application when the keyboard subtree holds nothing matching,
+    // which is how it reaches the accessory bar. That is only acceptable while it stops at the
+    // control that belongs to the keyboard: `IntegrationApp` deliberately carries its own `Done`
+    // button, so this pins that the fallback never taps into the application's own UI on the way.
+    XCTAssertEqual(
+      app.staticTexts["resultLabel"].label,
+      "Idle",
+      "expected keyboard dismissal to leave the application's own controls alone"
+    )
   }
 }
