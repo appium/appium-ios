@@ -24,19 +24,19 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - id: set-matrix
-        # Xcode/runtime/runner/iPhone come from the shared min/max (ios-xcode-matrix.yml); tvOS
-        # shares the iOS runtime version, the watchOS runtime and tv/watch models are WDA-specific.
+        # Xcode/runtimes/runner/device models for all platforms come from the shared min/max
+        # (ios-xcode-matrix.yml).
         env:
           MIN: ${{ needs.xcode_matrix.outputs.min }}
           MAX: ${{ needs.xcode_matrix.outputs.max }}
         run: |
           jq -nc --argjson min "$MIN" --argjson max "$MAX" '
-            def targets($c; $watchVersion; $watchName): [
+            def targets($c): [
               {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "iOS", PLATFORM_VERSION: $c.iosVersion, DEVICE_NAME: $c.deviceName},
-              {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "tvOS", PLATFORM_VERSION: $c.iosVersion, DEVICE_NAME: "Apple TV 4K (3rd generation)"},
-              {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "watchOS", PLATFORM_VERSION: $watchVersion, DEVICE_NAME: $watchName}
+              {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "tvOS", PLATFORM_VERSION: $c.tvosVersion, DEVICE_NAME: $c.tvosDeviceName},
+              {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "watchOS", PLATFORM_VERSION: $c.watchosVersion, DEVICE_NAME: $c.watchosDeviceName}
             ];
-            targets($max; $max.iosVersion; "Apple Watch Series 12 (46mm)") + targets($min; $min.iosVersion; "Apple Watch Series 11 (46mm)")
+            targets($max) + targets($min)
           ' | sed 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   test:
