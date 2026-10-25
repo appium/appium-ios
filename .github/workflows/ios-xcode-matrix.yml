@@ -32,6 +32,9 @@ jobs:
           # "image" is the runs-on runner image - each Xcode version only ships on specific
           # macOS runner images, so it travels with xcodeVersion in the same matrix entry rather
           # than being picked independently.
+          # Don't guess versions/devices: only preinstalled simulator runtimes and models work.
+          # See "Installed Xcode/SDKs/Simulators" in https://github.com/actions/runner-images/tree/main/images/macos
+          # (<image>-arm64-Readme.md, e.g. macos-26-arm64, xcode-27-arm64).
           json='[
             {"xcodeVersion": "27.1", "iosVersion": "27.0", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 11-inch (M4)",
              "tvosVersion": "27.0", "tvosDeviceName": "Apple TV 4K (3rd generation)",
