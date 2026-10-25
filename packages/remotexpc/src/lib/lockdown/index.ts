@@ -135,24 +135,32 @@ class TLSManager {
       socket.pause();
       tlsManagerLog.debug('Upgrading socket to TLS...');
 
-      const timer = setTimeout(() => {
+      let timer: NodeJS.Timeout | undefined;
+      let secure: TLSSocket;
+      try {
+        secure = tls.connect(
+          {
+            socket,
+            rejectUnauthorized: false,
+            minVersion: 'TLSv1.2',
+            ...tlsOptions,
+          },
+          () => {
+            clearTimeout(timer);
+            tlsManagerLog.info('TLS handshake completed');
+            resolve(secure);
+          },
+        );
+      } catch (err) {
+        // e.g. invalid PEM in the pair record: tls.connect throws synchronously
+        reject(new TLSUpgradeError(`TLS socket error: ${(err as Error).message}`));
+        return;
+      }
+      // armed only once `secure` exists, so the callback can never hit a TDZ error
+      timer = setTimeout(() => {
         secure.destroy();
         reject(new TLSUpgradeError(`TLS handshake timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-
-      const secure = tls.connect(
-        {
-          socket,
-          rejectUnauthorized: false,
-          minVersion: 'TLSv1.2',
-          ...tlsOptions,
-        },
-        () => {
-          clearTimeout(timer);
-          tlsManagerLog.info('TLS handshake completed');
-          resolve(secure);
-        },
-      );
 
       secure.on('error', (err) => {
         clearTimeout(timer);

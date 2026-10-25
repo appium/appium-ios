@@ -21,4 +21,25 @@ describe('upgradeSocketToTLS', function () {
       server.close();
     }
   });
+
+  it('rejects without leaving a live timer when tls.connect throws synchronously', async function () {
+    const socket = new net.Socket();
+    const timeoutMs = 50;
+    const uncaught: Error[] = [];
+    const onUncaught = (err: Error) => uncaught.push(err);
+    process.on('uncaughtException', onUncaught);
+
+    try {
+      await assert.rejects(
+        upgradeSocketToTLS(socket, {key: 'not-a-pem', cert: 'not-a-pem'}, timeoutMs),
+        /TLS socket error/,
+      );
+      // outlive the would-be timer
+      await new Promise((resolve) => setTimeout(resolve, timeoutMs * 3));
+      assert.deepEqual(uncaught, []);
+    } finally {
+      process.off('uncaughtException', onUncaught);
+      socket.destroy();
+    }
+  });
 });
