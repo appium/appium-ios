@@ -17,8 +17,8 @@ env:
   # Xcode, iOS runtime, iPhone model and runner image come from ios-xcode-matrix.yml (shared with
   # the other packages); only the device models/versions it doesn't cover are listed here.
   MIN_TV_DEVICE_NAME: "Apple TV 4K (3rd generation)"
-  MIN_WATCH_PLATFORM_VERSION: "11.5"
-  MIN_WATCH_DEVICE_NAME: "Apple Watch Series 10 (46mm)"
+  MIN_WATCH_PLATFORM_VERSION: "26.5"
+  MIN_WATCH_DEVICE_NAME: "Apple Watch Series 11 (46mm)"
   MIN_IPAD_DEVICE_NAME: "iPad Air 13-inch (M2)"
   MAX_WATCH_PLATFORM_VERSION: "27.0"
   MAX_WATCH_DEVICE_NAME: "Apple Watch Series 12 (46mm)"

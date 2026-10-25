@@ -36,7 +36,7 @@ jobs:
               {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "tvOS", PLATFORM_VERSION: $c.iosVersion, DEVICE_NAME: "Apple TV 4K (3rd generation)"},
               {HOST_OS: $c.image, XCODE_VERSION: $c.xcodeVersion, PLATFORM_NAME: "watchOS", PLATFORM_VERSION: $watchVersion, DEVICE_NAME: $watchName}
             ];
-            targets($max; $max.iosVersion; "Apple Watch Series 12 (46mm)") + targets($min; "11.5"; "Apple Watch Series 10 (46mm)")
+            targets($max; $max.iosVersion; "Apple Watch Series 12 (46mm)") + targets($min; $min.iosVersion; "Apple Watch Series 11 (46mm)")
           ' | sed 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   test:

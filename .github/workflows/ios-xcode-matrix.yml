@@ -33,9 +33,8 @@ jobs:
           # macOS runner images, so it travels with xcodeVersion in the same matrix entry rather
           # than being picked independently.
           json='[
-            {"xcodeVersion": "27.0", "iosVersion": "27.0", "deviceName": "iPhone 17", "image": "xcode-27"},
-            {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "image": "macos-26"},
-            {"xcodeVersion": "16.4", "iosVersion": "18.5", "deviceName": "iPhone 16", "image": "macos-15"}
+            {"xcodeVersion": "27.1", "iosVersion": "27.0", "deviceName": "iPhone 17", "image": "xcode-27"},
+            {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "image": "macos-26"}
           ]'
           echo "matrix=$(echo "$json" | jq -c .)" >> "$GITHUB_OUTPUT"
           # Ends of the matrix by Xcode version, for suites that only run the oldest/newest legs.
