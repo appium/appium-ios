@@ -6,7 +6,7 @@ import type {
   PlistMessage,
 } from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService} from '../base-service.js';
+import {BaseService, type BaseServiceOptions} from '../base-service.js';
 
 const log = getLogger('NotificationProxyService');
 
@@ -32,8 +32,8 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
   private _conn: ServiceConnection | null = null;
   private _pendingNotificationsObservationSet: Set<string> = new Set();
 
-  constructor(udid: string, timeout: number = 10000) {
-    super(udid);
+  constructor(udid: string, timeout: number = 10000, options?: BaseServiceOptions) {
+    super(udid, options);
     this.timeout = timeout;
   }
 

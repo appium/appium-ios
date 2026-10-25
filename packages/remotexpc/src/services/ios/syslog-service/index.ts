@@ -3,7 +3,7 @@ import {EventEmitter} from 'node:events';
 import {getLogger} from '../../../lib/logger.js';
 import type {SyslogOptions, SyslogService as SyslogServiceInterface} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService, type Service} from '../base-service.js';
+import {BaseService, type BaseServiceOptions, type Service} from '../base-service.js';
 import {
   type SyslogEntry,
   SyslogProtocolParser,
@@ -39,9 +39,12 @@ class SyslogService extends EventEmitter implements SyslogServiceInterface {
    * Creates a new syslog-service instance
    * @param udid Device UDID
    */
-  constructor(private readonly udid: string) {
+  constructor(
+    private readonly udid: string,
+    options?: BaseServiceOptions,
+  ) {
     super();
-    this.baseService = new BaseService(udid);
+    this.baseService = new BaseService(udid, options);
     this.syslogParser = new SyslogProtocolParser(
       (entry: SyslogEntry) => this.handleSyslogEntry(entry),
       (error: Error) => log.debug(`Syslog parse error: ${error.message}`),

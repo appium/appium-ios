@@ -1,7 +1,7 @@
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService} from '../base-service.js';
+import {BaseService, type BaseServiceOptions} from '../base-service.js';
 import type {
   AppInfo,
   ApplicationType,
@@ -50,8 +50,8 @@ export class InstallationProxyService extends BaseService {
   private readonly timeout: number;
   private connection: ServiceConnection | null = null;
 
-  constructor(udid: string, timeout: number = 30000) {
-    super(udid);
+  constructor(udid: string, timeout: number = 30000, options?: BaseServiceOptions) {
+    super(udid, options);
     this.timeout = timeout;
   }
 

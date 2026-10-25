@@ -8,7 +8,9 @@ import {pipeline} from 'node:stream/promises';
 import {minimatch} from 'minimatch';
 
 import {getLogger} from '../../../lib/logger.js';
+import {type ServiceTransport, TUNNEL_TRANSPORT, UsbmuxServiceTransport} from '../../../lib/service-transport/index.js';
 import {DEFAULT_TUNNEL_SERVICE_WAIT_MS, resolveTunnelService} from '../../../lib/tunnel/tunnel-service-resolver.js';
+import type {BaseServiceOptions} from '../base-service.js';
 import {
   buildClosePayload,
   buildFopenPayload,
@@ -92,18 +94,25 @@ export class AfcService {
 
   private readonly udid?: string;
   private readonly rsdServiceName: string;
+  private readonly transport: ServiceTransport = TUNNEL_TRANSPORT;
   private socket: net.Socket | null = null;
   private demux: AfcPacketDemux | null = null;
   private silent: boolean = false;
   /** Set when the AFC byte stream is no longer safe to reuse on this instance. */
   private connectionError: Error | null = null;
 
-  constructor(udid: string, silent?: boolean, rsdServiceName?: string);
+  constructor(udid: string, silent?: boolean, rsdServiceName?: string, options?: BaseServiceOptions);
   constructor(socket: net.Socket, silent?: boolean);
-  constructor(udidOrSocket: string | net.Socket, silent?: boolean, rsdServiceName?: string) {
+  constructor(
+    udidOrSocket: string | net.Socket,
+    silent?: boolean,
+    rsdServiceName?: string,
+    options?: BaseServiceOptions,
+  ) {
     if (typeof udidOrSocket === 'string') {
       this.udid = udidOrSocket;
       this.rsdServiceName = rsdServiceName ?? AfcService.RSD_SERVICE_NAME;
+      this.transport = options?.transport ?? TUNNEL_TRANSPORT;
     } else {
       this.socket = udidOrSocket;
       this.rsdServiceName = AfcService.RSD_SERVICE_NAME;
@@ -773,6 +782,13 @@ export class AfcService {
 
     if (!this.udid) {
       throw new AfcConnectionError('Pre-connected AFC socket is no longer usable');
+    }
+
+    if (this.transport instanceof UsbmuxServiceTransport) {
+      this.socket = await this.transport.openSocket(this.rsdServiceName, {timeoutMs: 30000});
+      this._getDemux().ensureReaderStarted(this.socket);
+      log.debug('Lockdown service started over usbmux; switching to raw AFC');
+      return this.socket;
     }
 
     const resolved = await resolveTunnelService(this.udid, this.rsdServiceName, {

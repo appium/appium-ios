@@ -1,4 +1,9 @@
 import {
+  type StartServiceOptions,
+  resolveServiceTransport,
+  resolveServiceTransportWithPort,
+} from './lib/service-transport/index.js';
+import {
   DEFAULT_TUNNEL_SERVICE_WAIT_MS,
   resolveTunnelService,
   resolveTunnelServicePorts,
@@ -48,13 +53,22 @@ import ZipConduitService from './services/ios/zipconduit/index.js';
 export {getAvailableDevices, getTunnelForDevice} from './lib/tunnel/tunnel-availability.js';
 
 const SERVICE_WAIT_MS = DEFAULT_TUNNEL_SERVICE_WAIT_MS;
+const TUNNEL_RESOLVERS = {resolveTunnelService, resolveTunnelServicePorts};
 
 /**
  * Start the diagnostics service for the given device UDID.
  */
-export async function startDiagnosticsService(udid: string): Promise<DiagnosticsService> {
-  await requireCatalogService(udid, DiagnosticsService.RSD_SERVICE_NAME);
-  return new DiagnosticsService(udid);
+export async function startDiagnosticsService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<DiagnosticsService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    DiagnosticsService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new DiagnosticsService(udid, {transport});
 }
 
 /**
@@ -68,17 +82,33 @@ export async function startCompanionProxyService(udid: string): Promise<Companio
 /**
  * Start the notification proxy service for the given device UDID.
  */
-export async function startNotificationProxyService(udid: string): Promise<NotificationProxyService> {
-  await requireCatalogService(udid, NotificationProxyService.RSD_SERVICE_NAME);
-  return new NotificationProxyService(udid);
+export async function startNotificationProxyService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<NotificationProxyService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    NotificationProxyService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new NotificationProxyService(udid, undefined, {transport});
 }
 
 /**
  * Start the mobile configuration service for the given device UDID.
  */
-export async function startMobileConfigService(udid: string): Promise<MobileConfigService> {
-  await requireCatalogService(udid, MobileConfigService.RSD_SERVICE_NAME);
-  return new MobileConfigService(udid);
+export async function startMobileConfigService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<MobileConfigService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    MobileConfigService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new MobileConfigService(udid, {transport});
 }
 
 /**
@@ -246,7 +276,7 @@ export async function startSyslogService(udid: string): Promise<SyslogServiceTyp
 export async function startSyslogBinaryService(
   udid: string,
 ): Promise<{syslogService: SyslogServiceType; serviceDescriptor: Service}> {
-  return startSyslogWithServiceName(udid, RSD_SYSLOG_BINARY_SERVICE_NAME);
+  return startSyslogWithServiceName(udid, RSD_SYSLOG_BINARY_SERVICE_NAME, {transport: 'tunnel'});
 }
 
 /**
@@ -254,24 +284,35 @@ export async function startSyslogBinaryService(
  */
 export async function startSyslogTextService(
   udid: string,
+  options?: StartServiceOptions,
 ): Promise<{syslogService: SyslogServiceType; serviceDescriptor: Service}> {
-  return startSyslogWithServiceName(udid, RSD_SYSLOG_TEXT_SERVICE_NAME);
+  return startSyslogWithServiceName(udid, RSD_SYSLOG_TEXT_SERVICE_NAME, options);
 }
 
 /**
  * Start AFC service over RemoteXPC shim.
  */
-export async function startAfcService(udid: string): Promise<AfcService> {
-  await requireCatalogService(udid, AfcService.RSD_SERVICE_NAME);
-  return new AfcService(udid);
+export async function startAfcService(udid: string, options?: StartServiceOptions): Promise<AfcService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    AfcService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new AfcService(udid, undefined, undefined, {transport});
 }
 
 /**
  * Start streaming zip_conduit service over RemoteXPC shim.
  */
-export async function startZipConduitService(udid: string): Promise<ZipConduitService> {
-  await requireCatalogService(udid, ZipConduitService.RSD_SERVICE_NAME);
-  return new ZipConduitService(udid);
+export async function startZipConduitService(udid: string, options?: StartServiceOptions): Promise<ZipConduitService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    ZipConduitService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new ZipConduitService(udid, {transport});
 }
 
 /**
@@ -288,25 +329,49 @@ export async function startCrashReportsService(udid: string): Promise<CrashRepor
 /**
  * Start the house arrest service for the given device UDID.
  */
-export async function startHouseArrestService(udid: string): Promise<HouseArrestService> {
-  await requireCatalogService(udid, HouseArrestService.RSD_SERVICE_NAME);
-  return new HouseArrestService(udid);
+export async function startHouseArrestService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<HouseArrestService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    HouseArrestService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new HouseArrestService(udid, {transport});
 }
 
 /**
  * Start the installation proxy service for the given device UDID.
  */
-export async function startInstallationProxyService(udid: string): Promise<InstallationProxyService> {
-  await requireCatalogService(udid, InstallationProxyService.RSD_SERVICE_NAME);
-  return new InstallationProxyService(udid);
+export async function startInstallationProxyService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<InstallationProxyService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    InstallationProxyService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new InstallationProxyService(udid, undefined, {transport});
 }
 
 /**
  * Start the web inspector service for the given device UDID.
  */
-export async function startWebInspectorService(udid: string): Promise<WebInspectorService> {
-  await requireCatalogService(udid, WebInspectorService.RSD_SERVICE_NAME);
-  return new WebInspectorService(udid);
+export async function startWebInspectorService(
+  udid: string,
+  options?: StartServiceOptions,
+): Promise<WebInspectorService> {
+  const transport = await resolveServiceTransport(
+    udid,
+    WebInspectorService.RSD_SERVICE_NAME,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  return new WebInspectorService(udid, {transport});
 }
 
 /**
@@ -405,12 +470,17 @@ async function requireCatalogServices(udid: string, serviceNames: string[]): Pro
 async function startSyslogWithServiceName(
   udid: string,
   serviceName: string,
+  options?: StartServiceOptions,
 ): Promise<{syslogService: SyslogServiceType; serviceDescriptor: Service}> {
-  const {port} = await resolveTunnelService(udid, serviceName, {
-    waitMs: SERVICE_WAIT_MS,
-  });
+  const {transport, tunnelPort} = await resolveServiceTransportWithPort(
+    udid,
+    serviceName,
+    options?.transport,
+    TUNNEL_RESOLVERS,
+  );
+  // The port is only meaningful for the tunnel; the usbmux transport starts the service itself
   return {
-    syslogService: new SyslogService(udid),
-    serviceDescriptor: {serviceName, port: String(port)},
+    syslogService: new SyslogService(udid, {transport}),
+    serviceDescriptor: {serviceName, port: String(tunnelPort ?? 0)},
   };
 }

@@ -70,6 +70,24 @@ APPIUM_IOS_REMOTEXPC_LOG_LEVEL=error node your-script.js
 
 This is particularly useful for debugging issues or reducing log noise in production environments.
 
+#### APPIUM_IOS_REMOTEXPC_TRANSPORT
+
+Selects how services are reached when `Services.start*` is called without an explicit `transport` option:
+
+- `auto` (default) - use the RemoteXPC tunnel when it serves the service, otherwise fall back to lockdown over usbmux
+- `tunnel` - tunnel only
+- `usbmux` - lockdown over usbmux only (no tunnel needed)
+
+The usbmux transport is a **transitional** best-effort path for the services Appium needs: AFC, House Arrest,
+Installation Proxy, Notification Proxy, syslog (text relay), zip_conduit, MobileConfig, Diagnostics and Web Inspector.
+It starts the classic lockdown services (`StartService` + TLS with the pair record), so the device must be paired and
+trusted. Every other service (DVT, XCTest, pasteboard, HID, crash reports, ...) still requires a tunnel and fails with an
+`UnsupportedTransportError` (a `TunnelAvailabilityError`) in `usbmux` mode.
+
+```ts
+await Services.startAfcService(udid, {transport: 'usbmux'});
+```
+
 ## Architecture Flow
 
 The following diagram illustrates the high-level flow of how the tunnel is created:

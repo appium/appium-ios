@@ -70,11 +70,39 @@ interface TLSConfig {
 }
 
 // Error classes for better error handling
-class LockdownError extends Error {
+export class LockdownError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'LockdownError';
   }
+}
+
+/** lockdownd refused to start a service (e.g. `PasswordProtected`, `InvalidService`). */
+export class LockdownStartServiceError extends LockdownError {
+  constructor(
+    readonly serviceName: string,
+    readonly reason: string,
+  ) {
+    super(
+      reason === 'PasswordProtected'
+        ? `Cannot start '${serviceName}': the device is locked with a passcode. Unlock it and try again.`
+        : `Cannot start '${serviceName}': ${reason}`,
+    );
+    this.name = 'LockdownStartServiceError';
+  }
+}
+
+/** Connection attributes returned by lockdownd for a started service. */
+export interface StartedLockdownService {
+  port: number;
+  enableServiceSSL: boolean;
+}
+
+/** A strict (paired, TLS-secured when requested) lockdown session over usbmux. */
+export interface LockdownSessionInfo {
+  lockdown: LockdownService;
+  pairRecord: PairRecord;
+  deviceId: number;
 }
 
 class TLSUpgradeError extends Error {
@@ -254,6 +282,41 @@ export class LockdownService extends BasePlistService {
     }
 
     throw new LockdownError(`Unexpected session data: ${JSON.stringify(response)}`);
+  }
+
+  /**
+   * Starts a session using the given pair record and upgrades the connection to TLS when the
+   * device asks for it. Unlike the auto-secure constructor path, every failure is thrown.
+   */
+  async startSecureSession(pairRecord: PairRecord): Promise<void> {
+    if (!this.validatePairRecord(pairRecord)) {
+      throw new LockdownError(
+        `The pair record for ${this.udid} is incomplete. Unlock the device and trust this computer, then retry.`,
+      );
+    }
+    const sessionInfo = await this.startSession(pairRecord.HostID as string, pairRecord.SystemBUID as string);
+    if (sessionInfo.enableSessionSSL) {
+      await this.performTLSUpgrade(pairRecord);
+    }
+  }
+
+  /**
+   * Asks lockdownd to start a service. Requires a session (see {@link startSecureSession}).
+   *
+   * @param serviceName - Lockdown service name, e.g. `com.apple.afc`
+   * @param timeout - Request timeout in milliseconds
+   * @returns The device port to connect to and whether the connection must use TLS
+   */
+  async startService(serviceName: string, timeout = DEFAULT_TIMEOUT): Promise<StartedLockdownService> {
+    const response = await this.sendAndReceive({Label: LABEL, Request: 'StartService', Service: serviceName}, timeout);
+    if (response.Error) {
+      throw new LockdownStartServiceError(serviceName, String(response.Error));
+    }
+    const port = Number(response.Port);
+    if (!Number.isInteger(port) || port <= 0) {
+      throw new LockdownError(`Unexpected StartService response for '${serviceName}': ${JSON.stringify(response)}`);
+    }
+    return {port, enableServiceSSL: Boolean(response.EnableServiceSSL)};
   }
 
   /**
@@ -534,6 +597,36 @@ export class LockdownServiceFactory {
       throw err;
     }
   }
+}
+
+/**
+ * Opens a paired, TLS-secured lockdown session over usbmux (no tunnel, no local relay).
+ * The caller owns the returned `lockdown` and must close it.
+ *
+ * @throws If the device is not connected, not paired, or the session cannot be established
+ */
+export async function openLockdownSession(udid: string): Promise<LockdownSessionInfo> {
+  const deviceManager = new DeviceManager();
+  const device = await deviceManager.findDeviceByUDID(udid);
+  const pairRecord = await deviceManager.readPairRecord(udid);
+
+  const usbmux = await createUsbmux();
+  let socket: Socket;
+  try {
+    socket = await usbmux.connect(device.DeviceID, DEFAULT_LOCKDOWN_PORT);
+  } catch (err) {
+    await usbmux.close().catch(() => {});
+    throw err;
+  }
+
+  const lockdown = new LockdownService(socket, udid, false);
+  try {
+    await lockdown.startSecureSession(pairRecord);
+  } catch (err) {
+    lockdown.close();
+    throw err;
+  }
+  return {lockdown, pairRecord, deviceId: device.DeviceID};
 }
 
 /**
