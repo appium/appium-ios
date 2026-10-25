@@ -36,7 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSDictionary *)fb_tree;
 
 /**
-  @param excludedAttributes Set of possible attributes to be excluded i.e frame, enabled, visible, accessible, focused. If set to nil or an empty array then no attributes will be excluded from the resulting JSON
+  @param excludedAttributes Set of possible attributes to be excluded i.e frame, nativeFrame, enabled, visible, accessible, nativeAccessibilityElement, focused, traits, placeholderValue, minValue, maxValue, customActions. If set to nil or an empty array then no attributes will be excluded from the resulting JSON
   @return application elements tree in form of nested dictionaries
  */
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *) excludedAttributes;
