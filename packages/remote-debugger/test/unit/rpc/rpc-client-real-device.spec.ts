@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {describe, it, beforeEach} from 'node:test';
 
-import {RpcClientRealDeviceShim} from '../../../lib/rpc/rpc-client-real-device-shim.js';
+import {RpcClientRealDevice} from '../../../lib/rpc/rpc-client-real-device.js';
 
-describe('RpcClientRealDeviceShim', function () {
+describe('RpcClientRealDevice', function () {
   let shim: any;
 
   beforeEach(function () {
-    shim = new RpcClientRealDeviceShim({udid: 'test-udid'});
+    shim = new RpcClientRealDevice({udid: 'test-udid'});
   });
 
   describe('convertMessage', function () {
@@ -120,6 +120,81 @@ describe('RpcClientRealDeviceShim', function () {
     it('should return args unchanged when WIRConnectionIdentifierKey is absent', function () {
       const args = {WIRApplicationIdentifierKey: 'com.example.app'};
       assert.deepStrictEqual(shim.translateArguments(args), args);
+    });
+  });
+
+  describe('message listener and disconnect', function () {
+    function makeService(messages: AsyncIterable<any>) {
+      return {
+        listenMessage: () => messages,
+        stopListeningAsync: async () => {},
+        close: async () => {},
+        sendMessage: async () => {},
+      };
+    }
+
+    async function* gen(items: any[], endAfter?: Promise<void>) {
+      for (const item of items) {
+        yield item;
+      }
+      if (endAfter) {
+        await endAfter;
+      }
+    }
+
+    function attach(client: any, service: any) {
+      client.webInspectorService = service;
+      client.isConnected = true;
+      client.startMessageListener();
+    }
+
+    it('keeps listening after the message handler throws', async function () {
+      const handled: any[] = [];
+      shim.messageHandler.handleMessage = async (msg: any) => {
+        if (msg.__selector === 'bad') {
+          throw new Error('boom');
+        }
+        handled.push(msg);
+      };
+      attach(
+        shim,
+        makeService(
+          gen([
+            {__selector: 'bad', __argument: {}},
+            {__selector: 'good', __argument: {}},
+          ]),
+        ),
+      );
+      await shim.messageListenerTask;
+      assert.deepStrictEqual(
+        handled.map((m) => m.__selector),
+        ['good'],
+      );
+    });
+
+    it('flags the client as disconnected when the message stream ends on its own', async function () {
+      attach(shim, makeService(gen([])));
+      await shim.messageListenerTask;
+      assert.strictEqual(shim.isConnected, false);
+    });
+
+    it('disconnects cleanly even if stopListeningAsync fails, and lets a stale listener finish quietly', async function () {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const service: any = makeService(gen([], gate));
+      let closed = false;
+      service.stopListeningAsync = async () => {
+        throw new Error('stop failed');
+      };
+      service.close = async () => {
+        closed = true;
+        release();
+      };
+      attach(shim, service);
+      await shim.disconnect();
+      assert.strictEqual(closed, true);
+      assert.strictEqual(shim.isConnected, false);
+      assert.strictEqual(shim.webInspectorService, undefined);
     });
   });
 });

@@ -1,10 +1,16 @@
 import net from 'node:net';
 
-import {services} from 'appium-ios-device';
+import {util} from '@appium/support';
 
 import {log} from '../logger.js';
 import type {RpcClientOptions, RpcClientSimulatorOptions, RemoteCommand} from '../types.js';
 import {RpcClient} from './rpc-client.js';
+import {
+  WebInspectorFrameDecoder,
+  WebInspectorFrameError,
+  encodeWebInspectorFrame,
+  logHexDump,
+} from './web-inspector-framing.js';
 
 /**
  * RPC client implementation for iOS simulators.
@@ -17,7 +23,7 @@ export class RpcClientSimulator extends RpcClient {
   protected readonly messageProxy?: any;
   protected socket: net.Socket | null;
   protected readonly socketPath?: string;
-  protected service?: any;
+  protected decoder?: WebInspectorFrameDecoder;
 
   /**
    * @param opts - Options for configuring the RPC client, including
@@ -95,15 +101,32 @@ export class RpcClientSimulator extends RpcClient {
     this.socket.on('end', () => {
       this.isConnected = false;
     });
-    this.service = await services.startWebInspectorService(this.udid, {
-      socket: this.socket,
-      isSimulator: true,
-      osVersion: this.platformVersion,
-      verbose: this.logAllCommunication,
-      verboseHexDump: this.logAllCommunicationHexDump,
-      maxFrameLength: this.webInspectorMaxFrameLength,
+    const socket = this.socket;
+    const decoder = (this.decoder = new WebInspectorFrameDecoder(this.webInspectorMaxFrameLength));
+    socket.on('data', (chunk: Buffer) => {
+      if (this.logAllCommunicationHexDump) {
+        logHexDump('received', chunk);
+      }
+      let messages: any[];
+      let decodeError: Error | undefined;
+      try {
+        messages = decoder.push(chunk);
+      } catch (err: any) {
+        // still deliver whatever was decoded before the failure
+        decodeError = err;
+        messages = err instanceof WebInspectorFrameError ? err.decoded : [];
+      }
+      for (const message of messages) {
+        if (this.logAllCommunication) {
+          log.debug(`Received message from Web Inspector:\n${util.jsonStringify(message, null)}`);
+        }
+        this.receive(message).catch((err: Error) => log.error(`Cannot handle Web Inspector message: ${err.message}`));
+      }
+      if (decodeError) {
+        log.error(`Cannot decode Web Inspector data: ${decodeError.message}`);
+        socket.destroy();
+      }
     });
-    this.service.listenMessage(this.receive.bind(this));
 
     // connect the socket
     return await new Promise<void>((resolve, reject) => {
@@ -131,7 +154,7 @@ export class RpcClientSimulator extends RpcClient {
 
   /**
    * Disconnects from the Web Inspector service on the simulator.
-   * Closes the socket and service connection, and cleans up resources.
+   * Closes the socket, and cleans up resources.
    */
   override async disconnect(): Promise<void> {
     if (!this.isConnected) {
@@ -140,7 +163,8 @@ export class RpcClientSimulator extends RpcClient {
 
     log.debug('Disconnecting from remote debugger');
     await super.disconnect();
-    this.service?.close();
+    this.socket?.destroy();
+    this.decoder = undefined;
     this.isConnected = false;
   }
 
@@ -162,14 +186,25 @@ export class RpcClientSimulator extends RpcClient {
         reject(err);
       };
 
-      if (!this.socket || !this.service) {
+      if (!this.socket) {
         return reject(
           new Error('The RPC client is not connected. Have you called `connect()` before sending a message?'),
         );
       }
       this.socket.on('error', onSocketError);
-      this.service.sendMessage(cmd);
-      resolve();
+      try {
+        const frame = encodeWebInspectorFrame(cmd);
+        if (this.logAllCommunication) {
+          log.debug(`Sent message to Web Inspector:\n${util.jsonStringify(cmd, null)}`);
+        }
+        if (this.logAllCommunicationHexDump) {
+          logHexDump('sent', frame);
+        }
+        this.socket.write(frame);
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
     }).finally(() => {
       // remove this listener, so we don't exhaust the system
       if (this.socket && onSocketError) {

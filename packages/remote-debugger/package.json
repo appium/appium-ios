@@ -57,7 +57,7 @@
   "dependencies": {
     "@appium/base-driver": "^10.8.0",
     "@appium/support": "^7.2.6",
-    "appium-ios-device": "^3.1.22",
+    "appium-ios-remotexpc": "^5.28.1",
     "asyncbox": "^6.5.0",
     "teen_process": "^4.2.0"
   },
@@ -82,9 +82,6 @@
     "react-dom": "^19.3.1",
     "serve-static": "^2.2.0",
     "sinon": "^22.0.0"
-  },
-  "optionalDependencies": {
-    "appium-ios-remotexpc": "^5.28.1"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
