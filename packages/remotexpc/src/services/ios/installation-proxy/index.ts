@@ -17,6 +17,13 @@ import type {
 
 const log = getLogger('InstallationProxyService');
 
+const DEFAULT_TIMEOUT_MS = 30000;
+
+export interface InstallationProxyServiceOptions extends BaseServiceOptions {
+  /** Request timeout in milliseconds */
+  timeout?: number;
+}
+
 export const DEFAULT_APPLICATION_TYPE = 'Any';
 
 export const DEFAULT_RETURN_ATTRIBUTES = [
@@ -50,9 +57,14 @@ export class InstallationProxyService extends BaseService {
   private readonly timeout: number;
   private connection: ServiceConnection | null = null;
 
-  constructor(udid: string, timeout: number = 30000, options?: BaseServiceOptions) {
+  /**
+   * @param udid Device UDID
+   * @param timeoutOrOptions Request timeout in milliseconds (legacy form), or an options object
+   */
+  constructor(udid: string, timeoutOrOptions?: number | InstallationProxyServiceOptions) {
+    const options = typeof timeoutOrOptions === 'number' ? {timeout: timeoutOrOptions} : (timeoutOrOptions ?? {});
     super(udid, options);
-    this.timeout = timeout;
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**

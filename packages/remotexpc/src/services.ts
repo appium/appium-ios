@@ -92,7 +92,7 @@ export async function startNotificationProxyService(
     options?.transport,
     TUNNEL_RESOLVERS,
   );
-  return new NotificationProxyService(udid, undefined, {transport});
+  return new NotificationProxyService(udid, {transport});
 }
 
 /**
@@ -355,7 +355,7 @@ export async function startInstallationProxyService(
     options?.transport,
     TUNNEL_RESOLVERS,
   );
-  return new InstallationProxyService(udid, undefined, {transport});
+  return new InstallationProxyService(udid, {transport});
 }
 
 /**

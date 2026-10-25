@@ -20,6 +20,13 @@ export interface PostNotificationRequest extends PlistDictionary {
   Name: string;
 }
 
+const DEFAULT_TIMEOUT_MS = 10000;
+
+export interface NotificationProxyServiceOptions extends BaseServiceOptions {
+  /** Request timeout in milliseconds */
+  timeout?: number;
+}
+
 /**
  * NotificationProxyService provides an API to:
  * - Observe notifications
@@ -32,9 +39,14 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
   private _conn: ServiceConnection | null = null;
   private _pendingNotificationsObservationSet: Set<string> = new Set();
 
-  constructor(udid: string, timeout: number = 10000, options?: BaseServiceOptions) {
+  /**
+   * @param udid Device UDID
+   * @param timeoutOrOptions Request timeout in milliseconds (legacy form), or an options object
+   */
+  constructor(udid: string, timeoutOrOptions?: number | NotificationProxyServiceOptions) {
+    const options = typeof timeoutOrOptions === 'number' ? {timeout: timeoutOrOptions} : (timeoutOrOptions ?? {});
     super(udid, options);
-    this.timeout = timeout;
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**
