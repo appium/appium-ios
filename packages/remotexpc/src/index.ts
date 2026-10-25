@@ -287,7 +287,12 @@ export type {AppleTVDiscoveryOptions, AppleTVTunnelOptions} from './lib/apple-tv
 export type {AppleTVDevice, AppleTVPairingResult} from './lib/apple-tv/types.js';
 export type {LockdownService} from './lib/lockdown/index.js';
 export {LockdownError, LockdownStartServiceError} from './lib/lockdown/index.js';
-export {TRANSPORT_ENV_VAR, UnsupportedTransportError, getAvailableTransports} from './lib/service-transport/index.js';
+export {
+  SERVICE_NAMES,
+  TRANSPORT_ENV_VAR,
+  UnsupportedTransportError,
+  getAvailableTransports,
+} from './lib/service-transport/index.js';
 export type {
   StartServiceOptions,
   TransportAvailability,

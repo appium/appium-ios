@@ -87,10 +87,10 @@ trusted. Every other service (DVT, XCTest, pasteboard, HID, crash reports, ...) 
 `UnsupportedTransportError` (a `TunnelAvailabilityError`) in `usbmux` mode. `startSyslogBinaryService`
 (os_trace_relay) is tunnel-only and ignores the transport setting.
 
-Use `getAvailableTransports` to find out what can serve a device (and, optionally, specific services) before choosing:
+Use `getAvailableTransports` (with the `SERVICE_NAMES` constants for specific services) to find out what can serve a device (and, optionally, specific services) before choosing:
 
 ```ts
-const {tunnel, usbmux} = await Services.getAvailableTransports(udid, AfcService.RSD_SERVICE_NAME);
+const {tunnel, usbmux} = await Services.getAvailableTransports(udid, SERVICE_NAMES.afc);
 await Services.startAfcService(udid, {transport: tunnel ? 'tunnel' : 'usbmux'});
 ```
 

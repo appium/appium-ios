@@ -132,3 +132,4 @@ export type {AvailabilityProbes, TransportAvailability, TransportAvailabilityOpt
 export {UnsupportedTransportError, UsbmuxServiceTransport};
 export {UsbmuxServiceConnection} from './usbmux.js';
 export {getLockdownServiceName} from './lockdown-service-names.js';
+export {SERVICE_NAMES} from './service-names.js';
