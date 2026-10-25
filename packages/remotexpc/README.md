@@ -74,9 +74,11 @@ This is particularly useful for debugging issues or reducing log noise in produc
 
 Selects how services are reached when `Services.start*` is called without an explicit `transport` option:
 
-- `auto` (default) - use the RemoteXPC tunnel when it serves the service, otherwise fall back to lockdown over usbmux
-- `tunnel` - tunnel only
+- `tunnel` (default) - RemoteXPC tunnel only
+- `auto` - use the tunnel when it serves the service, otherwise fall back to lockdown over usbmux
 - `usbmux` - lockdown over usbmux only (no tunnel needed)
+
+`usbmux` and `auto` are never used unless requested explicitly (via the `transport` option or this variable).
 
 The usbmux transport is a **transitional** best-effort path for the services Appium needs: AFC, House Arrest,
 Installation Proxy, Notification Proxy, syslog (text relay), zip_conduit, MobileConfig, Diagnostics and Web Inspector.
@@ -84,8 +86,11 @@ It starts the classic lockdown services (`StartService` + TLS with the pair reco
 trusted. Every other service (DVT, XCTest, pasteboard, HID, crash reports, ...) still requires a tunnel and fails with an
 `UnsupportedTransportError` (a `TunnelAvailabilityError`) in `usbmux` mode.
 
+Use `getAvailableTransports` to find out what can serve a device (and, optionally, specific services) before choosing:
+
 ```ts
-await Services.startAfcService(udid, {transport: 'usbmux'});
+const {tunnel, usbmux} = await Services.getAvailableTransports(udid, AfcService.RSD_SERVICE_NAME);
+await Services.startAfcService(udid, {transport: tunnel ? 'tunnel' : 'usbmux'});
 ```
 
 ## Architecture Flow

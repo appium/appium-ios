@@ -51,6 +51,7 @@ import {WebInspectorService} from './services/ios/webinspector/index.js';
 import ZipConduitService from './services/ios/zipconduit/index.js';
 
 export {getAvailableDevices, getTunnelForDevice} from './lib/tunnel/tunnel-availability.js';
+export {getAvailableTransports} from './lib/service-transport/index.js';
 
 const SERVICE_WAIT_MS = DEFAULT_TUNNEL_SERVICE_WAIT_MS;
 const TUNNEL_RESOLVERS = {resolveTunnelService, resolveTunnelServicePorts};

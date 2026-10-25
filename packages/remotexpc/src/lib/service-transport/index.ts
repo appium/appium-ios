@@ -5,6 +5,7 @@ import {
   resolveTunnelService,
   resolveTunnelServicePorts,
 } from '../tunnel/tunnel-service-resolver.js';
+import {AUTO_TUNNEL_WAIT_MS} from './constants.js';
 import {UnsupportedTransportError} from './errors.js';
 import {UsbmuxServiceTransport} from './usbmux.js';
 
@@ -22,14 +23,14 @@ export type ServiceTransport = TunnelServiceTransport | UsbmuxServiceTransport;
 
 export const TUNNEL_TRANSPORT: TunnelServiceTransport = Object.freeze({kind: 'tunnel'});
 
-/** Short registry wait in `auto` mode: a missing tunnel should fall through quickly. */
-const AUTO_TUNNEL_WAIT_MS = 2000;
-
 export const TRANSPORT_ENV_VAR = 'APPIUM_IOS_REMOTEXPC_TRANSPORT';
 
 /** Options accepted by the `Services.start*` functions. */
 export interface StartServiceOptions {
-  /** Defaults to `APPIUM_IOS_REMOTEXPC_TRANSPORT`, then `auto`. */
+  /**
+   * Defaults to `APPIUM_IOS_REMOTEXPC_TRANSPORT`, then `tunnel`. `usbmux` and `auto` must be requested explicitly.
+   * Use {@link getAvailableTransports} to find out what a device supports.
+   */
   transport?: TransportMode;
 }
 
@@ -41,9 +42,10 @@ export interface TunnelResolvers {
 
 const DEFAULT_TUNNEL_RESOLVERS: TunnelResolvers = {resolveTunnelService, resolveTunnelServicePorts};
 
+/** The tunnel unless `APPIUM_IOS_REMOTEXPC_TRANSPORT` explicitly asks for `usbmux` or `auto`. */
 export function getDefaultTransportMode(): TransportMode {
   const value = process.env[TRANSPORT_ENV_VAR]?.trim().toLowerCase();
-  return value === 'tunnel' || value === 'usbmux' || value === 'auto' ? value : 'auto';
+  return value === 'usbmux' || value === 'auto' ? value : 'tunnel';
 }
 
 /**
@@ -113,6 +115,8 @@ function assertUsbmuxSupport(usbmux: UsbmuxServiceTransport, names: string[]): v
   }
 }
 
+export {getAvailableTransports} from './availability.js';
+export type {AvailabilityProbes, TransportAvailability, TransportAvailabilityOptions} from './availability.js';
 export {UnsupportedTransportError, UsbmuxServiceTransport};
 export {UsbmuxServiceConnection} from './usbmux.js';
 export {getLockdownServiceName} from './lockdown-service-names.js';

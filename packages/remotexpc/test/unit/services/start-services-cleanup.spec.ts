@@ -10,7 +10,6 @@ const TEST_HOST = '127.0.0.1';
 const TEST_PORT = 49_374;
 const TEST_UDID = 'test-udid';
 const WAIT_OPTS = {waitMs: 15_000};
-const TUNNEL_ONLY = {transport: 'tunnel'};
 
 interface LoadedServices {
   services: Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -87,7 +86,7 @@ describe('start*Service — registry catalog resolution', function () {
     it('resolves the AFC RSD shim by name before creating the instance', async function (t) {
       const {services, resolveTunnelService} = await loadServicesWithStubs(t);
 
-      const afc = await services.startAfcService(TEST_UDID, TUNNEL_ONLY);
+      const afc = await services.startAfcService(TEST_UDID);
 
       assert.ok(afc !== null && afc !== undefined);
       assert.strictEqual(resolveTunnelService.calledOnceWith(TEST_UDID, 'com.apple.afc.shim.remote', WAIT_OPTS), true);
@@ -102,7 +101,7 @@ describe('start*Service — registry catalog resolution', function () {
 
       let caught: Error | undefined;
       try {
-        await services.startAfcService(TEST_UDID, TUNNEL_ONLY);
+        await services.startAfcService(TEST_UDID);
       } catch (err) {
         caught = err as Error;
       }
@@ -115,7 +114,7 @@ describe('start*Service — registry catalog resolution', function () {
     it('startSyslogBinaryService queries the os_trace_relay RSD shim by name', async function (t) {
       const {services, resolveTunnelService} = await loadServicesWithStubs(t);
 
-      const result = await services.startSyslogBinaryService(TEST_UDID, TUNNEL_ONLY);
+      const result = await services.startSyslogBinaryService(TEST_UDID);
       const {serviceDescriptor} = result as {
         serviceDescriptor: {serviceName: string; port: string};
       };
@@ -140,7 +139,7 @@ describe('start*Service — registry catalog resolution', function () {
     ] as const) {
       it(`${fn} resolves ${serviceName} from the catalog`, async function (t) {
         const {services, resolveTunnelService} = await loadServicesWithStubs(t);
-        await services[fn](TEST_UDID, TUNNEL_ONLY);
+        await services[fn](TEST_UDID);
         assert.strictEqual(resolveTunnelService.calledOnceWith(TEST_UDID, serviceName, WAIT_OPTS), true);
       });
     }

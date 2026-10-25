@@ -123,9 +123,9 @@ describe('resolveServiceTransport', function () {
   });
 
   describe('default mode', function () {
-    it('is auto unless overridden by the environment', function () {
+    it('is the tunnel unless usbmux or auto is requested explicitly via the environment', function () {
       delete process.env[TRANSPORT_ENV_VAR];
-      assert.equal(getDefaultTransportMode(), 'auto');
+      assert.equal(getDefaultTransportMode(), 'tunnel');
 
       for (const mode of ['tunnel', 'usbmux', 'auto'] as const) {
         process.env[TRANSPORT_ENV_VAR] = ` ${mode.toUpperCase()} `;
@@ -133,7 +133,14 @@ describe('resolveServiceTransport', function () {
       }
 
       process.env[TRANSPORT_ENV_VAR] = 'bogus';
-      assert.equal(getDefaultTransportMode(), 'auto');
+      assert.equal(getDefaultTransportMode(), 'tunnel');
+    });
+
+    it('does not fall back to usbmux when no mode is given', async function () {
+      delete process.env[TRANSPORT_ENV_VAR];
+      const err = new TunnelAvailabilityError('no tunnel');
+
+      await assert.rejects(resolveServiceTransport(UDID, AFC, undefined, makeResolvers(err)), (e) => e === err);
     });
 
     it('is honoured by resolveServiceTransport', async function () {
