@@ -17,6 +17,8 @@ const deviceManagerLog = getLogger('DeviceManager');
 // Constants
 const LABEL = 'appium-internal';
 const DEFAULT_TIMEOUT = 5000;
+/** A device that accepts the connection but never answers the TLS handshake must not hang callers. */
+const TLS_HANDSHAKE_TIMEOUT_MS = 10000;
 const DEFAULT_LOCKDOWN_PORT = 62078;
 /** 0 lets the OS assign a free ephemeral port, so concurrent relays cannot collide. */
 const DEFAULT_RELAY_PORT = 0;
@@ -124,10 +126,19 @@ class TLSManager {
   /**
    * Upgrades a socket to TLS
    */
-  async upgradeSocketToTLS(socket: Socket, tlsOptions: Partial<ConnectionOptions> = {}): Promise<TLSSocket> {
+  async upgradeSocketToTLS(
+    socket: Socket,
+    tlsOptions: Partial<ConnectionOptions> = {},
+    timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
+  ): Promise<TLSSocket> {
     return new Promise((resolve, reject) => {
       socket.pause();
       tlsManagerLog.debug('Upgrading socket to TLS...');
+
+      const timer = setTimeout(() => {
+        secure.destroy();
+        reject(new TLSUpgradeError(`TLS handshake timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       const secure = tls.connect(
         {
@@ -137,17 +148,20 @@ class TLSManager {
           ...tlsOptions,
         },
         () => {
+          clearTimeout(timer);
           tlsManagerLog.info('TLS handshake completed');
           resolve(secure);
         },
       );
 
       secure.on('error', (err) => {
+        clearTimeout(timer);
         tlsManagerLog.error(`TLS socket error: ${err}`);
         reject(new TLSUpgradeError(`TLS socket error: ${err.message}`));
       });
 
       socket.on('error', (err) => {
+        clearTimeout(timer);
         tlsManagerLog.error(`Underlying socket error during TLS: ${err}`);
         reject(new TLSUpgradeError(`Socket error during TLS: ${err.message}`));
       });
@@ -623,7 +637,12 @@ export async function openLockdownSession(udid: string): Promise<LockdownSession
   try {
     await lockdown.startSecureSession(pairRecord);
   } catch (err) {
-    lockdown.close();
+    // Closing must not mask the actual failure (e.g. a locked device)
+    try {
+      lockdown.close();
+    } catch (closeErr) {
+      log.debug(`Error closing lockdown after a failed session: ${closeErr}`);
+    }
     throw err;
   }
   return {lockdown, pairRecord, deviceId: device.DeviceID};
@@ -661,9 +680,13 @@ export async function createLockdownServiceByUDID(
 /**
  * Upgrade an existing socket connection to TLS using Lockdown-compatible options.
  */
-export function upgradeSocketToTLS(socket: Socket, tlsOptions: Partial<ConnectionOptions> = {}): Promise<TLSSocket> {
+export function upgradeSocketToTLS(
+  socket: Socket,
+  tlsOptions: Partial<ConnectionOptions> = {},
+  timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
+): Promise<TLSSocket> {
   const tlsManager = new TLSManager();
-  return tlsManager.upgradeSocketToTLS(socket, tlsOptions);
+  return tlsManager.upgradeSocketToTLS(socket, tlsOptions, timeoutMs);
 }
 
 /**

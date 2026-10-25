@@ -43,6 +43,12 @@ describe('resolveServiceTransport', function () {
     }
   });
 
+  it('rejects an empty service list instead of resolving a transport that serves nothing', async function () {
+    for (const mode of ['tunnel', 'usbmux', 'auto'] as const) {
+      await assert.rejects(resolveServiceTransport(UDID, [], mode, makeResolvers()), TypeError);
+    }
+  });
+
   describe('usbmux mode', function () {
     it('returns the usbmux transport without touching the tunnel registry', async function () {
       const resolvers = makeResolvers();

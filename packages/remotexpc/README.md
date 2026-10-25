@@ -84,7 +84,8 @@ The usbmux transport is a **transitional** best-effort path for the services App
 Installation Proxy, Notification Proxy, syslog (text relay), zip_conduit, MobileConfig, Diagnostics and Web Inspector.
 It starts the classic lockdown services (`StartService` + TLS with the pair record), so the device must be paired and
 trusted. Every other service (DVT, XCTest, pasteboard, HID, crash reports, ...) still requires a tunnel and fails with an
-`UnsupportedTransportError` (a `TunnelAvailabilityError`) in `usbmux` mode.
+`UnsupportedTransportError` (a `TunnelAvailabilityError`) in `usbmux` mode. `startSyslogBinaryService`
+(os_trace_relay) is tunnel-only and ignores the transport setting.
 
 Use `getAvailableTransports` to find out what can serve a device (and, optionally, specific services) before choosing:
 

@@ -59,7 +59,12 @@ export class UsbmuxServiceTransport {
     try {
       started = await lockdown.startService(lockdownName);
     } finally {
-      lockdown.close();
+      // Closing must not mask the actual failure (e.g. a locked device)
+      try {
+        lockdown.close();
+      } catch (closeErr) {
+        log.debug(`Error closing lockdown after StartService: ${closeErr}`);
+      }
     }
     log.debug(`Started ${lockdownName} on port ${started.port} (ssl=${started.enableServiceSSL})`);
 

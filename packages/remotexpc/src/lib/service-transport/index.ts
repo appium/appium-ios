@@ -45,8 +45,17 @@ const DEFAULT_TUNNEL_RESOLVERS: TunnelResolvers = {resolveTunnelService, resolve
 /** The tunnel unless `APPIUM_IOS_REMOTEXPC_TRANSPORT` explicitly asks for `usbmux` or `auto`. */
 export function getDefaultTransportMode(): TransportMode {
   const value = process.env[TRANSPORT_ENV_VAR]?.trim().toLowerCase();
-  return value === 'usbmux' || value === 'auto' ? value : 'tunnel';
+  if (value === 'usbmux' || value === 'auto') {
+    return value;
+  }
+  if (value && value !== 'tunnel' && !warnedInvalidModes.has(value)) {
+    warnedInvalidModes.add(value);
+    log.warn(`Ignoring invalid ${TRANSPORT_ENV_VAR} value '${value}'; expected tunnel, usbmux or auto. Using tunnel.`);
+  }
+  return 'tunnel';
 }
+
+const warnedInvalidModes = new Set<string>();
 
 /**
  * Chooses the transport for one or more services of a device.
@@ -78,6 +87,9 @@ export async function resolveServiceTransportWithPort(
   resolvers: TunnelResolvers = DEFAULT_TUNNEL_RESOLVERS,
 ): Promise<{transport: ServiceTransport; tunnelPort?: number}> {
   const names = Array.isArray(rsdServiceNames) ? rsdServiceNames : [rsdServiceNames];
+  if (names.length === 0) {
+    throw new TypeError('At least one service name is required to resolve a transport');
+  }
   const usbmux = new UsbmuxServiceTransport(udid);
 
   if (mode === 'usbmux') {
