@@ -1,6 +1,5 @@
 import {
   type StartServiceOptions,
-  assertTunnelServiceAllowed,
   resolveServiceTransport,
   resolveServiceTransportWithPort,
 } from './lib/service-transport/index.js';
@@ -278,7 +277,6 @@ export async function startSyslogService(udid: string): Promise<SyslogServiceTyp
 export async function startSyslogBinaryService(
   udid: string,
 ): Promise<{syslogService: SyslogServiceType; serviceDescriptor: Service}> {
-  assertTunnelServiceAllowed(RSD_SYSLOG_BINARY_SERVICE_NAME);
   return startSyslogWithServiceName(udid, RSD_SYSLOG_BINARY_SERVICE_NAME, {transport: 'tunnel'});
 }
 
@@ -461,12 +459,10 @@ export async function startXCTestServices(udid: string, options?: StartXCTestSer
 }
 
 async function requireCatalogService(udid: string, serviceName: string): Promise<void> {
-  assertTunnelServiceAllowed(serviceName);
   await resolveTunnelService(udid, serviceName, {waitMs: SERVICE_WAIT_MS});
 }
 
 async function requireCatalogServices(udid: string, serviceNames: string[]): Promise<void> {
-  assertTunnelServiceAllowed(serviceNames);
   await resolveTunnelServicePorts(udid, serviceNames, {
     waitMs: SERVICE_WAIT_MS,
   });

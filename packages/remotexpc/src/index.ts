@@ -289,7 +289,6 @@ export type {LockdownService} from './lib/lockdown/index.js';
 export {LockdownError, LockdownStartServiceError} from './lib/lockdown/index.js';
 export {
   SERVICE_NAMES,
-  TRANSPORT_ENV_VAR,
   UnsupportedTransportError,
   UsbmuxDeviceUnavailableError,
   getAvailableTransports,

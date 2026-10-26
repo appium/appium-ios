@@ -24,12 +24,10 @@ export type ServiceTransport = TunnelServiceTransport | UsbmuxServiceTransport;
 
 export const TUNNEL_TRANSPORT: TunnelServiceTransport = Object.freeze({kind: 'tunnel'});
 
-export const TRANSPORT_ENV_VAR = 'APPIUM_IOS_REMOTEXPC_TRANSPORT';
-
 /** Options accepted by the `Services.start*` functions. */
 export interface StartServiceOptions {
   /**
-   * Defaults to `APPIUM_IOS_REMOTEXPC_TRANSPORT`, then `tunnel`. `usbmux` and `auto` must be requested explicitly.
+   * Defaults to `tunnel`; `usbmux` and `auto` must be requested explicitly.
    * Use {@link getAvailableTransports} to find out what a device supports.
    */
   transport?: TransportMode;
@@ -44,21 +42,6 @@ export interface TunnelResolvers {
 }
 
 const DEFAULT_TUNNEL_RESOLVERS: TunnelResolvers = {resolveTunnelService, resolveTunnelServicePorts};
-
-/** The tunnel unless `APPIUM_IOS_REMOTEXPC_TRANSPORT` explicitly asks for `usbmux` or `auto`. */
-export function getDefaultTransportMode(): TransportMode {
-  const value = process.env[TRANSPORT_ENV_VAR]?.trim().toLowerCase();
-  if (value === 'usbmux' || value === 'auto') {
-    return value;
-  }
-  if (value && value !== 'tunnel' && !warnedInvalidModes.has(value)) {
-    warnedInvalidModes.add(value);
-    log.warn(`Ignoring invalid ${TRANSPORT_ENV_VAR} value '${value}'; expected tunnel, usbmux or auto. Using tunnel.`);
-  }
-  return 'tunnel';
-}
-
-const warnedInvalidModes = new Set<string>();
 
 /**
  * Chooses the transport for one or more services of a device.
@@ -75,7 +58,7 @@ const warnedInvalidModes = new Set<string>();
 export async function resolveServiceTransport(
   udid: string,
   rsdServiceNames: string | string[],
-  mode: TransportMode = getDefaultTransportMode(),
+  mode: TransportMode = 'tunnel',
   resolvers: TunnelResolvers = DEFAULT_TUNNEL_RESOLVERS,
 ): Promise<ServiceTransport> {
   return (await resolveServiceTransportWithPort(udid, rsdServiceNames, mode, resolvers)).transport;
@@ -88,7 +71,7 @@ export async function resolveServiceTransport(
 export async function resolveServiceTransportWithPort(
   udid: string,
   rsdServiceNames: string | string[],
-  mode: TransportMode = getDefaultTransportMode(),
+  mode: TransportMode = 'tunnel',
   resolvers: TunnelResolvers = DEFAULT_TUNNEL_RESOLVERS,
 ): Promise<{transport: ServiceTransport; tunnelPort?: number}> {
   const names = Array.isArray(rsdServiceNames) ? rsdServiceNames : [rsdServiceNames];
@@ -148,22 +131,3 @@ export {UnsupportedTransportError, UsbmuxDeviceUnavailableError, UsbmuxServiceTr
 export {UsbmuxServiceConnection} from './usbmux.js';
 export {getLockdownServiceName} from './lockdown-service-names.js';
 export {SERVICE_NAMES} from './service-names.js';
-
-/**
- * Guard for tunnel-only services: they cannot be reached in `usbmux` mode, even if a tunnel is running.
- *
- * @throws {UnsupportedTransportError} If the effective mode is `usbmux`
- */
-export function assertTunnelServiceAllowed(
-  rsdServiceNames: string | string[],
-  mode: TransportMode = getDefaultTransportMode(),
-): void {
-  if (mode !== 'usbmux') {
-    return;
-  }
-  const names = Array.isArray(rsdServiceNames) ? rsdServiceNames : [rsdServiceNames];
-  throw new UnsupportedTransportError(
-    `Service(s) ${names.join(', ')} are not available without a RemoteXPC tunnel ` +
-      `(${TRANSPORT_ENV_VAR}=usbmux). Please run the tunnel creation script first`,
-  );
-}

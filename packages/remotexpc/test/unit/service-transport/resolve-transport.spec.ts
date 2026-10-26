@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict';
-import {afterEach, describe, it} from 'node:test';
+import {describe, it} from 'node:test';
 
 import * as sinon from 'sinon';
 
 import {
-  TRANSPORT_ENV_VAR,
   TUNNEL_TRANSPORT,
   UnsupportedTransportError,
   UsbmuxDeviceUnavailableError,
   UsbmuxServiceTransport,
-  assertTunnelServiceAllowed,
-  getDefaultTransportMode,
   resolveServiceTransport,
   resolveServiceTransportWithPort,
 } from '../../../src/lib/service-transport/index.js';
@@ -41,16 +38,6 @@ function makeResolvers(tunnelError?: Error, usbmuxError?: Error) {
 }
 
 describe('resolveServiceTransport', function () {
-  const savedEnv = process.env[TRANSPORT_ENV_VAR];
-
-  afterEach(function () {
-    if (savedEnv === undefined) {
-      delete process.env[TRANSPORT_ENV_VAR];
-    } else {
-      process.env[TRANSPORT_ENV_VAR] = savedEnv;
-    }
-  });
-
   it('rejects an empty service list instead of resolving a transport that serves nothing', async function () {
     for (const mode of ['tunnel', 'usbmux', 'auto'] as const) {
       await assert.rejects(resolveServiceTransport(UDID, [], mode, makeResolvers()), TypeError);
@@ -159,46 +146,12 @@ describe('resolveServiceTransport', function () {
   });
 
   describe('default mode', function () {
-    it('is the tunnel unless usbmux or auto is requested explicitly via the environment', function () {
-      delete process.env[TRANSPORT_ENV_VAR];
-      assert.equal(getDefaultTransportMode(), 'tunnel');
-
-      for (const mode of ['tunnel', 'usbmux', 'auto'] as const) {
-        process.env[TRANSPORT_ENV_VAR] = ` ${mode.toUpperCase()} `;
-        assert.equal(getDefaultTransportMode(), mode);
-      }
-
-      process.env[TRANSPORT_ENV_VAR] = 'bogus';
-      assert.equal(getDefaultTransportMode(), 'tunnel');
-    });
-
-    it('does not fall back to usbmux when no mode is given', async function () {
-      delete process.env[TRANSPORT_ENV_VAR];
+    it('is the tunnel and does not fall back to usbmux', async function () {
       const err = new TunnelAvailabilityError('no tunnel');
+      const resolvers = makeResolvers(err);
 
-      await assert.rejects(resolveServiceTransport(UDID, AFC, undefined, makeResolvers(err)), (e) => e === err);
+      await assert.rejects(resolveServiceTransport(UDID, AFC, undefined, resolvers), (e) => e === err);
+      assert.equal(resolvers.assertUsbmuxReady.callCount, 0);
     });
-
-    it('is honoured by resolveServiceTransport', async function () {
-      process.env[TRANSPORT_ENV_VAR] = 'usbmux';
-      const resolvers = makeResolvers();
-
-      assert.ok((await resolveServiceTransport(UDID, AFC, undefined, resolvers)) instanceof UsbmuxServiceTransport);
-      assert.equal(resolvers.resolveTunnelService.callCount, 0);
-    });
-  });
-});
-
-describe('assertTunnelServiceAllowed', function () {
-  it('rejects tunnel-only services in usbmux mode with UnsupportedTransportError', function () {
-    assert.throws(
-      () => assertTunnelServiceAllowed([PASTEBOARD], 'usbmux'),
-      (err: Error) => err instanceof UnsupportedTransportError && err.message.includes(PASTEBOARD),
-    );
-  });
-
-  it('allows the tunnel and auto modes', function () {
-    assertTunnelServiceAllowed(PASTEBOARD, 'tunnel');
-    assertTunnelServiceAllowed(PASTEBOARD, 'auto');
   });
 });
