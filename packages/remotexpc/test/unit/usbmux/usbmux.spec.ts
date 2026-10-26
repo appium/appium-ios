@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 
 import {fs, node} from '@appium/support';
 
-import {type Device, Usbmux} from '../../../src/lib/usbmux/index.js';
+import {type Device, Usbmux, getDefaultSocket} from '../../../src/lib/usbmux/index.js';
 import {UsbmuxDecoder} from '../../../src/lib/usbmux/usbmux-decoder.js';
 import {prioritizeUsbOverNetworkForDuplicateUdids} from '../../../src/lib/usbmux/utils.js';
 import {UDID, fixtures, getServerWithFixtures} from '../fixtures/index.js';
@@ -165,6 +165,26 @@ describe('usbmux', function () {
 
     assert.deepStrictEqual(received, trailingGreeting);
     connectedSocket.destroy();
+  });
+
+  it('should connect via TCP when socketHost and socketPort are provided to getDefaultSocket', async function () {
+    server = createServer();
+    await new Promise<void>((resolveListen) => server!.listen(0, '127.0.0.1', resolveListen));
+    const addr = server.address() as AddressInfo;
+
+    socket = await getDefaultSocket({
+      socketHost: '127.0.0.1',
+      socketPort: addr.port,
+    });
+    assert.strictEqual(socket.destroyed, false);
+    socket.destroy();
+  });
+
+  it('should reject with accessible error when socketPath does not exist', async function () {
+    await assert.rejects(
+      getDefaultSocket({socketPath: '/nonexistent/usbmuxd.sock'}),
+      /The usbmuxd socket at '\/nonexistent\/usbmuxd\.sock' does not exist or is not accessible/,
+    );
   });
 
   it('should order duplicate UDIDs with USB before Network', function () {

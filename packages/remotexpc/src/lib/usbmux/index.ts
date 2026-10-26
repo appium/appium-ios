@@ -1,4 +1,3 @@
-import {access} from 'node:fs/promises';
 import {type Server, type Socket, createConnection, createServer} from 'node:net';
 import {release} from 'node:os';
 
@@ -604,55 +603,91 @@ export async function getDefaultSocket(opts: Partial<SocketOptions> = {}): Promi
     timeout: 5000,
   };
 
-  if (process.env.USBMUXD_SOCKET_ADDRESS && !opts.socketPath && !opts.socketPort && !opts.socketHost) {
-    log.debug(
-      `Using USBMUXD_SOCKET_ADDRESS environment variable as default socket: ${process.env.USBMUXD_SOCKET_ADDRESS}`,
-    );
-    // "unix:" or "UNIX:" prefix is optional for unix socket paths.
-    const usbmuxdSocketAddress = process.env.USBMUXD_SOCKET_ADDRESS.replace(/^(unix):/i, '');
-    const [ip, port] = usbmuxdSocketAddress.split(':');
-    if (ip && port) {
-      defaults.socketHost = ip;
-      defaults.socketPort = parseInt(port, 10);
-    } else {
-      defaults.socketPath = usbmuxdSocketAddress;
-    }
-  }
+  const hasOpts = Object.values(opts).some((v) => v != null);
+  const envOpts = hasOpts ? {} : getSocketOptionsFromEnv();
 
-  const {socketPath, socketPort, socketHost, timeout} = {
-    ...defaults,
-    ...opts,
-  };
+  const socketPath = opts.socketPath ?? envOpts.socketPath ?? defaults.socketPath;
+  const socketPort = opts.socketPort ?? envOpts.socketPort ?? defaults.socketPort;
+  const socketHost = opts.socketHost ?? envOpts.socketHost ?? defaults.socketHost;
+  const timeout = opts.timeout ?? defaults.timeout;
 
-  let socket: Socket;
-  if (await fileExists(socketPath ?? '')) {
-    socket = createConnection(socketPath ?? '');
-  } else if (process.platform === 'win32' || (process.platform === 'linux' && /microsoft/i.test(release()))) {
-    // Connect to usbmuxd when running on WSL1
-    socket = createConnection({
-      port: socketPort as number,
-      host: socketHost as string,
-    });
-  } else {
-    throw new Error(`The usbmuxd socket at '${socketPath}' does not exist or is not accessible`);
-  }
+  const hasExplicitPath = !!(opts.socketPath || envOpts.socketPath);
+  const hasExplicitHostPort = !!(
+    opts.socketHost ||
+    opts.socketPort ||
+    envOpts.socketHost ||
+    envOpts.socketPort
+  );
+  const isWinOrWsl =
+    process.platform === 'win32' || (process.platform === 'linux' && /microsoft/i.test(release()));
+  const preferPath = hasExplicitPath || !(hasExplicitHostPort || isWinOrWsl);
+
+  const socket = preferPath
+    ? createConnection(socketPath)
+    : createConnection({port: socketPort, host: socketHost});
 
   return await new Promise<Socket>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off('error', onError);
+      socket.off('connect', onConnect);
+    };
+
+    const destroySocket = () => {
+      if (!socket.destroyed) {
+        socket.once('error', () => {});
+        socket.destroy();
+      }
+    };
+
     const timeoutId = setTimeout(() => {
-      socket.removeAllListeners();
+      cleanup();
+      destroySocket();
       reject(new Error(`Connection timed out after ${timeout}ms`));
-    }, timeout ?? 5000);
+    }, timeout);
 
-    socket.once('error', (err) => {
-      clearTimeout(timeoutId);
+    const onError = (err: NodeJS.ErrnoException) => {
+      cleanup();
+      destroySocket();
+      if (preferPath && (err.code === 'ENOENT' || err.code === 'EACCES')) {
+        reject(
+          new Error(`The usbmuxd socket at '${socketPath}' does not exist or is not accessible`, {
+            cause: err,
+          }),
+        );
+        return;
+      }
       reject(err);
-    });
+    };
 
-    socket.once('connect', () => {
-      clearTimeout(timeoutId);
+    const onConnect = () => {
+      cleanup();
       resolve(socket);
-    });
+    };
+
+    socket.once('error', onError);
+    socket.once('connect', onConnect);
   });
+}
+
+function getSocketOptionsFromEnv(): Partial<SocketOptions> {
+  const rawAddress = process.env.USBMUXD_SOCKET_ADDRESS;
+  if (!rawAddress) {
+    return {};
+  }
+  log.debug(`Using USBMUXD_SOCKET_ADDRESS environment variable as default socket: ${rawAddress}`);
+  // "unix:" or "UNIX:" prefix is optional for unix socket paths.
+  const usbmuxdSocketAddress = rawAddress.replace(/^(unix):/i, '');
+  const [ip, port] = usbmuxdSocketAddress.split(':');
+  if (ip && port) {
+    return {
+      socketHost: ip,
+      socketPort: parseInt(port, 10),
+    };
+  }
+  return {
+    socketPath: usbmuxdSocketAddress,
+  };
 }
 
 /**
@@ -692,19 +727,5 @@ export async function connectAndRelay(deviceID: string | number, port: number, r
         log.error(`Error stopping relay: ${err}`);
       }
     }
-  }
-}
-
-/**
- * Helper function to check if a file exists
- * @param path - Path to check
- * @returns Boolean indicating if the file exists
- */
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
   }
 }
