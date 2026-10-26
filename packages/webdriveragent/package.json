@@ -74,7 +74,7 @@
     "@appium/tsconfig": "^1.2.0",
     "@appium/types": "^1.0.0-rc.1",
     "@types/node": "^26.0.0",
-    "@types/sinon": "^22.0.0",
+    "@types/sinon": "^22.0.1",
     "appium-xcode": "^7.2.4",
     "semver": "^7.3.7",
     "sinon": "^22.0.0"
