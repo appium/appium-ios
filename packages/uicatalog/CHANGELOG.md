@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.1.3](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.2...ios-uicatalog@4.1.3) (2026-10-26)
+
+### Bug Fixes
+
+* **uicatalog:** adopt the UIScene lifecycle so Xcode 27 builds launch on iOS 27 ([#122](https://github.com/appium/appium-ios/issues/122)) ([6c63601](https://github.com/appium/appium-ios/commit/6c63601c06a94972d1bdb446bf10ff7f05f892c3))
+
+
 ## [4.1.2](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.1...ios-uicatalog@4.1.2) (2026-10-02)
 
 ### Miscellaneous Chores
