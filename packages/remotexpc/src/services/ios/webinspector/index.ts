@@ -50,6 +50,14 @@ export class WebInspectorService extends BaseService {
   }
 
   /**
+   * Establishes the connection now instead of lazily on the first message,
+   * so that connection failures surface to the caller.
+   */
+  async connect(): Promise<void> {
+    await this.connectToWebInspectorService();
+  }
+
+  /**
    * Send a message to the WebInspector service
    * @param selector The RPC selector (e.g., '_rpc_reportIdentifier:')
    * @param args The arguments dictionary for the message
