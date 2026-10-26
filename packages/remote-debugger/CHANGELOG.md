@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [18.0.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.13...appium-remote-debugger@18.0.0) (2026-10-26)
+
+### ⚠ BREAKING CHANGES
+
+* **remote-debugger:** appium-ios-device is no longer used, so the legacy lockdown Web Inspector client is gone. Real devices require a RemoteXPC tunnel unless the caller opts into the usbmux transport, and the socketChunkSize option has been removed.
+
+### Features
+
+* **remote-debugger:** drop appium-ios-device; real devices use RemoteXPC (tunnel or usbmux) ([#112](https://github.com/appium/appium-ios/issues/112)) ([5739cb5](https://github.com/appium/appium-ios/commit/5739cb56c2af18122fe9b964d6edd437073349ab))
+
+
 ## [17.7.13](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.12...appium-remote-debugger@17.7.13) (2026-10-26)
 
 **Note:** Version bump only for package appium-remote-debugger
