@@ -17,6 +17,8 @@ const deviceManagerLog = getLogger('DeviceManager');
 // Constants
 const LABEL = 'appium-internal';
 const DEFAULT_TIMEOUT = 5000;
+/** A device that accepts the connection but never answers the TLS handshake must not hang callers. */
+const TLS_HANDSHAKE_TIMEOUT_MS = 10000;
 const DEFAULT_LOCKDOWN_PORT = 62078;
 /** 0 lets the OS assign a free ephemeral port, so concurrent relays cannot collide. */
 const DEFAULT_RELAY_PORT = 0;
@@ -70,11 +72,39 @@ interface TLSConfig {
 }
 
 // Error classes for better error handling
-class LockdownError extends Error {
+export class LockdownError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'LockdownError';
   }
+}
+
+/** lockdownd refused to start a service (e.g. `PasswordProtected`, `InvalidService`). */
+export class LockdownStartServiceError extends LockdownError {
+  constructor(
+    readonly serviceName: string,
+    readonly reason: string,
+  ) {
+    super(
+      reason === 'PasswordProtected'
+        ? `Cannot start '${serviceName}': the device is locked with a passcode. Unlock it and try again.`
+        : `Cannot start '${serviceName}': ${reason}`,
+    );
+    this.name = 'LockdownStartServiceError';
+  }
+}
+
+/** Connection attributes returned by lockdownd for a started service. */
+export interface StartedLockdownService {
+  port: number;
+  enableServiceSSL: boolean;
+}
+
+/** A strict (paired, TLS-secured when requested) lockdown session over usbmux. */
+export interface LockdownSessionInfo {
+  lockdown: LockdownService;
+  pairRecord: PairRecord;
+  deviceId: number;
 }
 
 class TLSUpgradeError extends Error {
@@ -96,30 +126,50 @@ class TLSManager {
   /**
    * Upgrades a socket to TLS
    */
-  async upgradeSocketToTLS(socket: Socket, tlsOptions: Partial<ConnectionOptions> = {}): Promise<TLSSocket> {
+  async upgradeSocketToTLS(
+    socket: Socket,
+    tlsOptions: Partial<ConnectionOptions> = {},
+    timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
+  ): Promise<TLSSocket> {
     return new Promise((resolve, reject) => {
       socket.pause();
       tlsManagerLog.debug('Upgrading socket to TLS...');
 
-      const secure = tls.connect(
-        {
-          socket,
-          rejectUnauthorized: false,
-          minVersion: 'TLSv1.2',
-          ...tlsOptions,
-        },
-        () => {
-          tlsManagerLog.info('TLS handshake completed');
-          resolve(secure);
-        },
-      );
+      let timer: NodeJS.Timeout | undefined;
+      let secure: TLSSocket;
+      try {
+        secure = tls.connect(
+          {
+            socket,
+            rejectUnauthorized: false,
+            minVersion: 'TLSv1.2',
+            ...tlsOptions,
+          },
+          () => {
+            clearTimeout(timer);
+            tlsManagerLog.info('TLS handshake completed');
+            resolve(secure);
+          },
+        );
+      } catch (err) {
+        // e.g. invalid PEM in the pair record: tls.connect throws synchronously
+        reject(new TLSUpgradeError(`TLS socket error: ${(err as Error).message}`));
+        return;
+      }
+      // armed only once `secure` exists, so the callback can never hit a TDZ error
+      timer = setTimeout(() => {
+        secure.destroy();
+        reject(new TLSUpgradeError(`TLS handshake timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       secure.on('error', (err) => {
+        clearTimeout(timer);
         tlsManagerLog.error(`TLS socket error: ${err}`);
         reject(new TLSUpgradeError(`TLS socket error: ${err.message}`));
       });
 
       socket.on('error', (err) => {
+        clearTimeout(timer);
         tlsManagerLog.error(`Underlying socket error during TLS: ${err}`);
         reject(new TLSUpgradeError(`Socket error during TLS: ${err.message}`));
       });
@@ -254,6 +304,41 @@ export class LockdownService extends BasePlistService {
     }
 
     throw new LockdownError(`Unexpected session data: ${JSON.stringify(response)}`);
+  }
+
+  /**
+   * Starts a session using the given pair record and upgrades the connection to TLS when the
+   * device asks for it. Unlike the auto-secure constructor path, every failure is thrown.
+   */
+  async startSecureSession(pairRecord: PairRecord): Promise<void> {
+    if (!this.validatePairRecord(pairRecord)) {
+      throw new LockdownError(
+        `The pair record for ${this.udid} is incomplete. Unlock the device and trust this computer, then retry.`,
+      );
+    }
+    const sessionInfo = await this.startSession(pairRecord.HostID as string, pairRecord.SystemBUID as string);
+    if (sessionInfo.enableSessionSSL) {
+      await this.performTLSUpgrade(pairRecord);
+    }
+  }
+
+  /**
+   * Asks lockdownd to start a service. Requires a session (see {@link startSecureSession}).
+   *
+   * @param serviceName - Lockdown service name, e.g. `com.apple.afc`
+   * @param timeout - Request timeout in milliseconds
+   * @returns The device port to connect to and whether the connection must use TLS
+   */
+  async startService(serviceName: string, timeout = DEFAULT_TIMEOUT): Promise<StartedLockdownService> {
+    const response = await this.sendAndReceive({Label: LABEL, Request: 'StartService', Service: serviceName}, timeout);
+    if (response.Error) {
+      throw new LockdownStartServiceError(serviceName, String(response.Error));
+    }
+    const port = Number(response.Port);
+    if (!Number.isInteger(port) || port <= 0) {
+      throw new LockdownError(`Unexpected StartService response for '${serviceName}': ${JSON.stringify(response)}`);
+    }
+    return {port, enableServiceSSL: Boolean(response.EnableServiceSSL)};
   }
 
   /**
@@ -537,6 +622,41 @@ export class LockdownServiceFactory {
 }
 
 /**
+ * Opens a paired, TLS-secured lockdown session over usbmux (no tunnel, no local relay).
+ * The caller owns the returned `lockdown` and must close it.
+ *
+ * @throws If the device is not connected, not paired, or the session cannot be established
+ */
+export async function openLockdownSession(udid: string): Promise<LockdownSessionInfo> {
+  const deviceManager = new DeviceManager();
+  const device = await deviceManager.findDeviceByUDID(udid);
+  const pairRecord = await deviceManager.readPairRecord(udid);
+
+  const usbmux = await createUsbmux();
+  let socket: Socket;
+  try {
+    socket = await usbmux.connect(device.DeviceID, DEFAULT_LOCKDOWN_PORT);
+  } catch (err) {
+    await usbmux.close().catch(() => {});
+    throw err;
+  }
+
+  const lockdown = new LockdownService(socket, udid, false);
+  try {
+    await lockdown.startSecureSession(pairRecord);
+  } catch (err) {
+    // Closing must not mask the actual failure (e.g. a locked device)
+    try {
+      lockdown.close();
+    } catch (closeErr) {
+      log.debug(`Error closing lockdown after a failed session: ${closeErr}`);
+    }
+    throw err;
+  }
+  return {lockdown, pairRecord, deviceId: device.DeviceID};
+}
+
+/**
  * Lockdown over an RSD tunnel. Opens a scoped discovery connection, resolves the remote
  * lockdown port, and returns a `LockdownService` (discovery RSD is closed before return).
  */
@@ -568,9 +688,13 @@ export async function createLockdownServiceByUDID(
 /**
  * Upgrade an existing socket connection to TLS using Lockdown-compatible options.
  */
-export function upgradeSocketToTLS(socket: Socket, tlsOptions: Partial<ConnectionOptions> = {}): Promise<TLSSocket> {
+export function upgradeSocketToTLS(
+  socket: Socket,
+  tlsOptions: Partial<ConnectionOptions> = {},
+  timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
+): Promise<TLSSocket> {
   const tlsManager = new TLSManager();
-  return tlsManager.upgradeSocketToTLS(socket, tlsOptions);
+  return tlsManager.upgradeSocketToTLS(socket, tlsOptions, timeoutMs);
 }
 
 /**

@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events';
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary, PlistMessage} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService} from '../base-service.js';
+import {BaseService, type BaseServiceOptions} from '../base-service.js';
 
 const log = getLogger('WebInspectorService');
 
@@ -44,8 +44,8 @@ export class WebInspectorService extends BaseService {
   private readonly connectionId: string;
   private receivePromise: Promise<void> | null = null;
 
-  constructor(udid: string) {
-    super(udid);
+  constructor(udid: string, options?: BaseServiceOptions) {
+    super(udid, options);
     this.connectionId = randomUUID().toUpperCase();
   }
 

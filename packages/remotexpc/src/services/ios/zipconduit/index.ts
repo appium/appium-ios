@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises';
 import type net from 'node:net';
 
 import {getLogger} from '../../../lib/logger.js';
+import {type ServiceTransport, TUNNEL_TRANSPORT, UsbmuxServiceTransport} from '../../../lib/service-transport/index.js';
 import {DEFAULT_TUNNEL_SERVICE_WAIT_MS, resolveTunnelService} from '../../../lib/tunnel/tunnel-service-resolver.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {
@@ -11,6 +12,7 @@ import {
   sendOnePlist,
   writeBufferToSocket,
 } from '../afc/codec.js';
+import type {BaseServiceOptions} from '../base-service.js';
 import {CENTRAL_DIRECTORY_HEADER, DEFAULT_INSTALL_TIMEOUT_MS} from './constants.js';
 import {type ZipConduitProgressUpdate, createInitTransfer, evaluateProgress} from './plists.js';
 import {type IpaZipEntry, listZipEntries, openZipEntryStream, withZipFile} from './zip-reader.js';
@@ -41,13 +43,24 @@ export class ZipConduitService {
 
   private socket: net.Socket | null = null;
 
-  constructor(private readonly udid: string) {}
+  private readonly transport: ServiceTransport;
+
+  constructor(
+    private readonly udid: string,
+    options?: BaseServiceOptions,
+  ) {
+    this.transport = options?.transport ?? TUNNEL_TRANSPORT;
+  }
 
   /**
    * Connect to the zip_conduit service and complete the RSD handshake.
    */
   async connect(): Promise<void> {
     if (this.socket) {
+      return;
+    }
+    if (this.transport instanceof UsbmuxServiceTransport) {
+      this.socket = await this.transport.openSocket(ZipConduitService.RSD_SERVICE_NAME);
       return;
     }
     const {host, port} = await resolveTunnelService(this.udid, ZipConduitService.RSD_SERVICE_NAME, {
