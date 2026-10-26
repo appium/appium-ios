@@ -36,6 +36,12 @@ describe('RemoteDebuggerRealDevice', function () {
       assert.strictEqual((rd.requireRpcClient() as any)._targetCreationTimeoutMs, 654321);
     });
 
+    it('should forward fullPageInitialization to the real device RPC client', async function () {
+      const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', fullPageInitialization: true});
+      await rd.initRpcClient();
+      assert.strictEqual((rd.requireRpcClient() as any).fullPageInitialization, true);
+    });
+
     it('should forward the transport chosen by the caller to the real device RPC client', async function () {
       for (const transport of ['tunnel', 'usbmux'] as const) {
         const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', transport});

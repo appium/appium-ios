@@ -54,6 +54,10 @@ export class RpcClientRealDevice extends RpcClient {
     if (this.isConnected) {
       return;
     }
+    if (this.webInspectorService) {
+      // left over from a connection that was lost
+      await this.releaseService();
+    }
     log.debug(`Connecting to WebInspector service for device ${this.udid} via ${this.transport ?? 'tunnel'}`);
 
     let service: WebInspectorService | undefined;
@@ -97,7 +101,15 @@ export class RpcClientRealDevice extends RpcClient {
 
     log.debug('Disconnecting from WebInspector service');
     await super.disconnect();
+    await this.releaseService();
+    log.debug('Disconnected from WebInspector service');
+  }
 
+  /**
+   * Stops listening and closes the current service, if any, and waits for the listener to finish.
+   */
+  private async releaseService(): Promise<void> {
+    const service = this.webInspectorService;
     // Detach first so a stale listener cannot affect a later reconnect
     const listenerTask = this.messageListenerTask;
     this.webInspectorService = undefined;
@@ -129,7 +141,6 @@ export class RpcClientRealDevice extends RpcClient {
         clearTimeout(timer);
       }
     }
-    log.debug('Disconnected from WebInspector service');
   }
 
   /**
@@ -200,15 +211,12 @@ export class RpcClientRealDevice extends RpcClient {
           log.error('Error in message listener', err);
         }
       } finally {
-        // the stream ended on its own: flag the client as disconnected instead of letting commands time out
+        // the stream ended on its own: flag the client as disconnected instead of letting commands time out.
+        // The service is kept so that disconnect()/connect() release it through the regular path.
         if (this.webInspectorService === service) {
           log.warn('The WebInspector message stream has ended');
           this.isListening = false;
           this.isConnected = false;
-          this.webInspectorService = undefined;
-          service
-            .close()
-            .catch((err: Error) => log.warn(`Error while closing the WebInspector service: ${err.message}`));
         }
       }
     })();
