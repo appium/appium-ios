@@ -69,25 +69,14 @@
   }
 }
 
-- (nullable FBScreenRecordingPromise *)detachPromiseMatching:(nullable FBScreenRecordingPromise *)expectedPromise
-                                                requireMatch:(BOOL)requireMatch
-                                                    didReset:(nullable BOOL *)didReset
+- (nullable FBScreenRecordingPromise *)detachScreenRecordingPromise
 {
   @synchronized (self) {
-    if (requireMatch && _screenRecordingPromise != expectedPromise) {
-      if (NULL != didReset) {
-        *didReset = NO;
-      }
-      return nil;
-    }
     FBScreenRecordingPromise *detachedPromise = _screenRecordingPromise;
     _fps = 0;
     _codec = 0;
     _screenRecordingPromise = nil;
     _startedAt = nil;
-    if (NULL != didReset) {
-      *didReset = YES;
-    }
     return detachedPromise;
   }
 }
@@ -108,20 +97,18 @@
 
 - (void)reset;
 {
-  FBScreenRecordingPromise *detachedPromise = [self detachPromiseMatching:nil
-                                                             requireMatch:NO
-                                                                 didReset:NULL];
+  FBScreenRecordingPromise *detachedPromise = [self detachScreenRecordingPromise];
   [self cleanupDetachedPromise:detachedPromise];
 }
 
 - (BOOL)resetIfPromiseIs:(FBScreenRecordingPromise *)screenRecordingPromise
 {
-  BOOL didReset = NO;
-  FBScreenRecordingPromise *detachedPromise = [self detachPromiseMatching:screenRecordingPromise
-                                                             requireMatch:YES
-                                                                 didReset:&didReset];
-  if (!didReset) {
-    return NO;
+  FBScreenRecordingPromise *detachedPromise = nil;
+  @synchronized (self) {
+    if (_screenRecordingPromise != screenRecordingPromise) {
+      return NO;
+    }
+    detachedPromise = [self detachScreenRecordingPromise];
   }
   [self cleanupDetachedPromise:detachedPromise];
   return YES;

@@ -348,9 +348,12 @@ static id (^FBSystemApplicationLookup)(void);
   XCTAttachment *attachment = [XCTAttachment attachmentWithString:@"video"];
   FBTestScreenRecordingPromise *initial = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
                                                                        onNativePromiseAccess:^id{
-    dispatch_sync(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    XCTestExpectation *replacementStored = [self expectationWithDescription:@"Replacement stored during cleanup"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
       [container storeScreenRecordingPromise:replacement fps:60 codec:1];
+      [replacementStored fulfill];
     });
+    [self waitForExpectationsWithTimeout:2. handler:nil];
     return attachment;
   }];
   [container storeScreenRecordingPromise:initial fps:24 codec:0];
