@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.27.0...appium-ios-remotexpc@5.28.0) (2026-10-26)
+
+### Features
+
+* **remotexpc:** add WebInspectorService.connect() ([#117](https://github.com/appium/appium-ios/issues/117)) ([605ef59](https://github.com/appium/appium-ios/commit/605ef5972b0e7126e833cd9f8985a5e2d46a20c2))
+
+
 ## [5.27.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.3...appium-ios-remotexpc@5.27.0) (2026-10-26)
 
 ### Features
