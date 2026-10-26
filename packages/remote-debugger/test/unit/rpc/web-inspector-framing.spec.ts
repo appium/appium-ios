@@ -67,6 +67,17 @@ describe('web-inspector-framing', function () {
       assert.throws(() => decoder.push(Buffer.from('more bytes')), /bigger than expected/);
     });
 
+    it('does not keep the consumed frame alive through the leftover bytes', function () {
+      const big = encodeWebInspectorFrame({__selector: 'x', __argument: {WIRMessageDataKey: Buffer.alloc(100_000, 1)}});
+      const next = encodeWebInspectorFrame(MSG);
+      const decoder = new WebInspectorFrameDecoder();
+      assert.strictEqual(decoder.push(Buffer.concat([big, next.subarray(0, 10)])).length, 1);
+      const [tail] = (decoder as any).pending as Buffer[];
+      assert.strictEqual(tail.length, 10);
+      assert.strictEqual(tail.buffer.byteLength, 10);
+      assert.deepStrictEqual(decoder.push(next.subarray(10)), [MSG]);
+    });
+
     it('reports messages decoded before an oversize frame', function () {
       const bad = Buffer.alloc(4);
       bad.writeUInt32BE(5000, 0);

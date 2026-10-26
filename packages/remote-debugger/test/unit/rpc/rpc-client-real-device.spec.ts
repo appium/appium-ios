@@ -172,10 +172,17 @@ describe('RpcClientRealDevice', function () {
       );
     });
 
-    it('flags the client as disconnected when the message stream ends on its own', async function () {
-      attach(client, makeService(gen([])));
+    it('flags the client as disconnected and closes the service when the message stream ends on its own', async function () {
+      const service: any = makeService(gen([]));
+      let closed = false;
+      service.close = async () => {
+        closed = true;
+      };
+      attach(client, service);
       await client.messageListenerTask;
       assert.strictEqual(client.isConnected, false);
+      assert.strictEqual(client.webInspectorService, undefined);
+      assert.strictEqual(closed, true);
     });
 
     it('disconnects cleanly even if stopListeningAsync fails, and lets a stale listener finish quietly', async function () {
@@ -230,6 +237,24 @@ describe('RpcClientRealDevice', function () {
       assert.strictEqual(closed, true);
       assert.strictEqual(client.isConnected, false);
       assert.strictEqual(client.webInspectorService, undefined);
+    });
+
+    it('adds the device to the error and keeps its code', async function () {
+      const err: any = new Error('no tunnel');
+      err.code = 'ERR_TUNNEL_AVAILABILITY';
+      client.startService = async () => {
+        throw err;
+      };
+      await assert.rejects(client.connect(), (e: any) => {
+        assert.strictEqual(e.code, 'ERR_TUNNEL_AVAILABILITY');
+        assert.match(e.message, /test-udid.*no tunnel/);
+        return true;
+      });
+    });
+
+    it('rethrows non-Error rejections unchanged', async function () {
+      client.startService = () => Promise.reject('plain failure');
+      await assert.rejects(client.connect(), (e: any) => e === 'plain failure');
     });
 
     it('is connected once the service connected', async function () {

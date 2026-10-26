@@ -56,12 +56,17 @@ export class RpcClientRealDevice extends RpcClient {
     }
     log.debug(`Connecting to WebInspector service for device ${this.udid} via ${this.transport ?? 'tunnel'}`);
 
-    const service = await this.startService();
+    let service: WebInspectorService | undefined;
     try {
+      service = await this.startService();
       // the service connects lazily: do it now so that failures are reported by connect()
       await service.connect();
-    } catch (err) {
-      await service.close().catch(() => {});
+    } catch (err: unknown) {
+      await service?.close().catch(() => {});
+      // keep the original error (e.g. `code === 'ERR_TUNNEL_AVAILABILITY'`) intact for callers
+      if (err instanceof Error) {
+        err.message = `Failed to start the WebInspector service for device ${this.udid}: ${err.message}`;
+      }
       throw err;
     }
     this.webInspectorService = service;
@@ -200,6 +205,10 @@ export class RpcClientRealDevice extends RpcClient {
           log.warn('The WebInspector message stream has ended');
           this.isListening = false;
           this.isConnected = false;
+          this.webInspectorService = undefined;
+          service
+            .close()
+            .catch((err: Error) => log.warn(`Error while closing the WebInspector service: ${err.message}`));
         }
       }
     })();

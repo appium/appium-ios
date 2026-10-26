@@ -68,6 +68,7 @@ export class WebInspectorFrameDecoder {
     this.pending.push(chunk);
     this.pendingLength += chunk.length;
     const messages: any[] = [];
+    let consumedFrame = false;
     // chunks are only merged once a whole frame is available, so large frames cost linear time
     while (this.pendingLength >= HEADER_LENGTH) {
       const header = this.pending[0].length >= HEADER_LENGTH ? this.pending[0] : this.merge();
@@ -90,6 +91,7 @@ export class WebInspectorFrameDecoder {
       const rest = buffer.subarray(frameLength);
       this.pending = rest.length ? [rest] : [];
       this.pendingLength = rest.length;
+      consumedFrame = true;
       if (!payload.length) {
         continue;
       }
@@ -101,6 +103,12 @@ export class WebInspectorFrameDecoder {
       } catch (err: any) {
         throw new WebInspectorFrameError(`Cannot parse a Web Inspector frame: ${err.message}`, messages);
       }
+    }
+    if (consumedFrame && this.pending.length === 1) {
+      // detach the leftover from the (possibly huge) buffer it was sliced from
+      const tail = Buffer.allocUnsafeSlow(this.pending[0].length);
+      this.pending[0].copy(tail);
+      this.pending[0] = tail;
     }
     return messages;
   }
