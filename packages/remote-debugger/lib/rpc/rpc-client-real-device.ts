@@ -1,6 +1,5 @@
 import {util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import {Services} from 'appium-ios-remotexpc';
 import type {WebInspectorService} from 'appium-ios-remotexpc';
 
 import {log} from '../logger.js';
@@ -47,7 +46,7 @@ export class RpcClientRealDevice extends RpcClient {
   }
 
   /**
-   * Connects to the WebInspector service on an iOS 18+ real device.
+   * Connects to the WebInspector service on a real device.
    * Uses the RemoteXPC tunnel (`com.apple.webinspector.shim.remote`) unless the caller asked
    * for the temporary usbmux fallback (classic lockdown `com.apple.webinspector`).
    */
@@ -57,11 +56,28 @@ export class RpcClientRealDevice extends RpcClient {
     }
     log.debug(`Connecting to WebInspector service for device ${this.udid} via ${this.transport ?? 'tunnel'}`);
 
-    this.webInspectorService = await Services.startWebInspectorService(this.udid, {transport: this.transport});
+    const service = await this.startService();
+    try {
+      // the service connects lazily: do it now so that failures are reported by connect()
+      await service.connect();
+    } catch (err) {
+      await service.close().catch(() => {});
+      throw err;
+    }
+    this.webInspectorService = service;
 
     this.startMessageListener();
     this.isConnected = true;
     log.debug('Successfully connected to WebInspector service');
+  }
+
+  /**
+   * Starts the service through remotexpc. Loaded lazily so that simulator-only
+   * sessions never load it.
+   */
+  protected async startService(): Promise<WebInspectorService> {
+    const {Services} = await import('appium-ios-remotexpc');
+    return await Services.startWebInspectorService(this.udid, {transport: this.transport});
   }
 
   /**
@@ -118,14 +134,17 @@ export class RpcClientRealDevice extends RpcClient {
    * @param cmd - The command to send to the device.
    */
   override async sendMessage(cmd: RemoteCommand): Promise<void> {
-    if (!this.webInspectorService) {
-      throw new Error('WebInspector service is not initialized. Is the client connected?');
+    if (!this.webInspectorService || !this.isConnected) {
+      throw new Error('WebInspector service is not connected. Was the connection lost?');
     }
 
     const selector = cmd.__selector;
     const args = this.translateArguments(cmd.__argument);
 
     log.debug(`Sending message: ${selector}`);
+    if (this.logAllCommunication) {
+      log.debug(`Sent: ${JSON.stringify({__selector: selector, __argument: args})}`);
+    }
     await this.webInspectorService.sendMessage(selector, args);
   }
 
@@ -137,6 +156,9 @@ export class RpcClientRealDevice extends RpcClient {
    */
   override async receive(data: any): Promise<void> {
     if (this.isConnected && data) {
+      if (this.logAllCommunication) {
+        log.debug(`Received: ${JSON.stringify(data)}`);
+      }
       await this.messageHandler.handleMessage(data);
     }
   }

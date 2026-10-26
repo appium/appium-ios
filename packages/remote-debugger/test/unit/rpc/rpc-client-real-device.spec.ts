@@ -4,15 +4,15 @@ import {describe, it, beforeEach} from 'node:test';
 import {RpcClientRealDevice} from '../../../lib/rpc/rpc-client-real-device.js';
 
 describe('RpcClientRealDevice', function () {
-  let shim: any;
+  let client: any;
 
   beforeEach(function () {
-    shim = new RpcClientRealDevice({udid: 'test-udid'});
+    client = new RpcClientRealDevice({udid: 'test-udid'});
   });
 
   describe('convertMessage', function () {
     it('should copy __selector to the converted message', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_applicationConnected:',
         __argument: {WIRApplicationIdentifierKey: 'com.example.app'},
       });
@@ -20,7 +20,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should copy plain object __argument as-is', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_reportConnectedApplicationList:',
         __argument: {WIRApplicationIdentifierKey: 'com.example.app'},
       });
@@ -30,7 +30,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should convert Buffer values in WIRMessageDataKey to utf8 string', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_forwardSocketData:',
         __argument: {WIRMessageDataKey: Buffer.from('hello', 'utf8')},
       });
@@ -38,7 +38,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should convert Buffer values in WIRSocketDataKey to utf8 string', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_forwardSocketData:',
         __argument: {WIRSocketDataKey: Buffer.from('world', 'utf8')},
       });
@@ -46,7 +46,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should convert Buffer values in WIRDestinationKey to utf8 string', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_forwardSocketData:',
         __argument: {WIRDestinationKey: Buffer.from('target', 'utf8')},
       });
@@ -54,7 +54,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should leave non-Buffer values unchanged', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_applicationConnected:',
         __argument: {
           WIRMessageDataKey: 'already a string',
@@ -66,7 +66,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should convert multiple Buffer fields in a single message', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_forwardSocketData:',
         __argument: {
           WIRMessageDataKey: Buffer.from('msg', 'utf8'),
@@ -81,7 +81,7 @@ describe('RpcClientRealDevice', function () {
 
     it('should not convert Buffer values in non-special keys', function () {
       const buf = Buffer.from('data', 'utf8');
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_applicationConnected:',
         __argument: {WIRSomeOtherKey: buf},
       });
@@ -89,7 +89,7 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should omit __argument when it is not a plain object', function () {
-      const result = shim.convertMessage({
+      const result = client.convertMessage({
         __selector: '_rpc_applicationConnected:',
         __argument: null,
       });
@@ -99,7 +99,7 @@ describe('RpcClientRealDevice', function () {
 
   describe('translateArguments', function () {
     it('should remove WIRConnectionIdentifierKey from the arguments', function () {
-      const result = shim.translateArguments({
+      const result = client.translateArguments({
         WIRConnectionIdentifierKey: 'some-uuid',
         WIRApplicationIdentifierKey: 'com.example.app',
       });
@@ -108,18 +108,18 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('should return an empty object when args is not a plain object', function () {
-      assert.deepStrictEqual(shim.translateArguments(null), {});
-      assert.deepStrictEqual(shim.translateArguments(undefined), {});
-      assert.deepStrictEqual(shim.translateArguments('string'), {});
+      assert.deepStrictEqual(client.translateArguments(null), {});
+      assert.deepStrictEqual(client.translateArguments(undefined), {});
+      assert.deepStrictEqual(client.translateArguments('string'), {});
     });
 
     it('should return an empty object when only WIRConnectionIdentifierKey is present', function () {
-      assert.deepStrictEqual(shim.translateArguments({WIRConnectionIdentifierKey: 'some-uuid'}), {});
+      assert.deepStrictEqual(client.translateArguments({WIRConnectionIdentifierKey: 'some-uuid'}), {});
     });
 
     it('should return args unchanged when WIRConnectionIdentifierKey is absent', function () {
       const args = {WIRApplicationIdentifierKey: 'com.example.app'};
-      assert.deepStrictEqual(shim.translateArguments(args), args);
+      assert.deepStrictEqual(client.translateArguments(args), args);
     });
   });
 
@@ -150,14 +150,14 @@ describe('RpcClientRealDevice', function () {
 
     it('keeps listening after the message handler throws', async function () {
       const handled: any[] = [];
-      shim.messageHandler.handleMessage = async (msg: any) => {
+      client.messageHandler.handleMessage = async (msg: any) => {
         if (msg.__selector === 'bad') {
           throw new Error('boom');
         }
         handled.push(msg);
       };
       attach(
-        shim,
+        client,
         makeService(
           gen([
             {__selector: 'bad', __argument: {}},
@@ -165,7 +165,7 @@ describe('RpcClientRealDevice', function () {
           ]),
         ),
       );
-      await shim.messageListenerTask;
+      await client.messageListenerTask;
       assert.deepStrictEqual(
         handled.map((m) => m.__selector),
         ['good'],
@@ -173,9 +173,9 @@ describe('RpcClientRealDevice', function () {
     });
 
     it('flags the client as disconnected when the message stream ends on its own', async function () {
-      attach(shim, makeService(gen([])));
-      await shim.messageListenerTask;
-      assert.strictEqual(shim.isConnected, false);
+      attach(client, makeService(gen([])));
+      await client.messageListenerTask;
+      assert.strictEqual(client.isConnected, false);
     });
 
     it('disconnects cleanly even if stopListeningAsync fails, and lets a stale listener finish quietly', async function () {
@@ -190,11 +190,60 @@ describe('RpcClientRealDevice', function () {
         closed = true;
         release();
       };
-      attach(shim, service);
-      await shim.disconnect();
+      attach(client, service);
+      await client.disconnect();
       assert.strictEqual(closed, true);
-      assert.strictEqual(shim.isConnected, false);
-      assert.strictEqual(shim.webInspectorService, undefined);
+      assert.strictEqual(client.isConnected, false);
+      assert.strictEqual(client.webInspectorService, undefined);
+    });
+  });
+
+  describe('connect', function () {
+    function fakeService(overrides: Record<string, any> = {}) {
+      // a live connection: the stream never ends on its own
+      const pending = new Promise<never>(() => {});
+      return {
+        connect: async () => {},
+        listenMessage: () => ({[Symbol.asyncIterator]: () => ({next: () => pending})}),
+        stopListeningAsync: async () => {},
+        close: async () => {},
+        sendMessage: async () => {},
+        ...overrides,
+      };
+    }
+
+    it('reports a connection failure from connect() and closes the service', async function () {
+      let closed = false;
+      client.startService = async () =>
+        fakeService({
+          connect: async () => {
+            throw new Error('service refused');
+          },
+          close: async () => {
+            closed = true;
+          },
+        });
+      await assert.rejects(client.connect(), /service refused/);
+      assert.strictEqual(closed, true);
+      assert.strictEqual(client.isConnected, false);
+      assert.strictEqual(client.webInspectorService, undefined);
+    });
+
+    it('is connected once the service connected', async function () {
+      const service = fakeService();
+      client.startService = async () => service;
+      await client.connect();
+      assert.strictEqual(client.webInspectorService, service);
+      assert.strictEqual(client.isConnected, true);
+      await client.disconnect();
+    });
+  });
+
+  describe('sendMessage', function () {
+    it('fails clearly instead of reconnecting silently after the connection was lost', async function () {
+      client.webInspectorService = {sendMessage: async () => {}};
+      client.isConnected = false;
+      await assert.rejects(client.sendMessage({__selector: 'x', __argument: {}}), /not connected/);
     });
   });
 });

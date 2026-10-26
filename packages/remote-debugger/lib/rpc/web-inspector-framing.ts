@@ -36,6 +36,7 @@ export class WebInspectorFrameError extends Error {
 export class WebInspectorFrameDecoder {
   private pending: Buffer[] = [];
   private pendingLength = 0;
+  private failure?: WebInspectorFrameError;
   private readonly maxFrameLength: number;
 
   constructor(maxFrameLength?: number) {
@@ -44,9 +45,26 @@ export class WebInspectorFrameDecoder {
 
   /**
    * Feeds a chunk of socket data and returns all fully received messages.
-   * @throws {WebInspectorFrameError} on an oversize frame or an invalid plist
+   * @throws {WebInspectorFrameError} on an oversize frame or an invalid plist; the stream is out of
+   * sync after that, so every later call throws the same error
    */
   push(chunk: Buffer): any[] {
+    if (this.failure) {
+      throw this.failure;
+    }
+    try {
+      return this.decode(chunk);
+    } catch (err) {
+      if (err instanceof WebInspectorFrameError) {
+        this.failure = err;
+        this.pending = [];
+        this.pendingLength = 0;
+      }
+      throw err;
+    }
+  }
+
+  private decode(chunk: Buffer): any[] {
     this.pending.push(chunk);
     this.pendingLength += chunk.length;
     const messages: any[] = [];
