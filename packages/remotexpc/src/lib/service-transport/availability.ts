@@ -3,6 +3,7 @@ import {getTunnelForDevice} from '../tunnel/tunnel-availability.js';
 import {resolveTunnelService, resolveTunnelServicePorts} from '../tunnel/tunnel-service-resolver.js';
 import {createUsbmux} from '../usbmux/index.js';
 import {AUTO_TUNNEL_WAIT_MS} from './constants.js';
+import {UsbmuxDeviceUnavailableError} from './errors.js';
 import {getLockdownServiceName} from './lockdown-service-names.js';
 
 const log = getLogger('TransportAvailability');
@@ -86,18 +87,39 @@ async function isTunnelAvailable(
   }
 }
 
-/** The device is listed by usbmuxd and has a usable pair record. */
-async function isDeviceReadyOverUsbmux(udid: string): Promise<boolean> {
+/**
+ * Checks that the device is listed by usbmuxd and has a usable pair record.
+ *
+ * @throws {UsbmuxDeviceUnavailableError} If lockdown services cannot be started for the device
+ */
+export async function assertDeviceReadyOverUsbmux(udid: string): Promise<void> {
   const usbmux = await createUsbmux();
   try {
     if (!(await usbmux.findDevice(udid))) {
-      return false;
+      throw new UsbmuxDeviceUnavailableError(`Device ${udid} is not connected over usbmux`);
     }
-    const pairRecord = await usbmux.readPairRecord(udid);
-    return Boolean(
-      pairRecord?.HostID && pairRecord.SystemBUID && pairRecord.HostCertificate && pairRecord.HostPrivateKey,
-    );
+    let pairRecord;
+    try {
+      pairRecord = await usbmux.readPairRecord(udid);
+    } catch (err) {
+      throw new UsbmuxDeviceUnavailableError(`Cannot read the pair record of ${udid}: ${(err as Error).message}`, {
+        cause: err,
+      });
+    }
+    if (!pairRecord?.HostID || !pairRecord.SystemBUID || !pairRecord.HostCertificate || !pairRecord.HostPrivateKey) {
+      throw new UsbmuxDeviceUnavailableError(`Device ${udid} has no usable pair record; trust this computer first`);
+    }
   } finally {
     await usbmux.close().catch(() => {});
+  }
+}
+
+async function isDeviceReadyOverUsbmux(udid: string): Promise<boolean> {
+  try {
+    await assertDeviceReadyOverUsbmux(udid);
+    return true;
+  } catch (err) {
+    log.debug(`usbmux is not usable for ${udid}: ${(err as Error).message}`);
+    return false;
   }
 }

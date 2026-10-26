@@ -7,7 +7,9 @@ import {
   TRANSPORT_ENV_VAR,
   TUNNEL_TRANSPORT,
   UnsupportedTransportError,
+  UsbmuxDeviceUnavailableError,
   UsbmuxServiceTransport,
+  assertTunnelServiceAllowed,
   getDefaultTransportMode,
   resolveServiceTransport,
   resolveServiceTransportWithPort,
@@ -19,9 +21,15 @@ const AFC = 'com.apple.afc.shim.remote';
 const INSTPROXY = 'com.apple.mobile.installation_proxy.shim.remote';
 const PASTEBOARD = 'com.apple.coredevice.pasteboardservice';
 
-function makeResolvers(tunnelError?: Error) {
+function makeResolvers(tunnelError?: Error, usbmuxError?: Error) {
   const resolveTunnelService = sinon.stub();
   const resolveTunnelServicePorts = sinon.stub();
+  const assertUsbmuxReady = sinon.stub();
+  if (usbmuxError) {
+    assertUsbmuxReady.rejects(usbmuxError);
+  } else {
+    assertUsbmuxReady.resolves();
+  }
   if (tunnelError) {
     resolveTunnelService.rejects(tunnelError);
     resolveTunnelServicePorts.rejects(tunnelError);
@@ -29,7 +37,7 @@ function makeResolvers(tunnelError?: Error) {
     resolveTunnelService.resolves({host: '::1', port: 1234, udid: UDID});
     resolveTunnelServicePorts.resolves({host: '::1', ports: {}, udid: UDID});
   }
-  return {resolveTunnelService, resolveTunnelServicePorts};
+  return {resolveTunnelService, resolveTunnelServicePorts, assertUsbmuxReady};
 }
 
 describe('resolveServiceTransport', function () {
@@ -57,6 +65,14 @@ describe('resolveServiceTransport', function () {
       assert.ok(transport instanceof UsbmuxServiceTransport);
       assert.equal(resolvers.resolveTunnelService.callCount, 0);
       assert.equal(resolvers.resolveTunnelServicePorts.callCount, 0);
+    });
+
+    it('fails at start when the device is not connected or paired', async function () {
+      const err = new UsbmuxDeviceUnavailableError('not connected');
+      const resolvers = makeResolvers(undefined, err);
+
+      await assert.rejects(resolveServiceTransport(UDID, AFC, 'usbmux', resolvers), (e) => e === err);
+      assert.equal(resolvers.assertUsbmuxReady.firstCall.args[0], UDID);
     });
 
     it('rejects tunnel-only services with UnsupportedTransportError', async function () {
@@ -114,6 +130,20 @@ describe('resolveServiceTransport', function () {
       assert.equal(transport.udid, UDID);
     });
 
+    it('rethrows the tunnel error when the device is not usable over usbmux', async function () {
+      const err = new TunnelAvailabilityError('no tunnel');
+      const resolvers = makeResolvers(err, new UsbmuxDeviceUnavailableError('not connected'));
+
+      await assert.rejects(resolveServiceTransport(UDID, AFC, 'auto', resolvers), (e) => e === err);
+    });
+
+    it('does not probe usbmux when the tunnel serves the service', async function () {
+      const resolvers = makeResolvers();
+      await resolveServiceTransport(UDID, AFC, 'auto', resolvers);
+
+      assert.equal(resolvers.assertUsbmuxReady.callCount, 0);
+    });
+
     it('rethrows the tunnel error when any service is tunnel-only', async function () {
       const err = new TunnelAvailabilityError('no tunnel');
       await assert.rejects(
@@ -156,5 +186,19 @@ describe('resolveServiceTransport', function () {
       assert.ok((await resolveServiceTransport(UDID, AFC, undefined, resolvers)) instanceof UsbmuxServiceTransport);
       assert.equal(resolvers.resolveTunnelService.callCount, 0);
     });
+  });
+});
+
+describe('assertTunnelServiceAllowed', function () {
+  it('rejects tunnel-only services in usbmux mode with UnsupportedTransportError', function () {
+    assert.throws(
+      () => assertTunnelServiceAllowed([PASTEBOARD], 'usbmux'),
+      (err: Error) => err instanceof UnsupportedTransportError && err.message.includes(PASTEBOARD),
+    );
+  });
+
+  it('allows the tunnel and auto modes', function () {
+    assertTunnelServiceAllowed(PASTEBOARD, 'tunnel');
+    assertTunnelServiceAllowed(PASTEBOARD, 'auto');
   });
 });

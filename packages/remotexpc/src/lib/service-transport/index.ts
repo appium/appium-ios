@@ -5,8 +5,9 @@ import {
   resolveTunnelService,
   resolveTunnelServicePorts,
 } from '../tunnel/tunnel-service-resolver.js';
+import {assertDeviceReadyOverUsbmux} from './availability.js';
 import {AUTO_TUNNEL_WAIT_MS} from './constants.js';
-import {UnsupportedTransportError} from './errors.js';
+import {UnsupportedTransportError, UsbmuxDeviceUnavailableError} from './errors.js';
 import {UsbmuxServiceTransport} from './usbmux.js';
 
 const log = getLogger('ServiceTransport');
@@ -38,6 +39,8 @@ export interface StartServiceOptions {
 export interface TunnelResolvers {
   resolveTunnelService: typeof resolveTunnelService;
   resolveTunnelServicePorts: typeof resolveTunnelServicePorts;
+  /** Verifies the device can start lockdown services; defaults to a usbmuxd + pair record check */
+  assertUsbmuxReady?: (udid: string) => Promise<void>;
 }
 
 const DEFAULT_TUNNEL_RESOLVERS: TunnelResolvers = {resolveTunnelService, resolveTunnelServicePorts};
@@ -61,11 +64,13 @@ const warnedInvalidModes = new Set<string>();
  * Chooses the transport for one or more services of a device.
  *
  * - `tunnel`: requires every service in the tunnel catalog.
- * - `usbmux`: requires every service to be startable through lockdown.
- * - `auto`: the tunnel when it serves all of them, otherwise usbmux when every service supports it,
- *   otherwise the original tunnel error.
+ * - `usbmux`: requires every service to be startable through lockdown and the device to be
+ *   connected and paired.
+ * - `auto`: the tunnel when it serves all of them, otherwise usbmux when every service supports it and
+ *   the device is connected and paired, otherwise the original tunnel error.
  *
  * @throws {TunnelAvailabilityError} If no transport can serve the services
+ * @throws {UsbmuxDeviceUnavailableError} In `usbmux` mode, if the device is not connected or paired
  */
 export async function resolveServiceTransport(
   udid: string,
@@ -92,8 +97,11 @@ export async function resolveServiceTransportWithPort(
   }
   const usbmux = new UsbmuxServiceTransport(udid);
 
+  const assertUsbmuxReady = resolvers.assertUsbmuxReady ?? assertDeviceReadyOverUsbmux;
+
   if (mode === 'usbmux') {
     assertUsbmuxSupport(usbmux, names);
+    await assertUsbmuxReady(udid);
     return {transport: usbmux};
   }
 
@@ -110,6 +118,13 @@ export async function resolveServiceTransportWithPort(
       throw err;
     }
     if (!names.every((name) => usbmux.supports(name))) {
+      throw err;
+    }
+    try {
+      await assertUsbmuxReady(udid);
+    } catch (usbmuxErr) {
+      // Keep the tunnel error so callers asking the user to start a tunnel still recognise it
+      log.debug(`Tunnel unavailable for ${udid} (${err.message}) and usbmux is not usable: ${usbmuxErr}`);
       throw err;
     }
     log.debug(`Tunnel unavailable for ${udid} (${err.message}); using lockdown over usbmux`);
@@ -129,7 +144,26 @@ function assertUsbmuxSupport(usbmux: UsbmuxServiceTransport, names: string[]): v
 
 export {getAvailableTransports} from './availability.js';
 export type {AvailabilityProbes, TransportAvailability, TransportAvailabilityOptions} from './availability.js';
-export {UnsupportedTransportError, UsbmuxServiceTransport};
+export {UnsupportedTransportError, UsbmuxDeviceUnavailableError, UsbmuxServiceTransport};
 export {UsbmuxServiceConnection} from './usbmux.js';
 export {getLockdownServiceName} from './lockdown-service-names.js';
 export {SERVICE_NAMES} from './service-names.js';
+
+/**
+ * Guard for tunnel-only services: they cannot be reached in `usbmux` mode, even if a tunnel is running.
+ *
+ * @throws {UnsupportedTransportError} If the effective mode is `usbmux`
+ */
+export function assertTunnelServiceAllowed(
+  rsdServiceNames: string | string[],
+  mode: TransportMode = getDefaultTransportMode(),
+): void {
+  if (mode !== 'usbmux') {
+    return;
+  }
+  const names = Array.isArray(rsdServiceNames) ? rsdServiceNames : [rsdServiceNames];
+  throw new UnsupportedTransportError(
+    `Service(s) ${names.join(', ')} are not available without a RemoteXPC tunnel ` +
+      `(${TRANSPORT_ENV_VAR}=usbmux). Please run the tunnel creation script first`,
+  );
+}

@@ -291,6 +291,7 @@ export {
   SERVICE_NAMES,
   TRANSPORT_ENV_VAR,
   UnsupportedTransportError,
+  UsbmuxDeviceUnavailableError,
   getAvailableTransports,
 } from './lib/service-transport/index.js';
 export type {
