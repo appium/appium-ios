@@ -13,7 +13,7 @@ WebDriverAgent is a [WebDriver server](https://w3c.github.io/webdriver/webdriver
 * Both iOS and tvOS platforms are supported with devices & simulators
 * Implements most of [WebDriver Spec](https://w3c.github.io/webdriver/webdriver-spec.html)
 * Implements part of [Mobile JSON Wire Protocol Spec](https://github.com/SeleniumHQ/mobile-spec/blob/master/spec-draft.md)
-* USB support for devices is implemented via [appium-ios-device](https://github.com/appium/appium-ios-device) library and has zero dependencies on third-party tools.
+* USB support for devices is implemented via the [appium-ios-remotexpc](https://github.com/appium/appium-ios/tree/main/packages/remotexpc) library and has zero dependencies on third-party tools.
 * Easy development cycle as it can be launched & debugged directly via Xcode
 * Use [Mac2Driver](https://github.com/appium/appium-mac2-driver) to automate macOS apps
 

@@ -172,10 +172,52 @@ describe('RpcClientRealDevice', function () {
       );
     });
 
-    it('flags the client as disconnected when the message stream ends on its own', async function () {
-      attach(client, makeService(gen([])));
+    function slowCloseService(items: any[] = []) {
+      const state = {closeFinished: false, closeCalls: 0};
+      const service: any = makeService(gen(items));
+      service.close = async () => {
+        state.closeCalls++;
+        await new Promise((r) => setTimeout(r, 20));
+        state.closeFinished = true;
+      };
+      return {service, state};
+    }
+
+    it('flags the client as disconnected but keeps the service when the message stream ends on its own', async function () {
+      const {service, state} = slowCloseService();
+      attach(client, service);
       await client.messageListenerTask;
       assert.strictEqual(client.isConnected, false);
+      assert.strictEqual(client.webInspectorService, service);
+      assert.strictEqual(state.closeCalls, 0);
+    });
+
+    it('still cleans up in disconnect() after the message stream ended on its own', async function () {
+      const {service, state} = slowCloseService();
+      attach(client, service);
+      client.on('_rpc_reportConnectedApplicationList:', () => {});
+      await client.messageListenerTask;
+      await client.disconnect();
+      assert.strictEqual(state.closeFinished, true);
+      assert.strictEqual(state.closeCalls, 1);
+      assert.strictEqual(client.messageHandler.listenerCount('_rpc_reportConnectedApplicationList:'), 0);
+      assert.strictEqual(client.webInspectorService, undefined);
+      assert.strictEqual(client.messageListenerTask, undefined);
+    });
+
+    it('waits for the stale service to be released before reconnecting after the stream ended', async function () {
+      const {service, state} = slowCloseService();
+      attach(client, service);
+      await client.messageListenerTask;
+      const fresh = makeService(gen([])) as any;
+      fresh.connect = async () => {};
+      client.startService = async () => {
+        assert.strictEqual(state.closeFinished, true);
+        return fresh;
+      };
+      await client.connect();
+      assert.strictEqual(client.webInspectorService, fresh);
+      await client.disconnect();
     });
 
     it('disconnects cleanly even if stopListeningAsync fails, and lets a stale listener finish quietly', async function () {
@@ -230,6 +272,24 @@ describe('RpcClientRealDevice', function () {
       assert.strictEqual(closed, true);
       assert.strictEqual(client.isConnected, false);
       assert.strictEqual(client.webInspectorService, undefined);
+    });
+
+    it('adds the device to the error and keeps its code', async function () {
+      const err: any = new Error('no tunnel');
+      err.code = 'ERR_TUNNEL_AVAILABILITY';
+      client.startService = async () => {
+        throw err;
+      };
+      await assert.rejects(client.connect(), (e: any) => {
+        assert.strictEqual(e.code, 'ERR_TUNNEL_AVAILABILITY');
+        assert.match(e.message, /test-udid.*no tunnel/);
+        return true;
+      });
+    });
+
+    it('rethrows non-Error rejections unchanged', async function () {
+      client.startService = () => Promise.reject('plain failure');
+      await assert.rejects(client.connect(), (e: any) => e === 'plain failure');
     });
 
     it('is connected once the service connected', async function () {

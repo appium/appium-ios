@@ -36,6 +36,12 @@ describe('RemoteDebuggerRealDevice', function () {
       assert.strictEqual((rd.requireRpcClient() as any)._targetCreationTimeoutMs, 654321);
     });
 
+    it('should forward fullPageInitialization to the real device RPC client', async function () {
+      const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', fullPageInitialization: true});
+      await rd.initRpcClient();
+      assert.strictEqual((rd.requireRpcClient() as any).fullPageInitialization, true);
+    });
+
     it('should forward the transport chosen by the caller to the real device RPC client', async function () {
       for (const transport of ['tunnel', 'usbmux'] as const) {
         const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', transport});
@@ -53,26 +59,13 @@ describe('RemoteDebuggerRealDevice', function () {
     it('should not reject older platform versions explicitly', async function () {
       const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', platformVersion: '17.5', transport: 'usbmux'});
       await rd.initRpcClient();
-      sinon.assert.calledOnce(connectStub);
+      assert.ok(rd.requireRpcClient() instanceof RpcClientRealDevice);
     });
 
-    it('should rethrow non-Error rejections unchanged', async function () {
-      connectStub.callsFake(() => Promise.reject('plain failure'));
+    it('should leave connecting to the connect mixin, after its listeners are attached', async function () {
       const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', platformVersion: '18.2'});
-      await assert.rejects(rd.initRpcClient(), (e: any) => e === 'plain failure');
-    });
-
-    it('should not fall back to a legacy client if the shim fails, and keep the error code', async function () {
-      const err: any = new Error('no tunnel');
-      err.code = 'ERR_TUNNEL_AVAILABILITY';
-      connectStub.rejects(err);
-      const rd = new RemoteDebuggerRealDevice({udid: 'some-udid', platformVersion: '18.2'});
-      await assert.rejects(rd.initRpcClient(), (e: any) => {
-        assert.strictEqual(e.code, 'ERR_TUNNEL_AVAILABILITY');
-        assert.match(e.message, /some-udid.*no tunnel/);
-        return true;
-      });
-      assert.throws(() => rd.requireRpcClient());
+      await rd.initRpcClient();
+      sinon.assert.notCalled(connectStub);
     });
   });
 });

@@ -54,14 +54,23 @@ export class RpcClientRealDevice extends RpcClient {
     if (this.isConnected) {
       return;
     }
+    if (this.webInspectorService) {
+      // left over from a connection that was lost
+      await this.releaseService();
+    }
     log.debug(`Connecting to WebInspector service for device ${this.udid} via ${this.transport ?? 'tunnel'}`);
 
-    const service = await this.startService();
+    let service: WebInspectorService | undefined;
     try {
+      service = await this.startService();
       // the service connects lazily: do it now so that failures are reported by connect()
       await service.connect();
-    } catch (err) {
-      await service.close().catch(() => {});
+    } catch (err: unknown) {
+      await service?.close().catch(() => {});
+      // keep the original error (e.g. `code === 'ERR_TUNNEL_AVAILABILITY'`) intact for callers
+      if (err instanceof Error) {
+        err.message = `Failed to start the WebInspector service for device ${this.udid}: ${err.message}`;
+      }
       throw err;
     }
     this.webInspectorService = service;
@@ -92,7 +101,15 @@ export class RpcClientRealDevice extends RpcClient {
 
     log.debug('Disconnecting from WebInspector service');
     await super.disconnect();
+    await this.releaseService();
+    log.debug('Disconnected from WebInspector service');
+  }
 
+  /**
+   * Stops listening and closes the current service, if any, and waits for the listener to finish.
+   */
+  private async releaseService(): Promise<void> {
+    const service = this.webInspectorService;
     // Detach first so a stale listener cannot affect a later reconnect
     const listenerTask = this.messageListenerTask;
     this.webInspectorService = undefined;
@@ -124,7 +141,6 @@ export class RpcClientRealDevice extends RpcClient {
         clearTimeout(timer);
       }
     }
-    log.debug('Disconnected from WebInspector service');
   }
 
   /**
@@ -195,7 +211,8 @@ export class RpcClientRealDevice extends RpcClient {
           log.error('Error in message listener', err);
         }
       } finally {
-        // the stream ended on its own: flag the client as disconnected instead of letting commands time out
+        // the stream ended on its own: flag the client as disconnected instead of letting commands time out.
+        // The service is kept so that disconnect()/connect() release it through the regular path.
         if (this.webInspectorService === service) {
           log.warn('The WebInspector message stream has ended');
           this.isListening = false;
