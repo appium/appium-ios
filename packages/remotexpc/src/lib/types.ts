@@ -1496,6 +1496,12 @@ export interface DVTInstruments {
  */
 export interface WebInspectorService extends BaseService {
   /**
+   * Establish the connection now instead of lazily on the first message,
+   * so that connection failures surface to the caller
+   */
+  connect(): Promise<void>;
+
+  /**
    * Send a message to the WebInspector service
    * @param selector The RPC selector (e.g., '_rpc_reportIdentifier:')
    * @param args The arguments dictionary for the message

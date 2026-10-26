@@ -23,4 +23,28 @@ describe('WebInspectorService', function () {
       }, /socket lost/);
     });
   });
+
+  describe('connect', function () {
+    function stubLockdown(service: WebInspectorService, impl: () => Promise<unknown>) {
+      (service as unknown as {startLockdownService: unknown}).startLockdownService = impl;
+    }
+
+    it('surfaces connection failures and allows a retry', async function () {
+      const service = new WebInspectorService('test-udid');
+      stubLockdown(service, async () => {
+        throw new Error('service refused');
+      });
+      await assert.rejects(service.connect(), /service refused/);
+
+      const sent: unknown[] = [];
+      stubLockdown(service, async () => ({
+        receive: async (): Promise<never> => {
+          throw new Error('timeout');
+        },
+        sendPlist: (msg: unknown) => sent.push(msg),
+      }));
+      await service.connect();
+      assert.equal(sent.length, 1);
+    });
+  });
 });
