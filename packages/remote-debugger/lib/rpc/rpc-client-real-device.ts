@@ -143,7 +143,9 @@ export class RpcClientRealDevice extends RpcClient {
 
     log.debug(`Sending message: ${selector}`);
     if (this.logAllCommunication) {
-      log.debug(`Sent: ${JSON.stringify({__selector: selector, __argument: args})}`);
+      log.debug(
+        `Sent message to Web Inspector:\n${util.jsonStringify({__selector: selector, __argument: args}, null)}`,
+      );
     }
     await this.webInspectorService.sendMessage(selector, args);
   }
@@ -157,7 +159,7 @@ export class RpcClientRealDevice extends RpcClient {
   override async receive(data: any): Promise<void> {
     if (this.isConnected && data) {
       if (this.logAllCommunication) {
-        log.debug(`Received: ${JSON.stringify(data)}`);
+        log.debug(`Received message from Web Inspector:\n${util.jsonStringify(data, null)}`);
       }
       await this.messageHandler.handleMessage(data);
     }

@@ -200,12 +200,15 @@ describe('RpcClientRealDevice', function () {
 
   describe('connect', function () {
     function fakeService(overrides: Record<string, any> = {}) {
-      // a live connection: the stream never ends on its own
-      const pending = new Promise<never>(() => {});
+      // a live connection: the stream stays open until stopListeningAsync()
+      let stop!: () => void;
+      const pending = new Promise<{done: true; value: undefined}>((resolve) => {
+        stop = () => resolve({done: true, value: undefined});
+      });
       return {
         connect: async () => {},
         listenMessage: () => ({[Symbol.asyncIterator]: () => ({next: () => pending})}),
-        stopListeningAsync: async () => {},
+        stopListeningAsync: async () => stop(),
         close: async () => {},
         sendMessage: async () => {},
         ...overrides,

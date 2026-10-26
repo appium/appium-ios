@@ -86,6 +86,37 @@ describe('RpcClientSimulator', function () {
     assert.strictEqual(handled[0].__selector, 'ok');
   });
 
+  it('rejects sendMessage right after a decode failure, before the socket close event', async function () {
+    client = new RpcClientSimulator({socketPath, udid: 'sim'});
+    client.messageHandler.handleMessage = async () => {};
+    await client.connect();
+    await waitFor(() => !!serverSocket);
+    const oversize = Buffer.alloc(4);
+    oversize.writeUInt32BE(0x7fffffff, 0);
+    const sentAfterFailure = new Promise<void>((resolve, reject) => {
+      client.once('_rpc_never:', () => {});
+      const origReceive = client.receive.bind(client);
+      client.receive = async (msg: any) => {
+        await origReceive(msg);
+        // a handler reacting to the last good message sends a command
+        client.sendMessage({__selector: 'late', __argument: {}}).then(
+          () => reject(new Error('sendMessage resolved on a destroyed socket')),
+          () => resolve(),
+        );
+      };
+    });
+    serverSocket!.write(Buffer.concat([encodeWebInspectorFrame({__selector: 'ok', __argument: {}}), oversize]));
+    await sentAfterFailure;
+    assert.strictEqual(client.isConnected, false);
+  });
+
+  it('rejects sendMessage right after disconnect()', async function () {
+    client = new RpcClientSimulator({socketPath, udid: 'sim'});
+    await client.connect();
+    await client.disconnect();
+    await assert.rejects(client.sendMessage({__selector: 'x', __argument: {}}), /not connected/);
+  });
+
   it('converts Buffer fields at the top level of a received message', async function () {
     client = new RpcClientSimulator({socketPath, udid: 'sim'});
     const handled: any[] = [];

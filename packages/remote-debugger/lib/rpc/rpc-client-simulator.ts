@@ -124,6 +124,8 @@ export class RpcClientSimulator extends RpcClient {
       }
       if (decodeError) {
         log.error(`Cannot decode Web Inspector data: ${decodeError.message}`);
+        // 'close' fires on a later tick; mark the client as disconnected right away
+        this.isConnected = false;
         socket.destroy();
       }
     });
@@ -186,7 +188,7 @@ export class RpcClientSimulator extends RpcClient {
         reject(err);
       };
 
-      if (!this.socket) {
+      if (!this.socket || this.socket.destroyed) {
         return reject(
           new Error('The RPC client is not connected. Have you called `connect()` before sending a message?'),
         );
