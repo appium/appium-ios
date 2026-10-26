@@ -19,6 +19,8 @@ const config = {
  */
 export interface PlistServiceOptions {
   maxFrameLength?: number;
+  /** Plist messages to read before the rest is kept for {@link PlistService.detachSocket}. Unlimited by default. */
+  maxFrames?: number;
 }
 
 /**
@@ -84,6 +86,7 @@ export class PlistService {
     // Set up transformers
     this._splitter = new LengthBasedSplitter({
       maxFrameLength: options.maxFrameLength ?? 100 * 1024 * 1024, // Default to 100MB
+      maxFrames: options.maxFrames,
     });
     this._decoder = new PlistServiceDecoder();
     this._encoder = new PlistServiceEncoder();
