@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.27.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.3...appium-ios-remotexpc@5.27.0) (2026-10-26)
+
+### Features
+
+* **remotexpc:** start lockdown services over usbmux when no tunnel is available ([#113](https://github.com/appium/appium-ios/issues/113)) ([bbd0bf7](https://github.com/appium/appium-ios/commit/bbd0bf7d65ee3e2d42b39eca46c7991ac87f4c69))
+
+
 ## [5.26.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.2...appium-ios-remotexpc@5.26.3) (2026-10-23)
 
 ### Miscellaneous Chores
