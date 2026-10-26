@@ -1,6 +1,9 @@
 import {posix as path} from 'node:path';
 
 import {getLogger} from '../../../lib/logger.js';
+import {LENGTH_FIELD_4_BYTES, LENGTH_FIELD_8_BYTES} from '../../../lib/plist/constants.js';
+import {parsePlist} from '../../../lib/plist/index.js';
+import type {PlistDictionary} from '../../../lib/types.js';
 
 const log = getLogger('SyslogParser');
 
@@ -42,6 +45,12 @@ export interface SyslogEntry {
   filename: string;
   message: string;
   label?: SyslogLabel;
+}
+
+/** The StartActivity reply and the stream bytes that arrived after it */
+export interface ActivityReply {
+  response: PlistDictionary;
+  rest: Buffer;
 }
 
 /** Marker byte that precedes each syslog entry in the protocol */
@@ -239,6 +248,38 @@ const LOG_LEVEL_COLORS: Record<number, string> = {
   [SyslogLogLevel.Error]: RED,
   [SyslogLogLevel.Fault]: RED,
 };
+
+/**
+ * Parses the StartActivity reply at the start of `data`. os_trace_relay frames it as a uint32 LE
+ * width of the length field, the plist length in that many little-endian bytes, then the plist.
+ * @returns The reply and the bytes after it, or null until the whole reply has arrived
+ * @throws {Error} If the length field is empty or wider than 8 bytes
+ */
+export function parseActivityReply(data: Buffer): ActivityReply | null {
+  if (data.length < LENGTH_FIELD_4_BYTES) {
+    return null;
+  }
+  const lengthSize = data.readUInt32LE(0);
+  if (lengthSize < 1 || lengthSize > LENGTH_FIELD_8_BYTES) {
+    throw new Error(`Invalid StartActivity reply: ${lengthSize}-byte length field`);
+  }
+  const bodyStart = LENGTH_FIELD_4_BYTES + lengthSize;
+  if (data.length < bodyStart) {
+    return null;
+  }
+  let length = 0;
+  for (let i = bodyStart - 1; i >= LENGTH_FIELD_4_BYTES; i--) {
+    length = length * 256 + data[i];
+  }
+  const bodyEnd = bodyStart + length;
+  if (data.length < bodyEnd) {
+    return null;
+  }
+  return {
+    response: parsePlist(data.subarray(bodyStart, bodyEnd)) as PlistDictionary,
+    rest: data.subarray(bodyEnd),
+  };
+}
 
 /**
  * Streaming parser for the os_trace_relay binary syslog protocol.

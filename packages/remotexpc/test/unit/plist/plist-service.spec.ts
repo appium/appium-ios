@@ -153,6 +153,20 @@ describe('PlistService.detachSocket', function () {
     assert.deepStrictEqual(Buffer.concat(chunks), Buffer.concat([partial, Buffer.from([4, 5])]));
   });
 
+  it('leaves the bytes after maxFrames frames unparsed', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any, {maxFrames: 1});
+    const text = Buffer.from('line one\n\0line two\n\0');
+    socket.write(Buffer.concat([framePlist({Request: 'StartService'}), text]));
+    assert.deepStrictEqual(await service.receivePlist(1000), {Request: 'StartService'});
+
+    const detached = service.detachSocket();
+    const chunks = collect(detached);
+    await new Promise((r) => setImmediate(r));
+
+    assert.deepStrictEqual(Buffer.concat(chunks), text);
+  });
+
   it('keeps the data for an AFC reader attached on a later tick', async function () {
     const socket = new PassThrough();
     const service = new PlistService(socket as any);

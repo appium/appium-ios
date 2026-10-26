@@ -13,6 +13,9 @@ import {ServiceConnection, type ServiceConnectionOptions} from '../../service-co
 
 const log = getLogger('BaseService');
 
+/** Plist messages a shim sends before its own protocol: the RSDCheckin echo and the StartService greeting. */
+const SHIM_HANDSHAKE_FRAMES = 2;
+
 /**
  * Interface for service information
  */
@@ -90,8 +93,8 @@ export class BaseService {
    * Starts a `.shim.remote` lockdown service and drains its initial `StartService` greeting,
    * so it can never be mistaken for the reply to a later request
    */
-  protected async startShimService(serviceName: string): Promise<ServiceConnection> {
-    const connection = await this.startLockdownService(serviceName);
+  protected async startShimService(serviceName: string, options: Record<string, any> = {}): Promise<ServiceConnection> {
+    const connection = await this.startLockdownService(serviceName, options);
     try {
       const greeting = await connection.receive();
       if (greeting?.Request !== 'StartService') {
@@ -102,6 +105,19 @@ export class BaseService {
       connection.close();
       throw error;
     }
+  }
+
+  /**
+   * Starts a service that streams raw bytes right after its handshake and returns its socket
+   * positioned at the first of them, none consumed by plist framing. The caller must `resume()`
+   * the socket after attaching its reader.
+   */
+  public async startRawShimService(serviceName: string): Promise<net.Socket> {
+    if (this.serviceTransport instanceof UsbmuxServiceTransport) {
+      return await this.serviceTransport.openSocket(serviceName);
+    }
+    const connection = await this.startShimService(serviceName, {plistOptions: {maxFrames: SHIM_HANDSHAKE_FRAMES}});
+    return connection.detachSocket();
   }
 
   /**
