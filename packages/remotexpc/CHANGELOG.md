@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.0...appium-ios-remotexpc@5.28.1) (2026-10-26)
+
+### Bug Fixes
+
+* **remotexpc:** syslog StartActivity reply, early text lines and socket leaks ([#121](https://github.com/appium/appium-ios/issues/121)) ([4a6202e](https://github.com/appium/appium-ios/commit/4a6202e6a6cc0d87f7ae56d6f8cdc6bd265a5b46))
+
+
 ## [5.28.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.27.0...appium-ios-remotexpc@5.28.0) (2026-10-26)
 
 ### Features
