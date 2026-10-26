@@ -6,6 +6,7 @@ import {AutomationSession} from './rpc/index.js';
 import type {AutomationElement, AutomationRect, LocatorStrategy} from './rpc/index.js';
 import type {
   RemoteDebuggerRealDeviceOptions,
+  RemoteDebuggerTransport,
   RemoteDebuggerOptions,
   ScriptExecutionOptions,
   ExecuteAtomOptions,
@@ -32,6 +33,7 @@ export function createRemoteDebugger(
 export {RemoteDebugger, RemoteDebuggerRealDevice, REMOTE_DEBUGGER_PORT, ATOM_NAMES, AutomationSession};
 export type {
   RemoteDebuggerRealDeviceOptions,
+  RemoteDebuggerTransport,
   RemoteDebuggerOptions,
   ScriptExecutionOptions,
   ExecuteAtomOptions,

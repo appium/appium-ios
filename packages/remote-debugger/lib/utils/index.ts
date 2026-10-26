@@ -16,4 +16,3 @@ export {
 } from './inspector.js';
 export {RESPONSE_LOG_LENGTH, simpleStringify, convertJavascriptEvaluationResult} from './javascript.js';
 export {getModuleRoot, getModuleProperties} from './module.js';
-export {canUseWebInspectorShim} from './platform.js';

@@ -103,7 +103,6 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _pageReadyTimeout: number;
   protected readonly _logAllCommunication: boolean;
   protected readonly _logAllCommunicationHexDump: boolean;
-  protected readonly _socketChunkSize?: number;
   protected readonly _webInspectorMaxFrameLength?: number;
   protected readonly _fullPageInitialization?: boolean;
   protected readonly _targetCreationTimeoutMs?: number;
@@ -133,7 +132,6 @@ export class RemoteDebugger extends EventEmitter {
       logAllCommunication = false,
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
-      socketChunkSize,
       fullPageInitialization,
       pageLoadStrategy,
       targetCreationTimeoutMs,
@@ -160,7 +158,6 @@ export class RemoteDebugger extends EventEmitter {
 
     this._logAllCommunication = logAllCommunication == null ? !!logFullResponse : !!logAllCommunication;
     this._logAllCommunicationHexDump = logAllCommunicationHexDump;
-    this._socketChunkSize = socketChunkSize;
 
     if (Number.isInteger(webInspectorMaxFrameLength)) {
       this._webInspectorMaxFrameLength = webInspectorMaxFrameLength;

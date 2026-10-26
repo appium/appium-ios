@@ -79,7 +79,6 @@ export class RpcClient {
   protected readonly udid!: string;
   protected readonly logAllCommunication?: boolean;
   protected readonly logAllCommunicationHexDump?: boolean;
-  protected readonly socketChunkSize?: number;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
   protected readonly bundleId?: string;
@@ -105,7 +104,6 @@ export class RpcClient {
       logAllCommunication = false,
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
-      socketChunkSize,
       fullPageInitialization = false,
       udid,
       pageLoadTimeoutMs,
@@ -123,7 +121,6 @@ export class RpcClient {
 
     this.logAllCommunication = logAllCommunication;
     this.logAllCommunicationHexDump = logAllCommunicationHexDump;
-    this.socketChunkSize = socketChunkSize;
     this.webInspectorMaxFrameLength = webInspectorMaxFrameLength;
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
