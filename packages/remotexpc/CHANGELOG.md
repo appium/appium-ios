@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.2...appium-ios-remotexpc@5.28.3) (2026-10-27)
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t fail silent XCTest runs after 60s, clear runner timeout timer ([#124](https://github.com/appium/appium-ios/issues/124)) ([afda8c9](https://github.com/appium/appium-ios/commit/afda8c9d96e6012b0453b5d3e43c2eef57d015ee))
+
+
 ## [5.28.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.1...appium-ios-remotexpc@5.28.2) (2026-10-26)
 
 **Note:** Version bump only for package appium-ios-remotexpc
