@@ -133,7 +133,9 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
    * but before `initControlSessionAndAuthorize`.
    *
    * The listener uses `recvPlistWithTimeout` to poll for messages,
-   * and can be immediately canceled via `stop()`.
+   * and can be immediately canceled via `stop()`. Silence on the exec
+   * channel is not treated as a failure, since a single test can run for
+   * minutes without sending a callback.
    *
    * @param testBundlePath Path to the test bundle on device
    */
@@ -160,33 +162,15 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
     this.listenerAbortController = new AbortController();
     const {signal} = this.listenerAbortController;
 
-    const MAX_CONSECUTIVE_EMPTY_POLLS = 60; // ~60s of silence = dead connection
-
     const listenerPromise: Promise<void> = (async () => {
-      let consecutiveEmptyPolls = 0;
       try {
         while (!signal.aborted) {
           try {
             const result = await this.execConnection.recvPlistWithTimeout(this.execChannelCode, 1000);
 
             if (!result) {
-              consecutiveEmptyPolls++;
-              if (consecutiveEmptyPolls >= MAX_CONSECUTIVE_EMPTY_POLLS) {
-                log.warn(
-                  `No callbacks received for ${MAX_CONSECUTIVE_EMPTY_POLLS} consecutive polls (~${MAX_CONSECUTIVE_EMPTY_POLLS}s). ` +
-                    'The exec connection may be dead.',
-                );
-                this._lastListenerError = new Error(
-                  `Exec connection silent for ${MAX_CONSECUTIVE_EMPTY_POLLS}s — likely dead`,
-                );
-                this._running = false;
-                this.finishedDeferred?.resolve('failed');
-                break;
-              }
               continue; // Timeout — poll again
             }
-
-            consecutiveEmptyPolls = 0;
 
             const [selector, auxiliaries] = result;
             this.handleCallback(selector, auxiliaries);
@@ -313,6 +297,8 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
   /**
    * Wait for the test plan to finish or error out.
    * Returns 'passed' or 'failed' based on test results.
+   * Does not time out on its own: bound the wait with a timeout,
+   * as {@link XCTestRunner} does, or call `stop()`.
    */
   async waitForCompletion(): Promise<'passed' | 'failed'> {
     if (!this.finishedDeferred) {
@@ -629,8 +615,7 @@ export class XCTestRunner extends EventEmitter<XCTestRunnerEvents> {
     const sessionId = xcuitest.sessionIdentifier;
 
     this.emit('step', 'wait_finish');
-    const timeout = new Promise<'timed_out'>((resolve) => setTimeout(() => resolve('timed_out'), timeoutMs));
-    const raceResult = await Promise.race([xcuitest.waitForCompletion(), timeout]);
+    const raceResult = await waitForCompletionWithin(xcuitest, timeoutMs);
 
     const durationMs = Math.round(timer.getDuration().asMilliSeconds);
     const testSummary = xcuitest.lastTestSummary ?? undefined;
@@ -725,6 +710,26 @@ export class XCTestRunner extends EventEmitter<XCTestRunnerEvents> {
         {stage: 'lookup_apps', cause: err},
       );
     }
+  }
+}
+
+/**
+ * Waits for the test plan to finish, resolving to `'timed_out'` if it has not
+ * finished within `timeoutMs`. The timer is cleared either way so it never keeps
+ * the process alive after the run.
+ */
+async function waitForCompletionWithin(
+  xcuitest: XCUITestService,
+  timeoutMs: number,
+): Promise<XCTestRunResult['status']> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<'timed_out'>((resolve) => {
+    timer = setTimeout(() => resolve('timed_out'), timeoutMs);
+  });
+  try {
+    return await Promise.race([xcuitest.waitForCompletion(), timeout]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
