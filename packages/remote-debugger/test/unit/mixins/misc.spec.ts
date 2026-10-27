@@ -32,7 +32,10 @@ describe('misc', function () {
 
       await stopTimeline.call(rd);
       assert.strictEqual(rpcClient.listenerCount('Timeline.eventRecorded'), 0);
-      assert.strictEqual(rpcClient.send.lastCall.calledWithExactly('Timeline.stop', {appIdKey: 'PID:42', pageIdKey: 1}), true);
+      assert.strictEqual(
+        rpcClient.send.lastCall.calledWithExactly('Timeline.stop', {appIdKey: 'PID:42', pageIdKey: 1}),
+        true,
+      );
     });
 
     it('should not accumulate timeline listeners across restarts', async function () {
