@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.5...appium-webdriveragent@16.17.6) (2026-10-27)
+
+### Bug Fixes
+
+* **remote-debugger:** connect real-device clients after listeners are attached and release lost services ([#123](https://github.com/appium/appium-ios/issues/123)) ([c2ffd94](https://github.com/appium/appium-ios/commit/c2ffd94ca4c8d2c1952da80a816f9d8ed3188521))
+* **webdriveragent:** allow excluding customActions from the JSON page source ([#114](https://github.com/appium/appium-ios/issues/114)) ([8991115](https://github.com/appium/appium-ios/commit/89911153d5e666023fe675d382305d8203fe80e2))
+
+
 ## [16.17.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.4...appium-webdriveragent@16.17.5) (2026-10-24)
 
 **Note:** Version bump only for package appium-webdriveragent
