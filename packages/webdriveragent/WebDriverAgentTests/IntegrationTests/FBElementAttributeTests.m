@@ -12,10 +12,36 @@
 #import "FBFindElementCommands.h"
 #import "FBTestMacros.h"
 #import "FBXCodeCompatibility.h"
+#import "XCUIApplication+FBHelpers.h"
 #import "XCUIElement+FBAccessibility.h"
 #import "XCUIElement+FBCustomActions.h"
 #import "XCUIElement+FBIsVisible.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
+
+static void FBCountTreeNodes(NSDictionary *tree, NSUInteger *nodesCount, NSUInteger *customActionsCount)
+{
+  *nodesCount += 1;
+  if (nil != tree[@"customActions"]) {
+    *customActionsCount += 1;
+  }
+  for (NSDictionary *child in tree[@"children"]) {
+    FBCountTreeNodes(child, nodesCount, customActionsCount);
+  }
+}
+
+static NSDictionary *FBFindTreeButton(NSDictionary *tree, NSString *name)
+{
+  if ([tree[@"type"] isEqualToString:@"Button"] && [tree[@"name"] isEqual:name]) {
+    return tree;
+  }
+  for (NSDictionary *child in tree[@"children"]) {
+    NSDictionary *result = FBFindTreeButton(child, name);
+    if (nil != result) {
+      return result;
+    }
+  }
+  return nil;
+}
 
 @interface FBElementAttributeTests : FBIntegrationTestCase
 @end
@@ -268,6 +294,24 @@
   NSString *customActions = buttonElement.wdCustomActions;
   XCTAssertNotNil(customActions, @"Button should have custom actions");
   XCTAssertEqualObjects(customActions, @"Custom Action 1,Custom Action 2");
+}
+
+- (void)testCustomActionsInJSONTree
+{
+  NSDictionary *tree = self.testedApplication.fb_tree;
+  NSUInteger nodesCount = 0;
+  NSUInteger customActionsCount = 0;
+  FBCountTreeNodes(tree, &nodesCount, &customActionsCount);
+  XCTAssertEqual(customActionsCount, nodesCount);
+  NSDictionary *button = FBFindTreeButton(tree, @"Button");
+  XCTAssertEqualObjects(button[@"customActions"], @"Custom Action 1,Custom Action 2");
+
+  tree = [self.testedApplication fb_tree:[NSSet setWithObject:@"customActions"]];
+  XCTAssertNotNil(FBFindTreeButton(tree, @"Button"));
+  nodesCount = 0;
+  customActionsCount = 0;
+  FBCountTreeNodes(tree, &nodesCount, &customActionsCount);
+  XCTAssertEqual(customActionsCount, 0);
 }
 
 @end

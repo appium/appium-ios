@@ -52,6 +52,7 @@ static NSString* const FBExclusionAttributeNativeFrame = @"nativeFrame";
 static NSString* const FBExclusionAttributeTraits = @"traits";
 static NSString* const FBExclusionAttributeMinValue = @"minValue";
 static NSString* const FBExclusionAttributeMaxValue = @"maxValue";
+static NSString* const FBExclusionAttributeCustomActions = @"customActions";
 
 static NSString *FBJsonPrefixedAttributeKey(NSString *key)
 {
@@ -242,7 +243,6 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   info[@"value"] = FBValueOrNull(wrappedSnapshot.wdValue);
   info[@"label"] = FBValueOrNull(wrappedSnapshot.wdLabel);
   info[@"rect"] = wrappedSnapshot.wdRect;
-  info[@"customActions"] = FBValueOrNull(wrappedSnapshot.wdCustomActions);
   
   NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
@@ -253,6 +253,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
                             FBExclusionAttributeTraits,
                             FBExclusionAttributeMinValue,
                             FBExclusionAttributeMaxValue,
+                            FBExclusionAttributeCustomActions,
                             nil];
 
   for (NSString *key in attributeBlocks) {
@@ -315,6 +316,9 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   },
     FBExclusionAttributeTraits: ^{
     return wrappedSnapshot.wdTraits;
+  },
+    FBExclusionAttributeCustomActions: ^{
+    return (NSString *)FBValueOrNull(wrappedSnapshot.wdCustomActions);
   }
   } mutableCopy];
   
