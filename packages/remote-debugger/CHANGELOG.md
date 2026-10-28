@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [18.0.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.2...appium-remote-debugger@18.0.3) (2026-10-28)
+
+### Bug Fixes
+
+* **remote-debugger:** remove timeline listener on stopTimeline ([#126](https://github.com/appium/appium-ios/issues/126)) ([4ac7445](https://github.com/appium/appium-ios/commit/4ac7445cbb729671cc614a744e3c0e63a8f5cac1))
+
+
 ## [18.0.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.1...appium-remote-debugger@18.0.2) (2026-10-27)
 
 **Note:** Version bump only for package appium-remote-debugger
