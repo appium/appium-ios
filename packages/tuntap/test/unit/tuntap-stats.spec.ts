@@ -204,6 +204,21 @@ function getPlatformReader(): {
   }
 }
 
+function buildTestIpv6Packet(): Buffer {
+  const packet = Buffer.alloc(40);
+  packet[0] = 0x60; // IPv6 version 6
+  packet.writeUInt16BE(0, 4); // payload length = 0
+  packet[6] = 59; // Next Header: No Next Header (IPPROTO_NONE)
+  packet[7] = 64; // Hop Limit
+  // Source: fd00::1
+  packet.writeUInt16BE(0xfd00, 8);
+  packet.writeUInt16BE(1, 22);
+  // Destination: fd00::2
+  packet.writeUInt16BE(0xfd00, 24);
+  packet.writeUInt16BE(2, 38);
+  return packet;
+}
+
 describe('TunTap.getStats', {timeout: 30000}, () => {
   let tun: TunTap | null = null;
 
@@ -257,10 +272,20 @@ describe('TunTap.getStats', {timeout: 30000}, () => {
     tun = new TunTap();
     tun.open();
     await tun.configure('fd00::2', 1500);
+    tun.write(buildTestIpv6Packet());
+
+    const deadline = Date.now() + 1000;
+    while ((await tun.getStats()).rxPackets === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
 
     const before = readOsStats(tun.name);
     const stats = await tun.getStats();
     const after = readOsStats(tun.name);
+    assert.ok(
+      stats.rxPackets > 0 && stats.rxBytes > 0,
+      `expected non-zero rx counters on ${tun.name}, got ${JSON.stringify(stats)}`,
+    );
     assertStatsWithinWindow(stats, before, after, toolName, tun.name);
 
     tun.close();
