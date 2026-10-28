@@ -131,11 +131,17 @@ class LinuxTunBackend : public PosixTunBackend {
   }
 };
 
-}  // namespace
+template <typename StatsT>
+void CopyLinkStats(const StatsT& src, TunInterfaceStats& dst) {
+  dst.rx_packets = src.rx_packets;
+  dst.rx_errors = src.rx_errors;
+  dst.rx_bytes = src.rx_bytes;
+  dst.tx_packets = src.tx_packets;
+  dst.tx_errors = src.tx_errors;
+  dst.tx_bytes = src.tx_bytes;
+}
 
-std::unique_ptr<TunPlatformBackend> CreatePlatformBackend() { return std::make_unique<LinuxTunBackend>(); }
-
-bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error) {
+bool ResolveInterfaceIndex(const std::string& interface_name, unsigned int& out_ifindex, std::string& error) {
   if (interface_name.empty()) {
     error = "Interface name must not be empty";
     return false;
@@ -145,12 +151,15 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     return false;
   }
 
-  const unsigned int ifindex = if_nametoindex(interface_name.c_str());
-  if (ifindex == 0) {
+  out_ifindex = if_nametoindex(interface_name.c_str());
+  if (out_ifindex == 0) {
     error = "Interface not found: " + interface_name;
     return false;
   }
+  return true;
+}
 
+bool OpenNetlinkRouteSocket(FileDescriptor& out_fd, std::string& error) {
   FileDescriptor nl_fd(socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE));
   if (!nl_fd.is_valid()) {
     error = std::string("Failed to create netlink socket: ") + strerror(errno);
@@ -165,6 +174,11 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     return false;
   }
 
+  out_fd = std::move(nl_fd);
+  return true;
+}
+
+bool SendGetLinkRequest(int nl_fd, unsigned int ifindex, std::string& error) {
   NetlinkGetLinkRequest req{};
   req.nlh.nlmsg_len = static_cast<uint32_t>(sizeof(req));
   req.nlh.nlmsg_type = RTM_GETLINK;
@@ -175,16 +189,20 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
 
   ssize_t sent = 0;
   do {
-    sent = send(nl_fd.get(), &req, sizeof(req), 0);
+    sent = send(nl_fd, &req, sizeof(req), 0);
   } while (sent < 0 && errno == EINTR);
   if (sent < 0) {
     error = std::string("Failed to send RTM_GETLINK request: ") + strerror(errno);
     return false;
   }
+  return true;
+}
 
+bool ReceiveNetlinkResponse(int nl_fd, const std::string& interface_name, std::vector<uint8_t>& out_buf,
+                            std::string& error) {
   ssize_t peek_len = 0;
   do {
-    peek_len = recv(nl_fd.get(), nullptr, 0, MSG_PEEK | MSG_TRUNC);
+    peek_len = recv(nl_fd, nullptr, 0, MSG_PEEK | MSG_TRUNC);
   } while (peek_len < 0 && errno == EINTR);
   if (peek_len <= 0) {
     error =
@@ -192,31 +210,76 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     return false;
   }
 
-  std::vector<uint8_t> buf(std::max<size_t>(static_cast<size_t>(peek_len), 8192U));
+  out_buf.resize(std::max<size_t>(static_cast<size_t>(peek_len), 8192U));
   ssize_t recv_len = 0;
   do {
-    recv_len = recv(nl_fd.get(), buf.data(), buf.size(), MSG_TRUNC);
+    recv_len = recv(nl_fd, out_buf.data(), out_buf.size(), MSG_TRUNC);
   } while (recv_len < 0 && errno == EINTR);
   if (recv_len <= 0) {
     error =
         std::string("Failed to receive RTM_GETLINK response: ") + (recv_len < 0 ? strerror(errno) : "empty response");
     return false;
   }
-  if (static_cast<size_t>(recv_len) > buf.size()) {
+  if (static_cast<size_t>(recv_len) > out_buf.size()) {
     error = "RTM_GETLINK response truncated for " + interface_name;
     return false;
   }
 
-  const auto total_len = static_cast<size_t>(recv_len);
+  out_buf.resize(static_cast<size_t>(recv_len));
+  return true;
+}
+
+bool ExtractStatsFromNewLinkAttrs(const uint8_t* attr_data, size_t attrs_len, TunInterfaceStats& out) {
+  constexpr size_t kRtaHdrLen = AlignNetlink(sizeof(struct rtattr));
+  size_t attr_offset = 0;
+  bool has_stats32 = false;
+  TunInterfaceStats fallback_stats{};
+
+  while (attr_offset + sizeof(struct rtattr) <= attrs_len) {
+    struct rtattr rta {};
+    memcpy(&rta, attr_data + attr_offset, sizeof(rta));
+    if (rta.rta_len < sizeof(struct rtattr) || attr_offset + rta.rta_len > attrs_len) {
+      break;
+    }
+
+    const size_t payload_offset = attr_offset + kRtaHdrLen;
+    const size_t payload_len = rta.rta_len >= kRtaHdrLen ? rta.rta_len - kRtaHdrLen : 0U;
+
+    if (rta.rta_type == IFLA_STATS64 && payload_len >= sizeof(struct rtnl_link_stats64)) {
+      struct rtnl_link_stats64 stats64 {};
+      memcpy(&stats64, attr_data + payload_offset, sizeof(stats64));
+      CopyLinkStats(stats64, out);
+      return true;
+    }
+
+    if (rta.rta_type == IFLA_STATS && payload_len >= sizeof(struct rtnl_link_stats)) {
+      struct rtnl_link_stats stats32 {};
+      memcpy(&stats32, attr_data + payload_offset, sizeof(stats32));
+      CopyLinkStats(stats32, fallback_stats);
+      has_stats32 = true;
+    }
+
+    attr_offset += AlignNetlink(rta.rta_len);
+  }
+
+  if (has_stats32) {
+    out = fallback_stats;
+    return true;
+  }
+  return false;
+}
+
+bool ParseNetlinkLinkStats(const std::vector<uint8_t>& buf, const std::string& interface_name, TunInterfaceStats& out,
+                           std::string& error) {
   constexpr size_t kNlhHdrLen = AlignNetlink(sizeof(struct nlmsghdr));
   constexpr size_t kIfiHdrLen = AlignNetlink(sizeof(struct ifinfomsg));
-  constexpr size_t kRtaHdrLen = AlignNetlink(sizeof(struct rtattr));
+  constexpr size_t kNewLinkHdrLen = kNlhHdrLen + kIfiHdrLen;
 
   size_t offset = 0;
-  while (offset + sizeof(struct nlmsghdr) <= total_len) {
+  while (offset + sizeof(struct nlmsghdr) <= buf.size()) {
     struct nlmsghdr nlh {};
     memcpy(&nlh, buf.data() + offset, sizeof(nlh));
-    if (nlh.nlmsg_len < sizeof(struct nlmsghdr) || offset + nlh.nlmsg_len > total_len) {
+    if (nlh.nlmsg_len < sizeof(struct nlmsghdr) || offset + nlh.nlmsg_len > buf.size()) {
       break;
     }
 
@@ -232,51 +295,10 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
       return false;
     }
 
-    if (nlh.nlmsg_type == RTM_NEWLINK && nlh.nlmsg_len >= kNlhHdrLen + kIfiHdrLen) {
-      size_t attr_offset = offset + kNlhHdrLen + kIfiHdrLen;
-      const size_t msg_end = offset + nlh.nlmsg_len;
-      bool has_stats32 = false;
-      TunInterfaceStats fallback_stats{};
-
-      while (attr_offset + sizeof(struct rtattr) <= msg_end) {
-        struct rtattr rta {};
-        memcpy(&rta, buf.data() + attr_offset, sizeof(rta));
-        if (rta.rta_len < sizeof(struct rtattr) || attr_offset + rta.rta_len > msg_end) {
-          break;
-        }
-
-        const size_t payload_offset = attr_offset + kRtaHdrLen;
-        const size_t payload_len = rta.rta_len >= kRtaHdrLen ? rta.rta_len - kRtaHdrLen : 0U;
-
-        if (rta.rta_type == IFLA_STATS64 && payload_len >= sizeof(struct rtnl_link_stats64)) {
-          struct rtnl_link_stats64 stats64 {};
-          memcpy(&stats64, buf.data() + payload_offset, sizeof(stats64));
-          out.rx_packets = stats64.rx_packets;
-          out.rx_errors = stats64.rx_errors;
-          out.rx_bytes = stats64.rx_bytes;
-          out.tx_packets = stats64.tx_packets;
-          out.tx_errors = stats64.tx_errors;
-          out.tx_bytes = stats64.tx_bytes;
-          return true;
-        }
-
-        if (rta.rta_type == IFLA_STATS && payload_len >= sizeof(struct rtnl_link_stats)) {
-          struct rtnl_link_stats stats32 {};
-          memcpy(&stats32, buf.data() + payload_offset, sizeof(stats32));
-          fallback_stats.rx_packets = stats32.rx_packets;
-          fallback_stats.rx_errors = stats32.rx_errors;
-          fallback_stats.rx_bytes = stats32.rx_bytes;
-          fallback_stats.tx_packets = stats32.tx_packets;
-          fallback_stats.tx_errors = stats32.tx_errors;
-          fallback_stats.tx_bytes = stats32.tx_bytes;
-          has_stats32 = true;
-        }
-
-        attr_offset += AlignNetlink(rta.rta_len);
-      }
-
-      if (has_stats32) {
-        out = fallback_stats;
+    if (nlh.nlmsg_type == RTM_NEWLINK && nlh.nlmsg_len >= kNewLinkHdrLen) {
+      const uint8_t* attr_data = buf.data() + offset + kNewLinkHdrLen;
+      const size_t attrs_len = nlh.nlmsg_len - kNewLinkHdrLen;
+      if (ExtractStatsFromNewLinkAttrs(attr_data, attrs_len, out)) {
         return true;
       }
     }
@@ -286,6 +308,32 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
 
   error = "IFLA_STATS64 not found in RTM_GETLINK response for " + interface_name;
   return false;
+}
+
+}  // namespace
+
+std::unique_ptr<TunPlatformBackend> CreatePlatformBackend() { return std::make_unique<LinuxTunBackend>(); }
+
+bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error) {
+  unsigned int ifindex = 0;
+  if (!ResolveInterfaceIndex(interface_name, ifindex, error)) {
+    return false;
+  }
+
+  FileDescriptor nl_fd;
+  if (!OpenNetlinkRouteSocket(nl_fd, error)) {
+    return false;
+  }
+  if (!SendGetLinkRequest(nl_fd.get(), ifindex, error)) {
+    return false;
+  }
+
+  std::vector<uint8_t> response;
+  if (!ReceiveNetlinkResponse(nl_fd.get(), interface_name, response, error)) {
+    return false;
+  }
+
+  return ParseNetlinkLinkStats(response, interface_name, out, error);
 }
 
 #endif
