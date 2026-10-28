@@ -141,24 +141,33 @@ class LinuxTunBackend : public PosixTunBackend {
     std::string ifname;
     {
       std::shared_lock lock(fd_mutex_);
+      if (!fd_.is_valid() || interface_name_.empty()) {
+        error = "Device not open";
+        return false;
+      }
       ifname = interface_name_;
     }
-    if (ifname.empty()) {
-      error = "Device not open";
-      return false;
-    }
 
-    return ReadSysfsCounter(ifname, "rx_packets", out.rx_packets, error) &&
-           ReadSysfsCounter(ifname, "rx_errors", out.rx_errors, error) &&
-           ReadSysfsCounter(ifname, "rx_bytes", out.rx_bytes, error) &&
-           ReadSysfsCounter(ifname, "tx_packets", out.tx_packets, error) &&
-           ReadSysfsCounter(ifname, "tx_errors", out.tx_errors, error) &&
-           ReadSysfsCounter(ifname, "tx_bytes", out.tx_bytes, error);
+    return GetInterfaceStats(ifname, out, error);
   }
 };
 
 }  // namespace
 
 std::unique_ptr<TunPlatformBackend> CreatePlatformBackend() { return std::make_unique<LinuxTunBackend>(); }
+
+bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error) {
+  if (interface_name.empty()) {
+    error = "Interface name must not be empty";
+    return false;
+  }
+
+  return ReadSysfsCounter(interface_name, "rx_packets", out.rx_packets, error) &&
+         ReadSysfsCounter(interface_name, "rx_errors", out.rx_errors, error) &&
+         ReadSysfsCounter(interface_name, "rx_bytes", out.rx_bytes, error) &&
+         ReadSysfsCounter(interface_name, "tx_packets", out.tx_packets, error) &&
+         ReadSysfsCounter(interface_name, "tx_errors", out.tx_errors, error) &&
+         ReadSysfsCounter(interface_name, "tx_bytes", out.tx_bytes, error);
+}
 
 #endif

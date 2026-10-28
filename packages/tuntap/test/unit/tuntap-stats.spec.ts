@@ -2,23 +2,61 @@ import assert from 'node:assert';
 import {execFileSync} from 'node:child_process';
 import {readdirSync} from 'node:fs';
 import {createRequire} from 'node:module';
-import {describe, it} from 'node:test';
+import {afterEach, describe, it} from 'node:test';
 
 import {TunTap} from '../../src/index.js';
 import {getPkgRoot} from '../../src/pkg-root.js';
 import type {TunTapInterfaceStats} from '../../src/platform/types.js';
+import {hasPrivileges} from '../utils.js';
 
 const require = createRequire(import.meta.url);
-const {TunDevice} = require('node-gyp-build')(getPkgRoot()) as {
-  TunDevice: new (name?: string) => {getStats(): TunTapInterfaceStats};
+const {TunDevice, getInterfaceStats} = require('node-gyp-build')(getPkgRoot()) as {
+  TunDevice: new (name?: string) => {
+    open(): boolean;
+    close(): boolean;
+    getStats(): TunTapInterfaceStats;
+  };
+  getInterfaceStats(name: string): TunTapInterfaceStats;
 };
 
-function readNativeStats(interfaceName: string): TunTapInterfaceStats {
-  return new TunDevice(interfaceName).getStats();
-}
+const STAT_KEYS: ReadonlyArray<keyof TunTapInterfaceStats> = [
+  'rxBytes',
+  'txBytes',
+  'rxPackets',
+  'txPackets',
+  'rxErrors',
+  'txErrors',
+];
+
+const hasRequiredPrivileges = await hasPrivileges();
+const skipWithoutPrivileges = hasRequiredPrivileges
+  ? false
+  : process.platform === 'win32'
+    ? 'Requires Administrator privileges on Windows'
+    : 'Requires root privileges';
 
 function hasTraffic(stats: TunTapInterfaceStats): boolean {
   return Object.values(stats).some((value) => value > 0);
+}
+
+function assertStatsWithinWindow(
+  stats: TunTapInterfaceStats,
+  before: TunTapInterfaceStats,
+  after: TunTapInterfaceStats,
+  toolName: string,
+  interfaceName: string,
+): void {
+  if (JSON.stringify(before) === JSON.stringify(after)) {
+    assert.deepStrictEqual(stats, before, `mismatch against ${toolName} on ${interfaceName}`);
+    return;
+  }
+
+  for (const key of STAT_KEYS) {
+    assert.ok(
+      stats[key] >= before[key] && stats[key] <= after[key],
+      `expected ${interfaceName}.${key} (${stats[key]}) to be between ${toolName} before (${before[key]}) and after (${after[key]})`,
+    );
+  }
 }
 
 function parseDarwinNetstat(output: string): TunTapInterfaceStats {
@@ -90,19 +128,12 @@ function listLinuxCandidates(): string[] {
   });
 }
 
-function readWindowsOsStats(interfaceName: string): TunTapInterfaceStats {
-  const escaped = interfaceName.replace(/'/g, "''");
-  const script =
-    `Get-NetAdapterStatistics -Name '${escaped}' | ` +
-    'Select-Object ReceivedBytes,SentBytes,ReceivedUnicastPackets,ReceivedMulticastPackets,' +
-    'ReceivedBroadcastPackets,SentUnicastPackets,SentMulticastPackets,SentBroadcastPackets,' +
-    'ReceivedPacketErrors,OutboundPacketErrors | ConvertTo-Json -Compress';
-  const stdout = execFileSync(
-    'powershell',
-    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    {encoding: 'utf8'},
-  );
-  const parsed = JSON.parse(stdout) as Record<string, unknown>;
+const WINDOWS_STATS_FIELDS =
+  'Name,ReceivedBytes,SentBytes,ReceivedUnicastPackets,ReceivedMulticastPackets,' +
+  'ReceivedBroadcastPackets,SentUnicastPackets,SentMulticastPackets,SentBroadcastPackets,' +
+  'ReceivedPacketErrors,OutboundPacketErrors';
+
+function parseWindowsStatsRecord(parsed: Record<string, unknown>): TunTapInterfaceStats {
   const num = (key: string): number => {
     const value = parsed[key];
     const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
@@ -118,25 +149,38 @@ function readWindowsOsStats(interfaceName: string): TunTapInterfaceStats {
   };
 }
 
-function listWindowsCandidates(): string[] {
-  const script = 'Get-NetAdapterStatistics | Select-Object -ExpandProperty Name';
+function readWindowsOsStats(interfaceName: string): TunTapInterfaceStats {
+  const escaped = interfaceName.replace(/'/g, "''");
+  const script = `Get-NetAdapterStatistics -Name '${escaped}' | Select-Object ${WINDOWS_STATS_FIELDS} | ConvertTo-Json -Compress`;
   const stdout = execFileSync(
     'powershell',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
     {encoding: 'utf8'},
   );
-  const names = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const withTraffic = names.filter((name) => {
-    try {
-      return hasTraffic(readWindowsOsStats(name));
-    } catch {
-      return false;
-    }
-  });
-  return withTraffic.length > 0 ? withTraffic : names;
+  const parsed = JSON.parse(stdout) as Record<string, unknown>;
+  return parseWindowsStatsRecord(parsed);
+}
+
+function listWindowsCandidates(): string[] {
+  const script = `Get-NetAdapterStatistics | Select-Object ${WINDOWS_STATS_FIELDS} | ConvertTo-Json -Compress`;
+  const stdout = execFileSync(
+    'powershell',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {encoding: 'utf8'},
+  ).trim();
+  if (!stdout) {
+    return [];
+  }
+  const parsed = JSON.parse(stdout) as Record<string, unknown> | Array<Record<string, unknown>>;
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  const entries = records
+    .map((record) => ({
+      name: typeof record.Name === 'string' ? record.Name.trim() : '',
+      stats: parseWindowsStatsRecord(record),
+    }))
+    .filter((entry) => entry.name.length > 0);
+  const withTraffic = entries.filter((entry) => hasTraffic(entry.stats)).map((entry) => entry.name);
+  return withTraffic.length > 0 ? withTraffic : entries.map((entry) => entry.name);
 }
 
 function getPlatformReader(): {
@@ -161,9 +205,21 @@ function getPlatformReader(): {
 }
 
 describe('TunTap.getStats', {timeout: 30000}, () => {
+  let tun: TunTap | null = null;
+
+  afterEach(() => {
+    if (tun && tun.isOpen && !tun.isClosed) {
+      try {
+        tun.close();
+      } catch {}
+    }
+    tun = null;
+  });
+
   it('rejects when the device is not open', async () => {
-    const tun = new TunTap();
-    await assert.rejects(() => tun.getStats(), /Device not open/);
+    const unopened = new TunTap('lo0');
+    await assert.rejects(() => unopened.getStats(), /Device not open/);
+    assert.throws(() => new TunDevice('lo0').getStats(), /Device not open/);
   });
 
   it('matches the OS tool counters on a real interface', (t) => {
@@ -174,18 +230,25 @@ describe('TunTap.getStats', {timeout: 30000}, () => {
       return;
     }
 
-    for (const interfaceName of candidates) {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const before = readOsStats(interfaceName);
-        const stats = readNativeStats(interfaceName);
-        const after = readOsStats(interfaceName);
-        if (JSON.stringify(before) === JSON.stringify(after)) {
-          assert.deepStrictEqual(stats, before, `mismatch against ${toolName} on ${interfaceName}`);
-          return;
-        }
-      }
-    }
+    const interfaceName = candidates[0]!;
+    const before = readOsStats(interfaceName);
+    const stats = getInterfaceStats(interfaceName);
+    const after = readOsStats(interfaceName);
+    assertStatsWithinWindow(stats, before, after, toolName, interfaceName);
+  });
 
-    t.skip(`counters changed during every read attempt across: ${candidates.join(', ')}`);
+  it('matches the OS tool counters on an open TunTap device', {skip: skipWithoutPrivileges}, async () => {
+    const {readOsStats, toolName} = getPlatformReader();
+    tun = new TunTap();
+    tun.open();
+    await tun.configure('fd00::2', 1500);
+
+    const before = readOsStats(tun.name);
+    const stats = await tun.getStats();
+    const after = readOsStats(tun.name);
+    assertStatsWithinWindow(stats, before, after, toolName, tun.name);
+
+    tun.close();
+    await assert.rejects(() => tun!.getStats(), /Device has been closed/);
   });
 });

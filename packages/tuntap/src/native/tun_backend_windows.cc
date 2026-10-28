@@ -31,6 +31,28 @@ std::wstring BuildDefaultAdapterName() {
   return oss.str();
 }
 
+bool ReadStatsForLuid(const NET_LUID& luid, TunInterfaceStats& out, std::string& error) {
+  MIB_IF_ROW2 row{};
+  row.InterfaceLuid = luid;
+
+  DWORD status = ::GetIfEntry2(&row);
+  if (status != NO_ERROR) {
+    error = "GetIfEntry2 failed: " + FormatLastError(status);
+    return false;
+  }
+
+  // Count all packets (unicast + non-unicast) and real packet errors
+  // (`InErrors` / `OutErrors`, rather than non-error discards) to match the
+  // macOS (`ifi_*`) and Linux (`/sys/class/net/*/statistics/*`) backends.
+  out.rx_bytes = row.InOctets;
+  out.rx_packets = row.InUcastPkts + row.InNUcastPkts;
+  out.rx_errors = row.InErrors;
+  out.tx_bytes = row.OutOctets;
+  out.tx_packets = row.OutUcastPkts + row.OutNUcastPkts;
+  out.tx_errors = row.OutErrors;
+  return true;
+}
+
 class WindowsTunBackend : public TunPlatformBackend {
  public:
   WindowsTunBackend() = default;
@@ -191,44 +213,15 @@ class WindowsTunBackend : public TunPlatformBackend {
   // event `HANDLE`, not a numeric fd. Always -1.
   [[nodiscard]] int GetNativeFd() const override { return -1; }
 
-  void SetInterfaceName(const std::string& name) override { interface_name_ = name; }
-
   bool GetStats(TunInterfaceStats& out, std::string& error) override {
-    MIB_IF_ROW2 row{};
-    if (adapter_ != nullptr) {
-      WintunApi::Instance().GetAdapterLUID(adapter_, &row.InterfaceLuid);
-    } else if (!interface_name_.empty()) {
-      std::wstring wide_name = Utf8ToUtf16(interface_name_);
-      if (wide_name.empty()) {
-        error = "Failed to encode adapter name as UTF-16";
-        return false;
-      }
-      DWORD luid_status = ::ConvertInterfaceAliasToLuid(wide_name.c_str(), &row.InterfaceLuid);
-      if (luid_status != NO_ERROR) {
-        error = "ConvertInterfaceAliasToLuid failed for " + interface_name_ + ": " + FormatLastError(luid_status);
-        return false;
-      }
-    } else {
+    if (session_ == nullptr || adapter_ == nullptr) {
       error = "Device not open";
       return false;
     }
 
-    DWORD status = ::GetIfEntry2(&row);
-    if (status != NO_ERROR) {
-      error = "GetIfEntry2 failed: " + FormatLastError(status);
-      return false;
-    }
-
-    // Count all packets (unicast + non-unicast) and real packet errors
-    // (`InErrors` / `OutErrors`, rather than non-error discards) to match the
-    // macOS (`ifi_*`) and Linux (`/sys/class/net/*/statistics/*`) backends.
-    out.rx_bytes = row.InOctets;
-    out.rx_packets = row.InUcastPkts + row.InNUcastPkts;
-    out.rx_errors = row.InErrors;
-    out.tx_bytes = row.OutOctets;
-    out.tx_packets = row.OutUcastPkts + row.OutNUcastPkts;
-    out.tx_errors = row.OutErrors;
-    return true;
+    NET_LUID luid{};
+    WintunApi::Instance().GetAdapterLUID(adapter_, &luid);
+    return ReadStatsForLuid(luid, out, error);
   }
 
   bool WaitReadable(const std::atomic<bool>& running, std::string& error) override {
@@ -301,5 +294,27 @@ class WindowsTunBackend : public TunPlatformBackend {
 }  // namespace
 
 std::unique_ptr<TunPlatformBackend> CreatePlatformBackend() { return std::make_unique<WindowsTunBackend>(); }
+
+bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error) {
+  if (interface_name.empty()) {
+    error = "Interface name must not be empty";
+    return false;
+  }
+
+  std::wstring wide_name = Utf8ToUtf16(interface_name);
+  if (wide_name.empty()) {
+    error = "Failed to encode adapter name as UTF-16";
+    return false;
+  }
+
+  NET_LUID luid{};
+  DWORD luid_status = ::ConvertInterfaceAliasToLuid(wide_name.c_str(), &luid);
+  if (luid_status != NO_ERROR) {
+    error = "ConvertInterfaceAliasToLuid failed for " + interface_name + ": " + FormatLastError(luid_status);
+    return false;
+  }
+
+  return ReadStatsForLuid(luid, out, error);
+}
 
 #endif

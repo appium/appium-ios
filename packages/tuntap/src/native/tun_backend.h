@@ -58,7 +58,6 @@ class TunPlatformBackend {
   virtual ssize_t WritePacket(const uint8_t* data, size_t length, std::string& error) = 0;
 
   virtual bool GetStats(TunInterfaceStats& out, std::string& error) = 0;
-  virtual void SetInterfaceName(const std::string& /*name*/) {}
 
   // Block until a packet can be read/written or `running` becomes false.
   // Implementations may use short timed waits when the platform does not expose
@@ -72,3 +71,4 @@ class TunPlatformBackend {
 };
 
 std::unique_ptr<TunPlatformBackend> CreatePlatformBackend();
+bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error);

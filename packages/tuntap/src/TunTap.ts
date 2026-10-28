@@ -302,9 +302,6 @@ export class TunTap {
     try {
       return this.device.getStats();
     } catch (err: unknown) {
-      if (err instanceof TunTapError) {
-        throw err;
-      }
       throw new TunTapError(`Failed to get interface statistics: ${(err as Error).message}`);
     }
   }

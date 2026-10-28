@@ -41,6 +41,40 @@ const char* ErrnoCode(int sys_errno) {
   }
 }
 
+Napi::Object StatsToJsObject(Napi::Env env, const TunInterfaceStats& stats) {
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("rxBytes", Napi::Number::New(env, static_cast<double>(stats.rx_bytes)));
+  result.Set("txBytes", Napi::Number::New(env, static_cast<double>(stats.tx_bytes)));
+  result.Set("rxPackets", Napi::Number::New(env, static_cast<double>(stats.rx_packets)));
+  result.Set("txPackets", Napi::Number::New(env, static_cast<double>(stats.tx_packets)));
+  result.Set("rxErrors", Napi::Number::New(env, static_cast<double>(stats.rx_errors)));
+  result.Set("txErrors", Napi::Number::New(env, static_cast<double>(stats.tx_errors)));
+  return result;
+}
+
+Napi::Value GetInterfaceStatsBinding(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "Expected interface name string as first argument").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string interface_name = info[0].As<Napi::String>().Utf8Value();
+  if (interface_name.empty()) {
+    Napi::TypeError::New(env, "Interface name must not be empty").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  TunInterfaceStats stats{};
+  std::string error;
+  if (!GetInterfaceStats(interface_name, stats, error)) {
+    Napi::Error::New(env, error).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return StatsToJsObject(env, stats);
+}
+
 class TunDevice : public Napi::ObjectWrap<TunDevice> {
  public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
@@ -99,9 +133,6 @@ TunDevice::TunDevice(const Napi::CallbackInfo& info)
 
   if (info.Length() > 0 && info[0].IsString()) {
     requested_name_ = info[0].As<Napi::String>().Utf8Value();
-    if (backend_ && !requested_name_.empty()) {
-      backend_->SetInterfaceName(requested_name_);
-    }
   }
 }
 
@@ -244,11 +275,7 @@ Napi::Value TunDevice::GetStats(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   std::scoped_lock lock(device_mutex_);
 
-  if (!backend_) {
-    Napi::Error::New(env, "Unsupported platform: no native TUN backend available").ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  if (!IsOpenLocked() && requested_name_.empty()) {
+  if (!IsOpenLocked()) {
     Napi::Error::New(env, "Device not open").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -260,14 +287,7 @@ Napi::Value TunDevice::GetStats(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Object result = Napi::Object::New(env);
-  result.Set("rxBytes", Napi::Number::New(env, static_cast<double>(stats.rx_bytes)));
-  result.Set("txBytes", Napi::Number::New(env, static_cast<double>(stats.tx_bytes)));
-  result.Set("rxPackets", Napi::Number::New(env, static_cast<double>(stats.rx_packets)));
-  result.Set("txPackets", Napi::Number::New(env, static_cast<double>(stats.tx_packets)));
-  result.Set("rxErrors", Napi::Number::New(env, static_cast<double>(stats.rx_errors)));
-  result.Set("txErrors", Napi::Number::New(env, static_cast<double>(stats.tx_errors)));
-  return result;
+  return StatsToJsObject(env, stats);
 }
 
 void TunDevice::CloseInternal() {
@@ -282,6 +302,7 @@ void TunDevice::CloseInternal() {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   TunDevice::Init(env, exports);
+  exports.Set("getInterfaceStats", Napi::Function::New(env, GetInterfaceStatsBinding));
   InitTunnelForwarder(env, exports);
   return exports;
 }
