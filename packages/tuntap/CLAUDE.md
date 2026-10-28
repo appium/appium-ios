@@ -118,8 +118,9 @@ This is a Node.js native addon package that provides TUN/TAP virtual network dev
 A C++17 Node-API (NAPI) addon built via `node-gyp`. `src/tuntap.cc` is intentionally kept as the N-API interface/glue: it exposes `TunDevice` (`open()`, `close()`, `read()`, `write()`, `getName()`, `getFd()`, `isOpen()`, `getForwardingHandle()`, `getStats()`), `getInterfaceStats()`, and validates JS arguments.
 
 Native implementation details are split into `src/native/*`:
+
 - `TunPlatformBackend` interface in `tun_backend.h`; each backend `.cc` defines its own `CreatePlatformBackend()` and `GetInterfaceStats()`
-- platform-specific backends in `tun_backend_darwin.cc` (utun + `sysctl` `IFMIB_IFDATA` stats), `tun_backend_linux.cc` (`/dev/net/tun` + `/sys/class/net/<name>/statistics/*` stats), and `tun_backend_windows.cc` (WinTun via `wintun_loader.*` + `WintunGetAdapterLUID`/`GetIfEntry2` stats)
+- platform-specific backends in `tun_backend_darwin.cc` (utun + `sysctl` `NET_RT_IFLIST2`/`if_data64` stats), `tun_backend_linux.cc` (`/dev/net/tun` + `RTM_GETLINK` `rtnl_link_stats64` stats), and `tun_backend_windows.cc` (WinTun via `wintun_loader.*` + `WintunGetAdapterLUID`/`GetIfEntry2` stats)
 - shared POSIX base in `posix_tun_backend.h`
 - RAII handle: `FileDescriptor` (POSIX) in `file_descriptor.*`
 - tunnel forwarding in `tunnel_forwarder.*` (TLS↔TUN loops, N-API `TunnelForwarder`) and `tunnel_ssl.*` (OpenSSL client for lockdown cert or TLS-PSK)

@@ -222,6 +222,21 @@ describe('TunTap.getStats', {timeout: 30000}, () => {
     assert.throws(() => new TunDevice('lo0').getStats(), /Device not open/);
   });
 
+  it('rejects invalid or nonexistent interface names in getInterfaceStats', () => {
+    assert.throws(() => getInterfaceStats(''), /Interface name must not be empty/);
+    assert.throws(() => getInterfaceStats('../../../proc/self/status'), /Invalid interface name|Interface not found/);
+    assert.throws(() => getInterfaceStats('no_such_if0'), /Interface not found/);
+  });
+
+  it('throws a clear error when the native addon lacks getStats()', async () => {
+    const fakeTun = new TunTap();
+    Object.assign(fakeTun, {
+      _isOpen: true,
+      device: {},
+    });
+    await assert.rejects(() => fakeTun.getStats(), /Native addon is outdated and does not implement getStats\(\)/);
+  });
+
   it('matches the OS tool counters on a real interface', (t) => {
     const {listCandidates, readOsStats, toolName} = getPlatformReader();
     const candidates = listCandidates();

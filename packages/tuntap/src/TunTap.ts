@@ -23,7 +23,8 @@ interface NativeTunDevice {
   /** Absent on native binaries built before this method was added. */
   isOpen?(): boolean;
   getForwardingHandle(): unknown;
-  getStats(): TunTapInterfaceStats;
+  /** Absent on native binaries built before this method was added. */
+  getStats?(): TunTapInterfaceStats;
 }
 
 interface NativeTuntapModule {
@@ -298,6 +299,11 @@ export class TunTap {
    */
   async getStats(): Promise<TunTapInterfaceStats> {
     this.assertReady();
+    if (typeof this.device.getStats !== 'function') {
+      throw new TunTapError(
+        'Native addon is outdated and does not implement getStats(); rebuild the native addon (npm run build:addon)',
+      );
+    }
 
     try {
       return this.device.getStats();

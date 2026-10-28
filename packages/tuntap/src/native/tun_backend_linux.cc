@@ -5,15 +5,18 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <net/if.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <linux/if.h>
+#include <linux/if_link.h>
 #include <linux/if_tun.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 #include <array>
-#include <charconv>
 #include <shared_mutex>
 #include <utility>
 
@@ -24,27 +27,14 @@ namespace {
 
 constexpr const char* kTunDevicePath = "/dev/net/tun";
 
-bool ReadSysfsCounter(const std::string& ifname, const char* stat_name, uint64_t& value, std::string& error) {
-  std::string path = "/sys/class/net/" + ifname + "/statistics/" + stat_name;
-  FileDescriptor fd(open(path.c_str(), O_RDONLY | O_CLOEXEC));
-  if (!fd.is_valid()) {
-    error = "Failed to open " + path + ": " + strerror(errno);
-    return false;
-  }
+struct NetlinkGetLinkRequest {
+  struct nlmsghdr nlh {};
+  struct ifinfomsg ifi {};
+};
 
-  std::array<char, 64> buf{};
-  ssize_t bytes_read = read(fd.get(), buf.data(), buf.size() - 1);
-  if (bytes_read <= 0) {
-    error = "Failed to read " + path + ": " + (bytes_read < 0 ? strerror(errno) : "empty file");
-    return false;
-  }
-
-  auto [ptr, ec] = std::from_chars(buf.data(), buf.data() + bytes_read, value);
-  if (ec != std::errc{} || ptr == buf.data()) {
-    error = "Failed to parse counter in " + path;
-    return false;
-  }
-  return true;
+constexpr size_t AlignNetlink(size_t len) {
+  constexpr size_t kAlign = 4U;
+  return (len + (kAlign - 1U)) & ~(kAlign - 1U);
 }
 
 class LinuxTunBackend : public PosixTunBackend {
@@ -136,20 +126,6 @@ class LinuxTunBackend : public PosixTunBackend {
     }
     return bytes_written;
   }
-
-  bool GetStats(TunInterfaceStats& out, std::string& error) override {
-    std::string ifname;
-    {
-      std::shared_lock lock(fd_mutex_);
-      if (!fd_.is_valid() || interface_name_.empty()) {
-        error = "Device not open";
-        return false;
-      }
-      ifname = interface_name_;
-    }
-
-    return GetInterfaceStats(ifname, out, error);
-  }
 };
 
 }  // namespace
@@ -161,13 +137,123 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     error = "Interface name must not be empty";
     return false;
   }
+  if (interface_name.size() >= IFNAMSIZ || interface_name.find('/') != std::string::npos) {
+    error = "Invalid interface name: " + interface_name;
+    return false;
+  }
 
-  return ReadSysfsCounter(interface_name, "rx_packets", out.rx_packets, error) &&
-         ReadSysfsCounter(interface_name, "rx_errors", out.rx_errors, error) &&
-         ReadSysfsCounter(interface_name, "rx_bytes", out.rx_bytes, error) &&
-         ReadSysfsCounter(interface_name, "tx_packets", out.tx_packets, error) &&
-         ReadSysfsCounter(interface_name, "tx_errors", out.tx_errors, error) &&
-         ReadSysfsCounter(interface_name, "tx_bytes", out.tx_bytes, error);
+  const unsigned int ifindex = if_nametoindex(interface_name.c_str());
+  if (ifindex == 0) {
+    error = "Interface not found: " + interface_name;
+    return false;
+  }
+
+  FileDescriptor nl_fd(socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE));
+  if (!nl_fd.is_valid()) {
+    error = std::string("Failed to create netlink socket: ") + strerror(errno);
+    return false;
+  }
+
+  NetlinkGetLinkRequest req{};
+  req.nlh.nlmsg_len = static_cast<uint32_t>(sizeof(req));
+  req.nlh.nlmsg_type = RTM_GETLINK;
+  req.nlh.nlmsg_flags = NLM_F_REQUEST;
+  req.nlh.nlmsg_seq = 1;
+  req.ifi.ifi_family = AF_UNSPEC;
+  req.ifi.ifi_index = static_cast<int>(ifindex);
+
+  if (send(nl_fd.get(), &req, sizeof(req), 0) < 0) {
+    error = std::string("Failed to send RTM_GETLINK request: ") + strerror(errno);
+    return false;
+  }
+
+  std::array<uint8_t, 8192> buf{};
+  const ssize_t recv_len = recv(nl_fd.get(), buf.data(), buf.size(), 0);
+  if (recv_len <= 0) {
+    error =
+        std::string("Failed to receive RTM_GETLINK response: ") + (recv_len < 0 ? strerror(errno) : "empty response");
+    return false;
+  }
+
+  const auto total_len = static_cast<size_t>(recv_len);
+  constexpr size_t kNlhHdrLen = AlignNetlink(sizeof(struct nlmsghdr));
+  constexpr size_t kIfiHdrLen = AlignNetlink(sizeof(struct ifinfomsg));
+  constexpr size_t kRtaHdrLen = AlignNetlink(sizeof(struct rtattr));
+
+  size_t offset = 0;
+  while (offset + sizeof(struct nlmsghdr) <= total_len) {
+    struct nlmsghdr nlh {};
+    memcpy(&nlh, buf.data() + offset, sizeof(nlh));
+    if (nlh.nlmsg_len < sizeof(struct nlmsghdr) || offset + nlh.nlmsg_len > total_len) {
+      break;
+    }
+
+    if (nlh.nlmsg_type == NLMSG_ERROR) {
+      if (nlh.nlmsg_len >= kNlhHdrLen + sizeof(struct nlmsgerr)) {
+        struct nlmsgerr nlerr {};
+        memcpy(&nlerr, buf.data() + offset + kNlhHdrLen, sizeof(nlerr));
+        const int err_code = nlerr.error < 0 ? -nlerr.error : nlerr.error;
+        error = std::string("RTM_GETLINK failed for ") + interface_name + ": " + strerror(err_code);
+      } else {
+        error = "RTM_GETLINK returned NLMSG_ERROR for " + interface_name;
+      }
+      return false;
+    }
+
+    if (nlh.nlmsg_type == RTM_NEWLINK && nlh.nlmsg_len >= kNlhHdrLen + kIfiHdrLen) {
+      size_t attr_offset = offset + kNlhHdrLen + kIfiHdrLen;
+      const size_t msg_end = offset + nlh.nlmsg_len;
+      bool has_stats32 = false;
+      TunInterfaceStats fallback_stats{};
+
+      while (attr_offset + sizeof(struct rtattr) <= msg_end) {
+        struct rtattr rta {};
+        memcpy(&rta, buf.data() + attr_offset, sizeof(rta));
+        if (rta.rta_len < sizeof(struct rtattr) || attr_offset + rta.rta_len > msg_end) {
+          break;
+        }
+
+        const size_t payload_offset = attr_offset + kRtaHdrLen;
+        const size_t payload_len = rta.rta_len >= kRtaHdrLen ? rta.rta_len - kRtaHdrLen : 0U;
+
+        if (rta.rta_type == IFLA_STATS64 && payload_len >= sizeof(struct rtnl_link_stats64)) {
+          struct rtnl_link_stats64 stats64 {};
+          memcpy(&stats64, buf.data() + payload_offset, sizeof(stats64));
+          out.rx_packets = stats64.rx_packets;
+          out.rx_errors = stats64.rx_errors;
+          out.rx_bytes = stats64.rx_bytes;
+          out.tx_packets = stats64.tx_packets;
+          out.tx_errors = stats64.tx_errors;
+          out.tx_bytes = stats64.tx_bytes;
+          return true;
+        }
+
+        if (rta.rta_type == IFLA_STATS && payload_len >= sizeof(struct rtnl_link_stats)) {
+          struct rtnl_link_stats stats32 {};
+          memcpy(&stats32, buf.data() + payload_offset, sizeof(stats32));
+          fallback_stats.rx_packets = stats32.rx_packets;
+          fallback_stats.rx_errors = stats32.rx_errors;
+          fallback_stats.rx_bytes = stats32.rx_bytes;
+          fallback_stats.tx_packets = stats32.tx_packets;
+          fallback_stats.tx_errors = stats32.tx_errors;
+          fallback_stats.tx_bytes = stats32.tx_bytes;
+          has_stats32 = true;
+        }
+
+        attr_offset += AlignNetlink(rta.rta_len);
+      }
+
+      if (has_stats32) {
+        out = fallback_stats;
+        return true;
+      }
+    }
+
+    offset += AlignNetlink(nlh.nlmsg_len);
+  }
+
+  error = "IFLA_STATS64 not found in RTM_GETLINK response for " + interface_name;
+  return false;
 }
 
 #endif

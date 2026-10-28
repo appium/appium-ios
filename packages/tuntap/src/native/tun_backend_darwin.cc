@@ -13,14 +13,15 @@
 #include <unistd.h>
 
 #include <net/if.h>
-#include <net/if_mib.h>
 #include <net/if_utun.h>
+#include <net/route.h>
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
 
 #include <array>
 #include <shared_mutex>
 #include <utility>
+#include <vector>
 
 #include "file_descriptor.h"
 #include "posix_tun_backend.h"
@@ -155,20 +156,6 @@ class DarwinTunBackend : public PosixTunBackend {
                                                                  : 0;
   }
 
-  bool GetStats(TunInterfaceStats& out, std::string& error) override {
-    std::string ifname;
-    {
-      std::shared_lock lock(fd_mutex_);
-      if (!fd_.is_valid() || interface_name_.empty()) {
-        error = "Device not open";
-        return false;
-      }
-      ifname = interface_name_;
-    }
-
-    return GetInterfaceStats(ifname, out, error);
-  }
-
  private:
   static int ParseRequestedUtunUnit(const std::string& requested_name) {
     if (requested_name.empty() || requested_name.find("utun") != 0) {
@@ -211,29 +198,52 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     return false;
   }
 
-  unsigned int ifindex = if_nametoindex(interface_name.c_str());
+  const unsigned int ifindex = if_nametoindex(interface_name.c_str());
   if (ifindex == 0) {
     error = "Interface not found: " + interface_name;
     return false;
   }
 
   std::array<int, 6> mib = {
-      CTL_NET, PF_LINK, NETLINK_GENERIC, IFMIB_IFDATA, static_cast<int>(ifindex), IFDATA_GENERAL,
+      CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, static_cast<int>(ifindex),
   };
-  struct ifmibdata ifmd {};
-  size_t len = sizeof(ifmd);
-  if (sysctl(mib.data(), static_cast<u_int>(mib.size()), &ifmd, &len, nullptr, 0) < 0) {
-    error = std::string("sysctl IFMIB_IFDATA failed for ") + interface_name + ": " + strerror(errno);
+  size_t len = 0;
+  if (sysctl(mib.data(), static_cast<u_int>(mib.size()), nullptr, &len, nullptr, 0) < 0 || len == 0) {
+    error = std::string("sysctl NET_RT_IFLIST2 size query failed for ") + interface_name + ": " + strerror(errno);
     return false;
   }
 
-  out.rx_packets = ifmd.ifmd_data.ifi_ipackets;
-  out.rx_errors = ifmd.ifmd_data.ifi_ierrors;
-  out.rx_bytes = ifmd.ifmd_data.ifi_ibytes;
-  out.tx_packets = ifmd.ifmd_data.ifi_opackets;
-  out.tx_errors = ifmd.ifmd_data.ifi_oerrors;
-  out.tx_bytes = ifmd.ifmd_data.ifi_obytes;
-  return true;
+  std::vector<uint8_t> buf(len);
+  if (sysctl(mib.data(), static_cast<u_int>(mib.size()), buf.data(), &len, nullptr, 0) < 0) {
+    error = std::string("sysctl NET_RT_IFLIST2 failed for ") + interface_name + ": " + strerror(errno);
+    return false;
+  }
+
+  size_t offset = 0;
+  while (offset + sizeof(struct if_msghdr) <= len) {
+    struct if_msghdr hdr {};
+    memcpy(&hdr, buf.data() + offset, sizeof(hdr));
+    if (hdr.ifm_msglen == 0 || offset + hdr.ifm_msglen > len) {
+      break;
+    }
+    if (hdr.ifm_type == RTM_IFINFO2 && hdr.ifm_msglen >= sizeof(struct if_msghdr2)) {
+      struct if_msghdr2 ifm2 {};
+      memcpy(&ifm2, buf.data() + offset, sizeof(ifm2));
+      if (ifm2.ifm_index == ifindex) {
+        out.rx_packets = ifm2.ifm_data.ifi_ipackets;
+        out.rx_errors = ifm2.ifm_data.ifi_ierrors;
+        out.rx_bytes = ifm2.ifm_data.ifi_ibytes;
+        out.tx_packets = ifm2.ifm_data.ifi_opackets;
+        out.tx_errors = ifm2.ifm_data.ifi_oerrors;
+        out.tx_bytes = ifm2.ifm_data.ifi_obytes;
+        return true;
+      }
+    }
+    offset += hdr.ifm_msglen;
+  }
+
+  error = "RTM_IFINFO2 entry not found for " + interface_name;
+  return false;
 }
 
 #endif
