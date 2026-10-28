@@ -43,7 +43,7 @@ bool ReadStatsForLuid(const NET_LUID& luid, TunInterfaceStats& out, std::string&
 
   // Count all packets (unicast + non-unicast) and real packet errors
   // (`InErrors` / `OutErrors`, rather than non-error discards) to match the
-  // macOS (`ifi_*`) and Linux (`/sys/class/net/*/statistics/*`) backends.
+  // macOS (`ifi_*` via `NET_RT_IFLIST2`) and Linux (`IFLA_STATS64` via netlink `RTM_GETLINK`) backends.
   out.rx_bytes = row.InOctets;
   out.rx_packets = row.InUcastPkts + row.InNUcastPkts;
   out.rx_errors = row.InErrors;

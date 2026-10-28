@@ -207,15 +207,31 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
   std::array<int, 6> mib = {
       CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, static_cast<int>(ifindex),
   };
+  std::vector<uint8_t> buf;
   size_t len = 0;
-  if (sysctl(mib.data(), static_cast<u_int>(mib.size()), nullptr, &len, nullptr, 0) < 0 || len == 0) {
-    error = std::string("sysctl NET_RT_IFLIST2 size query failed for ") + interface_name + ": " + strerror(errno);
-    return false;
-  }
+  constexpr int kMaxAttempts = 5;
+  bool fetched = false;
+  for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+    len = 0;
+    if (sysctl(mib.data(), static_cast<u_int>(mib.size()), nullptr, &len, nullptr, 0) < 0 || len == 0) {
+      error = std::string("sysctl NET_RT_IFLIST2 size query failed for ") + interface_name + ": " + strerror(errno);
+      return false;
+    }
 
-  std::vector<uint8_t> buf(len);
-  if (sysctl(mib.data(), static_cast<u_int>(mib.size()), buf.data(), &len, nullptr, 0) < 0) {
-    error = std::string("sysctl NET_RT_IFLIST2 failed for ") + interface_name + ": " + strerror(errno);
+    // Pad buffer size in case NET_RT_IFLIST2 output grows between the size query and data fetch.
+    len += len / 4 + 4096;
+    buf.resize(len);
+    if (sysctl(mib.data(), static_cast<u_int>(mib.size()), buf.data(), &len, nullptr, 0) == 0) {
+      fetched = true;
+      break;
+    }
+    if (errno != ENOMEM) {
+      error = std::string("sysctl NET_RT_IFLIST2 failed for ") + interface_name + ": " + strerror(errno);
+      return false;
+    }
+  }
+  if (!fetched) {
+    error = std::string("sysctl NET_RT_IFLIST2 failed for ") + interface_name + ": " + strerror(ENOMEM);
     return false;
   }
 

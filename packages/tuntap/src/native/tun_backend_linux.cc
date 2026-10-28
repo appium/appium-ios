@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <linux/if_link.h>
@@ -16,9 +17,11 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
+#include <algorithm>
 #include <array>
 #include <shared_mutex>
 #include <utility>
+#include <vector>
 
 #include "file_descriptor.h"
 #include "posix_tun_backend.h"
@@ -154,6 +157,14 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     return false;
   }
 
+  struct timeval rcv_timeout {};
+  rcv_timeout.tv_sec = 2;
+  rcv_timeout.tv_usec = 0;
+  if (setsockopt(nl_fd.get(), SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout)) < 0) {
+    error = std::string("Failed to set SO_RCVTIMEO on netlink socket: ") + strerror(errno);
+    return false;
+  }
+
   NetlinkGetLinkRequest req{};
   req.nlh.nlmsg_len = static_cast<uint32_t>(sizeof(req));
   req.nlh.nlmsg_type = RTM_GETLINK;
@@ -162,16 +173,37 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
   req.ifi.ifi_family = AF_UNSPEC;
   req.ifi.ifi_index = static_cast<int>(ifindex);
 
-  if (send(nl_fd.get(), &req, sizeof(req), 0) < 0) {
+  ssize_t sent = 0;
+  do {
+    sent = send(nl_fd.get(), &req, sizeof(req), 0);
+  } while (sent < 0 && errno == EINTR);
+  if (sent < 0) {
     error = std::string("Failed to send RTM_GETLINK request: ") + strerror(errno);
     return false;
   }
 
-  std::array<uint8_t, 8192> buf{};
-  const ssize_t recv_len = recv(nl_fd.get(), buf.data(), buf.size(), 0);
+  ssize_t peek_len = 0;
+  do {
+    peek_len = recv(nl_fd.get(), nullptr, 0, MSG_PEEK | MSG_TRUNC);
+  } while (peek_len < 0 && errno == EINTR);
+  if (peek_len <= 0) {
+    error =
+        std::string("Failed to receive RTM_GETLINK response: ") + (peek_len < 0 ? strerror(errno) : "empty response");
+    return false;
+  }
+
+  std::vector<uint8_t> buf(std::max<size_t>(static_cast<size_t>(peek_len), 8192U));
+  ssize_t recv_len = 0;
+  do {
+    recv_len = recv(nl_fd.get(), buf.data(), buf.size(), MSG_TRUNC);
+  } while (recv_len < 0 && errno == EINTR);
   if (recv_len <= 0) {
     error =
         std::string("Failed to receive RTM_GETLINK response: ") + (recv_len < 0 ? strerror(errno) : "empty response");
+    return false;
+  }
+  if (static_cast<size_t>(recv_len) > buf.size()) {
+    error = "RTM_GETLINK response truncated for " + interface_name;
     return false;
   }
 
