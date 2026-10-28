@@ -85,6 +85,13 @@ describe('TunTap Unit Tests', {timeout: 10000}, () => {
     tun = new TunTap();
     tun.open();
     await tun.configure('fd00::2', 1500);
+    const stats = await tun.getStats();
+    assert.strictEqual(typeof stats.rxBytes, 'number');
+    assert.strictEqual(typeof stats.txBytes, 'number');
+    assert.strictEqual(typeof stats.rxPackets, 'number');
+    assert.strictEqual(typeof stats.txPackets, 'number');
+    assert.strictEqual(typeof stats.rxErrors, 'number');
+    assert.strictEqual(typeof stats.txErrors, 'number');
     await tun.addRoute('fd01::/64');
     await tun.removeRoute('fd01::/64');
     tun.close();

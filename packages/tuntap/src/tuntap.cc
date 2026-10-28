@@ -56,6 +56,7 @@ class TunDevice : public Napi::ObjectWrap<TunDevice> {
   Napi::Value GetFd(const Napi::CallbackInfo& info);
   Napi::Value IsOpen(const Napi::CallbackInfo& info);
   Napi::Value GetForwardingHandle(const Napi::CallbackInfo& info);
+  Napi::Value GetStats(const Napi::CallbackInfo& info);
 
   // Both require device_mutex_ to be held by the caller.
   void CloseInternal();
@@ -84,6 +85,7 @@ Napi::Object TunDevice::Init(Napi::Env env, Napi::Object exports) {
                                         InstanceMethod("getFd", &TunDevice::GetFd),
                                         InstanceMethod("isOpen", &TunDevice::IsOpen),
                                         InstanceMethod("getForwardingHandle", &TunDevice::GetForwardingHandle),
+                                        InstanceMethod("getStats", &TunDevice::GetStats),
                                     });
 
   exports.Set("TunDevice", func);
@@ -97,6 +99,9 @@ TunDevice::TunDevice(const Napi::CallbackInfo& info)
 
   if (info.Length() > 0 && info[0].IsString()) {
     requested_name_ = info[0].As<Napi::String>().Utf8Value();
+    if (backend_ && !requested_name_.empty()) {
+      backend_->SetInterfaceName(requested_name_);
+    }
   }
 }
 
@@ -233,6 +238,36 @@ Napi::Value TunDevice::GetForwardingHandle(const Napi::CallbackInfo& info) {
   auto* shared = new std::shared_ptr<TunPlatformBackend>(backend_);
   return Napi::External<std::shared_ptr<TunPlatformBackend>>::New(
       env, shared, [](Napi::Env, std::shared_ptr<TunPlatformBackend>* data) { delete data; });
+}
+
+Napi::Value TunDevice::GetStats(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  std::scoped_lock lock(device_mutex_);
+
+  if (!backend_) {
+    Napi::Error::New(env, "Unsupported platform: no native TUN backend available").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  if (!IsOpenLocked() && requested_name_.empty()) {
+    Napi::Error::New(env, "Device not open").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  TunInterfaceStats stats{};
+  std::string error;
+  if (!backend_->GetStats(stats, error)) {
+    Napi::Error::New(env, error).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("rxBytes", Napi::Number::New(env, static_cast<double>(stats.rx_bytes)));
+  result.Set("txBytes", Napi::Number::New(env, static_cast<double>(stats.tx_bytes)));
+  result.Set("rxPackets", Napi::Number::New(env, static_cast<double>(stats.rx_packets)));
+  result.Set("txPackets", Napi::Number::New(env, static_cast<double>(stats.tx_packets)));
+  result.Set("rxErrors", Napi::Number::New(env, static_cast<double>(stats.rx_errors)));
+  result.Set("txErrors", Napi::Number::New(env, static_cast<double>(stats.tx_errors)));
+  return result;
 }
 
 void TunDevice::CloseInternal() {

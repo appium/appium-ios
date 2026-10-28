@@ -32,6 +32,15 @@ struct TunError {
   int sys_errno = 0;
 };
 
+struct TunInterfaceStats {
+  uint64_t rx_bytes = 0;
+  uint64_t tx_bytes = 0;
+  uint64_t rx_packets = 0;
+  uint64_t tx_packets = 0;
+  uint64_t rx_errors = 0;
+  uint64_t tx_errors = 0;
+};
+
 /**
  * Backend abstraction that hides OS-specific TUN device handling from the
  * N-API surface. Each backend owns its native handle (POSIX file descriptor
@@ -47,6 +56,9 @@ class TunPlatformBackend {
 
   virtual ReadPacketStatus ReadPacket(size_t max_payload_size, std::vector<uint8_t>& out, std::string& error) = 0;
   virtual ssize_t WritePacket(const uint8_t* data, size_t length, std::string& error) = 0;
+
+  virtual bool GetStats(TunInterfaceStats& out, std::string& error) = 0;
+  virtual void SetInterfaceName(const std::string& /*name*/) {}
 
   // Block until a packet can be read/written or `running` becomes false.
   // Implementations may use short timed waits when the platform does not expose

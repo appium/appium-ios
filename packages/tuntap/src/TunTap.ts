@@ -23,6 +23,7 @@ interface NativeTunDevice {
   /** Absent on native binaries built before this method was added. */
   isOpen?(): boolean;
   getForwardingHandle(): unknown;
+  getStats(): TunTapInterfaceStats;
 }
 
 interface NativeTuntapModule {
@@ -290,16 +291,16 @@ export class TunTap {
   }
 
   /**
-   * Fetch RX/TX counters for this interface from the OS (e.g. `netstat` / `ip -s`).
+   * Fetch RX/TX counters for this interface from the OS.
    *
    * @returns byte and packet counts plus error counters
-   * @throws {TunTapError} if not ready or stats cannot be parsed
+   * @throws {TunTapError} if not ready or stats cannot be read
    */
   async getStats(): Promise<TunTapInterfaceStats> {
     this.assertReady();
 
     try {
-      return await this.platformBackend.getStats(this.name);
+      return this.device.getStats();
     } catch (err: unknown) {
       if (err instanceof TunTapError) {
         throw err;

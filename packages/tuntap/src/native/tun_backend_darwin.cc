@@ -9,8 +9,11 @@
 #include <sys/kern_control.h>
 #include <sys/socket.h>
 #include <sys/sys_domain.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
+#include <net/if.h>
+#include <net/if_mib.h>
 #include <net/if_utun.h>
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
@@ -150,6 +153,41 @@ class DarwinTunBackend : public PosixTunBackend {
 
     return bytes_written > static_cast<ssize_t>(kUtunHeaderSize) ? bytes_written - static_cast<ssize_t>(kUtunHeaderSize)
                                                                  : 0;
+  }
+
+  bool GetStats(TunInterfaceStats& out, std::string& error) override {
+    std::string ifname;
+    {
+      std::shared_lock lock(fd_mutex_);
+      ifname = interface_name_;
+    }
+    if (ifname.empty()) {
+      error = "Device not open";
+      return false;
+    }
+
+    unsigned int ifindex = if_nametoindex(ifname.c_str());
+    if (ifindex == 0) {
+      error = "Interface not found: " + ifname;
+      return false;
+    }
+
+    std::array<int, 6> mib = {CTL_NET,       PF_LINK, NETLINK_GENERIC, IFMIB_IFDATA, static_cast<int>(ifindex),
+                              IFDATA_GENERAL};
+    struct ifmibdata ifmd {};
+    size_t len = sizeof(ifmd);
+    if (sysctl(mib.data(), static_cast<u_int>(mib.size()), &ifmd, &len, nullptr, 0) < 0) {
+      error = std::string("sysctl IFMIB_IFDATA failed for ") + ifname + ": " + strerror(errno);
+      return false;
+    }
+
+    out.rx_packets = ifmd.ifmd_data.ifi_ipackets;
+    out.rx_errors = ifmd.ifmd_data.ifi_ierrors;
+    out.rx_bytes = ifmd.ifmd_data.ifi_ibytes;
+    out.tx_packets = ifmd.ifmd_data.ifi_opackets;
+    out.tx_errors = ifmd.ifmd_data.ifi_oerrors;
+    out.tx_bytes = ifmd.ifmd_data.ifi_obytes;
+    return true;
   }
 
  private:

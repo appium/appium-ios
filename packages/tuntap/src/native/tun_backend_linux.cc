@@ -12,6 +12,8 @@
 #include <linux/if.h>
 #include <linux/if_tun.h>
 
+#include <array>
+#include <charconv>
 #include <shared_mutex>
 #include <utility>
 
@@ -21,6 +23,29 @@
 namespace {
 
 constexpr const char* kTunDevicePath = "/dev/net/tun";
+
+bool ReadSysfsCounter(const std::string& ifname, const char* stat_name, uint64_t& value, std::string& error) {
+  std::string path = "/sys/class/net/" + ifname + "/statistics/" + stat_name;
+  FileDescriptor fd(open(path.c_str(), O_RDONLY | O_CLOEXEC));
+  if (!fd.is_valid()) {
+    error = "Failed to open " + path + ": " + strerror(errno);
+    return false;
+  }
+
+  std::array<char, 64> buf{};
+  ssize_t bytes_read = read(fd.get(), buf.data(), buf.size() - 1);
+  if (bytes_read <= 0) {
+    error = "Failed to read " + path + ": " + (bytes_read < 0 ? strerror(errno) : "empty file");
+    return false;
+  }
+
+  auto [ptr, ec] = std::from_chars(buf.data(), buf.data() + bytes_read, value);
+  if (ec != std::errc{} || ptr == buf.data()) {
+    error = "Failed to parse counter in " + path;
+    return false;
+  }
+  return true;
+}
 
 class LinuxTunBackend : public PosixTunBackend {
  public:
@@ -110,6 +135,25 @@ class LinuxTunBackend : public PosixTunBackend {
       return -1;
     }
     return bytes_written;
+  }
+
+  bool GetStats(TunInterfaceStats& out, std::string& error) override {
+    std::string ifname;
+    {
+      std::shared_lock lock(fd_mutex_);
+      ifname = interface_name_;
+    }
+    if (ifname.empty()) {
+      error = "Device not open";
+      return false;
+    }
+
+    return ReadSysfsCounter(ifname, "rx_packets", out.rx_packets, error) &&
+           ReadSysfsCounter(ifname, "rx_errors", out.rx_errors, error) &&
+           ReadSysfsCounter(ifname, "rx_bytes", out.rx_bytes, error) &&
+           ReadSysfsCounter(ifname, "tx_packets", out.tx_packets, error) &&
+           ReadSysfsCounter(ifname, "tx_errors", out.tx_errors, error) &&
+           ReadSysfsCounter(ifname, "tx_bytes", out.tx_bytes, error);
   }
 };
 

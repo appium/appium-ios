@@ -49,6 +49,11 @@ class PosixTunBackend : public TunPlatformBackend {
     return fd_.get();
   }
 
+  void SetInterfaceName(const std::string& name) override {
+    std::unique_lock lock(fd_mutex_);
+    interface_name_ = name;
+  }
+
   bool WaitReadable(const std::atomic<bool>& running, std::string& error) override {
     return WaitForEvents(POLLIN, running, error);
   }
