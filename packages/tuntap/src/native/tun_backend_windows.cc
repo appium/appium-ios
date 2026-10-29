@@ -312,7 +312,7 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
   NET_LUID luid{};
   DWORD luid_status = ::ConvertInterfaceAliasToLuid(wide_name.c_str(), &luid);
   if (luid_status != NO_ERROR) {
-    error = "ConvertInterfaceAliasToLuid failed for " + interface_name + ": " + FormatLastError(luid_status);
+    error = "Interface not found: " + interface_name + " (" + FormatLastError(luid_status) + ")";
     return false;
   }
 

@@ -219,7 +219,7 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
     }
 
     // Pad buffer size in case NET_RT_IFLIST2 output grows between the size query and data fetch.
-    len += len / 4 + 4096;
+    len += (len / 4) + 4096;
     buf.resize(len);
     if (sysctl(mib.data(), static_cast<u_int>(mib.size()), buf.data(), &len, nullptr, 0) == 0) {
       fetched = true;
