@@ -1,3 +1,4 @@
+import {access} from 'node:fs/promises';
 import {type Server, type Socket, createConnection, createServer} from 'node:net';
 import {release} from 'node:os';
 
@@ -603,28 +604,20 @@ export async function getDefaultSocket(opts: Partial<SocketOptions> = {}): Promi
     timeout: 5000,
   };
 
-  const hasOpts = Object.values(opts).some((v) => v != null);
-  const envOpts = hasOpts ? {} : getSocketOptionsFromEnv();
+  const hasSocketOpts = Boolean(opts.socketPath || opts.socketPort || opts.socketHost);
+  const envOpts = hasSocketOpts ? {} : getSocketOptionsFromEnv();
 
   const socketPath = opts.socketPath ?? envOpts.socketPath ?? defaults.socketPath;
   const socketPort = opts.socketPort ?? envOpts.socketPort ?? defaults.socketPort;
   const socketHost = opts.socketHost ?? envOpts.socketHost ?? defaults.socketHost;
   const timeout = opts.timeout ?? defaults.timeout;
 
-  const hasExplicitPath = !!(opts.socketPath || envOpts.socketPath);
-  const hasExplicitHostPort = !!(
-    opts.socketHost ||
-    opts.socketPort ||
-    envOpts.socketHost ||
-    envOpts.socketPort
-  );
-  const isWinOrWsl =
-    process.platform === 'win32' || (process.platform === 'linux' && /microsoft/i.test(release()));
-  const preferPath = hasExplicitPath || !(hasExplicitHostPort || isWinOrWsl);
+  const hasExplicitPath = Boolean(opts.socketPath || envOpts.socketPath);
+  const hasExplicitHostPort = Boolean(opts.socketHost || opts.socketPort || envOpts.socketHost || envOpts.socketPort);
+  const isWinOrWsl = process.platform === 'win32' || (process.platform === 'linux' && /microsoft/i.test(release()));
+  const preferPath = hasExplicitPath || (!hasExplicitHostPort && (!isWinOrWsl || (await fileExists(socketPath))));
 
-  const socket = preferPath
-    ? createConnection(socketPath)
-    : createConnection({port: socketPort, host: socketHost});
+  const socket = preferPath ? createConnection(socketPath) : createConnection({port: socketPort, host: socketHost});
 
   return await new Promise<Socket>((resolve, reject) => {
     const cleanup = () => {
@@ -727,5 +720,19 @@ export async function connectAndRelay(deviceID: string | number, port: number, r
         log.error(`Error stopping relay: ${err}`);
       }
     }
+  }
+}
+
+/**
+ * Helper function to check if a file exists
+ * @param path - Path to check
+ * @returns Boolean indicating if the file exists
+ */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
 }
