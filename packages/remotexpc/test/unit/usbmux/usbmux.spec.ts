@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
-import {type AddressInfo, type Server, type Socket, createConnection, createServer} from 'node:net';
-import {resolve} from 'node:path';
-import {afterEach, beforeEach, describe, it} from 'node:test';
+import {EventEmitter} from 'node:events';
+import {type AddressInfo, type Server, Socket, createConnection, createServer} from 'node:net';
+import {tmpdir} from 'node:os';
+import {join, resolve} from 'node:path';
+import {type TestContext, afterEach, beforeEach, describe, it} from 'node:test';
 import {fileURLToPath} from 'node:url';
 
 import {fs, node} from '@appium/support';
 
-import {type Device, Usbmux} from '../../../src/lib/usbmux/index.js';
+import {type Device, Usbmux, getDefaultSocket} from '../../../src/lib/usbmux/index.js';
 import {UsbmuxDecoder} from '../../../src/lib/usbmux/usbmux-decoder.js';
 import {prioritizeUsbOverNetworkForDuplicateUdids} from '../../../src/lib/usbmux/utils.js';
+import {mockImport} from '../../helpers/mock-module.js';
 import {UDID, fixtures, getServerWithFixtures} from '../fixtures/index.js';
 
 const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
@@ -42,14 +45,28 @@ describe('usbmux', function () {
   let usbmux: Usbmux | null;
   let server: Server | null;
   let socket: Socket | null;
+  let savedUsbmuxdSocketAddress: string | undefined;
+  const originalPlatform = process.platform;
 
   beforeEach(function () {
+    savedUsbmuxdSocketAddress = process.env.USBMUXD_SOCKET_ADDRESS;
+    delete process.env.USBMUXD_SOCKET_ADDRESS;
     usbmux = null;
     server = null;
     socket = null;
   });
 
   afterEach(async function () {
+    if (savedUsbmuxdSocketAddress === undefined) {
+      delete process.env.USBMUXD_SOCKET_ADDRESS;
+    } else {
+      process.env.USBMUXD_SOCKET_ADDRESS = savedUsbmuxdSocketAddress;
+    }
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+      configurable: true,
+    });
+
     if (usbmux) {
       usbmux.close();
       usbmux = null;
@@ -165,6 +182,139 @@ describe('usbmux', function () {
 
     assert.deepStrictEqual(received, trailingGreeting);
     connectedSocket.destroy();
+  });
+
+  it('should connect via TCP when socketHost and socketPort are provided to getDefaultSocket', async function () {
+    server = createServer();
+    await new Promise<void>((resolveListen) => server!.listen(0, '127.0.0.1', resolveListen));
+    const addr = server.address() as AddressInfo;
+
+    socket = await getDefaultSocket({
+      socketHost: '127.0.0.1',
+      socketPort: addr.port,
+    });
+    assert.strictEqual(socket.destroyed, false);
+    socket.destroy();
+  });
+
+  it('should reject with accessible error when socketPath does not exist and destroy the socket', async function (t: TestContext) {
+    const destroySpy = t.mock.method(Socket.prototype, 'destroy');
+    await assert.rejects(
+      getDefaultSocket({socketPath: '/nonexistent/usbmuxd.sock'}),
+      /The usbmuxd socket at '\/nonexistent\/usbmuxd\.sock' does not exist or is not accessible/,
+    );
+    assert.ok(destroySpy.mock.callCount() >= 1);
+  });
+
+  it('should destroy the socket when connection times out', async function (t: TestContext) {
+    class FakePendingSocket extends EventEmitter {
+      destroyed = false;
+      destroy() {
+        this.destroyed = true;
+        return this;
+      }
+    }
+    let createdSocket: FakePendingSocket | null = null;
+    const mod = await mockImport<{getDefaultSocket: typeof getDefaultSocket}>(
+      t,
+      '../../../src/lib/usbmux/index.js',
+      import.meta.url,
+      {
+        'node:net': {
+          createConnection: () => {
+            createdSocket = new FakePendingSocket();
+            return createdSocket;
+          },
+          createServer,
+        },
+      },
+    );
+
+    await assert.rejects(
+      mod.getDefaultSocket({socketPath: '/tmp/pending-usbmuxd.sock', timeout: 20}),
+      /Connection timed out after 20ms/,
+    );
+    assert.ok(createdSocket);
+    assert.strictEqual((createdSocket as FakePendingSocket).destroyed, true);
+  });
+
+  it('should parse USBMUXD_SOCKET_ADDRESS host:port and honor it when only timeout is passed in opts', async function () {
+    server = createServer();
+    await new Promise<void>((resolveListen) => server!.listen(0, '127.0.0.1', resolveListen));
+    const addr = server.address() as AddressInfo;
+
+    process.env.USBMUXD_SOCKET_ADDRESS = `127.0.0.1:${addr.port}`;
+    socket = await getDefaultSocket({timeout: 1000});
+    assert.strictEqual(socket.destroyed, false);
+    socket.destroy();
+  });
+
+  it('should parse USBMUXD_SOCKET_ADDRESS with unix: prefix', async function () {
+    const sockPath = join(tmpdir(), `usbmux-test-${process.pid}-${Date.now()}.sock`);
+    server = createServer();
+    await new Promise<void>((resolveListen) => server!.listen(sockPath, resolveListen));
+
+    process.env.USBMUXD_SOCKET_ADDRESS = `unix:${sockPath}`;
+    socket = await getDefaultSocket();
+    assert.strictEqual(socket.destroyed, false);
+    socket.destroy();
+  });
+
+  it('should prefer unix socket on Windows/WSL when the default socket path exists and fall back to TCP when it does not', async function (t: TestContext) {
+    const connectTargets: Array<unknown> = [];
+    let socketExists = true;
+    let kernelRelease = '5.15.153.1-microsoft-standard-WSL2';
+
+    const mod = await mockImport<{getDefaultSocket: typeof getDefaultSocket}>(
+      t,
+      '../../../src/lib/usbmux/index.js',
+      import.meta.url,
+      {
+        'node:os': {
+          release: () => kernelRelease,
+        },
+        'node:fs/promises': {
+          access: async () => {
+            if (!socketExists) {
+              throw Object.assign(new Error('ENOENT'), {code: 'ENOENT'});
+            }
+          },
+        },
+        'node:net': {
+          createConnection: (target: unknown) => {
+            connectTargets.push(target);
+            const fake = Object.assign(new EventEmitter(), {
+              destroyed: false,
+              destroy() {
+                this.destroyed = true;
+              },
+            });
+            queueMicrotask(() => fake.emit('connect'));
+            return fake;
+          },
+          createServer,
+        },
+      },
+    );
+
+    Object.defineProperty(process, 'platform', {
+      value: 'linux',
+      configurable: true,
+    });
+    await mod.getDefaultSocket();
+    assert.strictEqual(connectTargets[0], '/var/run/usbmuxd');
+
+    socketExists = false;
+    await mod.getDefaultSocket();
+    assert.deepStrictEqual(connectTargets[1], {host: '127.0.0.1', port: 27015});
+
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    kernelRelease = '10.0.22631';
+    await mod.getDefaultSocket();
+    assert.deepStrictEqual(connectTargets[2], {host: '127.0.0.1', port: 27015});
   });
 
   it('should order duplicate UDIDs with USB before Network', function () {
