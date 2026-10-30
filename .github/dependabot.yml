@@ -13,6 +13,10 @@ updates:
       - "dependencies"
     versioning-strategy: increase-if-necessary
     groups:
+      # base-driver pins @appium/support exactly, so they must be updated together
+      appium:
+        patterns:
+          - "@appium/*"
       angular:
         patterns:
           - "@angular/*"
