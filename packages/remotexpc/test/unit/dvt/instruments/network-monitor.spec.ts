@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {beforeEach, describe, it} from 'node:test';
+import {setImmediate} from 'node:timers/promises';
 
 import type {NetworkAddress} from '../../../../src/index.js';
 import {NetworkMonitor} from '../../../../src/services/ios/dvt/instruments/network-monitor.js';
@@ -340,6 +341,66 @@ describe('NetworkMonitor', function () {
 
         assert.strictEqual(result.address, 'abcd:1234:5678:9abc:def0:1122:3344:5566');
       });
+    });
+  });
+
+  describe('start', function () {
+    /** DVT stub whose channel records calls and whose receivePlist blocks until aborted */
+    function fakeDvt(calls: string[], failStart = false): any {
+      const channel = {
+        call: (selector: string) => async () => {
+          calls.push(selector);
+          if (failStart && selector === 'startMonitoring') {
+            throw new Error('startMonitoring failed');
+          }
+        },
+        receivePlist: (signal: AbortSignal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+      };
+      return {makeChannel: async () => channel};
+    }
+
+    it('should send startMonitoring once when started before iterating events()', async function () {
+      const calls: string[] = [];
+      const monitor = new NetworkMonitor(fakeDvt(calls));
+
+      await monitor.start();
+      const iterator = monitor.events();
+      const pending = iterator.next();
+      await setImmediate();
+      await monitor.stop();
+      await pending;
+
+      assert.deepStrictEqual(
+        calls.filter((c) => c === 'startMonitoring'),
+        ['startMonitoring'],
+      );
+    });
+
+    it('should send startMonitoring again after stop()', async function () {
+      const calls: string[] = [];
+      const monitor = new NetworkMonitor(fakeDvt(calls));
+
+      await monitor.start();
+      await monitor.stop();
+      await monitor.start();
+
+      assert.deepStrictEqual(
+        calls.filter((c) => c === 'startMonitoring'),
+        ['startMonitoring', 'startMonitoring'],
+      );
+    });
+
+    it('should reject when startMonitoring fails and allow a retry', async function () {
+      const calls: string[] = [];
+      const monitor = new NetworkMonitor(fakeDvt(calls, true));
+
+      await assert.rejects(monitor.start(), /startMonitoring failed/);
+      await assert.rejects(monitor.start(), /startMonitoring failed/);
+
+      assert.deepStrictEqual(calls.filter((c) => c === 'startMonitoring').length, 2);
     });
   });
 });
