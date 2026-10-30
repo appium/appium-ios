@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.3...appium-ios-remotexpc@5.28.4) (2026-10-30)
+
+### Miscellaneous Chores
+
+* **deps:** Bump axios from 1.18.1 to 1.21.0 ([#130](https://github.com/appium/appium-ios/issues/130)) ([566da80](https://github.com/appium/appium-ios/commit/566da80f6b43711cdc1bc6d4ca2b85937e9b30e4))
+
+
 ## [5.28.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.2...appium-ios-remotexpc@5.28.3) (2026-10-27)
 
 ### Bug Fixes
