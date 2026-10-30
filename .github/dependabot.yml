@@ -12,13 +12,12 @@ updates:
     labels:
       - "dependencies"
     versioning-strategy: increase-if-necessary
-    # Caret ranges already cover minor/patch; only majors need a manifest bump
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
     groups:
+      # base-driver pins @appium/support exactly, so they must be updated together
+      appium:
+        patterns:
+          - "@appium/*"
+          - "appium*"
       angular:
         patterns:
           - "@angular/*"
