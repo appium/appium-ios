@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@appium/tsconfig": "^1.2.0",
-    "@appium/types": "^1.0.0-rc.1",
+    "@appium/types": "^1.7.2",
     "@types/node": "^26.6.5"
   },
   "engines": {
