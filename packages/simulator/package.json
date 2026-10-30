@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@appium/coresim": "^1.14.0",
-    "@appium/support": "^7.2.7",
+    "@appium/support": "^7.2.9",
     "@xmldom/xmldom": "^0.x",
     "appium-xcode": "^7.2.4",
     "asyncbox": "^6.5.0",

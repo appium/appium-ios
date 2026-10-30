@@ -63,7 +63,7 @@
   "dependencies": {
     "@appium/base-driver": "^10.8.0",
     "@appium/strongbox": "^2.0.0",
-    "@appium/support": "^7.2.6",
+    "@appium/support": "^7.2.9",
     "asyncbox": "^6.5.0",
     "axios": "^1.21.0",
     "teen_process": "^4.2.0"
