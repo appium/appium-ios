@@ -884,6 +884,12 @@ export type NetworkEvent = InterfaceDetectionEvent | ConnectionDetectionEvent | 
  */
 export interface NetworkMonitorService {
   /**
+   * Begins monitoring. A no-op if already started, so it can be called before
+   * {@link events} to surface setup errors.
+   */
+  start(): Promise<void>;
+
+  /**
    * Stops the current network monitoring stream.
    * If no stream is active this call is a no-op.
    */
