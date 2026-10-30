@@ -50,12 +50,17 @@ export class NetworkMonitor extends BaseInstrument {
     }
     this.stopRequested = false;
     await this.initialize();
+    // stop() ran while the channel was opening
+    if (this.stopRequested) {
+      return;
+    }
     const channel = this.channel;
     if (!channel) {
       throw new Error('Network monitor channel is not initialized');
     }
     await channel.call('startMonitoring')(undefined, false);
-    this.started = true;
+    // Don't resurrect `started` if stop() ran meanwhile
+    this.started = !this.stopRequested;
   }
 
   async stop(): Promise<void> {

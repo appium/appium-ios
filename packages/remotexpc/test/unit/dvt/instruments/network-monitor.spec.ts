@@ -402,5 +402,52 @@ describe('NetworkMonitor', function () {
 
       assert.deepStrictEqual(calls.filter((c) => c === 'startMonitoring').length, 2);
     });
+
+    it('should not mark itself started when stop() runs during startMonitoring', async function () {
+      const calls: string[] = [];
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const dvt = fakeDvt(calls);
+      const channel = await dvt.makeChannel();
+      const call = channel.call;
+      channel.call = (selector: string) => async () => {
+        if (selector === 'startMonitoring' && calls.filter((c) => c === 'startMonitoring').length === 0) {
+          calls.push(selector);
+          await released;
+          return;
+        }
+        return call(selector)();
+      };
+      const monitor = new NetworkMonitor(dvt);
+
+      const starting = monitor.start();
+      await setImmediate();
+      await monitor.stop();
+      release();
+      await starting;
+      await monitor.start();
+
+      assert.deepStrictEqual(calls, ['startMonitoring', 'stopMonitoring', 'startMonitoring']);
+    });
+
+    it('should resolve without starting when stop() runs while the channel is opening', async function () {
+      const calls: string[] = [];
+      let open!: () => void;
+      const opened = new Promise<void>((resolve) => (open = resolve));
+      const dvt = fakeDvt(calls);
+      const makeChannel = dvt.makeChannel;
+      dvt.makeChannel = async () => {
+        await opened;
+        return makeChannel();
+      };
+      const monitor = new NetworkMonitor(dvt);
+
+      const starting = monitor.start();
+      await monitor.stop();
+      open();
+      await starting;
+
+      assert.deepStrictEqual(calls, []);
+    });
   });
 });
