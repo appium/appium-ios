@@ -55,8 +55,8 @@
     "build:atoms": "node scripts/build-atoms.mjs"
   },
   "dependencies": {
-    "@appium/base-driver": "^10.8.0",
-    "@appium/support": "^7.2.6",
+    "@appium/base-driver": "^10.8.2",
+    "@appium/support": "^7.2.9",
     "appium-ios-remotexpc": "^5.28.4",
     "asyncbox": "^6.5.0",
     "teen_process": "^4.2.0"

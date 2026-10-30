@@ -92,7 +92,7 @@
   },
   "dependencies": {
     "@appium/strongbox": "^2.0.0",
-    "@appium/support": "^7.2.6",
+    "@appium/support": "^7.2.9",
     "@xmldom/xmldom": "^0.x",
     "appium-ios-tuntap": "^2.2.6",
     "asyncbox": "^6.5.0",
