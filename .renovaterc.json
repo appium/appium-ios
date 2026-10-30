@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>appium/appium-workflows//renovate/default"],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Caret ranges: only majors need a manifest bump, minor/patch go through lock file maintenance",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^/",
+      "matchUpdateTypes": ["minor", "patch"],
+      "enabled": false
+    },
+    {
+      "description": "^0.y.z: a minor is out of range (^0.x still allows any minor)",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^0\\.\\d/",
+      "matchUpdateTypes": ["minor"],
+      "enabled": true
+    },
+    {
+      "description": "^0.0.x: a patch is out of range",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^0\\.0\\.\\d/",
+      "matchUpdateTypes": ["patch"],
+      "enabled": true
+    },
+    {
+      "description": "Tilde ranges: only minors need a manifest bump",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^~/",
+      "matchUpdateTypes": ["patch"],
+      "enabled": false
+    },
+    {
+      "description": "Don't bump runner images or tool versions pinned in workflows (JDK, Node, macOS, ...)",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["github-runner", "uses-with"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}
