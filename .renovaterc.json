@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>appium/appium-workflows//renovate/default"],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Caret ranges: only majors need a manifest bump, minor/patch go through lock file maintenance",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^/",
+      "matchUpdateTypes": ["minor", "patch"],
+      "enabled": false
+    },
+    {
+      "description": "^0.x: a minor is out of range",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^0\\./",
+      "matchUpdateTypes": ["minor"],
+      "enabled": true
+    },
+    {
+      "description": "^0.0.x: a patch is out of range",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^\\^0\\.0\\./",
+      "matchUpdateTypes": ["patch"],
+      "enabled": true
+    },
+    {
+      "description": "Tilde ranges: only minors need a manifest bump",
+      "matchManagers": ["npm"],
+      "matchCurrentValue": "/^~/",
+      "matchUpdateTypes": ["patch"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}
