@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.4...appium-ios-remotexpc@5.28.5) (2026-10-30)
+
+### Bug Fixes
+
+* **remotexpc:** make NetworkMonitor.start() idempotent ([#135](https://github.com/appium/appium-ios/issues/135)) ([cda68e3](https://github.com/appium/appium-ios/commit/cda68e391f96c45f8e679528328904fba19a1c5c))
+
+
 ## [5.28.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.3...appium-ios-remotexpc@5.28.4) (2026-10-30)
 
 ### Miscellaneous Chores
