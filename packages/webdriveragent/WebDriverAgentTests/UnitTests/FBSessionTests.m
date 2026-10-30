@@ -12,6 +12,8 @@
 #import "FBSession-Private.h"
 #import "FBExceptions.h"
 #import "FBConfiguration.h"
+#import "FBScreenRecordingContainer.h"
+#import "FBScreenRecordingPromise.h"
 #import "XCUIApplicationDouble.h"
 
 @interface FBSession (SystemApplicationTests)
@@ -70,6 +72,39 @@ static id (^FBSystemApplicationLookup)(void);
 }
 @end
 
+@interface FBTestScreenRecordingPromise : FBScreenRecordingPromise
+@property (nonatomic, strong) NSUUID *testIdentifier;
+@property (nonatomic, copy, nullable) id (^onNativePromiseAccess)(void);
+- (instancetype)initWithUUID:(NSUUID *)uuid
+       onNativePromiseAccess:(nullable id (^)(void))onNativePromiseAccess;
+@end
+
+@implementation FBTestScreenRecordingPromise
+- (instancetype)initWithUUID:(NSUUID *)uuid
+       onNativePromiseAccess:(nullable id (^)(void))onNativePromiseAccess
+{
+  XCTAttachment *attachment = [XCTAttachment attachmentWithString:@"video"];
+  if ((self = [super initWithNativePromise:attachment])) {
+    _testIdentifier = uuid;
+    _onNativePromiseAccess = [onNativePromiseAccess copy];
+  }
+  return self;
+}
+
+- (NSUUID *)identifier
+{
+  return self.testIdentifier;
+}
+
+- (id)nativePromise
+{
+  if (self.onNativePromiseAccess) {
+    return self.onNativePromiseAccess();
+  }
+  return [super nativePromise];
+}
+@end
+
 @interface FBSessionTests : XCTestCase
 @property (nonatomic, strong) FBSession *session;
 @property (nonatomic, strong) XCUIApplication *testedApplication;
@@ -93,6 +128,7 @@ static id (^FBSystemApplicationLookup)(void);
     ((FBAUTLaunchSession *)self.session).launchApplication.duringLaunch = nil;
   }
   FBSystemApplicationLookup = nil;
+  [FBScreenRecordingContainer.sharedInstance reset];
   [self.session kill];
   FBConfiguration.sharedInstance.shouldTerminateApp = self.shouldTerminateAppValue;
   [super tearDown];
@@ -263,6 +299,105 @@ static id (^FBSystemApplicationLookup)(void);
     dispatch_semaphore_signal(releaseLookup);
     [self waitForExpectationsWithTimeout:5. handler:nil];
   }
+}
+
+- (void)testScreenRecordingContainerResetClearsStateWhenCleanupThrows
+{
+  FBScreenRecordingContainer *container = FBScreenRecordingContainer.sharedInstance;
+  FBTestScreenRecordingPromise *promise = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                       onNativePromiseAccess:^id{
+    @throw [NSException exceptionWithName:@"CleanupFailure" reason:@"Simulated attachment failure" userInfo:nil];
+  }];
+  [container storeScreenRecordingPromise:promise fps:24 codec:0];
+
+  XCTAssertNoThrow([container reset]);
+  XCTAssertNil(container.screenRecordingPromise);
+  XCTAssertNil(container.startedAt);
+  XCTAssertEqual(container.fps, 0U);
+  XCTAssertEqual(container.codec, 0LL);
+  XCTAssertNil([container toDictionary]);
+}
+
+- (void)testScreenRecordingContainerStateIsClearedDuringCleanup
+{
+  FBScreenRecordingContainer *container = FBScreenRecordingContainer.sharedInstance;
+  __block FBScreenRecordingPromise *promiseDuringCleanup = nil;
+  __block NSNumber *startedAtDuringCleanup = nil;
+  __block NSDictionary *dictionaryDuringCleanup = nil;
+  XCTAttachment *attachment = [XCTAttachment attachmentWithString:@"video"];
+  FBTestScreenRecordingPromise *promise = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                       onNativePromiseAccess:^id{
+    promiseDuringCleanup = container.screenRecordingPromise;
+    startedAtDuringCleanup = container.startedAt;
+    dictionaryDuringCleanup = [container toDictionary];
+    return attachment;
+  }];
+  [container storeScreenRecordingPromise:promise fps:24 codec:1];
+
+  [container reset];
+  XCTAssertNil(promiseDuringCleanup);
+  XCTAssertNil(startedAtDuringCleanup);
+  XCTAssertNil(dictionaryDuringCleanup);
+}
+
+- (void)testScreenRecordingContainerResetAllowsConcurrentReplacementDuringCleanup
+{
+  FBScreenRecordingContainer *container = FBScreenRecordingContainer.sharedInstance;
+  FBTestScreenRecordingPromise *replacement = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                           onNativePromiseAccess:nil];
+  XCTAttachment *attachment = [XCTAttachment attachmentWithString:@"video"];
+  FBTestScreenRecordingPromise *initial = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                       onNativePromiseAccess:^id{
+    XCTestExpectation *replacementStored = [self expectationWithDescription:@"Replacement stored during cleanup"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      [container storeScreenRecordingPromise:replacement fps:60 codec:1];
+      [replacementStored fulfill];
+    });
+    [self waitForExpectationsWithTimeout:2. handler:nil];
+    return attachment;
+  }];
+  [container storeScreenRecordingPromise:initial fps:24 codec:0];
+
+  XCTAssertTrue([container resetIfPromiseIs:initial]);
+  XCTAssertEqual(container.screenRecordingPromise, replacement);
+  XCTAssertEqual(container.fps, 60U);
+  XCTAssertEqual(container.codec, 1LL);
+  XCTAssertEqualObjects([container toDictionary][@"uuid"], replacement.identifier.UUIDString);
+}
+
+- (void)testScreenRecordingContainerStaleResetPreservesActiveRecording
+{
+  FBScreenRecordingContainer *container = FBScreenRecordingContainer.sharedInstance;
+  __block BOOL didRunCleanup = NO;
+  XCTAttachment *attachment = [XCTAttachment attachmentWithString:@"video"];
+  FBTestScreenRecordingPromise *active = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                      onNativePromiseAccess:^id{
+    didRunCleanup = YES;
+    return attachment;
+  }];
+  FBTestScreenRecordingPromise *stale = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                     onNativePromiseAccess:nil];
+  [container storeScreenRecordingPromise:active fps:30 codec:1];
+
+  XCTAssertFalse([container resetIfPromiseIs:stale]);
+  XCTAssertFalse(didRunCleanup);
+  XCTAssertEqual(container.screenRecordingPromise, active);
+  XCTAssertEqual(container.fps, 30U);
+  XCTAssertEqual(container.codec, 1LL);
+}
+
+- (void)testScreenRecordingContainerResetOnEmptyContainer
+{
+  FBScreenRecordingContainer *container = FBScreenRecordingContainer.sharedInstance;
+  [container reset];
+  FBTestScreenRecordingPromise *stale = [[FBTestScreenRecordingPromise alloc] initWithUUID:NSUUID.UUID
+                                                                     onNativePromiseAccess:nil];
+
+  XCTAssertNil([container toDictionary]);
+  XCTAssertNoThrow([container reset]);
+  XCTAssertFalse([container resetIfPromiseIs:stale]);
+  XCTAssertNil(container.screenRecordingPromise);
+  XCTAssertNil(container.startedAt);
 }
 
 @end
