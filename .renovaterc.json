@@ -13,16 +13,16 @@
       "enabled": false
     },
     {
-      "description": "^0.x: a minor is out of range",
+      "description": "^0.y.z: a minor is out of range (^0.x still allows any minor)",
       "matchManagers": ["npm"],
-      "matchCurrentValue": "/^\\^0\\./",
+      "matchCurrentValue": "/^\\^0\\.\\d/",
       "matchUpdateTypes": ["minor"],
       "enabled": true
     },
     {
       "description": "^0.0.x: a patch is out of range",
       "matchManagers": ["npm"],
-      "matchCurrentValue": "/^\\^0\\.0\\./",
+      "matchCurrentValue": "/^\\^0\\.0\\.\\d/",
       "matchUpdateTypes": ["patch"],
       "enabled": true
     },
