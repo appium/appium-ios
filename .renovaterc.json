@@ -32,6 +32,12 @@
       "matchCurrentValue": "/^~/",
       "matchUpdateTypes": ["patch"],
       "enabled": false
+    },
+    {
+      "description": "Don't bump runner images or tool versions pinned in workflows (JDK, Node, macOS, ...)",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["github-runner", "uses-with"],
+      "enabled": false
     }
   ],
   "vulnerabilityAlerts": {
