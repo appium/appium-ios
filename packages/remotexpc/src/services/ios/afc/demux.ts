@@ -4,7 +4,7 @@ import {AsyncLock} from 'asyncbox';
 
 import {getLogger} from '../../../lib/logger.js';
 import {fatalizeAfcSocket, readAfcHeader, readExact, readUInt64LE, sendAfcPacket} from './codec.js';
-import {AFC_HEADER_SIZE, AFC_OPERATION_TIMEOUT_MS} from './constants.js';
+import {AFC_HEADER_SIZE, AFC_NO_TIMEOUT, AFC_OPERATION_TIMEOUT_MS} from './constants.js';
 import {AfcError, AfcOpcode} from './enums.js';
 import {AfcConnectionError} from './errors.js';
 
@@ -148,10 +148,15 @@ export class AfcPacketDemux {
     this.pending.delete(pktNum);
   }
 
+  /**
+   * Read responses until the socket closes or the demux stops.
+   * The header read has no deadline so an idle connection stays open; each pending
+   * request is bounded by its own timer from {@link _registerPending} instead.
+   */
   private async _readerLoop(socket: net.Socket): Promise<void> {
     try {
       while (!this.stopped && !socket.destroyed) {
-        const header = await readAfcHeader(socket, AFC_OPERATION_TIMEOUT_MS);
+        const header = await readAfcHeader(socket, AFC_NO_TIMEOUT);
         const payloadLen = Number(header.entireLength - BigInt(AFC_HEADER_SIZE));
         const payload =
           payloadLen > 0 ? await readExact(socket, payloadLen, AFC_OPERATION_TIMEOUT_MS) : Buffer.alloc(0);
