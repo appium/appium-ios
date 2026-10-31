@@ -46,15 +46,16 @@ function assertStatsWithinWindow(
   toolName: string,
   interfaceName: string,
 ): void {
-  if (JSON.stringify(before) === JSON.stringify(after)) {
-    assert.deepStrictEqual(stats, before, `mismatch against ${toolName} on ${interfaceName}`);
-    return;
-  }
-
   for (const key of STAT_KEYS) {
+    // On macOS, XNU's sysctl(NET_RT_IFLIST2) quantizes ifi_ibytes/ifi_obytes down
+    // to 1024-byte (1 KiB) increments for processes without Apple's private entitlement,
+    // whereas /usr/sbin/netstat holds that entitlement and reports unquantized byte counts.
+    const isDarwinByteCounter = process.platform === 'darwin' && (key === 'rxBytes' || key === 'txBytes');
+    const minExpected = isDarwinByteCounter ? Math.floor(before[key] / 1024) * 1024 : before[key];
+    const maxExpected = after[key];
     assert.ok(
-      stats[key] >= before[key] && stats[key] <= after[key],
-      `expected ${interfaceName}.${key} (${stats[key]}) to be between ${toolName} before (${before[key]}) and after (${after[key]})`,
+      stats[key] >= minExpected && stats[key] <= maxExpected,
+      `expected ${interfaceName}.${key} (${stats[key]}) to be between ${toolName} before (${minExpected}) and after (${maxExpected})`,
     );
   }
 }
@@ -117,7 +118,7 @@ function readLinuxOsStats(interfaceName: string): TunTapInterfaceStats {
 }
 
 function listLinuxCandidates(): string[] {
-  const all = readdirSync('/sys/class/net');
+  const all = readdirSync('/sys/class/net').filter((name) => !/^appium-tun/i.test(name));
   const quietFirst = [...all.filter((name) => name === 'lo'), ...all.filter((name) => name !== 'lo')];
   return quietFirst.filter((name) => {
     try {
@@ -178,7 +179,7 @@ function listWindowsCandidates(): string[] {
       name: typeof record.Name === 'string' ? record.Name.trim() : '',
       stats: parseWindowsStatsRecord(record),
     }))
-    .filter((entry) => entry.name.length > 0);
+    .filter((entry) => entry.name.length > 0 && !/^appium-tun/i.test(entry.name));
   const withTraffic = entries.filter((entry) => hasTraffic(entry.stats)).map((entry) => entry.name);
   return withTraffic.length > 0 ? withTraffic : entries.map((entry) => entry.name);
 }
@@ -205,16 +206,19 @@ function getPlatformReader(): {
 }
 
 function buildTestIpv6Packet(): Buffer {
-  const packet = Buffer.alloc(40);
+  const payloadLength = 1024;
+  const packet = Buffer.alloc(40 + payloadLength);
   packet[0] = 0x60; // IPv6 version 6
-  packet.writeUInt16BE(0, 4); // payload length = 0
+  packet.writeUInt16BE(payloadLength, 4);
   packet[6] = 59; // Next Header: No Next Header (IPPROTO_NONE)
   packet[7] = 64; // Hop Limit
-  // Source: fd00::1
+  // Source: fd00:127::1
   packet.writeUInt16BE(0xfd00, 8);
+  packet.writeUInt16BE(0x0127, 10);
   packet.writeUInt16BE(1, 22);
-  // Destination: fd00::2
+  // Destination: fd00:127::2
   packet.writeUInt16BE(0xfd00, 24);
+  packet.writeUInt16BE(0x0127, 26);
   packet.writeUInt16BE(2, 38);
   return packet;
 }
@@ -260,18 +264,31 @@ describe('TunTap.getStats', {timeout: 30000}, () => {
       return;
     }
 
-    const interfaceName = candidates[0]!;
-    const before = readOsStats(interfaceName);
-    const stats = getInterfaceStats(interfaceName);
-    const after = readOsStats(interfaceName);
-    assertStatsWithinWindow(stats, before, after, toolName, interfaceName);
+    let lastError: unknown;
+    for (const interfaceName of candidates) {
+      let before: TunTapInterfaceStats;
+      let stats: TunTapInterfaceStats;
+      let after: TunTapInterfaceStats;
+      try {
+        before = readOsStats(interfaceName);
+        stats = getInterfaceStats(interfaceName);
+        after = readOsStats(interfaceName);
+      } catch (err) {
+        lastError = err;
+        continue;
+      }
+      assertStatsWithinWindow(stats, before, after, toolName, interfaceName);
+      return;
+    }
+
+    throw lastError ?? new Error(`Failed to read stats from any candidate via ${toolName}`);
   });
 
   it('matches the OS tool counters on an open TunTap device', {skip: skipWithoutPrivileges}, async () => {
     const {readOsStats, toolName} = getPlatformReader();
     tun = new TunTap();
     tun.open();
-    await tun.configure('fd00::2', 1500);
+    await tun.configure('fd00:127::2', 1500);
     tun.write(buildTestIpv6Packet());
 
     const deadline = Date.now() + 1000;
@@ -283,7 +300,7 @@ describe('TunTap.getStats', {timeout: 30000}, () => {
     const stats = await tun.getStats();
     const after = readOsStats(tun.name);
     assert.ok(
-      stats.rxPackets > 0 && stats.rxBytes > 0,
+      stats.rxPackets > 0 && (process.platform === 'darwin' || stats.rxBytes > 0),
       `expected non-zero rx counters on ${tun.name}, got ${JSON.stringify(stats)}`,
     );
     assertStatsWithinWindow(stats, before, after, toolName, tun.name);
