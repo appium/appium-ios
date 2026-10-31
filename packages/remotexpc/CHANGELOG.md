@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.5...appium-ios-remotexpc@5.28.6) (2026-10-31)
+
+### Bug Fixes
+
+* **remotexpc:** keep idle AFC connections open past 30s ([#137](https://github.com/appium/appium-ios/issues/137)) ([ef536de](https://github.com/appium/appium-ios/commit/ef536de3072e73c467fe47be4ab208f488d7994f))
+
+
 ## [5.28.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.4...appium-ios-remotexpc@5.28.5) (2026-10-30)
 
 ### Bug Fixes
