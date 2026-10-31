@@ -11,21 +11,21 @@ import {PlistUID} from './plist-uid.js';
 
 const log = getLogger('Plist');
 
+const OBJECT_AREA_START = BPLIST_MAGIC_AND_VERSION.length;
+
 /**
- * Represents a temporary object during binary plist parsing.
+ * Represents a container during binary plist parsing, before its references are resolved.
  * A class so it can be told apart from parsed dictionaries, which may have the same keys.
+ * For an array `refs` holds the element references; for a dictionary it holds the key
+ * references followed by the value references.
  */
 class TempObject {
   readonly type: 'array' | 'dict';
-  readonly objLength: number;
-  readonly startOffset: number;
-  readonly value: PlistArray | PlistDictionary;
+  readonly refs: number[];
 
-  constructor(type: 'array' | 'dict', objLength: number, startOffset: number, value: PlistArray | PlistDictionary) {
+  constructor(type: 'array' | 'dict', refs: number[]) {
     this.type = type;
-    this.objLength = objLength;
-    this.startOffset = startOffset;
-    this.value = value;
+    this.refs = refs;
   }
 }
 
@@ -44,6 +44,7 @@ class BinaryPlistParser {
   private _numObjects: number;
   private _topObject: number;
   private _offsetTableOffset: number;
+  private _payloadBudget: number;
   private readonly _objectTable: ObjectTableItem[];
 
   /**
@@ -60,6 +61,7 @@ class BinaryPlistParser {
     this._numObjects = 0;
     this._topObject = 0;
     this._offsetTableOffset = 0;
+    this._payloadBudget = 0;
   }
 
   /**
@@ -85,29 +87,56 @@ class BinaryPlistParser {
   }
 
   /**
-   * Parses the trailer section of the binary plist
-   * @throws Error if the buffer is too small to contain a trailer
+   * Parses and validates the trailer section of the binary plist. Every trailer field comes from
+   * the peer, so each one is checked against the buffer before it is allowed to bound any loop.
+   * @throws Error if the buffer is too small to contain a trailer or the trailer is inconsistent
    */
   private _parseTrailer(): void {
     if (this._buffer.length < BPLIST_TRAILER_SIZE) {
       throw new Error('Binary plist is too small to contain a trailer.');
     }
 
-    const trailer = this._buffer.slice(this._buffer.length - BPLIST_TRAILER_SIZE);
+    const trailer = this._buffer.subarray(this._buffer.length - BPLIST_TRAILER_SIZE);
+    const offsetSize = trailer.readUInt8(6);
+    const objectRefSize = trailer.readUInt8(7);
+    const numObjects = trailer.readBigUInt64BE(8);
+    const topObject = trailer.readBigUInt64BE(16);
+    const offsetTableOffset = trailer.readBigUInt64BE(24);
+    const offsetTableEnd = BigInt(this._buffer.length - BPLIST_TRAILER_SIZE);
 
-    // Extract trailer information
-    this._offsetSize = trailer.readUInt8(6);
-    this._objectRefSize = trailer.readUInt8(7);
-    this._numObjects = Number(trailer.readBigUInt64BE(8));
-    this._topObject = Number(trailer.readBigUInt64BE(16));
-    this._offsetTableOffset = Number(trailer.readBigUInt64BE(24));
+    if (offsetSize < 1 || offsetSize > 8) {
+      throw new Error(`Invalid binary plist trailer: offset size must be between 1 and 8, got ${offsetSize}.`);
+    }
+    if (objectRefSize < 1 || objectRefSize > 8) {
+      throw new Error(
+        `Invalid binary plist trailer: object reference size must be between 1 and 8, got ${objectRefSize}.`,
+      );
+    }
+    if (numObjects < 1n) {
+      throw new Error('Invalid binary plist trailer: object count must be at least 1.');
+    }
+    if (topObject >= numObjects) {
+      throw new Error(
+        `Invalid binary plist trailer: top object ${topObject} is out of range for ${numObjects} objects.`,
+      );
+    }
+    if (
+      offsetTableOffset <= BigInt(OBJECT_AREA_START) ||
+      offsetTableOffset + numObjects * BigInt(offsetSize) > offsetTableEnd
+    ) {
+      throw new Error(
+        `Invalid binary plist trailer: offset table at ${offsetTableOffset} with ${numObjects} entries of ${offsetSize} byte(s) does not fit before the trailer.`,
+      );
+    }
+
+    this._offsetSize = offsetSize;
+    this._objectRefSize = objectRefSize;
+    this._numObjects = Number(numObjects);
+    this._topObject = Number(topObject);
+    this._offsetTableOffset = Number(offsetTableOffset);
+    this._payloadBudget = this._offsetTableOffset - OBJECT_AREA_START;
   }
 
-  /**
-   * Reads an object reference from the buffer
-   * @param offset - The offset to read from
-   * @returns The object reference index
-   */
   /**
    * Helper method to read multi-byte integers safely, handling potential overflow
    * @param startOffset - The offset to start reading from
@@ -136,13 +165,61 @@ class BinaryPlistParser {
     // Use regular number arithmetic for smaller values
     let result = 0;
     for (let i = 0; i < byteCount; i++) {
-      result = (result << 8) | this._buffer.readUInt8(startOffset + i);
+      result = result * 256 + this._buffer.readUInt8(startOffset + i);
     }
     return result;
   }
 
+  /**
+   * Reads an object reference from the buffer and checks that it points at an existing object
+   * @param offset - The offset to read from
+   * @returns The object reference index
+   * @throws RangeError if the reference is past the object count
+   */
   private _readObjectRef(offset: number): number {
-    return this._readMultiByteInteger(offset, this._objectRefSize, 'Object reference');
+    const ref = this._readMultiByteInteger(offset, this._objectRefSize, 'Object reference');
+    if (ref >= this._numObjects) {
+      throw new RangeError(`Binary plist object reference ${ref} is out of range for ${this._numObjects} objects.`);
+    }
+    return ref;
+  }
+
+  /**
+   * Reads consecutive object references after bounding them by the object area
+   * @param startOffset - The offset of the first reference
+   * @param count - The number of references to read
+   * @param valueName - Name of the container type for error messages
+   * @returns The object indices the references point at
+   */
+  private _readObjectRefs(startOffset: number, count: number, valueName: string): number[] {
+    this._claimPayloadBytes(startOffset, count * this._objectRefSize, valueName);
+    const refs: number[] = [];
+    for (let j = 0; j < count; j++) {
+      refs.push(this._readObjectRef(startOffset + j * this._objectRefSize));
+    }
+    return refs;
+  }
+
+  /**
+   * Checks that a variable-length payload lies inside the object area and charges it against the
+   * shared budget. Objects in a well-formed plist never overlap, so their payloads can never add
+   * up to more than the object area holds; an offset table whose entries alias one large object
+   * is rejected before it can multiply that object's size.
+   * @param startOffset - The offset where the payload starts
+   * @param byteCount - The number of payload bytes the object claims
+   * @param valueName - Name of the value type for error messages
+   * @throws RangeError if the payload runs past the object area or exhausts the budget
+   */
+  private _claimPayloadBytes(startOffset: number, byteCount: number, valueName: string): void {
+    if (startOffset + byteCount > this._offsetTableOffset) {
+      throw new RangeError(
+        `${valueName} at offset ${startOffset} claims ${byteCount} bytes past the end of the object area.`,
+      );
+    }
+    this._payloadBudget -= byteCount;
+    if (this._payloadBudget < 0) {
+      throw new RangeError('Binary plist objects claim more bytes in total than the object area holds.');
+    }
   }
 
   /**
@@ -243,7 +320,8 @@ class BinaryPlistParser {
    * @returns The parsed Buffer
    */
   private _parseDataValue(startOffset: number, objLength: number): Buffer {
-    return Buffer.from(this._buffer.slice(startOffset, startOffset + objLength));
+    this._claimPayloadBytes(startOffset, objLength, 'Data');
+    return Buffer.from(this._buffer.subarray(startOffset, startOffset + objLength));
   }
 
   /**
@@ -253,28 +331,23 @@ class BinaryPlistParser {
    * @returns The parsed string
    */
   private _parseAsciiString(startOffset: number, objLength: number): string {
-    return this._buffer.slice(startOffset, startOffset + objLength).toString('ascii');
+    this._claimPayloadBytes(startOffset, objLength, 'ASCII string');
+    return this._buffer.toString('ascii', startOffset, startOffset + objLength);
   }
 
   /**
-   * Parses a Unicode string from the buffer
+   * Parses a Unicode string from the buffer. Binary plists store them as UTF-16BE, so a copy is
+   * byte swapped for Node's UTF-16LE decoder.
    * @param startOffset - The offset to start reading from
-   * @param objLength - The length of the string in characters
+   * @param objLength - The length of the string in UTF-16 code units
    * @returns The parsed string
    */
   private _parseUnicodeString(startOffset: number, objLength: number): string {
-    // Unicode strings are stored as UTF-16BE in binary plists
     const bytesToRead = objLength * 2;
-    const stringBuffer = this._buffer.slice(startOffset, startOffset + bytesToRead);
-
-    // Convert UTF-16BE to UTF-16LE for proper decoding
-    const utf16leBuffer = Buffer.alloc(bytesToRead);
-    for (let i = 0; i < bytesToRead; i += 2) {
-      utf16leBuffer[i] = stringBuffer[i + 1]; // Low byte
-      utf16leBuffer[i + 1] = stringBuffer[i]; // High byte
-    }
-
-    return utf16leBuffer.toString('utf16le');
+    this._claimPayloadBytes(startOffset, bytesToRead, 'Unicode string');
+    return Buffer.from(this._buffer.subarray(startOffset, startOffset + bytesToRead))
+      .swap16()
+      .toString('utf16le');
   }
 
   /**
@@ -293,6 +366,9 @@ class BinaryPlistParser {
   private _parseObjects(): void {
     for (let i = 0; i < this._numObjects; i++) {
       const objOffset = this._readOffset(i);
+      if (objOffset < OBJECT_AREA_START || objOffset >= this._offsetTableOffset) {
+        throw new RangeError(`Binary plist object ${i} offset ${objOffset} lies outside the object area.`);
+      }
       const objType = this._buffer.readUInt8(objOffset) & 0xf0;
       const objInfo = this._buffer.readUInt8(objOffset) & 0x0f;
 
@@ -391,23 +467,23 @@ class BinaryPlistParser {
   }
 
   /**
-   * Creates a temporary array object
+   * Creates a temporary array object holding its element references
    * @param objLength - The array length
-   * @param startOffset - The start offset
+   * @param startOffset - The start offset of the references
    * @returns The temporary array object
    */
   private _createTempArray(objLength: number, startOffset: number): TempObject {
-    return new TempObject('array', objLength, startOffset, [] as PlistArray);
+    return new TempObject('array', this._readObjectRefs(startOffset, objLength, 'Array'));
   }
 
   /**
-   * Creates a temporary dictionary object
+   * Creates a temporary dictionary object holding its key references followed by its value references
    * @param objLength - The dictionary length
-   * @param startOffset - The start offset
+   * @param startOffset - The start offset of the references
    * @returns The temporary dictionary object
    */
   private _createTempDict(objLength: number, startOffset: number): TempObject {
-    return new TempObject('dict', objLength, startOffset, {} as PlistDictionary);
+    return new TempObject('dict', this._readObjectRefs(startOffset, objLength * 2, 'Dictionary'));
   }
 
   /**
@@ -420,70 +496,73 @@ class BinaryPlistParser {
   }
 
   /**
-   * Resolves references for arrays and dictionaries
+   * Resolves references for arrays and dictionaries. Containers are filled depth first, after
+   * the containers they reference, so every reference already points at a final value and a
+   * container shared by several parents stays one object. A container reached again while it is
+   * still being filled contains itself; CoreFoundation rejects such plists and so does this parser,
+   * so callers never receive a cyclic structure.
+   * @throws Error if a container contains itself
    */
   private _resolveReferences(): void {
-    for (let i = 0; i < this._numObjects; i++) {
-      const obj = this._objectTable[i];
-      if (this._isTempObject(obj)) {
-        if (obj.type === 'array') {
-          this._resolveArrayReferences(obj, i);
-        } else if (obj.type === 'dict') {
-          this._resolveDictReferences(obj, i);
+    const visiting = new Uint8Array(this._numObjects);
+    for (let root = 0; root < this._numObjects; root++) {
+      if (!this._isTempObject(this._objectTable[root])) {
+        continue;
+      }
+      const path = [root];
+      const cursors = [0];
+      visiting[root] = 1;
+      while (path.length > 0) {
+        const depth = path.length - 1;
+        const index = path[depth];
+        const obj = this._objectTable[index] as TempObject;
+        if (cursors[depth] >= obj.refs.length) {
+          this._objectTable[index] = obj.type === 'array' ? this._resolveArray(obj) : this._resolveDict(obj);
+          visiting[index] = 0;
+          path.pop();
+          cursors.pop();
+          continue;
         }
+        const refIdx = obj.refs[cursors[depth]++];
+        if (!this._isTempObject(this._objectTable[refIdx])) {
+          continue;
+        }
+        if (visiting[refIdx]) {
+          throw new Error(`Binary plist object ${refIdx} contains itself.`);
+        }
+        visiting[refIdx] = 1;
+        path.push(refIdx);
+        cursors.push(0);
       }
     }
   }
 
   /**
-   * Resolves references for an array
+   * Builds the array for a temporary array object whose elements are already resolved
    * @param obj - The temporary array object
-   * @param index - The index in the object table
+   * @returns The array
    */
-  private _resolveArrayReferences(obj: TempObject, index: number): void {
-    const array = obj.value as PlistArray;
-    for (let j = 0; j < obj.objLength; j++) {
-      const refIdx = this._readObjectRef(obj.startOffset + j * this._objectRefSize);
-      const refValue = this._objectTable[refIdx];
-      // Handle TempObjects correctly - they should be resolved by the time we get here
-      if (this._isTempObject(refValue)) {
-        array.push(refValue.value);
-      } else {
-        array.push(refValue);
-      }
-    }
-    this._objectTable[index] = array;
+  private _resolveArray(obj: TempObject): PlistArray {
+    return obj.refs.map((ref) => this._objectTable[ref] as PlistValue);
   }
 
   /**
-   * Resolves references for a dictionary
+   * Builds the dictionary for a temporary dictionary object whose keys and values are already resolved
    * @param obj - The temporary dictionary object
-   * @param index - The index in the object table
+   * @returns The dictionary
+   * @throws TypeError if a key is not a string
    */
-  private _resolveDictReferences(obj: TempObject, index: number): void {
-    const dict = obj.value as PlistDictionary;
-    const keyCount = obj.objLength;
-
-    // Keys are stored first, followed by values
+  private _resolveDict(obj: TempObject): PlistDictionary {
+    const dict: PlistDictionary = {};
+    const keyCount = obj.refs.length / 2;
     for (let j = 0; j < keyCount; j++) {
-      const keyRef = this._readObjectRef(obj.startOffset + j * this._objectRefSize);
-      const valueRef = this._readObjectRef(obj.startOffset + (keyCount + j) * this._objectRefSize);
-
-      const key = this._objectTable[keyRef];
-      const value = this._objectTable[valueRef];
-
+      const key = this._objectTable[obj.refs[j]];
       if (typeof key !== 'string') {
         throw new TypeError(`Dictionary key must be a string, got ${typeof key}`);
       }
-
-      // Handle TempObjects correctly - they should be resolved by the time we get here
-      if (this._isTempObject(value)) {
-        dict[key] = value.value;
-      } else {
-        dict[key] = value;
-      }
+      dict[key] = this._objectTable[obj.refs[keyCount + j]] as PlistValue;
     }
-    this._objectTable[index] = dict;
+    return dict;
   }
 
   /**
@@ -504,12 +583,7 @@ class BinaryPlistParser {
       return this._convertArrayToDict();
     }
 
-    // Ensure the top object is a PlistValue and not a TempObject
-    const topValue = this._objectTable[this._topObject];
-    if (this._isTempObject(topValue)) {
-      return topValue.value;
-    }
-    return topValue;
+    return this._objectTable[this._topObject] as PlistValue;
   }
 
   /**
