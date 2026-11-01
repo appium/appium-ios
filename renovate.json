@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>appium/appium-workflows//renovate/default"],
+  "labels": ["dependencies"],
   "lockFileMaintenance": {
     "enabled": true
   },
@@ -39,8 +40,5 @@
       "matchDepTypes": ["github-runner", "uses-with"],
       "enabled": false
     }
-  ],
-  "vulnerabilityAlerts": {
-    "enabled": true
-  }
+  ]
 }
