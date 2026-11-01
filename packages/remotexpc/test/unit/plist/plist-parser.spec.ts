@@ -332,3 +332,15 @@ describe('Plist Parser', function () {
     });
   });
 });
+
+describe('XML Plist Dictionary Keys', function () {
+  it('should store a __proto__ key as an own property instead of changing the prototype', function () {
+    const xml =
+      '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>__proto__</key><dict><key>x</key><true/></dict></dict></plist>';
+    const parsed = parseXmlPlist(xml) as PlistDictionary;
+    assert.strictEqual(Object.getPrototypeOf(parsed), Object.prototype);
+    assert.deepStrictEqual(Object.keys(parsed), ['__proto__']);
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(parsed, '__proto__')?.value, {x: true});
+    assert.strictEqual((parsed as Record<string, unknown>).x, undefined);
+  });
+});

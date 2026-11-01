@@ -1,3 +1,4 @@
+import type {PlistDictionary, PlistValue} from '../types.js';
 import {UTF8_ENCODING} from './constants.js';
 
 /**
@@ -343,4 +344,20 @@ function fallbackCleaning(xmlString: string): string {
   }
 
   return xmlString;
+}
+
+/**
+ * Stores a dictionary entry as an own property. Plain assignment would hand a `__proto__` key to
+ * the prototype setter, so a peer could swap the prototype of a parsed dictionary instead of
+ * adding an entry.
+ * @param dict - The dictionary being built
+ * @param key - The entry's key, as sent by the peer
+ * @param value - The entry's value
+ */
+export function setDictionaryEntry(dict: PlistDictionary, key: string, value: PlistValue): void {
+  if (key === '__proto__') {
+    Object.defineProperty(dict, key, {value, enumerable: true, writable: true, configurable: true});
+  } else {
+    dict[key] = value;
+  }
 }

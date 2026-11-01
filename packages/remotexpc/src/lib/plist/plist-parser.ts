@@ -11,6 +11,7 @@ import {
   hasUnicodeReplacementCharacter,
   isValidXml,
   removeExtraContentAfterPlist,
+  setDictionaryEntry,
   trimBeforeXmlDeclaration,
 } from './utils.js';
 
@@ -134,7 +135,7 @@ export function parsePlist(xmlData: string | Buffer): PlistDictionary {
       }
 
       if (valueNode) {
-        obj[keyName] = parseNode(valueNode as Element);
+        setDictionaryEntry(obj, keyName, parseNode(valueNode as Element));
         // Skip ahead of the parsed value so the loop doesn't re-visit it
         childNode = valueNode.nextSibling;
       }
