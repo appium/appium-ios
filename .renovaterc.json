@@ -1,6 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>appium/appium-workflows//renovate/default"],
+  "constraints": {
+    "npm": ">=11.14.0"
+  },
   "lockFileMaintenance": {
     "enabled": true
   },
