@@ -98,7 +98,7 @@
     "asyncbox": "^6.5.0",
     "axios": "^1.21.0",
     "commander": "^14.0.1",
-    "minimatch": "^10.2.3",
+    "minimatch": "^11.0.1",
     "node-devicectl": "^2.2.2",
     "path-to-regexp": "^8.4.0"
   },
