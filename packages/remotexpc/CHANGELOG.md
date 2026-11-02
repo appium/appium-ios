@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.7...appium-ios-remotexpc@5.28.8) (2026-11-02)
+
+### Bug Fixes
+
+* **remotexpc:** validate binary plist trailer and lengths against the buffer ([#141](https://github.com/appium/appium-ios/issues/141)) ([b0295c3](https://github.com/appium/appium-ios/commit/b0295c3d4081d120c45c87b3d341cc8955d56e00))
+
+
 ## [5.28.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.6...appium-ios-remotexpc@5.28.7) (2026-11-01)
 
 ### Miscellaneous Chores
