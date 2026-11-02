@@ -52,6 +52,17 @@ static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequi
                                                                      traceback:nil]);
 }
 
+/**
+ Runs `action` with the request's `bundleId` and returns its response.
+ If `bundleId` is not a string, returns an invalid argument error without running `action`.
+ */
+static id<FBResponsePayload> FBRunWithValidBundleId(FBRouteRequest *request,
+                                                    id<FBResponsePayload> (^action)(NSString *bundleId))
+{
+  id bundleId = request.arguments[@"bundleId"];
+  return FBInvalidBundleIdResponse(bundleId, YES) ?: action(bundleId);
+}
+
 @implementation FBSessionCommands
 
 #pragma mark - <FBCommandHandler>
@@ -156,50 +167,38 @@ static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequi
 
 + (id<FBResponsePayload>)handleSessionAppLaunch:(FBRouteRequest *)request
 {
-  NSString *bundleId = request.arguments[@"bundleId"];
-  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundleId, YES);
-  if (nil != errorResponse) {
-    return errorResponse;
-  }
-  [request.session launchApplicationWithBundleId:bundleId
-                         shouldWaitForQuiescence:request.arguments[@"shouldWaitForQuiescence"]
-                                       arguments:request.arguments[@"arguments"]
-                                     environment:request.arguments[@"environment"]
-                          asApplicationUnderTest:[request.arguments[@"asAppUnderTest"] boolValue]];
-  return FBResponseWithOK();
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    [request.session launchApplicationWithBundleId:bundleId
+                           shouldWaitForQuiescence:request.arguments[@"shouldWaitForQuiescence"]
+                                         arguments:request.arguments[@"arguments"]
+                                       environment:request.arguments[@"environment"]
+                            asApplicationUnderTest:[request.arguments[@"asAppUnderTest"] boolValue]];
+    return FBResponseWithOK();
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppActivate:(FBRouteRequest *)request
 {
-  NSString *bundleId = request.arguments[@"bundleId"];
-  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundleId, YES);
-  if (nil != errorResponse) {
-    return errorResponse;
-  }
-  [request.session activateApplicationWithBundleId:bundleId];
-  return FBResponseWithOK();
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    [request.session activateApplicationWithBundleId:bundleId];
+    return FBResponseWithOK();
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppTerminate:(FBRouteRequest *)request
 {
-  NSString *bundleId = request.arguments[@"bundleId"];
-  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundleId, YES);
-  if (nil != errorResponse) {
-    return errorResponse;
-  }
-  BOOL result = [request.session terminateApplicationWithBundleId:bundleId];
-  return FBResponseWithObject(@(result));
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    BOOL result = [request.session terminateApplicationWithBundleId:bundleId];
+    return FBResponseWithObject(@(result));
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppState:(FBRouteRequest *)request
 {
-  NSString *bundleId = request.arguments[@"bundleId"];
-  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundleId, YES);
-  if (nil != errorResponse) {
-    return errorResponse;
-  }
-  NSUInteger state = [request.session applicationStateWithBundleId:bundleId];
-  return FBResponseWithObject(@(state));
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    NSUInteger state = [request.session applicationStateWithBundleId:bundleId];
+    return FBResponseWithObject(@(state));
+  });
 }
 
 + (id<FBResponsePayload>)handleGetActiveAppsList:(FBRouteRequest *)request
