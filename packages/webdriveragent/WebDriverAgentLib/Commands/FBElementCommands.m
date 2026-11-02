@@ -12,6 +12,7 @@
 #import "FBScreen.h"
 #import "XCUIScreen.h"
 #import "FBKeyboard.h"
+#import "FBLogger.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
 #import "FBRunLoopSpinner.h"
@@ -24,22 +25,8 @@
 #import "FBRuntimeUtils.h"
 #import "NSPredicate+FBFormat.h"
 #import "XCTestPrivateSymbols.h"
+#import "FBXCTestDaemonsProxy.h"
 #import "XCUIApplication+FBTouchAction.h"
-
-// XCTest's own touch types. XCUIAutomation is already linked into this target, so these
-// resolve at runtime; declaring them here rather than importing keeps the dependency
-// visible: a rename in a future Xcode breaks this build instead of silently misbehaving.
-@interface XCPointerEventPath : NSObject
-- (instancetype)initForTouchAtPoint:(CGPoint)point offset:(double)offset;
-- (void)moveToPoint:(CGPoint)point atOffset:(double)offset;
-- (void)liftUpAtOffset:(double)offset;
-@end
-
-@interface XCSynthesizedEventRecord : NSObject
-- (instancetype)initWithName:(NSString *)name interfaceOrientation:(int64_t)orientation;
-- (void)addPointerEventPath:(XCPointerEventPath *)path;
-- (BOOL)synthesizeWithError:(NSError **)error;
-@end
 
 #import "XCUICoordinate.h"
 #import "XCUIDevice.h"
@@ -60,6 +47,9 @@
 #import "FBXCodeCompatibility.h"
 
 @interface FBElementCommands ()
+
++ (void)fb_dispatchEventInBackground:(XCSynthesizedEventRecord *)event name:(NSString *)name;
+
 @end
 
 @implementation FBElementCommands
@@ -124,7 +114,6 @@
 
     [[FBRoute POST:@"/wda/element/:uuid/dragfromtoforduration"] respondWithTarget:self action:@selector(handleDrag:)],
     [[FBRoute POST:@"/wda/dragfromtoforduration"] respondWithTarget:self action:@selector(handleDrag:)],
-    [[FBRoute POST:@"/wda/fastDrag"] respondWithTarget:self action:@selector(handleFastDrag:)],
 
     [[FBRoute POST:@"/wda/element/:uuid/pressAndDragWithVelocity"] respondWithTarget:self action:@selector(handlePressAndDragWithVelocity:)],
     [[FBRoute POST:@"/wda/pressAndDragWithVelocity"] respondWithTarget:self action:@selector(handlePressAndDragCoordinateWithVelocity:)],
@@ -134,7 +123,6 @@
 
     [[FBRoute POST:@"/wda/element/:uuid/tap"] respondWithTarget:self action:@selector(handleTap:)],
     [[FBRoute POST:@"/wda/tap"] respondWithTarget:self action:@selector(handleTap:)],
-    [[FBRoute POST:@"/wda/fastTap"] respondWithTarget:self action:@selector(handleFastTap:)],
 
     [[FBRoute POST:@"/wda/pickerwheel/:uuid/select"] respondWithTarget:self action:@selector(handleWheelSelect:)],
 #endif
@@ -484,6 +472,27 @@
   XCUIApplication *application = [target isKindOfClass:XCUIApplication.class]
     ? (XCUIApplication *)target
     : target.application;
+  if ([request.arguments[@"fast"] boolValue]) {
+#if TARGET_OS_WATCH
+    // Gesture synthesis is not available on watchOS at all.
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on watchOS"
+                                                                           traceback:nil]);
+#else
+    // The same event record the confirmed path builds, dispatched without waiting for the
+    // daemon to confirm it. See handleTap: for the response contract.
+    XCSynthesizedEventRecord *event = [application fb_pressDragEventFromCoordinate:startCoordinate
+                                                                       forDuration:duration
+                                                                      toCoordinate:endCoordinate
+                                                                      withVelocity:XCUIGestureVelocityDefault
+                                                               thenHoldForDuration:0
+                                                                             error:&error];
+    if (nil == event) {
+      return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
+    }
+    [self fb_dispatchEventInBackground:event name:@"drag"];
+    return FBResponseWithOK();
+#endif
+  }
   if (![application fb_pressAtCoordinate:startCoordinate
                              forDuration:duration
                     thenDragToCoordinate:endCoordinate
@@ -525,69 +534,75 @@
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
                                                                        traceback:nil]);
   }
-  [target tap];
-  return FBResponseWithOK();
-}
-
-/**
- * Inject a touch without waiting for XCTest to confirm it.
- *
- * -[XCUICoordinate tap] goes through -[XCSynthesizedEventRecord synthesizeWithError:],
- * which blocks on a daemon confirmation whose ceiling is __XCTEventConfirmationTimeout
- * (30 s), and sits underneath pre-event quiescence: one tap measured 0.62-0.94 s. This
- * builds the same record and dispatches it on a background queue, so the reply waits for
- * neither while the injection still completes behind it.
- *
- * The reply therefore proves dispatch, not capture: callers must verify the outcome from
- * a frame. Calling the daemon directly is faster still but breaks the session bookkeeping.
- */
-+ (id<FBResponsePayload>)handleFastTap:(FBRouteRequest *)request
-{
-  double x = [request.arguments[@"x"] doubleValue];
-  double y = [request.arguments[@"y"] doubleValue];
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:CGPointMake(x, y)
-                                                                       offset:0.0];
-    [path liftUpAtOffset:0.01];
-    XCSynthesizedEventRecord *record =
-      [[XCSynthesizedEventRecord alloc] initWithName:@"wda-fastTap" interfaceOrientation:1];
-    [record addPointerEventPath:path];
-    NSError *error = nil;
-    if (![record synthesizeWithError:&error]) {
-      NSLog(@"WDA fastTap injection failed: %@", error.localizedDescription);
-    }
-  });
-  return FBResponseWithOK();
-}
-
-/**
- * Inject a drag without waiting for XCTest to confirm it, the way fastTap does for a tap.
- * One /wda/dragfromtoforduration call measured 1.73 s for a 0.4 s gesture.
- */
-+ (id<FBResponsePayload>)handleFastDrag:(FBRouteRequest *)request
-{
-  double fromX = [request.arguments[@"fromX"] doubleValue];
-  double fromY = [request.arguments[@"fromY"] doubleValue];
-  double toX = [request.arguments[@"toX"] doubleValue];
-  double toY = [request.arguments[@"toY"] doubleValue];
-  double duration = [request.arguments[@"duration"] doubleValue];
-  if (!(duration > 0) || duration > 10) {
-    duration = 0.4;
+  if (![request.arguments[@"fast"] boolValue]) {
+    [target tap];
+    return FBResponseWithOK();
   }
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-    XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:CGPointMake(fromX, fromY)
-                                                                       offset:0.0];
-    [path moveToPoint:CGPointMake(toX, toY) atOffset:duration];
-    [path liftUpAtOffset:duration + 0.01];
-    XCSynthesizedEventRecord *record =
-      [[XCSynthesizedEventRecord alloc] initWithName:@"wda-fastDrag" interfaceOrientation:1];
-    [record addPointerEventPath:path];
+
+#if TARGET_OS_WATCH
+  // Gesture synthesis is not available on watchOS at all.
+  return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on watchOS"
+                                                                         traceback:nil]);
+#else
+  // Opt-in fast mode: the event is queued and the reply is sent without waiting for XCTest
+  // to confirm it, so the touch has not landed when the caller reads this response. Callers
+  // that need proof of delivery have to observe the screen instead.
+  XCUICoordinate *coordinate = [target isKindOfClass:XCUICoordinate.class]
+    ? (XCUICoordinate *)target
+    : [(XCUIElement *)target coordinateWithNormalizedOffset:CGVectorMake(0.5, 0.5)];
+  CGPoint point = coordinate.screenPoint;
+  if (!isfinite(point.x) || !isfinite(point.y)) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot resolve the on-screen position of the tap target. Make sure it is visible and idle, then retry"
+                                                                           traceback:nil]);
+  }
+  XCUIElement *anchor = [target isKindOfClass:XCUICoordinate.class]
+    ? ((XCUICoordinate *)target).element
+    : (XCUIElement *)target;
+  XCUIApplication *application = [anchor isKindOfClass:XCUIApplication.class]
+    ? (XCUIApplication *)anchor
+    : anchor.application;
+  if (nil == application) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot determine the application of the tap target"
+                                                                           traceback:nil]);
+  }
+  // Like XCTest, send the event to the display the target belongs to.
+  XCUIElement *referencedElement = coordinate.referencedElement;
+  long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
+    ? referencedElement.displayID
+    : 0;
+  [self fb_dispatchEventInBackground:[XCUIApplication fb_tapEventFromPoint:point
+                                                                 displayID:displayID
+                                                      interfaceOrientation:application.interfaceOrientation]
+                                name:@"tap"];
+  return FBResponseWithOK();
+#endif
+}
+
+/**
+ Dispatches an already built event record without waiting for the daemon to confirm it.
+ The queue is serial, so consecutive fast gestures reach the daemon in the order they were
+ requested. A failure is only reported to the WDA log, because the reply has been sent.
+
+ @param event The event record to synthesize
+ @param name A short gesture name for the failure log message
+ */
++ (void)fb_dispatchEventInBackground:(XCSynthesizedEventRecord *)event name:(NSString *)name
+{
+  static dispatch_queue_t synthesisQueue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    synthesisQueue = dispatch_queue_create("com.facebook.WebDriverAgent.fast-gesture",
+                                           DISPATCH_QUEUE_SERIAL);
+    dispatch_set_target_queue(synthesisQueue,
+                              dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+  });
+  dispatch_async(synthesisQueue, ^{
     NSError *error = nil;
-    if (![record synthesizeWithError:&error]) {
-      NSLog(@"WDA fastDrag injection failed: %@", error.localizedDescription);
+    if (![FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:&error]) {
+      [FBLogger logFmt:@"Failed to synthesize the %@ event without waiting for confirmation: %@",
+       name, error.localizedDescription ?: @"unknown error"];
     }
   });
-  return FBResponseWithOK();
 }
 
 + (id<FBResponsePayload>)handlePinch:(FBRouteRequest *)request
