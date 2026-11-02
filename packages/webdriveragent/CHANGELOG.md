@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.7...appium-webdriveragent@16.17.8) (2026-11-02)
+
+### Bug Fixes
+
+* **webdriveragent:** return keyboard autocorrection and prediction settings as booleans ([#147](https://github.com/appium/appium-ios/issues/147)) ([efb6024](https://github.com/appium/appium-ios/commit/efb602438c37175e32b38b78e632922c21efbabf))
+
+
 ## [16.17.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.6...appium-webdriveragent@16.17.7) (2026-10-30)
 
 ### Miscellaneous Chores
