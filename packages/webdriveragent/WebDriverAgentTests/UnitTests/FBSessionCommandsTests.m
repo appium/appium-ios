@@ -7,12 +7,16 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
+#import "FBCapabilities.h"
+#import "FBReflectionUtils.h"
 #import "FBRouteRequest-Private.h"
 #import "FBResponsePayload.h"
 #import "FBSession.h"
 #import "FBSessionCommands.h"
 #import "RouteResponse.h"
+#import "XCUIDevice+FBHelpers.h"
 
 @interface FBSessionCommands (FBWDATestable)
 + (id<FBResponsePayload>)handleOpenURL:(FBRouteRequest *)request;
@@ -21,6 +25,16 @@
 + (id<FBResponsePayload>)handleSessionAppActivate:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSessionAppTerminate:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSessionAppState:(FBRouteRequest *)request;
++ (NSDictionary *)currentCapabilities;
+@end
+
+@implementation FBSessionCommands (FBSessionCommandsTests)
+
++ (NSDictionary *)fbtest_currentCapabilities
+{
+  return @{};
+}
+
 @end
 
 // Stands in for the session of the /wda/apps handlers and records the bundle ids it gets
@@ -69,6 +83,31 @@
 
 @end
 
+// What the /url stubs below got: [url] or [url, bundleId]
+static NSMutableArray<NSArray<NSString *> *> *FBOpenedUrls;
+
+@implementation XCUIDevice (FBSessionCommandsTests)
+
+- (BOOL)fbtest_openUrl:(NSString *)url error:(NSError **)error
+{
+  [FBOpenedUrls addObject:@[url]];
+  return YES;
+}
+
+- (BOOL)fbtest_openUrl:(NSString *)url withApplication:(NSString *)bundleId error:(NSError **)error
+{
+  [FBOpenedUrls addObject:@[url, bundleId]];
+  return YES;
+}
+
+@end
+
+// -[NSNumber isEqual:] treats false and 0 as equal, so only the CF type tells a JSON boolean from a number
+static BOOL FBIsBoolean(id value)
+{
+  return nil != value && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID();
+}
+
 @interface FBSessionCommandsTests : XCTestCase
 @end
 
@@ -100,14 +139,39 @@
   XCTAssertEqualObjects([self errorOf:response], @"invalid argument", @"%@", message);
 }
 
-- (NSArray<NSValue *> *)appHandlers
+- (nullable id)valueOfSuccessfulResponse:(RouteResponse *)response message:(NSString *)message
 {
-  return @[
-    [NSValue valueWithPointer:@selector(handleSessionAppLaunch:)],
-    [NSValue valueWithPointer:@selector(handleSessionAppActivate:)],
-    [NSValue valueWithPointer:@selector(handleSessionAppTerminate:)],
-    [NSValue valueWithPointer:@selector(handleSessionAppState:)],
-  ];
+  XCTAssertEqual(response.statusCode, 200, @"%@", message);
+  NSError *error;
+  NSDictionary *body = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:&error];
+  XCTAssertNil(error, @"%@", message);
+  XCTAssertTrue([body isKindOfClass:NSDictionary.class], @"%@", message);
+  return body[@"value"];
+}
+
+// Puts the stubs above in place of the XCUIDevice methods /url calls, until the test ends.
+- (void)stubOpenUrl
+{
+  void (^swapMethods)(void) = ^{
+    FBReplaceMethod(XCUIDevice.class, @selector(fb_openUrl:error:), @selector(fbtest_openUrl:error:));
+    FBReplaceMethod(XCUIDevice.class,
+                    @selector(fb_openUrl:withApplication:error:),
+                    @selector(fbtest_openUrl:withApplication:error:));
+  };
+  swapMethods();
+  [self addTeardownBlock:swapMethods];
+  FBOpenedUrls = [NSMutableArray array];
+}
+
+// Maps each /wda/apps handler to its expected response value when using FBAppsSessionDouble
+- (NSDictionary<NSString *, id> *)appHandlers
+{
+  return @{
+    NSStringFromSelector(@selector(handleSessionAppLaunch:)): NSNull.null,
+    NSStringFromSelector(@selector(handleSessionAppActivate:)): NSNull.null,
+    NSStringFromSelector(@selector(handleSessionAppTerminate:)): @NO,
+    NSStringFromSelector(@selector(handleSessionAppState:)): @0,
+  };
 }
 
 - (NSArray *)nonStringBundleIds
@@ -121,12 +185,11 @@
   for (id bundleId in self.nonStringBundleIds) {
     [argumentsList addObject:@{@"bundleId": bundleId}];
   }
-  for (NSValue *handler in self.appHandlers) {
+  for (NSString *handler in self.appHandlers) {
     for (NSDictionary *arguments in argumentsList) {
       FBAppsSessionDouble *session = [FBAppsSessionDouble new];
-      RouteResponse *response = [self responseOf:(SEL)handler.pointerValue arguments:arguments session:session];
-      NSString *message = [NSString stringWithFormat:@"%@ with %@",
-                           NSStringFromSelector((SEL)handler.pointerValue), arguments];
+      RouteResponse *response = [self responseOf:NSSelectorFromString(handler) arguments:arguments session:session];
+      NSString *message = [NSString stringWithFormat:@"%@ with %@", handler, arguments];
       [self assertInvalidBundleIdResponse:response message:message];
       XCTAssertEqual(session.receivedBundleIds.count, 0, @"%@", message);
     }
@@ -135,16 +198,19 @@
 
 - (void)testAppCommandsPassStringBundleIdToSession
 {
-  for (NSValue *handler in self.appHandlers) {
+  NSDictionary<NSString *, id> *handlers = self.appHandlers;
+  for (NSString *handler in handlers) {
+    id expectedValue = handlers[handler];
     // An empty string is still a string: it is passed on as before.
     for (NSString *bundleId in @[@"com.apple.Preferences", @""]) {
       FBAppsSessionDouble *session = [FBAppsSessionDouble new];
-      RouteResponse *response = [self responseOf:(SEL)handler.pointerValue
+      RouteResponse *response = [self responseOf:NSSelectorFromString(handler)
                                        arguments:@{@"bundleId": bundleId}
                                          session:session];
-      NSString *message = [NSString stringWithFormat:@"%@ with '%@'",
-                           NSStringFromSelector((SEL)handler.pointerValue), bundleId];
-      XCTAssertNil([self errorOf:response], @"%@", message);
+      NSString *message = [NSString stringWithFormat:@"%@ with '%@'", handler, bundleId];
+      id value = [self valueOfSuccessfulResponse:response message:message];
+      XCTAssertEqualObjects(value, expectedValue, @"%@", message);
+      XCTAssertEqual(FBIsBoolean(value), FBIsBoolean(expectedValue), @"%@", message);
       XCTAssertEqualObjects(session.receivedBundleIds, @[bundleId], @"%@", message);
     }
   }
@@ -152,12 +218,53 @@
 
 - (void)testOpenURLRejectsNonStringBundleId
 {
+  [self stubOpenUrl];
   for (id bundleId in self.nonStringBundleIds) {
     RouteResponse *response = [self responseOf:@selector(handleOpenURL:)
                                      arguments:@{@"url": @"https://appium.io", @"bundleId": bundleId}
                                        session:nil];
     [self assertInvalidBundleIdResponse:response message:[NSString stringWithFormat:@"/url with %@", bundleId]];
   }
+  XCTAssertEqual(FBOpenedUrls.count, 0);
+}
+
+- (void)testOpenURLWithoutBundleIdUsesDefaultApplication
+{
+  [self stubOpenUrl];
+  RouteResponse *response = [self responseOf:@selector(handleOpenURL:)
+                                   arguments:@{@"url": @"https://appium.io"}
+                                     session:nil];
+  XCTAssertEqualObjects([self valueOfSuccessfulResponse:response message:@"/url without bundleId"], NSNull.null);
+  XCTAssertEqualObjects(FBOpenedUrls, @[@[@"https://appium.io"]]);
+}
+
+- (void)testOpenURLWithBundleIdUsesThatApplication
+{
+  [self stubOpenUrl];
+  RouteResponse *response = [self responseOf:@selector(handleOpenURL:)
+                                   arguments:@{@"url": @"https://appium.io", @"bundleId": @"com.apple.Preferences"}
+                                     session:nil];
+  XCTAssertEqualObjects([self valueOfSuccessfulResponse:response message:@"/url with bundleId"], NSNull.null);
+  XCTAssertEqualObjects(FBOpenedUrls, (@[@[@"https://appium.io", @"com.apple.Preferences"]]));
+}
+
+- (void)testCreateSessionWithoutBundleIdCapability
+{
+  // The session information reads UIDevice, which can wait tens of seconds on a simulator that has just booted
+  Class metaClass = object_getClass(FBSessionCommands.class);
+  FBReplaceMethod(metaClass, @selector(currentCapabilities), @selector(fbtest_currentCapabilities));
+  [self addTeardownBlock:^{
+    FBReplaceMethod(metaClass, @selector(currentCapabilities), @selector(fbtest_currentCapabilities));
+    [FBSession.activeSession kill];
+  }];
+  // Skips the private keyboard API, which this test does not cover
+  NSDictionary *capabilities = @{FB_CAP_FORCE_SIMULATOR_SOFTWARE_KEYBOARD_PRESENCE: @NO};
+  RouteResponse *response = [self responseOf:@selector(handleCreateSession:)
+                                   arguments:@{@"capabilities": @{@"alwaysMatch": capabilities}}
+                                     session:nil];
+  NSDictionary *value = [self valueOfSuccessfulResponse:response message:@"/session without bundleId"];
+  XCTAssertNotNil(FBSession.activeSession.identifier);
+  XCTAssertEqualObjects(value[@"sessionId"], FBSession.activeSession.identifier);
 }
 
 - (void)testCreateSessionRejectsNonStringBundleIdCapability
@@ -170,6 +277,7 @@
     // Like the other capability errors of this handler
     XCTAssertEqual(response.statusCode, 500, @"%@", message);
     XCTAssertEqualObjects([self errorOf:response], @"session not created", @"%@", message);
+    XCTAssertNil(FBSession.activeSession, @"%@", message);
   }
 }
 
