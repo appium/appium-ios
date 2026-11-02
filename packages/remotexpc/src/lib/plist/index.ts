@@ -5,7 +5,7 @@ import {APPLE_EPOCH_OFFSET, BPLIST_MAGIC_AND_VERSION, BPLIST_TYPE, UTF8_ENCODING
 import {LengthBasedSplitter} from './length-based-splitter.js';
 import {createPlist as createXmlPlist} from './plist-creator.js';
 import {PlistServiceDecoder} from './plist-decoder.js';
-import {PlistServiceEncoder} from './plist-encoder.js';
+import {PlistServiceEncoder, framePlist} from './plist-encoder.js';
 import {parsePlist as parseXmlPlist} from './plist-parser.js';
 import {PlistService} from './plist-service.js';
 import {createPlist} from './unified-plist-creator.js';
@@ -35,6 +35,7 @@ export {
   PlistService,
   PlistServiceDecoder,
   PlistServiceEncoder,
+  framePlist,
   APPLE_EPOCH_OFFSET,
   BPLIST_MAGIC_AND_VERSION,
   BPLIST_TYPE,

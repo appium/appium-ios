@@ -26,7 +26,7 @@ export async function sendSignalToProcess(
 /**
  * Launch the given bundle id application with the given environment variable.
  * This method is over devicectl command, this it may take additional seconds to launch the app.
- * Please use via WDA or via appium-ios-device as primary method to launch app if possible.
+ * Please use via WDA or via appium-ios-remotexpc as primary method to launch app if possible.
  */
 export async function launchApp(this: Devicectl, bundleId: string, opts: LaunchAppOptions = {}): Promise<void> {
   const {env, terminateExisting = false} = opts;

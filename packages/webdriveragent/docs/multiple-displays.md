@@ -114,6 +114,23 @@ before resolving coordinates, in addition to keeping its pose stable during a
 command. This observation does not imply that every missed gesture is an
 XCTest defect.
 
+## Home button on Duo devices
+
+On the Duo simulator running iOS 27.1, XCTest's Home button and its IOHID
+wrapper can return success without leaving the foreground application. WDA
+uses a directly dispatched IOKit Home key-down/key-up pair for Home requests
+on iOS devices with an available hinge sensor, including simulators and physical
+devices. Devices without a hinge retain the XCTest path. The direct path sends button events;
+it does not substitute application activation or change the selected display.
+
+The Home key event has been verified on the Duo simulator; physical Duo Home
+behavior remains unverified and feedback is welcome. Availability of IOKit APIs
+and successful event dispatch do not by themselves confirm that the app left
+the foreground.
+
+This workaround does not address rotation or input immediately after an
+application is reactivated. See [Appium #22857](https://github.com/appium/appium/issues/22857).
+
 ## Validation and feedback
 
 Duo display behavior has been tested on the iPhone Duo simulator with Xcode 27.1
@@ -122,3 +139,30 @@ We have not had access to a physical Duo for testing. If you have access to one,
 we would appreciate [reports of its display and capture behavior](https://github.com/appium/WebDriverAgent/issues),
 including the device model, iOS/Xcode and WDA versions, selected display IDs,
 requests and responses, and observed results.
+
+### Rotation on Duo devices
+
+On Duo Simulator 27.1, assigning `XCUIDevice.orientation` can update XCTest's
+reported orientation without rotating the application. On Duo simulators with
+an available hinge sensor, WDA directly dispatches the vendor-defined
+`orientation-picker-control` event used by Xcode 27.1's Duo controls, while also
+keeping XCTest's reported device orientation in sync.
+
+On physical devices with an available hinge sensor, WDA first uses XCTest and
+checks the application's interface orientation after waiting for stability.
+Only if that check fails does WDA log the transition to the vendor HID fallback
+and attempt it. Devices without a hinge retain the XCTest path.
+
+The vendor event has only been verified on the Duo simulator. Its
+`com.apple.Virtualization.VirtualMachines` receiver may not exist on physical
+hardware. Physical-device feedback is welcome; availability of the IOKit APIs
+or successful event submission does not establish that rotation works.
+
+Select the active panel with `currentDisplayId` before rotating. The inner
+panel's native orientation is a quarter turn from the cover panel, so WDA
+translates the requested orientation for the selected display. Both orientation
+and numeric rotation commands use the same path. WDA waits up to five seconds
+for the application's interface orientation to match, then waits for stability;
+event submission alone is not success. An app or panel that does not support
+the requested orientation still returns an error. In particular, the tested
+cover panel did not adopt upside-down portrait.

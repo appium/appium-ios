@@ -1,9 +1,9 @@
-function(){"use strict";var AtomExport=(()=>{var s=Object.defineProperty;var u=Object.getOwnPropertyDescriptor;var c=Object.getOwnPropertyNames;var f=Object.prototype.hasOwnProperty;var E=(t,e)=>{for(var n in e)s(t,n,{get:e[n],enumerable:!0})},d=(t,e,n,r)=>{if(e&&typeof e=="object"||typeof e=="function")for(let o of c(e))!f.call(t,o)&&o!==n&&s(t,o,{get:()=>e[o],enumerable:!(r=u(e,o))||r.enumerable});return t};var N=t=>d(s({},"__esModule",{value:!0}),t);var O={};E(O,{default:()=>l});function l(t,e){if(e=e.toLowerCase(),e==="style")return h(t.style.cssText);let n=t.getAttributeNode(e);return n&&n.specified?n.value:null}var T=/[;]+(?=(?:(?:[^"]*"){2})*[^"]*$)(?=(?:(?:[^']*'){2})*[^']*$)(?=(?:[^()]*\([^()]*\))*[^()]*$)/;function h(t){let e=t.split(T),n=[];for(let o of e){let i=o.indexOf(":");if(i>0){let a=[o.slice(0,i),o.slice(i+1)];n.push(a[0].toLowerCase(),":",a[1],";")}}let r=n.join("");return r.charAt(r.length-1)===";"?r:`${r};`}return N(O);})();
+function(){var AtomExport=(()=>{var l=Object.defineProperty;var c=Object.getOwnPropertyDescriptor;var f=Object.getOwnPropertyNames;var E=Object.prototype.hasOwnProperty;var d=(e,t)=>{for(var n in t)l(e,n,{get:t[n],enumerable:!0})},N=(e,t,n,r)=>{if(t&&typeof t=="object"||typeof t=="function")for(let o of f(t))!E.call(e,o)&&o!==n&&l(e,o,{get:()=>t[o],enumerable:!(r=c(t,o))||r.enumerable});return e};var m=e=>N(l({},"__esModule",{value:!0}),e);var _={};d(_,{default:()=>i,isBotError:()=>u});var p=new WeakSet;function u(e){return typeof e=="object"&&e!==null&&p.has(e)}function i(e,t){if(t=t.toLowerCase(),t==="style")return O(e.style.cssText);let n=e.getAttributeNode(t);return n&&n.specified?n.value:null}var b=/[;]+(?=(?:(?:[^"]*"){2})*[^"]*$)(?=(?:(?:[^']*'){2})*[^']*$)(?=(?:[^()]*\([^()]*\))*[^()]*$)/;function O(e){let t=e.split(b),n=[];for(let o of t){let s=o.indexOf(":");if(s>0){let a=[o.slice(0,s),o.slice(s+1)];n.push(a[0].toLowerCase(),":",a[1],";")}}let r=n.join("");return r.charAt(r.length-1)===";"?r:`${r};`}return m(_);})();
 
 try {
   return AtomExport.default.apply(null,arguments);
 } catch (e) {
-  if (e && e.isAutomationError) {
+  if (AtomExport.isBotError(e)) {
     throw new Error(JSON.stringify({state: e.state, message: e.message}));
   }
   throw e;

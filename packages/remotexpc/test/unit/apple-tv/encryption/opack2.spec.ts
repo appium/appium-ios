@@ -8,6 +8,7 @@ describe('Apple TV Encryption - Opack2', function () {
   describe('loads', function () {
     it('should decode primitive types', function () {
       assert.strictEqual(Opack2.loads(Buffer.from([0x03])), null);
+      assert.strictEqual(Opack2.loads(Buffer.from([0x04])), null);
       assert.strictEqual(Opack2.loads(Buffer.from([0x01])), true);
       assert.strictEqual(Opack2.loads(Buffer.from([0x02])), false);
       assert.strictEqual(Opack2.loads(Buffer.from([0x0a])), 2);
@@ -38,17 +39,35 @@ describe('Apple TV Encryption - Opack2', function () {
 
       assert.deepStrictEqual(Opack2.loads(Opack2.dumps(value)), value);
     });
+
+    it('should decode a terminated 15-element array', function () {
+      const bytes = Buffer.from('df08090a0b0c0d0e0f1011121314151603', 'hex');
+      assert.deepStrictEqual(
+        Opack2.loads(bytes),
+        Array.from({length: 15}, (_, i) => i),
+      );
+    });
+
+    it('should decode the null marker (0x04) inside a terminated array', function () {
+      const bytes = Buffer.from([0xdf, 0x08, 0x04, 0x09, 0x04, 0x03]);
+      assert.deepStrictEqual(Opack2.loads(bytes), [0, null, 1, null]);
+    });
+
+    it('should round-trip a terminated array containing null', function () {
+      const value = Array.from({length: 16}, (_, i) => (i === 3 || i === 15 ? null : i));
+      assert.deepStrictEqual(Opack2.loads(Opack2.dumps(value)), value);
+    });
   });
 
   describe('dumps - primitive types', function () {
     it('should encode null', function () {
       const result = Opack2.dumps(null);
-      assert.deepStrictEqual(result, Buffer.from([0x03]));
+      assert.deepStrictEqual(result, Buffer.from([0x04]));
     });
 
     it('should encode undefined as null', function () {
       const result = Opack2.dumps(undefined);
-      assert.deepStrictEqual(result, Buffer.from([0x03]));
+      assert.deepStrictEqual(result, Buffer.from([0x04]));
     });
 
     it('should encode boolean true', function () {
@@ -142,6 +161,16 @@ describe('Apple TV Encryption - Opack2', function () {
       assert.strictEqual(result[1], 0x09);
       assert.strictEqual(result[2], 0x0a);
       assert.strictEqual(result[3], 0x0b);
+    });
+
+    it('should encode a 14-element array with a count marker', function () {
+      const result = Opack2.dumps(Array.from({length: 14}, (_, i) => i));
+      assert.deepStrictEqual(result, Buffer.from('de08090a0b0c0d0e0f101112131415', 'hex'));
+    });
+
+    it('should encode a 15-element array as a terminated array', function () {
+      const result = Opack2.dumps(Array.from({length: 15}, (_, i) => i));
+      assert.deepStrictEqual(result, Buffer.from('df08090a0b0c0d0e0f1011121314151603', 'hex'));
     });
 
     it('should encode large arrays', function () {

@@ -1,7 +1,7 @@
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService} from '../base-service.js';
+import {BaseService, type BaseServiceOptions} from '../base-service.js';
 import type {
   AppInfo,
   ApplicationType,
@@ -16,6 +16,13 @@ import type {
 } from './types.js';
 
 const log = getLogger('InstallationProxyService');
+
+const DEFAULT_TIMEOUT_MS = 30000;
+
+export interface InstallationProxyServiceOptions extends BaseServiceOptions {
+  /** Request timeout in milliseconds */
+  timeout?: number;
+}
 
 export const DEFAULT_APPLICATION_TYPE = 'Any';
 
@@ -50,9 +57,14 @@ export class InstallationProxyService extends BaseService {
   private readonly timeout: number;
   private connection: ServiceConnection | null = null;
 
-  constructor(udid: string, timeout: number = 30000) {
-    super(udid);
-    this.timeout = timeout;
+  /**
+   * @param udid Device UDID
+   * @param timeoutOrOptions Request timeout in milliseconds (legacy form), or an options object
+   */
+  constructor(udid: string, timeoutOrOptions?: number | InstallationProxyServiceOptions) {
+    const options = typeof timeoutOrOptions === 'number' ? {timeout: timeoutOrOptions} : (timeoutOrOptions ?? {});
+    super(udid, options);
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**

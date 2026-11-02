@@ -25,6 +25,9 @@ export const AFC_HEADER_SIZE = 40;
 
 export const AFC_OPERATION_TIMEOUT_MS = 30_000;
 
+// Read timeout meaning "wait without a deadline until the bytes arrive or the socket closes"
+export const AFC_NO_TIMEOUT = 0;
+
 export const NULL_BYTE = Buffer.from([0]);
 
 // File lock operation constants

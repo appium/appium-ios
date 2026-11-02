@@ -11,6 +11,9 @@
       "target_name": "media_proxy",
       "sources": [
         "src/native/addon.cc",
+        "src/native/h264_encoder.cc",
+        "src/native/openh264_encoder.cc",
+        "src/native/audio_pipeline.cc",
         "src/native/pipeline.cc"
       ],
       "include_dirs": [
@@ -58,19 +61,24 @@
       ],
       "conditions": [
         ["OS=='mac'", {
+          "sources": ["src/native/videotoolbox_encoder.cc"],
           "libraries": [
+            "-framework CoreFoundation", "-framework CoreMedia", "-framework CoreVideo", "-framework VideoToolbox",
             "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium",
             "-Wl,-rpath,@loader_path"
           ]
         }],
         ["OS=='linux'", {
           "libraries": [
-            "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium",
+            "-L<(ffmpeg_dir)/lib", "-lavcodec-appium", "-lavutil-appium", "-lswscale-appium", "-ldl",
             "-Wl,-rpath,'$$ORIGIN'"
           ]
         }],
         ["OS=='win'", {
+          "defines": ["_CRT_SECURE_NO_WARNINGS"],
+          "sources": ["src/native/mediafoundation_encoder.cc"],
           "libraries": [
+            "mfplat.lib", "mf.lib", "mfuuid.lib", "strmiids.lib", "ole32.lib", "oleaut32.lib",
             "<(ffmpeg_dir)/lib/avcodec-appium.lib",
             "<(ffmpeg_dir)/lib/avutil-appium.lib",
             "<(ffmpeg_dir)/lib/swscale-appium.lib"

@@ -8,6 +8,7 @@ import {BaseSimulator} from './base-simulator.js';
 import * as appExtensions from './extensions/applications.js';
 import * as biometricExtensions from './extensions/biometric.js';
 import * as geolocationExtensions from './extensions/geolocation.js';
+import * as hidExtensions from './extensions/hid.js';
 import * as jpegStreamExtensions from './extensions/jpeg-stream.js';
 import * as keychainExtensions from './extensions/keychain.js';
 import * as lifecycleExtensions from './extensions/lifecycle.js';
@@ -76,6 +77,15 @@ export class SimulatorXcode15 extends BaseSimulator implements CoreSimulator {
     this._uiClientAppPath = undefined;
     this._systemAppBundleIds = undefined;
     this._log = log ?? defaultLog;
+  }
+
+  /**
+   * Identifies iPhone Duo by device type, independently of its name or hinge readings.
+   * Does not guarantee runtime HID service availability.
+   * @returns Whether this simulator has the iPhone Duo device type.
+   */
+  async isDuo(): Promise<boolean> {
+    return this._native.isDuo(this.udid);
   }
 
   /**
@@ -206,6 +216,7 @@ Object.assign(SimulatorXcode15.prototype, {
   startVideoStream: videoStreamExtensions.startVideoStream,
   startJpegStream: jpegStreamExtensions.startJpegStream,
 
+  ...hidExtensions,
   // orientation
   setOrientation: orientationExtensions.setOrientation,
   getOrientation: orientationExtensions.getOrientation,

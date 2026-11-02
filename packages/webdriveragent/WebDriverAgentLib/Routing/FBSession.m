@@ -24,6 +24,7 @@
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUIApplication+FBQuiescence.h"
 #import "XCUIElement.h"
+#import "XCUIElement+FBUtilities.h"
 
 /*!
  The intial value for the default application property.
@@ -432,7 +433,7 @@ static NSUInteger _committedTerminationCount = 0;
     app.launchEnvironment = environment ?: @{};
     [app launch];
   } else {
-    [app activate];
+    [app fb_activate];
   }
   if (asApplicationUnderTest) {
     BOOL waitForQuiescence = app.fb_shouldWaitForQuiescence;
@@ -475,7 +476,7 @@ static NSUInteger _committedTerminationCount = 0;
 - (XCUIApplication *)activateApplicationWithBundleId:(NSString *)bundleIdentifier
 {
   XCUIApplication *app = [self makeApplicationWithBundleId:bundleIdentifier];
-  [app activate];
+  [app fb_activate];
   return app;
 }
 

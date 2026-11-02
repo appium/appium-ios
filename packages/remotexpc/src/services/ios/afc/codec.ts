@@ -3,7 +3,14 @@ import net from 'node:net';
 import {createPlist} from '../../../lib/plist/plist-creator.js';
 import {parsePlist} from '../../../lib/plist/unified-plist-parser.js';
 import type {PlistDictionary} from '../../../lib/types.js';
-import {AFCMAGIC, AFC_HEADER_SIZE, AFC_OPERATION_TIMEOUT_MS, MAXIMUM_READ_SIZE, NULL_BYTE} from './constants.js';
+import {
+  AFCMAGIC,
+  AFC_HEADER_SIZE,
+  AFC_NO_TIMEOUT,
+  AFC_OPERATION_TIMEOUT_MS,
+  MAXIMUM_READ_SIZE,
+  NULL_BYTE,
+} from './constants.js';
 import {AfcError, type AfcFopenMode, AfcOpcode} from './enums.js';
 import {AfcConnectionError} from './errors.js';
 
@@ -102,8 +109,9 @@ export function fatalizeAfcSocket(socket: net.Socket, error: Error): void {
 /**
  * Read exactly `n` bytes from a socket, waiting up to timeoutMs.
  * On timeout the socket is destroyed; further reads throw AfcConnectionError.
+ * A timeoutMs of AFC_NO_TIMEOUT waits without a deadline until the bytes arrive or the socket closes.
  */
-export async function readExact(socket: net.Socket, n: number, timeoutMs = 30000): Promise<Buffer> {
+export async function readExact(socket: net.Socket, n: number, timeoutMs = AFC_OPERATION_TIMEOUT_MS): Promise<Buffer> {
   const state = ensureSocketState(socket);
 
   if (state.buffer.length >= n) {
@@ -115,6 +123,9 @@ export async function readExact(socket: net.Socket, n: number, timeoutMs = 30000
   return await new Promise<Buffer>((resolve, reject) => {
     const waiter: SocketWaiter = {n, resolve, reject};
     state.waiters.push(waiter);
+    if (timeoutMs === AFC_NO_TIMEOUT) {
+      return;
+    }
     waiter.timer = setTimeout(() => {
       const idx = state.waiters.indexOf(waiter);
       if (idx >= 0) {

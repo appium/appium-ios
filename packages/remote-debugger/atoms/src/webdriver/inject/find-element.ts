@@ -39,7 +39,7 @@ function performSearch(
     // Step 4: encode our response.
     response = inject.wrapResponse(found);
   } catch (ex) {
-    response = inject.wrapError(ex as Error);
+    response = inject.wrapError(ex);
   }
   return JSON.stringify(response);
 }

@@ -179,7 +179,8 @@ jobs:
   release-uicatalog-app:
     name: Build and upload UIKitCatalog app
     needs: release
-    if: needs.release.outputs.uicatalog_release_tag != ''
+    # Native prebuilds may be skipped upstream; override the implicit success() check.
+    if: ${{ !cancelled() && !failure() && needs.release.result == 'success' && needs.release.outputs.uicatalog_release_tag != '' }}
     uses: ./.github/workflows/uicatalog-build-app.yml
     with:
       upload_release_artifacts: true
@@ -189,7 +190,8 @@ jobs:
   release-webdriveragent-assets:
     name: Build and upload WebDriverAgent archives
     needs: release
-    if: needs.release.outputs.webdriveragent_release_tag != ''
+    # Native prebuilds may be skipped upstream; override the implicit success() check.
+    if: ${{ !cancelled() && !failure() && needs.release.result == 'success' && needs.release.outputs.webdriveragent_release_tag != '' }}
     uses: ./.github/workflows/webdriveragent-build-assets.yml
     with:
       release_tag: ${{ needs.release.outputs.webdriveragent_release_tag }}

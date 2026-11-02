@@ -884,6 +884,12 @@ export type NetworkEvent = InterfaceDetectionEvent | ConnectionDetectionEvent | 
  */
 export interface NetworkMonitorService {
   /**
+   * Begins monitoring. A no-op if already started, so it can be called before
+   * {@link events} to surface setup errors.
+   */
+  start(): Promise<void>;
+
+  /**
    * Stops the current network monitoring stream.
    * If no stream is active this call is a no-op.
    */
@@ -1495,6 +1501,12 @@ export interface DVTInstruments {
  * Represents the WebInspectorService
  */
 export interface WebInspectorService extends BaseService {
+  /**
+   * Establish the connection now instead of lazily on the first message,
+   * so that connection failures surface to the caller
+   */
+  connect(): Promise<void>;
+
   /**
    * Send a message to the WebInspector service
    * @param selector The RPC selector (e.g., '_rpc_reportIdentifier:')

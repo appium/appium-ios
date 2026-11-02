@@ -103,5 +103,20 @@ jobs:
         if: ${{ inputs.test-command == 'test:integration' }}
         run: npm run build:addon --workspace packages/media-proxy
 
+      # Software H.264 (Linux has no other encoder in CI), fetched from Cisco and never bundled; the
+      # client packages do the same (see the README).
+      - name: Install OpenH264
+        if: ${{ inputs.test-command == 'test:integration' }}
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) lib=openh264.dll ;;
+            macOS) lib=libopenh264.dylib ;;
+            *) lib=libopenh264.so ;;
+          esac
+          export MEDIA_PROXY_OPENH264_PATH="${RUNNER_TEMP}/openh264/${lib}"
+          "$(command -v python3 || command -v python)" packages/media-proxy/scripts/ci/fetch-openh264.py
+          echo "MEDIA_PROXY_OPENH264_PATH=${MEDIA_PROXY_OPENH264_PATH}" >> "$GITHUB_ENV"
+
       - name: Run ${{ inputs.test-name }}
         run: npm run ${{ inputs.test-command }} --workspace packages/media-proxy

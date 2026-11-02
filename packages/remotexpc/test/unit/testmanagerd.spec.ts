@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {beforeEach, describe, it} from 'node:test';
+import {type TestContext, beforeEach, describe, it} from 'node:test';
 
 import {PlistUID, createBinaryPlist} from '../../src/lib/plist/index.js';
 import {DTX_CONSTANTS, MessageAux} from '../../src/services/ios/dvt/dtx-message.js';
@@ -10,6 +10,7 @@ import {
 } from '../../src/services/ios/testmanagerd/index.js';
 import {TestmanagerdEncoder} from '../../src/services/ios/testmanagerd/testmanagerd-encoder.js';
 import {canonicalizeUuidString} from '../../src/services/ios/testmanagerd/uuid.js';
+import {SELECTOR} from '../../src/services/ios/testmanagerd/xctest-common.js';
 import {createNSUUID} from '../../src/services/ios/testmanagerd/xctestconfiguration.js';
 import type {XCTestRunner} from '../../src/services/ios/testmanagerd/xcuitest.js';
 import {mockImport} from '../helpers/mock-module.js';
@@ -58,6 +59,86 @@ function buildPrimitiveDictEntry(type: number, value: Buffer): Buffer {
   const typeField = Buffer.alloc(4);
   typeField.writeUInt32LE(type, 0);
   return Buffer.concat([key, typeField, value]);
+}
+
+const RUNNER_BUNDLE_ID = 'com.example.Runner.xctrunner';
+const TARGET_BUNDLE_ID = 'com.example.App';
+const RUNNER_OPTIONS = {
+  udid: 'device-1',
+  testRunnerBundleId: RUNNER_BUNDLE_ID,
+  appUnderTestBundleId: TARGET_BUNDLE_ID,
+  xctestBundleId: 'com.example.Runner',
+};
+
+type ExecCallback = [string, any[]] | null;
+
+function createFakeTestmanagerd() {
+  return {
+    makeChannel: async () => ({getCode: () => 1}),
+    sendMessage: async () => {},
+    recvPlist: async () => [{}],
+    close: async () => {},
+  };
+}
+
+/**
+ * Fake exec connection that delivers `callbacks` in order. A `null` entry, and every poll after the
+ * list runs out, is a silent poll that advances the mocked clock by the poll timeout.
+ */
+function createFakeExecTestmanagerd(t: TestContext, callbacks: ExecCallback[]) {
+  return {
+    ...createFakeTestmanagerd(),
+    sendReply: async () => {},
+    lastMessageExpectsReply: () => false,
+    recvPlistWithTimeout: async (_channel: number, timeoutMs: number) => {
+      const callback = callbacks.shift();
+      if (callback) {
+        return callback;
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+      t.mock.timers.tick(timeoutMs);
+      return null;
+    },
+  };
+}
+
+async function importMockedXCTestRunner(
+  t: TestContext,
+  {
+    execTestmanagerd = createFakeTestmanagerd(),
+    launch,
+  }: {
+    execTestmanagerd?: object;
+    launch: (options: Record<string, any>) => Promise<number>;
+  },
+): Promise<typeof XCTestRunner> {
+  const {XCTestRunner: MockedRunner} = await mockImport<{XCTestRunner: typeof XCTestRunner}>(
+    t,
+    '../../src/services/ios/testmanagerd/xcuitest.js',
+    import.meta.url,
+    {
+      '../../src/services.js': {
+        startXCTestServices: async () => ({
+          execTestmanagerd,
+          controlTestmanagerd: createFakeTestmanagerd(),
+          dvtService: {close: async () => {}},
+          processControl: {launch, kill: async () => {}},
+          installationProxy: {
+            lookup: async () => ({
+              [RUNNER_BUNDLE_ID]: {Path: '/private/var/containers/Bundle/Application/A/Runner-Runner.app'},
+              [TARGET_BUNDLE_ID]: {Path: '/private/var/containers/Bundle/Application/B/App.app'},
+            }),
+            close: () => {},
+          },
+        }),
+      },
+    },
+  );
+  return MockedRunner;
+}
+
+function countActiveTimeouts(): number {
+  return process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length;
 }
 
 // #endregion
@@ -309,54 +390,64 @@ describe('DvtTestmanagedProxyService auxiliary helpers', function () {
 
 describe('XCTestRunner', function () {
   it('should launch the test runner in the background', async function (t) {
-    const runnerBundleId = 'com.example.Runner.xctrunner';
-    const targetBundleId = 'com.example.App';
     const launchCalls: Record<string, any>[] = [];
-    const createFakeTestmanagerd = () => ({
-      makeChannel: async () => ({getCode: () => 1}),
-      sendMessage: async () => {},
-      recvPlist: async () => [{}],
-      close: async () => {},
-    });
-    const {XCTestRunner: MockedRunner} = await mockImport<{XCTestRunner: typeof XCTestRunner}>(
-      t,
-      '../../src/services/ios/testmanagerd/xcuitest.js',
-      import.meta.url,
-      {
-        '../../src/services.js': {
-          startXCTestServices: async () => ({
-            execTestmanagerd: createFakeTestmanagerd(),
-            controlTestmanagerd: createFakeTestmanagerd(),
-            dvtService: {close: async () => {}},
-            processControl: {
-              launch: async (options: Record<string, any>) => {
-                launchCalls.push(options);
-                throw new Error('launch intercepted');
-              },
-              kill: async () => {},
-            },
-            installationProxy: {
-              lookup: async () => ({
-                [runnerBundleId]: {Path: '/private/var/containers/Bundle/Application/A/Runner-Runner.app'},
-                [targetBundleId]: {Path: '/private/var/containers/Bundle/Application/B/App.app'},
-              }),
-              close: () => {},
-            },
-          }),
-        },
+    const MockedRunner = await importMockedXCTestRunner(t, {
+      launch: async (options) => {
+        launchCalls.push(options);
+        throw new Error('launch intercepted');
       },
-    );
-
-    const runner = new MockedRunner({
-      udid: 'device-1',
-      testRunnerBundleId: runnerBundleId,
-      appUnderTestBundleId: targetBundleId,
-      xctestBundleId: 'com.example.Runner',
     });
+
+    const runner = new MockedRunner(RUNNER_OPTIONS);
     await assert.rejects(runner.run(), (err: any) => err.stage === 'launch_runner');
 
     assert.strictEqual(launchCalls.length, 1);
-    assert.strictEqual(launchCalls[0].bundleId, runnerBundleId);
+    assert.strictEqual(launchCalls[0].bundleId, RUNNER_BUNDLE_ID);
     assert.strictEqual(launchCalls[0].extraOptions?.ActivateSuspended, true);
+  });
+
+  it('should not fail a run whose exec channel is silent for over 60s within timeoutMs', async function (t) {
+    t.mock.timers.enable({apis: ['setTimeout', 'Date']});
+    const MockedRunner = await importMockedXCTestRunner(t, {
+      execTestmanagerd: createFakeExecTestmanagerd(t, [
+        [SELECTOR.testRunnerReady, []],
+        ...Array<ExecCallback>(90).fill(null),
+        [SELECTOR.testPlanFinished, []],
+      ]),
+      launch: async () => 1234,
+    });
+
+    const result = await new MockedRunner(RUNNER_OPTIONS).run();
+
+    assert.strictEqual(result.status, 'passed');
+    assert.strictEqual(result.error, undefined);
+  });
+
+  it('should report timed_out when the exec channel stays silent past timeoutMs', async function (t) {
+    t.mock.timers.enable({apis: ['setTimeout', 'Date']});
+    const MockedRunner = await importMockedXCTestRunner(t, {
+      execTestmanagerd: createFakeExecTestmanagerd(t, [[SELECTOR.testRunnerReady, []]]),
+      launch: async () => 1234,
+    });
+
+    const result = await new MockedRunner(RUNNER_OPTIONS).run();
+
+    assert.strictEqual(result.status, 'timed_out');
+  });
+
+  it('should not leave its timeout timer keeping the event loop alive after the run finishes', async function (t) {
+    const MockedRunner = await importMockedXCTestRunner(t, {
+      execTestmanagerd: createFakeExecTestmanagerd(t, [
+        [SELECTOR.testRunnerReady, []],
+        [SELECTOR.testPlanFinished, []],
+      ]),
+      launch: async () => 1234,
+    });
+    const activeTimeoutsBefore = countActiveTimeouts();
+
+    const result = await new MockedRunner({...RUNNER_OPTIONS, timeoutMs: 5000}).run();
+
+    assert.strictEqual(result.status, 'passed');
+    assert.strictEqual(countActiveTimeouts(), activeTimeoutsBefore);
   });
 });

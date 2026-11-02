@@ -35,6 +35,11 @@ export interface LengthBasedSplitterOptions {
   lengthFieldOffset?: number;
   lengthFieldLength?: number;
   lengthAdjustment?: number;
+  /**
+   * Frames to split before every later byte is left untouched for {@link LengthBasedSplitter.takeBufferedData},
+   * for a protocol that stops framing plists after a fixed handshake. Unlimited by default.
+   */
+  maxFrames?: number;
 }
 
 /**
@@ -49,6 +54,7 @@ export class LengthBasedSplitter extends Transform {
   private readonly lengthFieldOffset: number;
   private readonly lengthFieldLength: number;
   private readonly lengthAdjustment: number;
+  private framesLeft: number;
   private isXmlMode: boolean = false;
 
   /**
@@ -63,6 +69,7 @@ export class LengthBasedSplitter extends Transform {
     this.lengthFieldOffset = options.lengthFieldOffset ?? DEFAULT_LENGTH_FIELD_OFFSET;
     this.lengthFieldLength = options.lengthFieldLength ?? DEFAULT_LENGTH_FIELD_LENGTH;
     this.lengthAdjustment = options.lengthAdjustment ?? DEFAULT_LENGTH_ADJUSTMENT;
+    this.framesLeft = options.maxFrames ?? Infinity;
 
     // If readableStream is provided, pipe it to this
     if (options.readableStream) {
@@ -163,7 +170,7 @@ export class LengthBasedSplitter extends Transform {
    * Process data as binary with length prefix
    */
   private processBinaryData(callback: TransformCallback): void {
-    while (this.buffer.length >= this.lengthFieldOffset + this.lengthFieldLength) {
+    while (this.framesLeft > 0 && this.buffer.length >= this.lengthFieldOffset + this.lengthFieldLength) {
       let messageLength: number;
 
       // Read the length prefix according to configuration
@@ -232,6 +239,7 @@ export class LengthBasedSplitter extends Transform {
 
         // Remove the processed message from the buffer
         this.buffer = this.buffer.slice(totalLength);
+        this.framesLeft--;
       } catch {
         // move forward by 1 byte and try again
         this.buffer = this.buffer.slice(1);

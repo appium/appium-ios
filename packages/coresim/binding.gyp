@@ -11,6 +11,8 @@
         "src/native/sim_device_set.mm",
         "src/native/sim_device.mm",
         "src/native/sim_orientation.mm",
+        "src/native/sim_hid.mm",
+        "src/native/sim_duo.mm",
         "src/native/tcc_privacy.mm",
         "src/native/sim_pasteboard.mm",
         "src/native/sim_process.mm",

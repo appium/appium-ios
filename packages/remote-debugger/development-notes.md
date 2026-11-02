@@ -16,8 +16,8 @@ code at [github.com/WebKit/WebKit](https://github.com/WebKit/WebKit).
 
 - **Language / build**: TypeScript; compile with `npm run build` (watch: `npm run dev`).
 - **Entry**: `index.ts` exports `createRemoteDebugger()`, `RemoteDebugger`, `RemoteDebuggerRealDevice`, and `REMOTE_DEBUGGER_PORT`.
-- **Simulator vs real device**: Use `RemoteDebugger` (simulator) or `RemoteDebuggerRealDevice` (real device via `appium-ios-device`). Both extend the same base; the real-device class wires in `RpcClientRealDevice` instead of `RpcClientSimulator`.
-- **RPC layer** (`lib/rpc/`): `RpcClient` (base), `RpcClientSimulator`, `RpcClientRealDevice`; `RemoteMessages` builds Web Inspector commands; `RpcMessageHandler` processes responses.
+- **Simulator vs real device**: Use `RemoteDebugger` (simulator) or `RemoteDebuggerRealDevice` (real device via `appium-ios-remotexpc`; the caller picks the `transport`: `tunnel` (default, preferred) or the temporary `usbmux` fallback when no tunnel is running). Both extend the same base; the real-device class wires in `RpcClientRealDevice` instead of `RpcClientSimulator`.
+- **RPC layer** (`lib/rpc/`): `RpcClient` (base), `RpcClientSimulator` (framing in `web-inspector-framing.ts`), `RpcClientRealDevice`; `RemoteMessages` builds Web Inspector commands; `RpcMessageHandler` processes responses.
 - **Protocol** (`lib/protocol/`): Maps Web Inspector domain/method names to parameter definitions used when building RPC commands.
 - **Mixins** (`lib/mixins/`): Connect, execute, navigate, cookies, screenshot, events, message-handlers, misc, property-accessors.
 - **Events**: `RemoteDebugger.EVENT_PAGE_CHANGE`, `RemoteDebugger.EVENT_DISCONNECT`, `RemoteDebugger.EVENT_FRAMES_DETACHED` (see README for usage).

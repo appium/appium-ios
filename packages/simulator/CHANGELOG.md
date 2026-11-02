@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.10.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.2...appium-ios-simulator@10.10.0) (2026-10-24)
+
+### Features
+
+* **coresim:** add host-side simulator HID and Duo controls ([#109](https://github.com/appium/appium-ios/issues/109)) ([15f1dd1](https://github.com/appium/appium-ios/commit/15f1dd164f15f243e4a88889964bc2b6b7d2adc9))
+
+
+## [10.9.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.1...appium-ios-simulator@10.9.2) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
 ## [10.9.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.0...appium-ios-simulator@10.9.1) (2026-10-16)
 
 ### Code Refactoring

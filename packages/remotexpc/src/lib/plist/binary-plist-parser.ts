@@ -7,6 +7,7 @@
 import {getLogger} from '../logger.js';
 import type {PlistArray, PlistDictionary, PlistValue} from '../types.js';
 import {APPLE_EPOCH_OFFSET, BPLIST_MAGIC_AND_VERSION, BPLIST_TRAILER_SIZE, BPLIST_TYPE} from './constants.js';
+import {PlistUID} from './plist-uid.js';
 
 const log = getLogger('Plist');
 
@@ -280,10 +281,10 @@ class BinaryPlistParser {
    * Parses a UID value from the buffer
    * @param startOffset - The offset to start reading from
    * @param uidByteCount - The number of bytes to read
-   * @returns The parsed UID value
+   * @returns The parsed UID, kept distinct from integers so NSKeyedArchiver references stay recognizable
    */
-  private _parseUidValue(startOffset: number, uidByteCount: number): number {
-    return this._readMultiByteInteger(startOffset, uidByteCount, 'UID');
+  private _parseUidValue(startOffset: number, uidByteCount: number): PlistUID {
+    return new PlistUID(this._readMultiByteInteger(startOffset, uidByteCount, 'UID'));
   }
 
   /**

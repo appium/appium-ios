@@ -18,7 +18,7 @@ export async function launchSafari(this: RemoteDebugger): Promise<void> {
 }
 
 /**
- * Starts recording the timeline by registering an event listener and
+ * Starts recording the timeline by registering a Timeline.eventRecorded listener and
  * sending the Timeline.start command to the remote debugger.
  *
  * @param fn - Event listener function that will be called when timeline events are recorded.
@@ -26,7 +26,7 @@ export async function launchSafari(this: RemoteDebugger): Promise<void> {
  */
 export async function startTimeline(this: RemoteDebugger, fn: EventListener): Promise<any> {
   this.log.debug('Starting to record the timeline');
-  this.requireRpcClient().on('Timeline.eventRecorded', fn);
+  this.addClientEventListener('Timeline.eventRecorded', fn);
   return await this.requireRpcClient().send('Timeline.start', {
     appIdKey: getAppIdKey(this),
     pageIdKey: getPageIdKey(this),
@@ -34,11 +34,12 @@ export async function startTimeline(this: RemoteDebugger, fn: EventListener): Pr
 }
 
 /**
- * Stops recording the timeline by sending the Timeline.stop command
- * to the remote debugger.
+ * Stops recording the timeline by removing the Timeline.eventRecorded listeners
+ * and sending the Timeline.stop command to the remote debugger.
  */
 export async function stopTimeline(this: RemoteDebugger): Promise<any> {
   this.log.debug('Stopping to record the timeline');
+  this.removeClientEventListener('Timeline.eventRecorded');
   await this.requireRpcClient().send('Timeline.stop', {
     appIdKey: getAppIdKey(this),
     pageIdKey: getPageIdKey(this),

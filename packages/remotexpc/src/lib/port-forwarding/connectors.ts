@@ -28,7 +28,10 @@ const connectViaUsbmuxImpl = async (udid: string, devicePort: number, connectTim
  */
 export const connectViaUsbmux = connectViaUsbmuxImpl satisfies PortForwardingConnector;
 
-const connectToTunnelHost = async (host: string, port: number, connectTimeoutMs = 5000): Promise<Socket> =>
+/**
+ * Opens a TCP connection to a host on the tunnel, failing after `connectTimeoutMs`.
+ */
+export const connectToTunnelHost = async (host: string, port: number, connectTimeoutMs = 5000): Promise<Socket> =>
   await new Promise<Socket>((resolve, reject) => {
     const socket = createConnection({host, port});
 

@@ -4,23 +4,28 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
+#include "audio_pipeline.h"
 #include "napi_util.h"
 #include "pipeline.h"
 
 namespace {
 
+using media_proxy::AudioConfig;
+using media_proxy::AudioPipeline;
 using media_proxy::EncodedUnit;
 using media_proxy::Pipeline;
 using media_proxy::PipelineConfig;
 using media_proxy::PipelineError;
 
-constexpr std::array<uint8_t, 4> kStartCode{0, 0, 0, 1};
 // Encoded units waiting for the JS thread; beyond this new ones are dropped so a stalled loop can't grow memory.
 // Fine for MJPEG (every frame stands alone); H.264 must resync to the next key frame instead.
 constexpr size_t kMaxPendingUnits = 60;
+// Audio units are tiny and never need a resync; this only bounds a stalled loop (~5 s of 10 ms units).
+constexpr size_t kMaxPendingAudioUnits = 500;
 
 // Shared with in-flight events, so late events never touch a dead session. JS-thread-only, except the counter.
 // The callbacks are weak: the handle's `callbacks` array owns them, so an abandoned transcoder stays collectable.
@@ -30,6 +35,7 @@ struct JsState {
   napi_deferred deferred = nullptr;  // resolved on the JS thread when close() finishes
   std::shared_ptr<void> keepAlive;   // the Session itself, held while close() drains so GC can't abort it
   std::atomic<size_t> pendingUnits{0};
+  std::atomic<size_t> pendingAudioUnits{0};
 };
 
 struct Event {
@@ -38,13 +44,15 @@ struct Event {
   EncodedUnit unit;
   PipelineError error;
   std::shared_ptr<JsState> state;
+  bool audio = false;
 };
 
 // Owns one transcoder: the pipeline (worker thread) plus the thread-safe bridge back to JS.
 class Session : public std::enable_shared_from_this<Session> {
  public:
-  Session(Napi::Env env, const PipelineConfig& config, const Napi::Function& onUnit, const Napi::Function& onError)
-      : env_(env), state_(std::make_shared<JsState>()) {
+  Session(Napi::Env env, const PipelineConfig& config, const std::optional<AudioConfig>& audio,
+          const Napi::Function& onUnit, const Napi::Function& onError)
+      : env_(env), isH264_(config.outputCodec == "h264"), state_(std::make_shared<JsState>()) {
     state_->onUnit = Napi::Weak(onUnit);
     state_->onError = Napi::Weak(onError);
     // The bridge's own function is a no-op: it must not keep JS objects alive.
@@ -57,7 +65,12 @@ class Session : public std::enable_shared_from_this<Session> {
     try {
       pipeline_ = std::make_unique<Pipeline>(
           config, [this](EncodedUnit&& unit) { PostUnit(std::move(unit)); },
-          [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); });
+          [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); }, keyFrameRequested_);
+      if (audio) {
+        audioPipeline_ = std::make_unique<AudioPipeline>(
+            *audio, [this](EncodedUnit&& unit) { PostAudioUnit(std::move(unit)); },
+            [this](PipelineError&& err) { Post(Event::Kind::kError, {}, std::move(err)); });
+      }
     } catch (...) {
       napi_remove_env_cleanup_hook(env_, &Session::OnEnvCleanup, this);
       ReleaseBridge();  // the destructor won't run for a half-built Session
@@ -69,7 +82,8 @@ class Session : public std::enable_shared_from_this<Session> {
     if (!shutdown_) {
       napi_remove_env_cleanup_hook(env_, &Session::OnEnvCleanup, this);
     }
-    pipeline_.reset();  // joins the worker before the bridge goes away
+    audioPipeline_.reset();  // joins the workers before the bridge goes away
+    pipeline_.reset();
     ReleaseBridge();
   }
   Session(const Session&) = delete;
@@ -91,7 +105,7 @@ class Session : public std::enable_shared_from_this<Session> {
         throw Napi::TypeError::New(env, "chunks must be Buffers");
       }
       const auto buffer = chunk.As<Napi::Buffer<uint8_t>>();
-      unit.insert(unit.end(), kStartCode.begin(), kStartCode.end());
+      unit.insert(unit.end(), media_proxy::kAnnexBStartCode.begin(), media_proxy::kAnnexBStartCode.end());
       unit.insert(unit.end(), buffer.Data(), buffer.Data() + buffer.Length());
     }
     if (unit.empty()) {
@@ -99,6 +113,21 @@ class Session : public std::enable_shared_from_this<Session> {
     }
     pipeline_->Push(std::move(unit), info[1].As<Napi::Number>().Int64Value(), info[2].As<Napi::Boolean>().Value());
   }
+
+  void PushAudio(const Napi::CallbackInfo& info) {
+    const Napi::Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsBuffer() || !info[1].IsNumber()) {
+      throw Napi::TypeError::New(env, "pushAudio(data: Buffer, timestampMicros: number)");
+    }
+    if (closing_ || !audioPipeline_) {
+      return;
+    }
+    const auto buffer = info[0].As<Napi::Buffer<uint8_t>>();
+    audioPipeline_->Push(std::vector<uint8_t>(buffer.Data(), buffer.Data() + buffer.Length()),
+                         info[1].As<Napi::Number>().Int64Value());
+  }
+
+  void RequestKeyFrame() { keyFrameRequested_.store(true); }
 
   Napi::Value Close(const Napi::Env& env) {
     if (!closing_) {
@@ -110,11 +139,18 @@ class Session : public std::enable_shared_from_this<Session> {
       closePromise_ = Napi::Persistent(Napi::Promise(env, promise));
       state_->keepAlive = shared_from_this();
       tsfn_.Ref(env);
-      // Safe even if Deliver destroys *this meanwhile: ~Session joins this worker before members die.
-      pipeline_->Finish([this] {
-        Post(Event::Kind::kDone, {}, {});
-        ReleaseBridge();
-      });
+      // Safe even if Deliver destroys *this meanwhile: ~Session joins the workers before members die.
+      remainingWorkers_ = audioPipeline_ ? 2 : 1;
+      const auto workerDone = [this] {
+        if (--remainingWorkers_ == 0) {
+          Post(Event::Kind::kDone, {}, {});
+          ReleaseBridge();
+        }
+      };
+      pipeline_->Finish(workerDone);
+      if (audioPipeline_) {
+        audioPipeline_->Finish(workerDone);
+      }
     }
     return closePromise_.Value();
   }
@@ -126,6 +162,7 @@ class Session : public std::enable_shared_from_this<Session> {
   // finalizer (which runs while Node holds the tsfn's lock) would deadlock.
   void Shutdown() {
     shutdown_ = true;
+    audioPipeline_.reset();
     pipeline_.reset();
     released_.store(true);
     // A close() interrupted here would otherwise keep the session alive forever (done is never posted).
@@ -139,19 +176,36 @@ class Session : public std::enable_shared_from_this<Session> {
     }
   }
 
+  // Dropping an H.264 unit breaks the prediction chain: skip everything up to a fresh key frame and ask for one.
   void PostUnit(EncodedUnit&& unit) {
     if (state_->pendingUnits.load() >= kMaxPendingUnits) {
+      if (isH264_) {
+        awaitingKeyFrame_ = true;
+        keyFrameRequested_.store(true);
+      }
       return;
     }
+    if (awaitingKeyFrame_ && !unit.isKeyFrame) {
+      return;
+    }
+    awaitingKeyFrame_ = false;
     ++state_->pendingUnits;
     Post(Event::Kind::kUnit, std::move(unit), {});
   }
 
-  void Post(Event::Kind kind, EncodedUnit&& unit, PipelineError&& error) {
-    auto* event = new Event{kind, std::move(unit), std::move(error), state_};
+  void PostAudioUnit(EncodedUnit&& unit) {
+    if (state_->pendingAudioUnits.load() >= kMaxPendingAudioUnits) {
+      return;
+    }
+    ++state_->pendingAudioUnits;
+    Post(Event::Kind::kUnit, std::move(unit), {}, true);
+  }
+
+  void Post(Event::Kind kind, EncodedUnit&& unit, PipelineError&& error, bool audio = false) {
+    auto* event = new Event{kind, std::move(unit), std::move(error), state_, audio};
     if (tsfn_.NonBlockingCall(event, Deliver) != napi_ok) {
       if (kind == Event::Kind::kUnit) {
-        --state_->pendingUnits;
+        --(audio ? state_->pendingAudioUnits : state_->pendingUnits);
       }
       delete event;
     }
@@ -165,7 +219,7 @@ class Session : public std::enable_shared_from_this<Session> {
     JsState& state = *event->state;
     switch (event->kind) {
       case Event::Kind::kUnit:
-        --state.pendingUnits;
+        --(event->audio ? state.pendingAudioUnits : state.pendingUnits);
         DeliverUnit(env, state, *event);
         break;
       case Event::Kind::kError:
@@ -201,6 +255,7 @@ class Session : public std::enable_shared_from_this<Session> {
     napi_value data = nullptr;
     napi_value isKeyFrame = nullptr;
     napi_value timestamp = nullptr;
+    napi_value audio = nullptr;
     const std::vector<uint8_t>& bytes = event.unit.data;
     if (napi_create_object(env, &unit) != napi_ok ||
         napi_create_buffer_copy(env, bytes.size(), bytes.data(), nullptr, &data) != napi_ok ||
@@ -209,6 +264,10 @@ class Session : public std::enable_shared_from_this<Session> {
         napi_set_named_property(env, unit, "data", data) != napi_ok ||
         napi_set_named_property(env, unit, "isKeyFrame", isKeyFrame) != napi_ok ||
         napi_set_named_property(env, unit, "timestampMicros", timestamp) != napi_ok) {
+      return;
+    }
+    if (event.audio && (napi_get_boolean(env, true, &audio) != napi_ok ||
+                        napi_set_named_property(env, unit, "audio", audio) != napi_ok)) {
       return;
     }
     CallWithArgument(env, state.onUnit, unit);
@@ -228,13 +287,18 @@ class Session : public std::enable_shared_from_this<Session> {
   }
 
   napi_env env_;
+  bool isH264_;
   std::shared_ptr<JsState> state_;
   Napi::ThreadSafeFunction tsfn_;
   Napi::Reference<Napi::Promise> closePromise_;
   std::atomic<bool> released_{false};
   bool shutdown_ = false;
   bool closing_ = false;
-  std::unique_ptr<Pipeline> pipeline_;  // last: destroyed (and joined) first
+  bool awaitingKeyFrame_ = false;  // worker thread only
+  std::atomic<bool> keyFrameRequested_{false};
+  std::atomic<int> remainingWorkers_{0};
+  std::unique_ptr<Pipeline> pipeline_;
+  std::unique_ptr<AudioPipeline> audioPipeline_;  // last: destroyed (and joined) first
 };
 
 double ReadNumber(const Napi::Object& config, const char* key) {
@@ -271,10 +335,22 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
   pipelineConfig.quality = ReadNumber(config, "quality");
   pipelineConfig.scale = ReadNumber(config, "scale");
 
+  std::optional<AudioConfig> audioConfig;
+  if (config.Get("audio").ToBoolean().Value()) {
+    const Napi::Value asc = config.Get("audioSpecificConfig");
+    if (!asc.IsBuffer()) {
+      throw Napi::TypeError::New(env, "audioSpecificConfig must be a Buffer");
+    }
+    const auto bytes = asc.As<Napi::Buffer<uint8_t>>();
+    audioConfig.emplace();
+    audioConfig->audioSpecificConfig.assign(bytes.Data(), bytes.Data() + bytes.Length());
+    audioConfig->bitratePerChannel = ReadNumber(config, "audioBitratePerChannel");
+  }
+
   std::shared_ptr<Session> session;
   try {
-    session =
-        std::make_shared<Session>(env, pipelineConfig, info[1].As<Napi::Function>(), info[2].As<Napi::Function>());
+    session = std::make_shared<Session>(env, pipelineConfig, audioConfig, info[1].As<Napi::Function>(),
+                                        info[2].As<Napi::Function>());
   } catch (const PipelineError& err) {
     media_proxy::ThrowTyped(env, err.name.c_str(), err.message);
   }
@@ -286,8 +362,10 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
   callbacks.Set(1U, info[2]);
   handle.Set("callbacks", callbacks);
   handle.Set("push", Napi::Function::New(env, [session](const Napi::CallbackInfo& call) { session->Push(call); }));
+  handle.Set("pushAudio",
+             Napi::Function::New(env, [session](const Napi::CallbackInfo& call) { session->PushAudio(call); }));
   handle.Set("requestKeyFrame",
-             Napi::Function::New(env, [](const Napi::CallbackInfo&) {}));  // MJPEG: every frame is a key frame
+             Napi::Function::New(env, [session](const Napi::CallbackInfo&) { session->RequestKeyFrame(); }));
   handle.Set("close", Napi::Function::New(
                           env, [session](const Napi::CallbackInfo& call) { return session->Close(call.Env()); }));
   return handle;

@@ -37,20 +37,36 @@ export class NetworkMonitor extends BaseInstrument {
   static readonly IDENTIFIER = 'com.apple.instruments.server.services.networking';
   private receiveAbortController: AbortController | null = null;
   private stopRequested = false;
+  private started = false;
 
+  /**
+   * Begin monitoring. A no-op if monitoring is already started, so callers can start
+   * eagerly (to surface setup errors) before iterating {@link events}.
+   */
   async start(): Promise<void> {
+    if (this.started) {
+      log.debug('network monitor already started; start() is a no-op');
+      return;
+    }
     this.stopRequested = false;
     await this.initialize();
+    // stop() ran while the channel was opening
+    if (this.stopRequested) {
+      return;
+    }
     const channel = this.channel;
     if (!channel) {
       throw new Error('Network monitor channel is not initialized');
     }
     await channel.call('startMonitoring')(undefined, false);
+    // Don't resurrect `started` if stop() ran meanwhile
+    this.started = !this.stopRequested;
   }
 
   async stop(): Promise<void> {
     this.stopRequested = true;
     this.receiveAbortController?.abort();
+    this.started = false;
     if (this.channel) {
       await this.channel.call('stopMonitoring')();
     }

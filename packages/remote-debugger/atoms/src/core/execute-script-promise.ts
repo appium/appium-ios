@@ -1,16 +1,26 @@
 import {BotError, ErrorCode} from './error.js';
-import {type ResponseObject, unwrapValue, wrapError, wrapResponse} from './inject.js';
+import {
+  getErrorMessage,
+  SCRIPT_ERROR_FALLBACK,
+  type ResponseObject,
+  toBotError,
+  unwrapValue,
+  wrapError,
+  wrapResponse,
+} from './inject.js';
 
 /** Longest wait for a returned promise; a longer timeout is reduced to it. */
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;
+
+const REJECTION_FALLBACK = 'The promise returned by the script was rejected';
 
 /** iOS Safari can fire pagehide without unload, e.g. for the back/forward cache. */
 const PAGE_LEAVE_EVENTS = ['unload', 'pagehide'];
 
 /**
  * `executeScript` from inject.ts for a script string, plus a returned thenable is awaited
- * (https://w3c.github.io/webdriver/#execute-script). Kept apart so inject.ts, bundled in most
- * atoms, does not change.
+ * (https://w3c.github.io/webdriver/#execute-script). Kept apart so this promise handling is
+ * not bundled into every atom that bundles inject.ts.
  */
 export function executeScriptAwaitingPromise(
   script: string,
@@ -27,14 +37,14 @@ export function executeScriptAwaitingPromise(
     const unwrappedArgs = unwrapValue(args, win.document) as unknown[];
     result = compiled.apply(null, unwrappedArgs);
   } catch (ex) {
-    return finish(wrapError(ex as Error));
+    return finish(wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK)));
   }
   try {
     if (!isThenable(result)) {
       return finish(wrapResponse(result));
     }
   } catch (ex) {
-    return finish(wrapSerializationError(ex));
+    return finish(wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK)));
   }
   const thenable = result;
   // Runtime.awaitPromise accepts only a native promise: an async function returns one, even when
@@ -100,31 +110,12 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
         try {
           ret = wrapResponse(value);
         } catch (ex) {
-          ret = wrapSerializationError(ex);
+          ret = wrapError(toBotError(ex, SCRIPT_ERROR_FALLBACK));
         }
         settle(ret);
       },
-      (reason) => settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(reason)))),
+      (reason) =>
+        settle(wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getErrorMessage(reason, REJECTION_FALLBACK)))),
     );
   });
-}
-
-/** wrapError needs an object (`'code' in err`): a thrown primitive (e.g. from a getter) is a script error. */
-function wrapSerializationError(ex: unknown): ResponseObject {
-  return typeof ex === 'object' && ex !== null
-    ? wrapError(ex as Error)
-    : wrapError(new BotError(ErrorCode.JAVASCRIPT_ERROR, getRejectionMessage(ex)));
-}
-
-function getRejectionMessage(reason: unknown): string {
-  let message = '';
-  try {
-    if (reason !== null && reason !== undefined) {
-      const reasonMessage = (reason as {message?: unknown}).message;
-      message = String(reasonMessage === undefined ? reason : reasonMessage);
-    }
-  } catch {
-    // e.g. Object.create(null)
-  }
-  return message || 'The promise returned by the script was rejected';
 }

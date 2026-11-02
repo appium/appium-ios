@@ -32,6 +32,7 @@ export function removeClientEventListener(this: RemoteDebugger, eventName: strin
   for (const listener of getClientEventListeners(this)[eventName] || []) {
     this.requireRpcClient().off(eventName, listener);
   }
+  delete getClientEventListeners(this)[eventName];
 }
 
 /**

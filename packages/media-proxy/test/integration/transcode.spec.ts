@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {MediaProxyEncoderUnavailableError} from '../../src/errors.js';
 import {createTranscoder, transcode} from '../../src/transcoder.js';
 import type {JpegFrame, MjpegOptions, NalAccessUnit} from '../../src/types.js';
-import {jpegSize, readHevcFixture} from '../helpers/annexb.js';
+import {HAS_H264, jpegSize, readHevcFixture} from '../helpers/annexb.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../test/fixtures/hevc-360x640-30f.h265', import.meta.url));
 const FRAMES = 30;
@@ -112,7 +112,7 @@ describe('HEVC -> MJPEG', () => {
     assert.strictEqual((await t.units().next()).done, true);
   });
 
-  it('reports H.264 as unavailable', () => {
+  it('reports H.264 as unavailable where no encoder exists', {skip: HAS_H264}, () => {
     assert.throws(() => createTranscoder({codec: 'h264'}), MediaProxyEncoderUnavailableError);
   });
 });

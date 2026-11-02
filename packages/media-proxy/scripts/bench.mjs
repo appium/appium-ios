@@ -10,6 +10,8 @@ import {readHevcFixture} from '../lib/test/helpers/annexb.js';
 
 const BYTES_PER_MB = 1048576;
 const RTP_CLOCK_HZ = 90000;
+const RSS_SAMPLE_MS = 1000;
+const MIN_RSS_SAMPLES = 8;
 
 function parseOptions() {
   const {values, positionals} = parseArgs({
@@ -37,15 +39,16 @@ function parseOptions() {
 }
 
 /** Consumes the transcoder output, recording when each unit arrived relative to when it was sent. */
-function collect(transcoder, sentAt) {
-  const stats = {received: 0, bytes: 0, latencies: []};
+function collect(transcoder, sentAt, fps) {
+  // Preallocated, so the run's own bookkeeping never shows up as memory growth.
+  const stats = {received: 0, bytes: 0, latencies: new Float64Array(sentAt.length), measured: 0};
   const done = (async () => {
     for await (const unit of transcoder.units()) {
       stats.received++;
       stats.bytes += unit.data.length;
-      const sent = sentAt.get(unit.timestampMicros);
-      if (sent !== undefined) {
-        stats.latencies.push(performance.now() - sent);
+      const sent = sentAt[Math.round((unit.timestampMicros * fps) / 1e6)];
+      if (sent !== undefined && stats.measured < stats.latencies.length) {
+        stats.latencies[stats.measured++] = performance.now() - sent;
       }
     }
   })();
@@ -53,11 +56,16 @@ function collect(transcoder, sentAt) {
 }
 
 /** Pushes `frames` access units paced at `fps`, looping the clip (key frames repeat, time keeps advancing). */
-async function feed(transcoder, units, {fps, frames}, sentAt) {
+async function feed(transcoder, units, {fps, frames}, sentAt, rssSamples) {
   const interval = 1000 / fps;
   const start = performance.now();
+  let nextSample = start;
   for (let i = 0; i < frames; i++) {
-    sentAt.set(Math.round((i * 1e6) / fps), performance.now());
+    if (performance.now() >= nextSample) {
+      rssSamples.push(process.memoryUsage().rss / BYTES_PER_MB);
+      nextSample += RSS_SAMPLE_MS;
+    }
+    sentAt[i] = performance.now();
     transcoder.push({...units[i % units.length], timestamp: Math.round((i * RTP_CLOCK_HZ) / fps) >>> 0});
     const wait = start + (i + 1) * interval - performance.now();
     if (wait > 0) {
@@ -68,8 +76,10 @@ async function feed(transcoder, units, {fps, frames}, sentAt) {
   return (performance.now() - start) / 1000;
 }
 
-function summarize(options, units, stats, elapsed) {
-  const sorted = [...stats.latencies].sort((a, b) => a - b);
+function summarize(options, units, stats, elapsed, rssSamples) {
+  // Growth after the first quarter of the run (warm-up allocations excluded): a steady climb means a leak.
+  const settled = rssSamples.slice(Math.floor(rssSamples.length / 4));
+  const sorted = stats.latencies.slice(0, stats.measured).sort();
   const pct = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]?.toFixed(1);
   return {
     codec: options.codec,
@@ -81,6 +91,8 @@ function summarize(options, units, stats, elapsed) {
     mbps: +((stats.bytes * 8) / elapsed / 1e6).toFixed(1),
     latencyMs: {p50: pct(0.5), p95: pct(0.95), p99: pct(0.99), max: sorted.at(-1)?.toFixed(1)},
     rssMb: Math.round(process.memoryUsage().rss / BYTES_PER_MB),
+    // null: the run was too short to tell (not "no growth").
+    rssGrowthMb: settled.length >= MIN_RSS_SAMPLES ? Math.round(settled.at(-1) - settled[0]) : null,
   };
 }
 
@@ -93,11 +105,12 @@ async function main() {
     scale: options.scale,
     quality: options.quality,
   });
-  const sentAt = new Map();
-  const {stats, done} = collect(transcoder, sentAt);
-  const elapsed = await feed(transcoder, units, options, sentAt);
+  const sentAt = new Float64Array(options.frames);
+  const {stats, done} = collect(transcoder, sentAt, options.fps);
+  const rssSamples = [];
+  const elapsed = await feed(transcoder, units, options, sentAt, rssSamples);
   await done;
-  console.log(JSON.stringify(summarize(options, units, stats, elapsed)));
+  console.log(JSON.stringify(summarize(options, units, stats, elapsed, rssSamples)));
 }
 
 main().catch((err) => {
