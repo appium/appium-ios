@@ -33,14 +33,19 @@
 
 
 /**
- Returns an invalid argument error unless `bundleId` is a string, or is absent where it is optional.
+ Whether `bundleId` is a string, or is absent where it is optional.
 
  XCTest passes the identifier to testmanagerd over XPC, which only accepts NSString there.
  A JSON null (NSNull) makes testmanagerd drop the whole test session and turn Automation Mode off.
  */
+static BOOL FBIsValidBundleId(id bundleId, BOOL isRequired)
+{
+  return [bundleId isKindOfClass:NSString.class] || (nil == bundleId && !isRequired);
+}
+
 static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequired)
 {
-  if ([bundleId isKindOfClass:NSString.class] || (nil == bundleId && !isRequired)) {
+  if (FBIsValidBundleId(bundleId, isRequired)) {
     return nil;
   }
   return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"'bundleId' must be a string"
@@ -118,8 +123,7 @@ static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequi
     return errorResponse;
   }
   NSString *bundleID = capabilities[FB_CAP_BUNDLE_ID];
-  if (nil != bundleID && ![bundleID isKindOfClass:NSString.class]) {
-    // See FBInvalidBundleIdResponse
+  if (!FBIsValidBundleId(bundleID, NO)) {
     return FBResponseWithStatus([FBCommandStatus sessionNotCreatedError:@"'bundleId' capability must be a string"
                                                               traceback:nil]);
   }
