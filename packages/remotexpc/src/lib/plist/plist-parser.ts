@@ -1,5 +1,6 @@
 import {DOMParser, type Element, Node} from '@xmldom/xmldom';
 
+import {setDictionaryEntry} from '../dictionary.js';
 import {getLogger} from '../logger.js';
 import type {PlistArray, PlistDictionary, PlistValue} from '../types.js';
 import {PlistService} from './plist-service.js';
@@ -11,7 +12,6 @@ import {
   hasUnicodeReplacementCharacter,
   isValidXml,
   removeExtraContentAfterPlist,
-  setDictionaryEntry,
   trimBeforeXmlDeclaration,
 } from './utils.js';
 

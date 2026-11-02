@@ -5,7 +5,13 @@
  * commonly used in Apple's iOS and macOS systems.
  */
 import type {PlistDictionary, PlistValue} from '../types.js';
-import {APPLE_EPOCH_OFFSET, BPLIST_MAGIC_AND_VERSION, BPLIST_TRAILER_SIZE, BPLIST_TYPE} from './constants.js';
+import {
+  APPLE_EPOCH_OFFSET,
+  BPLIST_DATE_MARKER,
+  BPLIST_MAGIC_AND_VERSION,
+  BPLIST_TRAILER_SIZE,
+  BPLIST_TYPE,
+} from './constants.js';
 import {PlistUID} from './plist-uid.js';
 
 /**
@@ -249,13 +255,14 @@ class BinaryPlistCreator {
   }
 
   /**
-   * Creates binary data for a date value
+   * Creates binary data for a date value. The marker carries the 8-byte width, which
+   * CoreFoundation checks before it accepts a date.
    * @param value - The date value
    * @returns Buffer containing the binary data
    */
   private _createDateData(value: Date): Buffer {
     const buffer = Buffer.alloc(9);
-    buffer.writeUInt8(BPLIST_TYPE.DATE, 0);
+    buffer.writeUInt8(BPLIST_DATE_MARKER, 0);
     // Convert to seconds since Apple epoch (2001-01-01)
     const timestamp = value.getTime() / 1000 - APPLE_EPOCH_OFFSET;
     buffer.writeDoubleBE(timestamp, 1);

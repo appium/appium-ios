@@ -4,11 +4,17 @@
  * This module provides functionality to parse binary property lists (bplists)
  * commonly used in Apple's iOS and macOS systems.
  */
+import {setDictionaryEntry} from '../dictionary.js';
 import {getLogger} from '../logger.js';
 import type {PlistArray, PlistDictionary, PlistValue} from '../types.js';
-import {APPLE_EPOCH_OFFSET, BPLIST_MAGIC_AND_VERSION, BPLIST_TRAILER_SIZE, BPLIST_TYPE} from './constants.js';
+import {
+  APPLE_EPOCH_OFFSET,
+  BPLIST_DATE_MARKER,
+  BPLIST_MAGIC_AND_VERSION,
+  BPLIST_TRAILER_SIZE,
+  BPLIST_TYPE,
+} from './constants.js';
 import {PlistUID} from './plist-uid.js';
-import {setDictionaryEntry} from './utils.js';
 
 const log = getLogger('Plist');
 
@@ -20,16 +26,19 @@ const OBJECT_AREA_START = BPLIST_MAGIC_AND_VERSION.length;
  */
 const MAX_LENGTH_INT_BYTES = 8;
 
+const INTEGER_BYTE_COUNTS = new Set([1, 2, 4, 8, 16]);
+const REAL_BYTE_COUNTS = new Set([4, 8]);
+
 /**
- * Object types whose marker is followed by a length, with a separate length integer when the
- * length does not fit the marker's low 4 bits.
+ * Supported object types whose marker is followed by a length, with a separate length integer
+ * when the length does not fit the marker's low 4 bits. Sets are not supported, so they are
+ * rejected by type before any length is read for them.
  */
 const VARIABLE_LENGTH_TYPES = new Set([
   BPLIST_TYPE.DATA,
   BPLIST_TYPE.STRING_ASCII,
   BPLIST_TYPE.STRING_UNICODE,
   BPLIST_TYPE.ARRAY,
-  BPLIST_TYPE.SET,
   BPLIST_TYPE.DICT,
 ]);
 
@@ -117,7 +126,7 @@ class BinaryPlistParser {
     this._parseTrailer();
     this._parseObjects();
     this._resolveReferences();
-    return this._handleTopObject();
+    return this._objectTable[this._topObject] as PlistValue;
   }
 
   /**
@@ -282,8 +291,12 @@ class BinaryPlistParser {
    * @param startOffset - The offset to start reading from
    * @param intByteCount - The number of bytes to read
    * @returns The parsed integer value (number or bigint)
+   * @throws BinaryPlistError if the width is not one binary plists use
    */
   private _parseIntegerValue(startOffset: number, intByteCount: number): number | bigint {
+    if (!INTEGER_BYTE_COUNTS.has(intByteCount)) {
+      throw new BinaryPlistError(`Unexpected integer byte count: ${intByteCount}. Cannot parse integer value.`);
+    }
     this._claimPayloadBytes(startOffset, intByteCount, 'Integer');
 
     // Handle different integer sizes
@@ -336,8 +349,12 @@ class BinaryPlistParser {
    * @param startOffset - The offset to start reading from
    * @param floatByteCount - The number of bytes to read
    * @returns The parsed floating point value
+   * @throws BinaryPlistError if the width is not one binary plists use
    */
   private _parseRealValue(startOffset: number, floatByteCount: number): number {
+    if (!REAL_BYTE_COUNTS.has(floatByteCount)) {
+      throw new BinaryPlistError(`Unexpected float byte count: ${floatByteCount}. Cannot parse real value.`);
+    }
     this._claimPayloadBytes(startOffset, floatByteCount, 'Real');
     switch (floatByteCount) {
       case 4:
@@ -350,11 +367,16 @@ class BinaryPlistParser {
   }
 
   /**
-   * Parses a date value from the buffer
+   * Parses a date value from the buffer. CoreFoundation only writes and accepts the 8-byte form.
    * @param startOffset - The offset to start reading from
+   * @param objInfo - The marker's low 4 bits
    * @returns The parsed Date object
+   * @throws BinaryPlistError if the marker is not the 8-byte date marker
    */
-  private _parseDateValue(startOffset: number): Date {
+  private _parseDateValue(startOffset: number, objInfo: number): Date {
+    if ((BPLIST_TYPE.DATE | objInfo) !== BPLIST_DATE_MARKER) {
+      throw new BinaryPlistError(`Unexpected date marker info: 0x${objInfo.toString(16)}. Cannot parse date value.`);
+    }
     this._claimPayloadBytes(startOffset, 8, 'Date');
     // Date is stored as a float, seconds since 2001-01-01
     const timestamp = this._buffer.readDoubleBE(startOffset);
@@ -411,13 +433,14 @@ class BinaryPlistParser {
   }
 
   /**
-   * Parses every object listed in the offset table. Each entry must point at its own object inside
-   * the object area; writers never list an object twice, and refusing it keeps the work and memory
-   * per entry tied to the bytes that entry describes.
-   * @throws BinaryPlistError if an offset lies outside the object area or repeats an earlier entry
+   * Parses every object listed in the offset table. Entries that point at the same offset share
+   * one parsed object, as in CoreFoundation, so an aliased entry costs a table slot and nothing
+   * more. Writers never alias, so the offset index is only built once an alias shows up.
+   * @throws BinaryPlistError if an offset lies outside the object area
    */
   private _parseObjects(): void {
     const seenOffsets = new Uint8Array(Math.ceil(this._offsetTableOffset / 8));
+    let itemsByOffset: Map<number, ObjectTableItem> | undefined;
     for (let i = 0; i < this._numObjects; i++) {
       const objOffset = this._readOffset(i);
       if (objOffset < OBJECT_AREA_START || objOffset >= this._offsetTableOffset) {
@@ -426,11 +449,28 @@ class BinaryPlistParser {
       const seenByte = objOffset >> 3;
       const seenBit = 1 << (objOffset & 7);
       if (seenOffsets[seenByte] & seenBit) {
-        throw new BinaryPlistError(`Binary plist offset table points at offset ${objOffset} more than once.`);
+        itemsByOffset ??= this._indexParsedObjectsByOffset(i);
+        this._objectTable[i] = itemsByOffset.get(objOffset);
+        continue;
       }
       seenOffsets[seenByte] |= seenBit;
-      this._objectTable[i] = this._parseObjectAt(objOffset);
+      const item = this._parseObjectAt(objOffset);
+      this._objectTable[i] = item;
+      itemsByOffset?.set(objOffset, item);
     }
+  }
+
+  /**
+   * Maps the offsets of the table entries parsed so far to their objects
+   * @param count - How many entries have been parsed
+   * @returns The parsed objects keyed by offset
+   */
+  private _indexParsedObjectsByOffset(count: number): Map<number, ObjectTableItem> {
+    const itemsByOffset = new Map<number, ObjectTableItem>();
+    for (let i = 0; i < count; i++) {
+      itemsByOffset.set(this._readOffset(i), this._objectTable[i]);
+    }
+    return itemsByOffset;
   }
 
   /**
@@ -494,7 +534,7 @@ class BinaryPlistParser {
         return this._parseRealValue(startOffset, 1 << objInfo);
 
       case BPLIST_TYPE.DATE:
-        return this._parseDateValue(startOffset);
+        return this._parseDateValue(startOffset, objInfo);
 
       case BPLIST_TYPE.DATA:
         return this._parseDataValue(startOffset, objLength);
@@ -685,42 +725,6 @@ class BinaryPlistParser {
     }
     this._setExpandedSize(obj, expandedSize);
     return dict;
-  }
-
-  /**
-   * Handles special case for the top object
-   * @returns The final parsed value
-   */
-  private _handleTopObject(): PlistValue {
-    // If the top object is an empty object but we have key-value pairs in the array format,
-    // convert it to a proper object
-    if (
-      this._topObject === 0 &&
-      this._objectTable[0] &&
-      typeof this._objectTable[0] === 'object' &&
-      Object.keys(this._objectTable[0] as object).length === 0 &&
-      this._objectTable.length > 1
-    ) {
-      return this._convertArrayToDict();
-    }
-
-    return this._objectTable[this._topObject] as PlistValue;
-  }
-
-  /**
-   * Converts an array format to a dictionary
-   * @returns The converted dictionary
-   */
-  private _convertArrayToDict(): PlistDictionary {
-    const result: PlistDictionary = {};
-    // Process the array in key-value pairs
-    for (let i = 1; i < this._objectTable.length; i += 2) {
-      const key = this._objectTable[i];
-      if (i + 1 < this._objectTable.length && typeof key === 'string') {
-        setDictionaryEntry(result, key, this._objectTable[i + 1] as PlistValue);
-      }
-    }
-    return result;
   }
 }
 

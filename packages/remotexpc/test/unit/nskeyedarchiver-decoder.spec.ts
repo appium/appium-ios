@@ -308,3 +308,38 @@ describe('NSKeyedArchiver Decoder', () => {
     });
   });
 });
+
+describe('NSKeyedArchiver Decoder dictionary keys', () => {
+  it('should store a __proto__ key from an archived object as an own property', () => {
+    const root: Record<string, unknown> = {other: 'v'};
+    Object.defineProperty(root, '__proto__', {
+      value: new PlistUID(2),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    const decoded = decodeNSKeyedArchiver(parseBinaryArchive(['$null', root, {x: true}]));
+    assert.strictEqual(Object.getPrototypeOf(decoded), Object.prototype);
+    assert.deepStrictEqual(Object.keys(decoded).sort(), ['__proto__', 'other']);
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(decoded, '__proto__')?.value, {x: true});
+    assert.strictEqual(decoded.x, undefined);
+  });
+});
+
+describe('NSKeyedArchiver Decoder NSDictionary keys', () => {
+  it('should store a __proto__ NSDictionary key as an own property', () => {
+    const decoded = decodeNSKeyedArchiver(
+      parseBinaryArchive([
+        '$null',
+        {'NS.keys': [new PlistUID(2)], 'NS.objects': [new PlistUID(3)], $class: new PlistUID(4)},
+        '__proto__',
+        {x: true},
+        {$classname: 'NSDictionary', $classes: ['NSDictionary', 'NSObject']},
+      ]),
+    );
+    assert.strictEqual(Object.getPrototypeOf(decoded), Object.prototype);
+    assert.deepStrictEqual(Object.keys(decoded), ['__proto__']);
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(decoded, '__proto__')?.value, {x: true});
+    assert.strictEqual(decoded.x, undefined);
+  });
+});

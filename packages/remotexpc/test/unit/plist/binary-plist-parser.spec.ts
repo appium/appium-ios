@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {describe, it} from 'node:test';
+import {fileURLToPath} from 'node:url';
 
-import {createBinaryPlist, parseBinaryPlist} from '../../../src/lib/plist/index.js';
+import {node} from '@appium/support';
+
+import {BinaryPlistError as RootBinaryPlistError} from '../../../src/index.js';
+import {BinaryPlistError, createBinaryPlist, parseBinaryPlist} from '../../../src/lib/plist/index.js';
 import {PlistUID} from '../../../src/lib/plist/plist-uid.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
+
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const SAMPLE_BINARY_PLIST = path.join(PKG_ROOT, 'test', 'unit', 'plist', 'fixtures', 'sample.binary.plist');
 
 const HEADER = Buffer.from('bplist00', 'ascii');
 const TRAILER_SIZE = 32;
@@ -180,15 +189,33 @@ describe('Binary Plist Parser Hardening', function () {
       assert.throws(() => parseBinaryPlist(buildBinaryPlist({objects, offsets: [200]})), /outside the object area/);
     });
 
-    it('should reject offset table entries that point at the same object', function () {
-      const object = Buffer.from([TYPE_ASCII | 0x0f, TYPE_INT, 0x00]);
+    it('should parse offset table entries that point at the same object once and share the result', function () {
+      const objects = [
+        Buffer.from([TYPE_DICT | 0x02, 0x01, 0x02, 0x03, 0x04]),
+        asciiString('a'),
+        asciiString('b'),
+        Buffer.from([TYPE_ARRAY | 0x01, 0x05]),
+        Buffer.from([TYPE_INT, 0x07]),
+      ];
+      const offsets = computeOffsets(objects);
+      const plist = buildBinaryPlist({
+        objects,
+        offsets: [offsets[0], offsets[1], offsets[2], offsets[3], offsets[3], offsets[4]],
+        numObjects: 6,
+      });
+      const parsed = parseBinaryPlist(plist) as PlistDictionary;
+      assert.deepStrictEqual(parsed, {a: [7], b: [7]});
+      assert.strictEqual(parsed.a, parsed.b);
+    });
+
+    it('should parse offset table entries that alias one object without repeating its work', function () {
       const copies = 100_000;
       const plist = buildBinaryPlist({
-        objects: [object],
+        objects: [Buffer.from([TYPE_ASCII | 0x0f, TYPE_INT, 0x00])],
         offsets: Array.from({length: copies}, () => HEADER.length),
         numObjects: copies,
       });
-      assert.throws(() => parseBinaryPlist(plist), /points at offset 8 more than once/);
+      assert.strictEqual(parseBinaryPlist(plist), '');
     });
 
     it('should reject an object reference past the object count', function () {
@@ -218,6 +245,23 @@ describe('Binary Plist Parser Hardening', function () {
       const parsed = parseBinaryPlist(createBinaryPlist(obj)) as PlistDictionary;
       assert.deepStrictEqual(parsed, obj);
       assert.strictEqual(parsed.first, parsed.second);
+    });
+  });
+
+  describe('Top Object', function () {
+    it('should return an empty top-level dictionary even when the table holds unreferenced objects', function () {
+      const plist = buildBinaryPlist({objects: [Buffer.from([TYPE_DICT]), asciiString('k'), Buffer.from([0x09])]});
+      assert.deepStrictEqual(parseBinaryPlist(plist), {});
+    });
+
+    it('should return an empty top-level array even when the table holds unreferenced objects', function () {
+      const plist = buildBinaryPlist({objects: [Buffer.from([TYPE_ARRAY]), asciiString('k'), Buffer.from([0x09])]});
+      assert.deepStrictEqual(parseBinaryPlist(plist), []);
+    });
+
+    it('should honour a top object that is not the first entry', function () {
+      const plist = buildBinaryPlist({objects: [Buffer.from([0x08]), Buffer.from([0x09])], topObject: 1});
+      assert.strictEqual(parseBinaryPlist(plist), true);
     });
   });
 
@@ -270,6 +314,40 @@ describe('Binary Plist Parser Hardening', function () {
         });
         assert.throws(() => parseBinaryPlist(plist), /at most 8 bytes/);
       }
+    });
+
+    it('should reject an integer or real marker with an unsupported width before charging the budget', function () {
+      assert.throws(
+        () => parseBinaryPlist(buildBinaryPlist({objects: [Buffer.from([TYPE_INT | 0x05])]})),
+        /Unexpected integer byte count: 32/,
+      );
+      assert.throws(
+        () => parseBinaryPlist(buildBinaryPlist({objects: [Buffer.from([TYPE_REAL | 0x01])]})),
+        /Unexpected float byte count: 2/,
+      );
+    });
+
+    it('should accept only the 8-byte date marker', function () {
+      const seconds = Buffer.alloc(8);
+      seconds.writeDoubleBE(0, 0);
+      const valid = buildBinaryPlist({objects: [Buffer.concat([Buffer.from([TYPE_DATE | 0x03]), seconds])]});
+      assert.deepStrictEqual(parseBinaryPlist(valid), new Date('2001-01-01T00:00:00Z'));
+      const invalid = buildBinaryPlist({objects: [Buffer.concat([Buffer.from([TYPE_DATE]), seconds])]});
+      assert.throws(() => parseBinaryPlist(invalid), /Unexpected date marker/);
+    });
+
+    it('should write dates with the 8-byte marker CoreFoundation requires', function () {
+      const date = new Date('2023-01-01T12:00:00Z');
+      const plist = createBinaryPlist({date});
+      assert.ok(plist.includes(Buffer.from([TYPE_DATE | 0x03])), 'expected a 0x33 date marker');
+      assert.deepStrictEqual(parseBinaryPlist(plist), {date});
+    });
+
+    it('should reject a set marker before reading a length for it', function () {
+      const plist = buildBinaryPlist({objects: [Buffer.from([0xcf, TYPE_INT | 0x02])]});
+      assert.throws(() => parseBinaryPlist(plist), /Unsupported binary plist object type: c0/);
+      const shortSet = buildBinaryPlist({objects: [Buffer.from([0xc1, 0x00])]});
+      assert.throws(() => parseBinaryPlist(shortSet), /Unsupported binary plist object type: c0/);
     });
 
     it('should reject a length integer whose bytes run past the object area', function () {
@@ -369,5 +447,66 @@ describe('Binary Plist Parser Hardening', function () {
         assert.throws(() => parseBinaryPlist(plist), {name: 'BinaryPlistError'});
       });
     }
+
+    it('should export BinaryPlistError from the package root', function () {
+      assert.strictEqual(RootBinaryPlistError, BinaryPlistError);
+    });
+
+    it('should only ever raise BinaryPlistError for randomly corrupted plists', function () {
+      const seeds = [
+        readFileSync(SAMPLE_BINARY_PLIST),
+        createBinaryPlist({
+          text: 'é'.repeat(40),
+          data: Buffer.alloc(40, 0x5a),
+          list: Array.from({length: 20}, (_, index) => ({index, flag: index % 2 === 0, uid: new PlistUID(index)})),
+          nested: {deep: {deeper: [1.5, -7, 2n ** 40n, new Date(0)]}},
+        }),
+      ];
+      const random = seededRandom(0x5eed);
+      for (const seed of seeds) {
+        for (let iteration = 0; iteration < 1500; iteration++) {
+          const corrupted = corruptPlist(seed, random);
+          try {
+            parseBinaryPlist(corrupted);
+          } catch (error) {
+            assert.ok(
+              error instanceof BinaryPlistError,
+              `iteration ${iteration} raised ${String(error)} for ${corrupted.toString('hex')}`,
+            );
+          }
+        }
+      }
+    });
   });
 });
+
+/**
+ * Returns a deterministic pseudo random generator so a failing iteration can be reproduced.
+ */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+/**
+ * Corrupts a copy of a plist by overwriting a few bytes, biased towards the trailer where the
+ * sizes and counts live, and occasionally truncating it.
+ */
+function corruptPlist(plist: Buffer, random: () => number): Buffer {
+  const corrupted = Buffer.from(plist);
+  const edits = 1 + Math.floor(random() * 4);
+  for (let edit = 0; edit < edits; edit++) {
+    const inTrailer = random() < 0.5;
+    const position = inTrailer
+      ? corrupted.length - TRAILER_SIZE + Math.floor(random() * TRAILER_SIZE)
+      : Math.floor(random() * corrupted.length);
+    corrupted[position] = Math.floor(random() * 256);
+  }
+  if (random() < 0.1) {
+    return corrupted.subarray(0, Math.floor(random() * corrupted.length));
+  }
+  return corrupted;
+}
