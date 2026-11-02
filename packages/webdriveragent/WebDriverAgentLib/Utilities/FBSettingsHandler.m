@@ -275,10 +275,10 @@ static NSSet<NSString *> *FBNilClearableSettingKeys(void)
       return @(FBConfiguration.sharedInstance.screenshotQuality);
     };
     map[FB_SETTING_KEYBOARD_AUTOCORRECTION] = ^id(FBSession *session) {
-      return @(FBConfiguration.sharedInstance.keyboardAutocorrection);
+      return @((BOOL)(FBConfiguration.sharedInstance.keyboardAutocorrection == FBConfigurationKeyboardPreferenceEnabled));
     };
     map[FB_SETTING_KEYBOARD_PREDICTION] = ^id(FBSession *session) {
-      return @(FBConfiguration.sharedInstance.keyboardPrediction);
+      return @((BOOL)(FBConfiguration.sharedInstance.keyboardPrediction == FBConfigurationKeyboardPreferenceEnabled));
     };
     map[FB_SETTING_SNAPSHOT_MAX_DEPTH] = ^id(FBSession *session) {
       return @(FBConfiguration.sharedInstance.snapshotMaxDepth);
