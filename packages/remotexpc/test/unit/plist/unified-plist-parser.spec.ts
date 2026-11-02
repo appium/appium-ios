@@ -54,40 +54,14 @@ describe('Unified Plist Parser', function () {
     });
 
     it('should throw an error for invalid plist data', function () {
-      try {
-        parsePlist('not a plist at all');
-        assert.fail('Should have thrown an error for invalid data');
-      } catch (error) {
-        assert.ok(error !== null && error !== undefined);
-      }
-
-      try {
-        parsePlist(Buffer.from('not a plist at all'));
-        assert.fail('Should have thrown an error for invalid data buffer');
-      } catch (error) {
-        assert.ok(error !== null && error !== undefined);
-      }
-
-      try {
-        parsePlist('');
-        assert.fail('Should have thrown an error for empty string');
-      } catch (error) {
-        assert.ok(error !== null && error !== undefined);
-      }
-
-      try {
-        parsePlist(Buffer.alloc(0));
-        assert.fail('Should have thrown an error for empty buffer');
-      } catch (error) {
-        assert.ok(error !== null && error !== undefined);
-      }
-
-      try {
-        parsePlist('<plist><dict><key>test</key></dict></plist>');
-        assert.fail('Should have thrown an error for malformed XML');
-      } catch (error) {
-        assert.ok(error !== null && error !== undefined);
-      }
+      assert.throws(() => parsePlist('not a plist at all'), /Failed to parse plist/);
+      assert.throws(() => parsePlist(Buffer.from('not a plist at all')), /Failed to parse plist/);
+      assert.throws(() => parsePlist(''), /Failed to parse plist/);
+      assert.throws(() => parsePlist(Buffer.alloc(0)), /Failed to parse plist/);
+      assert.throws(
+        () => parsePlist('<?xml version="1.0"?><plist><dict><key>t</key><string>v</string></dict>'),
+        /Failed to parse plist/,
+      );
     });
   });
 
@@ -223,5 +197,16 @@ describe('Unified Plist Parser', function () {
       const result = parsePlist(xmlWithMultipleDeclarations) as PlistDictionary;
       assert.strictEqual(result.test, 'value');
     });
+  });
+});
+
+describe('Unified Plist Parser Errors', function () {
+  it('should surface BinaryPlistError unchanged for a malformed binary plist', function () {
+    const malformed = Buffer.concat([Buffer.from('bplist00', 'ascii'), Buffer.from([0x09]), Buffer.alloc(32)]);
+    assert.throws(() => parsePlist(malformed), {name: 'BinaryPlistError', message: /offset size must be/});
+  });
+
+  it('should still wrap XML parse failures', function () {
+    assert.throws(() => parsePlist('not a plist at all'), {name: 'Error', message: /^Failed to parse plist: /});
   });
 });

@@ -1,5 +1,6 @@
 import {DOMParser, type Element, Node} from '@xmldom/xmldom';
 
+import {setDictionaryEntry} from '../dictionary.js';
 import {getLogger} from '../logger.js';
 import type {PlistArray, PlistDictionary, PlistValue} from '../types.js';
 import {PlistService} from './plist-service.js';
@@ -134,7 +135,7 @@ export function parsePlist(xmlData: string | Buffer): PlistDictionary {
       }
 
       if (valueNode) {
-        obj[keyName] = parseNode(valueNode as Element);
+        setDictionaryEntry(obj, keyName, parseNode(valueNode as Element));
         // Skip ahead of the parsed value so the loop doesn't re-visit it
         childNode = valueNode.nextSibling;
       }

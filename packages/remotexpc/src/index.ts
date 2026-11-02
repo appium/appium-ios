@@ -279,7 +279,7 @@ export type {
   XCTestEvent,
   XCTestSummary,
 } from './services/ios/testmanagerd/xctest-common.js';
-export {createBinaryPlist} from './lib/plist/index.js';
+export {BinaryPlistError, createBinaryPlist} from './lib/plist/index.js';
 export {AppleTVPairingService, UserInputService} from './lib/apple-tv/pairing/index.js';
 export {AppleTVTunnelService} from './lib/apple-tv/tunnel/index.js';
 export type {AppleTVPairingDiscoveryOptions, AppleTVPairingOptions} from './lib/apple-tv/pairing/index.js';

@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../dictionary.js';
 import type {XPCArray, XPCDictionary, XPCValue} from '../types.js';
 import {Http2Constants} from './constants.js';
 import {XPCUUID} from './xpc-uuid.js';
@@ -489,7 +490,7 @@ function decodeDictionary(reader: Reader): XPCDictionary {
   const dict: XPCDictionary = {};
   for (let i = 0; i < numEntries; i++) {
     const key = readDictionaryKey(reader);
-    dict[key] = decodeObject(reader);
+    setDictionaryEntry(dict, key, decodeObject(reader));
   }
   return dict;
 }

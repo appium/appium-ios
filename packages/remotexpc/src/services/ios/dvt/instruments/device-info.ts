@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../../../../lib/dictionary.js';
 import {getLogger} from '../../../../lib/logger.js';
 import {parseBinaryPlist} from '../../../../lib/plist/index.js';
 import type {ProcessInfo} from '../../../../lib/types.js';
@@ -152,7 +153,7 @@ export class DeviceInfo extends BaseInstrument {
       const match = line.trim().match(/^(\S+)\s+(.+)$/);
       if (match) {
         const [, hex, description] = match;
-        codes[hex] = description;
+        setDictionaryEntry(codes, hex, description);
       }
     }
 

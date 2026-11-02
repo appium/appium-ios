@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../../dictionary.js';
 import * as constants from '../constants.js';
 import {AppleTVError} from '../errors.js';
 
@@ -209,7 +210,7 @@ export class Opack2 {
         throw new AppleTVError('OPACK2 dictionary key is not a string');
       }
       const value = this.decode(data, key.offset);
-      result[key.value] = value.value;
+      setDictionaryEntry(result, key.value, value.value);
       currentOffset = value.offset;
     }
     return {value: result, offset: currentOffset};
@@ -261,7 +262,7 @@ export class Opack2 {
       if (typeof key.value !== 'string') {
         throw new AppleTVError('OPACK2 dictionary key is not a string');
       }
-      result[key.value] = value.value;
+      setDictionaryEntry(result, key.value, value.value);
     }
   }
 
