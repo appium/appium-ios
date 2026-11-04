@@ -11,7 +11,7 @@ for (const fullPageInitialization of [false, true]) {
       await fixture.selectTestPage();
       const rd = fixture.rd();
       for (const allowCrossOrigin of [false, true, false, true]) {
-        await rd.setWebInspectorSettings(allowCrossOrigin ? {pageSettings: {WebSecurityEnabled: false}} : {});
+        await rd.setWebInspectorPageSettings(allowCrossOrigin ? {pageSettings: {WebSecurityEnabled: false}} : {});
         // WebKit assigns document security origins when loading, so the document
         // that was already loaded before attaching must first be reloaded.
         await rd.navToUrl(fixture.freshUrl());
@@ -70,7 +70,7 @@ for (const fullPageInitialization of [false, true]) {
       const userAgent = 'Appium-Grouped-Overrides/1.0';
       let sequence = 0;
       for (const enabled of [false, true]) {
-        await rd.setWebInspectorSettings({
+        await rd.setWebInspectorPageSettings({
           pageSettings: {AuthorAndUserStylesEnabled: enabled, ImagesEnabled: enabled, ScriptEnabled: enabled},
           userPreferences: {PrefersReducedMotion: 'Reduce', PrefersContrast: 'More', PrefersColorScheme: 'Dark'},
           userAgent,
@@ -93,7 +93,7 @@ for (const fullPageInitialization of [false, true]) {
         }
       }
       // A replacement containing only UA must reset all omitted settings/preferences.
-      await rd.setWebInspectorSettings({userAgent: 'Appium-Replacement/2.0'});
+      await rd.setWebInspectorPageSettings({userAgent: 'Appium-Replacement/2.0'});
       await rd.navToUrl(`${fixture.address()}/page-overrides.html?n=${++sequence}`);
       assert.deepStrictEqual(await readPreferences(), baseline);
       assert.strictEqual(await rd.execute('navigator.userAgent'), 'Appium-Replacement/2.0');
@@ -108,7 +108,7 @@ for (const fullPageInitialization of [false, true]) {
         ]),
         {width: '137px', image: 1, script: 'ran'},
       );
-      await rd.setWebInspectorSettings({});
+      await rd.setWebInspectorPageSettings({});
       await rd.navToUrl(`${fixture.address()}/page-overrides.html?n=${sequence + 1}`);
       assert.strictEqual(await rd.execute('navigator.userAgent'), baselineUA);
       assert.deepStrictEqual(await readPreferences(), baseline);

@@ -89,7 +89,7 @@ describe('rpc-client', function () {
       await addPage(client, 'page-1');
       await addPage(client, 'page-2', '2');
       await addPage(client, 'page-3', '2', true);
-      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
+      await client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}});
       assert.deepStrictEqual(
         send.getCalls().map(({args}) => args[1]),
         [
@@ -99,7 +99,7 @@ describe('rpc-client', function () {
         ],
       );
       send.resetHistory();
-      await client.setWebInspectorSettings({});
+      await client.setWebInspectorPageSettings({});
       assert.strictEqual(send.callCount, 3);
       for (const {args} of send.getCalls()) {
         assert.strictEqual(args[0], 'Page.overrideSetting');
@@ -111,12 +111,12 @@ describe('rpc-client', function () {
       const client = new RpcClient();
       const initialize = sinon.stub(client, 'send').resolves();
       const update = sinon.stub(client, 'sendToDevice').resolves();
-      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
+      await client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}});
       await addPage(client, 'page-1');
       sinon.assert.calledWith(update, 'Page.overrideSetting', sinon.match({value: false}));
       update.resetHistory();
       await client.removeTarget(undefined, 'app', {targetId: 'page-1'} as any);
-      await client.setWebInspectorSettings({});
+      await client.setWebInspectorPageSettings({});
       sinon.assert.notCalled(update);
       initialize.resetHistory();
       await addPage(client, 'page-2');
@@ -143,7 +143,7 @@ describe('rpc-client', function () {
             await entered.promise;
             try {
               // Must complete while the unrelated domain remains blocked.
-              await client.setWebInspectorSettings(nextValue ? {pageSettings: {WebSecurityEnabled: false}} : {});
+              await client.setWebInspectorPageSettings(nextValue ? {pageSettings: {WebSecurityEnabled: false}} : {});
             } finally {
               blocked.resolve();
             }
@@ -178,7 +178,7 @@ describe('rpc-client', function () {
         });
         const creation = addPage(client, 'provisional', '1', true);
         await entered.promise;
-        const setting = client.setWebInspectorSettings({});
+        const setting = client.setWebInspectorPageSettings({});
         await Promise.resolve();
         sinon.assert.calledOnce(update);
         blocked.resolve();
@@ -198,7 +198,7 @@ describe('rpc-client', function () {
       const update = sinon.stub(client, 'sendToDevice').resolves();
       update.onSecondCall().rejects(new Error('Override unavailable'));
       await assert.rejects(
-        client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}}),
+        client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}}),
         /Override unavailable/,
       );
       assert.deepStrictEqual(update.thirdCall.args, [
@@ -217,9 +217,9 @@ describe('rpc-client', function () {
       sinon.stub(client, 'send').resolves();
       await addPage(client, 'page-1');
       const update = sinon.stub(client, 'sendToDevice').rejects(new Error('Missing target for given targetId'));
-      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
+      await client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}});
       sinon.assert.calledOnce(update);
-      await client.setWebInspectorSettings({});
+      await client.setWebInspectorPageSettings({});
       sinon.assert.calledOnce(update);
     });
   });

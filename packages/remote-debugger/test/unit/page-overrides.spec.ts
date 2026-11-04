@@ -19,7 +19,7 @@ describe('page overrides', function () {
       const client = new RpcClient();
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
-      await client.setWebInspectorSettings({pageSettings: {[setting]: false}});
+      await client.setWebInspectorPageSettings({pageSettings: {[setting]: false}});
       await addPage(client, 'first');
       sinon.assert.calledOnceWithExactly(send, 'Page.overrideSetting', {
         appIdKey: 'app',
@@ -30,11 +30,11 @@ describe('page overrides', function () {
       });
       await addPage(client, 'provisional', '1', true);
       send.resetHistory();
-      await client.setWebInspectorSettings({pageSettings: {[setting]: true}});
+      await client.setWebInspectorPageSettings({pageSettings: {[setting]: true}});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => args[1].value === true));
       send.resetHistory();
-      await client.setWebInspectorSettings({});
+      await client.setWebInspectorPageSettings({});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
@@ -49,7 +49,7 @@ describe('page overrides', function () {
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
       for (const value of USER_PREFERENCE_VALUES[name]) {
-        await client.setWebInspectorSettings({userPreferences: {[name]: value}});
+        await client.setWebInspectorPageSettings({userPreferences: {[name]: value}});
         send.resetHistory();
         await addPage(client, `target-${value}`, '1', true);
         sinon.assert.calledOnceWithExactly(send, 'Page.overrideUserPreference', {
@@ -61,7 +61,7 @@ describe('page overrides', function () {
         });
       }
       send.resetHistory();
-      await client.setWebInspectorSettings({});
+      await client.setWebInspectorPageSettings({});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
@@ -81,7 +81,7 @@ describe('page overrides', function () {
     send.resetHistory();
     send.onSecondCall().rejects(new Error('Rejected'));
     await assert.rejects(
-      client.setWebInspectorSettings({
+      client.setWebInspectorPageSettings({
         pageSettings: {ImagesEnabled: false},
         userPreferences: {PrefersContrast: 'NoPreference'},
       }),
@@ -155,7 +155,7 @@ describe('page overrides', function () {
   for (const realDevice of [false, true]) {
     it(`retains runtime policy after reconnect and removes cleared values (real=${realDevice})`, async function () {
       const remote = realDevice ? new RemoteDebuggerRealDevice({udid: 'test'}) : new RemoteDebugger();
-      await remote.setWebInspectorSettings({
+      await remote.setWebInspectorPageSettings({
         pageSettings: {ImagesEnabled: false},
         userPreferences: {PrefersColorScheme: 'Dark'},
       });
@@ -173,7 +173,7 @@ describe('page overrides', function () {
         );
         remote.teardown();
       }
-      await remote.setWebInspectorSettings({});
+      await remote.setWebInspectorPageSettings({});
       await remote.initRpcClient();
       const client = remote.requireRpcClient();
       sinon.stub(client, 'send').resolves();
@@ -186,9 +186,9 @@ describe('page overrides', function () {
   it('does not retain a rejected preference for reconnect', async function () {
     const remote = new RemoteDebugger({webInspectorSettings: {userPreferences: {PrefersContrast: 'More'}}});
     await remote.initRpcClient();
-    sinon.stub(remote.requireRpcClient(), 'setWebInspectorSettings').rejects(new Error('Rejected'));
+    sinon.stub(remote.requireRpcClient(), 'setWebInspectorPageSettings').rejects(new Error('Rejected'));
     await assert.rejects(
-      remote.setWebInspectorSettings({userPreferences: {PrefersContrast: 'NoPreference'}}),
+      remote.setWebInspectorPageSettings({userPreferences: {PrefersContrast: 'NoPreference'}}),
       /Rejected/,
     );
     remote.teardown();
@@ -212,7 +212,7 @@ describe('page overrides', function () {
     await addPage(client, 'first');
     sinon.assert.calledWith(send, 'Page.overrideUserAgent', sinon.match({value: 'Old/1'}));
     send.resetHistory();
-    await client.setWebInspectorSettings({userAgent: 'New/2'});
+    await client.setWebInspectorPageSettings({userAgent: 'New/2'});
     assert.strictEqual(send.callCount, 3);
     sinon.assert.calledWith(send, 'Page.overrideUserAgent', sinon.match({value: 'New/2'}));
     for (const {args} of send.getCalls().filter(({args}) => args[0] !== 'Page.overrideUserAgent')) {
@@ -227,7 +227,7 @@ describe('page overrides', function () {
       value: 'New/2',
     });
     send.resetHistory();
-    await client.setWebInspectorSettings({});
+    await client.setWebInspectorPageSettings({});
     assert.strictEqual(send.callCount, 2);
     assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
     send.resetHistory();
@@ -266,7 +266,7 @@ describe('page overrides', function () {
     const baseline = structuredClone(state);
     failAt = calls + 6;
     await assert.rejects(
-      client.setWebInspectorSettings({
+      client.setWebInspectorPageSettings({
         pageSettings: {ImagesEnabled: false, ScriptEnabled: false},
         userPreferences: {PrefersColorScheme: 'Light'},
         userAgent: 'New/2',
@@ -285,7 +285,7 @@ describe('page overrides', function () {
     const send = sinon.stub(client, 'sendToDevice').resolves();
     await addPage(client, 'first');
     send.resetHistory();
-    await client.setWebInspectorSettings(structuredClone(settings));
+    await client.setWebInspectorPageSettings(structuredClone(settings));
     sinon.assert.notCalled(send);
   });
 
@@ -293,7 +293,7 @@ describe('page overrides', function () {
     it(`snapshots a grouped policy and retains UA after reconnect (real=${realDevice})`, async function () {
       const remote = realDevice ? new RemoteDebuggerRealDevice({udid: 'test'}) : new RemoteDebugger();
       const settings = {pageSettings: {ImagesEnabled: false}, userAgent: 'Test/1'};
-      await remote.setWebInspectorSettings(settings);
+      await remote.setWebInspectorPageSettings(settings);
       settings.pageSettings.ImagesEnabled = true;
       settings.userAgent = 'Changed';
       for (let i = 0; i < 2; i++) {
@@ -306,7 +306,7 @@ describe('page overrides', function () {
         sinon.assert.calledWith(send, 'Page.overrideUserAgent', sinon.match({value: 'Test/1'}));
         remote.teardown();
       }
-      await remote.setWebInspectorSettings({});
+      await remote.setWebInspectorPageSettings({});
       await remote.initRpcClient();
       const client = remote.requireRpcClient();
       sinon.stub(client, 'send').resolves();
@@ -319,8 +319,8 @@ describe('page overrides', function () {
   it('retains the previous complete object after rejection and reconnect', async function () {
     const remote = new RemoteDebugger({webInspectorSettings: {userAgent: 'Old/1'}});
     await remote.initRpcClient();
-    sinon.stub(remote.requireRpcClient(), 'setWebInspectorSettings').rejects(new Error('Rejected'));
-    await assert.rejects(remote.setWebInspectorSettings({userAgent: 'New/2'}), /Rejected/);
+    sinon.stub(remote.requireRpcClient(), 'setWebInspectorPageSettings').rejects(new Error('Rejected'));
+    await assert.rejects(remote.setWebInspectorPageSettings({userAgent: 'New/2'}), /Rejected/);
     remote.teardown();
     await remote.initRpcClient();
     const client = remote.requireRpcClient();

@@ -49,5 +49,5 @@ export type {
   PageSettings,
   UserPreferenceName,
   PageUserPreferences,
-  WebInspectorSettings,
+  WebInspectorPageSettings,
 } from './page-overrides.js';

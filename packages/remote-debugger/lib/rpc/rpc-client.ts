@@ -5,7 +5,7 @@ import type {StringRecord} from '@appium/types';
 import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
-import {toPageOverrides, type PageOverride, type WebInspectorSettings} from '../page-overrides.js';
+import {toPageOverrides, type PageOverride, type WebInspectorPageSettings} from '../page-overrides.js';
 import type {
   AppIdKey,
   PageIdKey,
@@ -977,7 +977,7 @@ export class RpcClient {
   }
 
   /** Replaces overrides on current targets and retains the complete policy for future targets. */
-  async setWebInspectorSettings(settings: WebInspectorSettings): Promise<void> {
+  async setWebInspectorPageSettings(settings: WebInspectorPageSettings): Promise<void> {
     const next = toPageOverrides(settings);
     await this.pageSettingsLock.acquire('settings', async () => await this.replacePageOverrides(next));
   }

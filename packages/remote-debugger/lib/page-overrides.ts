@@ -31,7 +31,7 @@ export type PageUserPreferences = {
 
 export const WEB_INSPECTOR_SETTING_KEYS = ['pageSettings', 'userPreferences', 'userAgent'] as const;
 
-export interface WebInspectorSettings {
+export interface WebInspectorPageSettings {
   pageSettings?: PageSettings;
   userPreferences?: PageUserPreferences;
   userAgent?: string;
@@ -44,7 +44,7 @@ export interface PageOverride {
 }
 
 /** Snapshot supported values; callers cannot mutate the retained policy afterward. */
-export function toPageOverrides(settings: WebInspectorSettings): Map<string, PageOverride> {
+export function toPageOverrides(settings: WebInspectorPageSettings): Map<string, PageOverride> {
   const result = new Map<string, PageOverride>();
   for (const setting of PAGE_SETTING_NAMES) {
     const value = settings.pageSettings?.[setting];
