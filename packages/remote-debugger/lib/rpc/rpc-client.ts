@@ -5,6 +5,13 @@ import type {StringRecord} from '@appium/types';
 import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
+import {
+  PAGE_SETTING_NAMES,
+  USER_PREFERENCE_VALUES,
+  type PageSettingName,
+  type UserPreferenceName,
+  type PageUserPreferences,
+} from '../page-overrides.js';
 import type {
   AppIdKey,
   PageIdKey,
@@ -20,6 +27,12 @@ import type {
 import {convertJavascriptEvaluationResult, defaults} from '../utils/index.js';
 import {RemoteMessages} from './remote-messages.js';
 import RpcMessageHandler from './rpc-message-handler.js';
+
+interface PageOverride {
+  method: 'Page.overrideSetting' | 'Page.overrideUserPreference';
+  params: {setting: PageSettingName} | {name: UserPreferenceName};
+  value: boolean | string | undefined;
+}
 
 const DATA_LOG_LENGTH = 200;
 const MIN_WAIT_FOR_TARGET_TIMEOUT_MS = 30000;
@@ -81,7 +94,10 @@ export class RpcClient {
   protected readonly logAllCommunicationHexDump?: boolean;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
-  protected disableWebSecurity: boolean;
+  private readonly pageOverrides = new Map<string, PageOverride>();
+  protected get disableWebSecurity(): boolean {
+    return this.pageOverrides.get('setting:WebSecurityEnabled')?.value === false;
+  }
   private readonly pageSettingsLock = new AsyncLock();
   private readonly initializedPageTargets = new Map<
     string,
@@ -136,7 +152,19 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
-    this.disableWebSecurity = disableWebSecurity;
+    const initialSettings = {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})};
+    for (const setting of PAGE_SETTING_NAMES) {
+      const value = initialSettings[setting];
+      if (value !== undefined) {
+        this.pageOverrides.set(`setting:${setting}`, {method: 'Page.overrideSetting', params: {setting}, value});
+      }
+    }
+    for (const name of Object.keys(USER_PREFERENCE_VALUES) as UserPreferenceName[]) {
+      const value = opts.userPreferences?.[name];
+      if (value !== undefined) {
+        this.pageOverrides.set(`preference:${name}`, {method: 'Page.overrideUserPreference', params: {name}, value});
+      }
+    }
 
     this.bundleId = bundleId;
     this.platformVersion = platformVersion;
@@ -969,22 +997,40 @@ export class RpcClient {
    * browser's configured default; it does not force WebSecurityEnabled to true.
    */
   async setDisableWebSecurity(value: boolean): Promise<void> {
+    await this.setPageSetting('WebSecurityEnabled', value ? false : undefined);
+  }
+
+  async setPageSetting(setting: PageSettingName, value: boolean | undefined): Promise<void> {
+    await this.updatePageOverride(`setting:${setting}`, {method: 'Page.overrideSetting', params: {setting}, value});
+  }
+
+  async setUserPreference<Name extends UserPreferenceName>(
+    name: Name,
+    value: PageUserPreferences[Name],
+  ): Promise<void> {
+    await this.updatePageOverride(`preference:${name}`, {method: 'Page.overrideUserPreference', params: {name}, value});
+  }
+
+  private async updatePageOverride(key: string, override: PageOverride): Promise<void> {
     await this.pageSettingsLock.acquire('settings', async () => {
-      const previous = this.disableWebSecurity;
+      const previous = this.pageOverrides.get(key) ?? {...override, value: undefined};
       const updated: string[] = [];
       try {
-        for (const key of this.initializedPageTargets.keys()) {
-          await this.applyWebSecurityOverride(key, value);
-          updated.push(key);
+        for (const target of this.initializedPageTargets.keys()) {
+          await this.applyPageOverride(target, override);
+          updated.push(target);
         }
-        this.disableWebSecurity = value;
+        if (override.value === undefined) {
+          this.pageOverrides.delete(key);
+        } else {
+          this.pageOverrides.set(key, override);
+        }
       } catch (error) {
-        // Keep the Settings API's stored value consistent if an update is rejected.
-        for (const key of updated) {
+        for (const target of updated) {
           try {
-            await this.applyWebSecurityOverride(key, previous);
+            await this.applyPageOverride(target, previous);
           } catch (rollbackError) {
-            log.warn(`Cannot restore the previous web security override: ${rollbackError}`);
+            log.warn(`Cannot restore the previous page override: ${rollbackError}`);
           }
         }
         throw error;
@@ -992,18 +1038,18 @@ export class RpcClient {
     });
   }
 
-  private async applyWebSecurityOverride(key: string, disabled: boolean): Promise<void> {
+  private async applyPageOverride(key: string, override: PageOverride): Promise<void> {
     const target = this.initializedPageTargets.get(key);
     if (!target) {
       return;
     }
     try {
-      // Do not retry against a replacement target: its initialization acquires
-      // the same settings lock and will pick up the updated policy itself.
-      await this.sendToDevice('Page.overrideSetting', {
+      // A replacement target initializes with the current policy itself. Do not
+      // wait for its initialization while holding the settings lock.
+      await this.sendToDevice(override.method, {
         ...target,
-        setting: 'WebSecurityEnabled',
-        ...(disabled ? {value: false} : {}),
+        ...override.params,
+        ...(override.value === undefined ? {} : {value: override.value}),
       });
     } catch (error: any) {
       if (!MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
@@ -1041,18 +1087,22 @@ export class RpcClient {
     }
   }
 
-  private async initializePageWebSecurity(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId: TargetId): Promise<void> {
-    // Page.enable has completed. Serialize only registration and the security
-    // override with runtime updates; other domains can initialize concurrently.
+  private async initializePageOverrides(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId: TargetId): Promise<void> {
+    // Page.enable has completed. Serialize only registration and page
+    // overrides with runtime updates; other domains can initialize concurrently.
     await this.pageSettingsLock.acquire('settings', async () => {
       const target = {appIdKey, pageIdKey, targetId};
       this.initializedPageTargets.set(JSON.stringify([String(appIdKey), targetId]), target);
-      if (this.disableWebSecurity) {
-        await this.sendToDevice('Page.overrideSetting', {
-          ...target,
-          setting: 'WebSecurityEnabled',
-          value: false,
-        });
+      for (const override of this.pageOverrides.values()) {
+        try {
+          await this.sendToDevice(override.method, {...target, ...override.params, value: override.value});
+        } catch (error: any) {
+          if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+            throw error;
+          }
+          // An unavailable override must not prevent other overrides or target resume.
+          log.info(`Cannot apply ${JSON.stringify(override.params)} during initialization: ${error.message}`);
+        }
       }
     });
   }
@@ -1091,7 +1141,7 @@ export class RpcClient {
       })) {
         try {
           if (domain === 'Page.overrideSetting') {
-            await this.initializePageWebSecurity(appIdKey, pageIdKey, targetId);
+            await this.initializePageOverrides(appIdKey, pageIdKey, targetId);
           } else {
             await this.send(domain, opts);
           }
@@ -1170,7 +1220,7 @@ export class RpcClient {
       try {
         const res =
           domain === 'Page.overrideSetting'
-            ? await this.initializePageWebSecurity(appIdKey, pageIdKey, targetId)
+            ? await this.initializePageOverrides(appIdKey, pageIdKey, targetId)
             : await this.send(domain, opts);
         if (domain === 'Console.getLoggingChannels') {
           for (const source of (res?.channels || []).map((entry: {source: any}) => entry.source)) {

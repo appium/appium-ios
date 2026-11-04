@@ -42,3 +42,6 @@ export type {
   AutomationRect,
   LocatorStrategy,
 };
+
+export {PAGE_SETTING_NAMES, USER_PREFERENCE_VALUES} from './page-overrides.js';
+export type {PageSettingName, PageSettings, UserPreferenceName, PageUserPreferences} from './page-overrides.js';

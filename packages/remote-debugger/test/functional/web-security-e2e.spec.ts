@@ -53,5 +53,50 @@ for (const fullPageInitialization of [false, true]) {
         }
       }
     });
+    it('retains page settings and preferences on new targets and restores defaults', async function () {
+      await fixture.selectTestPage();
+      const rd = fixture.rd();
+      const readPreferences = async () =>
+        await rd.executeAtom('execute_script', [
+          `return {
+          motion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+          contrast: matchMedia('(prefers-contrast: more)').matches,
+          dark: matchMedia('(prefers-color-scheme: dark)').matches,
+        };`,
+          [],
+        ]);
+      const baseline = await readPreferences();
+      await rd.setUserPreference('PrefersReducedMotion', 'Reduce');
+      await rd.setUserPreference('PrefersContrast', 'More');
+      await rd.setUserPreference('PrefersColorScheme', 'Dark');
+      let sequence = 0;
+      for (const enabled of [false, true]) {
+        await rd.setPageSetting('AuthorAndUserStylesEnabled', enabled);
+        await rd.setPageSetting('ImagesEnabled', enabled);
+        await rd.setPageSetting('ScriptEnabled', enabled);
+        for (const origin of [fixture.address(), fixture.address().replace('127.0.0.1', 'localhost')]) {
+          await rd.navToUrl(`${origin}/page-overrides.html?n=${++sequence}`);
+          const state = await rd.executeAtom('execute_script', [
+            `return {
+              width: getComputedStyle(document.getElementById('styled')).width,
+              image: document.getElementById('image').naturalWidth,
+              script: window.fixtureScriptRan ?? null,
+            };`,
+            [],
+          ]);
+          assert.strictEqual(state.width === '137px', enabled);
+          assert.strictEqual(state.image, enabled ? 1 : 0);
+          assert.strictEqual(state.script, enabled ? 'ran' : null);
+          assert.deepStrictEqual(await readPreferences(), {motion: true, contrast: true, dark: true});
+        }
+      }
+      await rd.setPageSetting('AuthorAndUserStylesEnabled', undefined);
+      await rd.setPageSetting('ImagesEnabled', undefined);
+      await rd.setPageSetting('ScriptEnabled', undefined);
+      await rd.setUserPreference('PrefersReducedMotion', undefined);
+      await rd.setUserPreference('PrefersContrast', undefined);
+      await rd.setUserPreference('PrefersColorScheme', undefined);
+      assert.deepStrictEqual(await readPreferences(), baseline);
+    });
   });
 }

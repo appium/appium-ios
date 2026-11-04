@@ -1,5 +1,7 @@
 import type {StringRecord, AppiumLogger} from '@appium/types';
 
+import type {PageSettings, PageUserPreferences} from './page-overrides.js';
+
 export interface AppInfo {
   id: string;
   isProxy: boolean;
@@ -113,6 +115,10 @@ export interface RemoteDebuggerOptions {
    * Use setDisableWebSecurity to change this value after construction.
    */
   disableWebSecurity?: boolean;
+  /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
+  pageSettings?: PageSettings;
+  /** Initial CSS user preferences, retained for future targets. */
+  userPreferences?: PageUserPreferences;
   /**
    * How long to wait until a new target is created for a page.
    * Usually, it happens almost instantly, but on slow CI environments this might take some minutes.
@@ -137,6 +143,10 @@ export interface RpcClientOptions {
   fullPageInitialization?: boolean;
   /** Disable same-origin security for each inspected page. Defaults to false. */
   disableWebSecurity?: boolean;
+  /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
+  pageSettings?: PageSettings;
+  /** Initial CSS user preferences, retained for future targets. */
+  userPreferences?: PageUserPreferences;
   pageLoadTimeoutMs?: number;
   udid?: string;
   targetCreationTimeoutMs?: number;

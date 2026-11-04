@@ -37,7 +37,7 @@ describe('runtime web security settings', function () {
   it('does not retain a rejected update for the next connection', async function (t) {
     const rd = new RemoteDebugger();
     await rd.initRpcClient();
-    t.mock.method(rd.requireRpcClient(), 'setDisableWebSecurity', async () => {
+    t.mock.method(rd.requireRpcClient(), 'setPageSetting', async () => {
       throw new Error('Rejected');
     });
     await assert.rejects(rd.setDisableWebSecurity(true), /Rejected/);
