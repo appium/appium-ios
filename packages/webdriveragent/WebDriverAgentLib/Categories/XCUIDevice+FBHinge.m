@@ -30,7 +30,7 @@ static const double FBHingeOpenAngle = 180.0;
 
 static BOOL FBHingeAnglesEqual(double first, double second)
 {
-  return fabs(first - second) <= FBHingeAngleTolerance;
+  return fabs(first - second) < FBHingeAngleTolerance;
 }
 
 typedef CFDataRef (*FBIOCFSerialize)(CFTypeRef object, CFOptionFlags options);
