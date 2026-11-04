@@ -263,7 +263,8 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   for (NSUInteger attempt = 0; attempt <= FBHingeMaxCorrections; ++attempt) {
     NSNumber *reading = [self fb_settledHingeAngle];
     // 0 and 180 are the device's snap points, so a reading there is final
-    if (nil == reading || reading.doubleValue <= 0 || reading.doubleValue >= 180
+    if (nil == reading || reading.doubleValue <= FBHingeAngleTolerance
+        || reading.doubleValue >= 180 - FBHingeAngleTolerance
         || fabs(reading.doubleValue - angle) <= FBHingeAngleTolerance
         || attempt == FBHingeMaxCorrections) {
       return;
