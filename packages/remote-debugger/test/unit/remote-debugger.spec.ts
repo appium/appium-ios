@@ -7,6 +7,20 @@ import {RemoteDebuggerRealDevice} from '../../lib/remote-debugger-real-device.js
 import {RemoteDebugger} from '../../lib/remote-debugger.js';
 import {RpcClientRealDevice} from '../../lib/rpc/index.js';
 
+describe('web security options', function () {
+  for (const isRealDevice of [false, true]) {
+    for (const disableWebSecurity of [undefined, false, true]) {
+      it(`forwards disableWebSecurity=${disableWebSecurity} to the ${isRealDevice ? 'real device' : 'simulator'} client`, async function () {
+        const rd = isRealDevice
+          ? new RemoteDebuggerRealDevice({udid: 'some-udid', disableWebSecurity})
+          : new RemoteDebugger({disableWebSecurity});
+        await rd.initRpcClient();
+        assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, disableWebSecurity ?? false);
+      });
+    }
+  }
+});
+
 describe('RemoteDebugger', function () {
   describe('initRpcClient', function () {
     it('should forward targetCreationTimeoutMs to the underlying simulator RPC client', async function () {

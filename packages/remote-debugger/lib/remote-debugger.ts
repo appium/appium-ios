@@ -105,6 +105,7 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _logAllCommunicationHexDump: boolean;
   protected readonly _webInspectorMaxFrameLength?: number;
   protected readonly _fullPageInitialization?: boolean;
+  protected readonly _disableWebSecurity: boolean;
   protected readonly _targetCreationTimeoutMs?: number;
 
   constructor(opts: RemoteDebuggerOptions = {}) {
@@ -133,6 +134,7 @@ export class RemoteDebugger extends EventEmitter {
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
       fullPageInitialization,
+      disableWebSecurity = false,
       pageLoadStrategy,
       targetCreationTimeoutMs,
     } = opts;
@@ -164,6 +166,7 @@ export class RemoteDebugger extends EventEmitter {
     }
 
     this._fullPageInitialization = fullPageInitialization;
+    this._disableWebSecurity = disableWebSecurity;
     this._targetCreationTimeoutMs = targetCreationTimeoutMs;
 
     this._pageLoadStrategy = pageLoadStrategy;
@@ -274,6 +277,7 @@ export class RemoteDebugger extends EventEmitter {
       logAllCommunication: this._logAllCommunication,
       logAllCommunicationHexDump: this._logAllCommunicationHexDump,
       fullPageInitialization: this._fullPageInitialization,
+      disableWebSecurity: this._disableWebSecurity,
       webInspectorMaxFrameLength: this._webInspectorMaxFrameLength,
       pageLoadTimeoutMs: this._pageLoadMs,
       targetCreationTimeoutMs: this._targetCreationTimeoutMs,

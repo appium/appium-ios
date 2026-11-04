@@ -81,6 +81,7 @@ export class RpcClient {
   protected readonly logAllCommunicationHexDump?: boolean;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
+  protected readonly disableWebSecurity: boolean;
   protected readonly bundleId?: string;
   protected readonly pageLoadTimeoutMs?: number;
   protected readonly platformVersion: string;
@@ -105,6 +106,7 @@ export class RpcClient {
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
       fullPageInitialization = false,
+      disableWebSecurity = false,
       udid,
       pageLoadTimeoutMs,
       targetCreationTimeoutMs = DEFAULT_TARGET_CREATION_TIMEOUT_MS,
@@ -125,6 +127,7 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
+    this.disableWebSecurity = disableWebSecurity;
 
     this.bundleId = bundleId;
     this.platformVersion = platformVersion;
@@ -968,22 +971,28 @@ export class RpcClient {
 
     log.debug(`Initializing page '${pageIdKey}' for app '${appIdKey}'`);
     const timer = new timing.Timer().start();
+    // Apply page overrides before Inspector.initialized and Target.resume, including
+    // when navigation creates a provisional target.
+    const initialDomains: Record<string, RemoteCommandOpts> = {
+      'Inspector.enable': sendOpts,
+      'Page.enable': sendOpts,
+      ...(this.disableWebSecurity
+        ? {'Page.overrideSetting': {...sendOpts, setting: 'WebSecurityEnabled', value: false}}
+        : {}),
+      'Runtime.enable': sendOpts,
+    };
     if (!this.fullPageInitialization) {
       // The sequence of domains is important
-      for (const domain of [
-        'Inspector.enable',
-        'Page.enable',
-        'Runtime.enable',
-
-        'Network.enable',
-        'Heap.enable',
-        'Debugger.enable',
-        'Console.enable',
-
-        'Inspector.initialized',
-      ]) {
+      for (const [domain, opts] of Object.entries({
+        ...initialDomains,
+        'Network.enable': sendOpts,
+        'Heap.enable': sendOpts,
+        'Debugger.enable': sendOpts,
+        'Console.enable': sendOpts,
+        'Inspector.initialized': sendOpts,
+      })) {
         try {
-          await this.send(domain, sendOpts);
+          await this.send(domain, opts);
         } catch (err: any) {
           log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
           if (MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
@@ -1000,9 +1009,7 @@ export class RpcClient {
 
     // The sequence of commands here is important
     const domainsToOptsMap: Record<string, RemoteCommandOpts> = {
-      'Inspector.enable': sendOpts,
-      'Page.enable': sendOpts,
-      'Runtime.enable': sendOpts,
+      ...initialDomains,
 
       'Page.getResourceTree': sendOpts,
       'Network.enable': sendOpts,

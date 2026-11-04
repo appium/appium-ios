@@ -8,6 +8,58 @@ import sinon from 'sinon';
 import {RpcClient} from '../../../lib/rpc/rpc-client.js';
 
 describe('rpc-client', function () {
+  describe('page web security', function () {
+    for (const fullPageInitialization of [false, true]) {
+      for (const disableWebSecurity of [undefined, false, true]) {
+        it(`initializes new and provisional targets with full=${fullPageInitialization}, disableWebSecurity=${disableWebSecurity}`, async function () {
+          const client = new RpcClient({fullPageInitialization, disableWebSecurity});
+          const send = sinon.stub(client, 'send').resolves();
+          (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+
+          for (const [targetId, isProvisional] of [
+            ['page-1', false],
+            ['page-2', true],
+          ] as const) {
+            send.resetHistory();
+            await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional, isPaused: true});
+
+            const overrides = send.getCalls().filter(({args}) => args[0] === 'Page.overrideSetting');
+            assert.strictEqual(overrides.length, disableWebSecurity ? 1 : 0);
+            if (disableWebSecurity) {
+              assert.deepStrictEqual(overrides[0].args[1], {
+                appIdKey: 'app',
+                pageIdKey: '1',
+                targetId: isProvisional ? targetId : undefined,
+                setting: 'WebSecurityEnabled',
+                value: false,
+              });
+              const methods = send.getCalls().map(({args}) => args[0]);
+              assert.ok(methods.indexOf('Page.enable') < methods.indexOf('Page.overrideSetting'));
+              assert.ok(methods.indexOf('Page.overrideSetting') < methods.indexOf('Inspector.initialized'));
+              assert.ok(methods.indexOf('Page.overrideSetting') < methods.indexOf('Target.resume'));
+            }
+            sinon.assert.calledWith(send, 'Target.resume', {appIdKey: 'app', pageIdKey: '1', targetId});
+          }
+        });
+      }
+
+      it(`resumes a target when the override is unsupported (full=${fullPageInitialization})`, async function () {
+        const client = new RpcClient({fullPageInitialization, disableWebSecurity: true});
+        const send = sinon.stub(client, 'send').resolves();
+        send.withArgs('Page.overrideSetting').rejects(new Error('Unknown method'));
+        (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+        await client.addTarget(undefined, 'app', {
+          targetId: 'page-1',
+          type: 'page',
+          isProvisional: true,
+          isPaused: true,
+        });
+        sinon.assert.calledWith(send, 'Inspector.initialized');
+        sinon.assert.calledWith(send, 'Target.resume');
+      });
+    }
+  });
+
   describe('.send', function () {
     it('should send RPC message to device', async function () {});
     it('should send RPC message to device and retry if target id not found', async function () {

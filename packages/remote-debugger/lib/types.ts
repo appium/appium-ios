@@ -108,6 +108,11 @@ export interface RemoteDebuggerOptions {
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
   /**
+   * Disable same-origin security for each inspected page. Defaults to false.
+   * Documents loaded before attaching must be reloaded for the override to apply.
+   */
+  disableWebSecurity?: boolean;
+  /**
    * How long to wait until a new target is created for a page.
    * Usually, it happens almost instantly, but on slow CI environments this might take some minutes.
    */
@@ -129,6 +134,8 @@ export interface RpcClientOptions {
   logAllCommunicationHexDump?: boolean;
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
+  /** Disable same-origin security for each inspected page. Defaults to false. */
+  disableWebSecurity?: boolean;
   pageLoadTimeoutMs?: number;
   udid?: string;
   targetCreationTimeoutMs?: number;
