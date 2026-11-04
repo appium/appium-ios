@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.8...appium-webdriveragent@16.17.9) (2026-11-04)
+
+### Bug Fixes
+
+* compare with lowercase for the direction in scroll ([#148](https://github.com/appium/appium-ios/issues/148)) ([4709a5c](https://github.com/appium/appium-ios/commit/4709a5c85e8d4b437a1641b22e3a1e69bef9d23a))
+
+
 ## [16.17.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.7...appium-webdriveragent@16.17.8) (2026-11-02)
 
 ### Bug Fixes
