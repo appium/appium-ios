@@ -10,8 +10,8 @@ for (const fullPageInitialization of [false, true]) {
     it('updates security in the same connection across reloads and cross-origin navigation', async function () {
       await fixture.selectTestPage();
       const rd = fixture.rd();
-      for (const disableWebSecurity of [false, true, false, true]) {
-        await rd.setWebInspectorSettings(disableWebSecurity ? {pageSettings: {WebSecurityEnabled: false}} : {});
+      for (const allowCrossOrigin of [false, true, false, true]) {
+        await rd.setWebInspectorSettings(allowCrossOrigin ? {pageSettings: {WebSecurityEnabled: false}} : {});
         // WebKit assigns document security origins when loading, so the document
         // that was already loaded before attaching must first be reloaded.
         await rd.navToUrl(fixture.freshUrl());
@@ -45,7 +45,7 @@ for (const fullPageInitialization of [false, true]) {
               [frame],
             );
           };
-          if (disableWebSecurity) {
+          if (allowCrossOrigin) {
             assert.strictEqual(await readFrame(), 'This is in #somediv');
           } else {
             await assert.rejects(readFrame, /cross-origin|Blocked a frame/i);

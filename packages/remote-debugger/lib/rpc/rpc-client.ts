@@ -5,15 +5,7 @@ import type {StringRecord} from '@appium/types';
 import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
-import {
-  toPageOverrides,
-  PAGE_OVERRIDE_METHODS,
-  type PageOverride,
-  type WebInspectorSettings,
-  type PageSettingName,
-  type UserPreferenceName,
-  type PageUserPreferences,
-} from '../page-overrides.js';
+import {toPageOverrides, type PageOverride, type WebInspectorSettings} from '../page-overrides.js';
 import type {
   AppIdKey,
   PageIdKey,
@@ -103,9 +95,6 @@ export class RpcClient {
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
   private readonly pageOverrides = new Map<string, PageOverride>();
-  protected get disableWebSecurity(): boolean {
-    return this.pageOverrides.get('setting:WebSecurityEnabled')?.value === false;
-  }
   private readonly pageSettingsLock = new AsyncLock();
   private readonly initializedPageTargets = new Map<
     string,
@@ -139,7 +128,6 @@ export class RpcClient {
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
       fullPageInitialization = false,
-      disableWebSecurity = false,
       udid,
       pageLoadTimeoutMs,
       targetCreationTimeoutMs = DEFAULT_TARGET_CREATION_TIMEOUT_MS,
@@ -160,11 +148,7 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
-    const initial = opts.webInspectorSettings ?? {
-      pageSettings: {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})},
-      userPreferences: opts.userPreferences,
-    };
-    for (const [key, override] of toPageOverrides(initial)) {
+    for (const [key, override] of toPageOverrides(opts.webInspectorSettings ?? {})) {
       this.pageOverrides.set(key, override);
     }
 
@@ -992,50 +976,10 @@ export class RpcClient {
     }
   }
 
-  /**
-   * Applies a runtime setting to every inspected target, including provisional
-   * targets. Serialized with initialization so a navigation cannot apply a stale
-   * value after this method resolves. false clears the override, restoring the
-   * browser's configured default; it does not force WebSecurityEnabled to true.
-   */
-  async setDisableWebSecurity(value: boolean): Promise<void> {
-    await this.setPageSetting('WebSecurityEnabled', value ? false : undefined);
-  }
-
-  async setPageSetting(setting: PageSettingName, value: boolean | undefined): Promise<void> {
-    await this.updatePageOverride(`setting:${setting}`, {
-      method: PAGE_OVERRIDE_METHODS.setting,
-      params: {setting},
-      value,
-    });
-  }
-
-  async setUserPreference<Name extends UserPreferenceName>(
-    name: Name,
-    value: PageUserPreferences[Name],
-  ): Promise<void> {
-    await this.updatePageOverride(`preference:${name}`, {
-      method: PAGE_OVERRIDE_METHODS.userPreference,
-      params: {name},
-      value,
-    });
-  }
-
+  /** Replaces overrides on current targets and retains the complete policy for future targets. */
   async setWebInspectorSettings(settings: WebInspectorSettings): Promise<void> {
     const next = toPageOverrides(settings);
     await this.pageSettingsLock.acquire('settings', async () => await this.replacePageOverrides(next));
-  }
-
-  private async updatePageOverride(key: string, override: PageOverride): Promise<void> {
-    await this.pageSettingsLock.acquire('settings', async () => {
-      const next = new Map(this.pageOverrides);
-      if (override.value === undefined) {
-        next.delete(key);
-      } else {
-        next.set(key, override);
-      }
-      await this.replacePageOverrides(next);
-    });
   }
 
   /** Called under the settings lock; publish the new policy only after every update succeeds. */

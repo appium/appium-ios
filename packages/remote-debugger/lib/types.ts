@@ -1,6 +1,6 @@
 import type {StringRecord, AppiumLogger} from '@appium/types';
 
-import type {PageSettings, PageUserPreferences, WebInspectorSettings} from './page-overrides.js';
+import type {WebInspectorSettings} from './page-overrides.js';
 
 export interface AppInfo {
   id: string;
@@ -109,18 +109,8 @@ export interface RemoteDebuggerOptions {
   /** The maximum size in bytes of a single data frame in the device communication protocol */
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
-  /**
-   * Disable same-origin security for each inspected page. Defaults to false.
-   * Documents loaded before attaching must be reloaded for the override to apply.
-   * Use setDisableWebSecurity to change this value after construction.
-   */
-  disableWebSecurity?: boolean;
-  /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
-  pageSettings?: PageSettings;
-  /** Initial complete override policy. Takes precedence over individual constructor options. */
+  /** Initial complete override policy, retained for future targets. Omitted entries use browser defaults. */
   webInspectorSettings?: WebInspectorSettings;
-  /** Initial CSS user preferences, retained for future targets. */
-  userPreferences?: PageUserPreferences;
   /**
    * How long to wait until a new target is created for a page.
    * Usually, it happens almost instantly, but on slow CI environments this might take some minutes.
@@ -143,14 +133,8 @@ export interface RpcClientOptions {
   logAllCommunicationHexDump?: boolean;
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
-  /** Disable same-origin security for each inspected page. Defaults to false. */
-  disableWebSecurity?: boolean;
-  /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
-  pageSettings?: PageSettings;
-  /** Initial complete override policy. Takes precedence over individual constructor options. */
+  /** Initial complete override policy, retained for future targets. Omitted entries use browser defaults. */
   webInspectorSettings?: WebInspectorSettings;
-  /** Initial CSS user preferences, retained for future targets. */
-  userPreferences?: PageUserPreferences;
   pageLoadTimeoutMs?: number;
   udid?: string;
   targetCreationTimeoutMs?: number;

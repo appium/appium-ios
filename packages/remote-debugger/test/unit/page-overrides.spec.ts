@@ -19,7 +19,7 @@ describe('page overrides', function () {
       const client = new RpcClient();
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
-      await client.setPageSetting(setting, false);
+      await client.setWebInspectorSettings({pageSettings: {[setting]: false}});
       await addPage(client, 'first');
       sinon.assert.calledOnceWithExactly(send, 'Page.overrideSetting', {
         appIdKey: 'app',
@@ -30,11 +30,11 @@ describe('page overrides', function () {
       });
       await addPage(client, 'provisional', '1', true);
       send.resetHistory();
-      await client.setPageSetting(setting, true);
+      await client.setWebInspectorSettings({pageSettings: {[setting]: true}});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => args[1].value === true));
       send.resetHistory();
-      await client.setPageSetting(setting, undefined);
+      await client.setWebInspectorSettings({});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
@@ -49,7 +49,7 @@ describe('page overrides', function () {
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
       for (const value of USER_PREFERENCE_VALUES[name]) {
-        await client.setUserPreference(name, value);
+        await client.setWebInspectorSettings({userPreferences: {[name]: value}});
         send.resetHistory();
         await addPage(client, `target-${value}`, '1', true);
         sinon.assert.calledOnceWithExactly(send, 'Page.overrideUserPreference', {
@@ -61,7 +61,7 @@ describe('page overrides', function () {
         });
       }
       send.resetHistory();
-      await client.setUserPreference(name, undefined);
+      await client.setWebInspectorSettings({});
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
@@ -71,14 +71,22 @@ describe('page overrides', function () {
   }
 
   it('rolls a rejected preference update back without changing other overrides', async function () {
-    const client = new RpcClient({pageSettings: {ImagesEnabled: false}, userPreferences: {PrefersContrast: 'More'}});
+    const client = new RpcClient({
+      webInspectorSettings: {pageSettings: {ImagesEnabled: false}, userPreferences: {PrefersContrast: 'More'}},
+    });
     sinon.stub(client, 'send').resolves();
     const send = sinon.stub(client, 'sendToDevice').resolves();
     await addPage(client, 'first');
     await addPage(client, 'second', '2');
     send.resetHistory();
     send.onSecondCall().rejects(new Error('Rejected'));
-    await assert.rejects(client.setUserPreference('PrefersContrast', 'NoPreference'), /Rejected/);
+    await assert.rejects(
+      client.setWebInspectorSettings({
+        pageSettings: {ImagesEnabled: false},
+        userPreferences: {PrefersContrast: 'NoPreference'},
+      }),
+      /Rejected/,
+    );
     assert.deepStrictEqual(send.thirdCall.args[1], {
       appIdKey: 'app',
       pageIdKey: '1',
@@ -95,8 +103,10 @@ describe('page overrides', function () {
 
   it('continues applying remaining overrides and resumes when one is unsupported', async function () {
     const client = new RpcClient({
-      pageSettings: {ImagesEnabled: false, ScriptEnabled: false},
-      userPreferences: {PrefersColorScheme: 'Dark'},
+      webInspectorSettings: {
+        pageSettings: {ImagesEnabled: false, ScriptEnabled: false},
+        userPreferences: {PrefersColorScheme: 'Dark'},
+      },
     });
     const initialize = sinon.stub(client, 'send').resolves();
     const send = sinon.stub(client, 'sendToDevice').resolves();
@@ -114,10 +124,41 @@ describe('page overrides', function () {
   });
 
   for (const realDevice of [false, true]) {
+    it(`snapshots the complete constructor policy (real=${realDevice})`, async function () {
+      const settings = {
+        pageSettings: {WebSecurityEnabled: false},
+        userPreferences: {PrefersContrast: 'More' as const},
+        userAgent: 'Initial/1',
+      };
+      const remote = realDevice
+        ? new RemoteDebuggerRealDevice({udid: 'test', webInspectorSettings: settings})
+        : new RemoteDebugger({webInspectorSettings: settings});
+      settings.pageSettings.WebSecurityEnabled = true;
+      delete (settings.userPreferences as {PrefersContrast?: string}).PrefersContrast;
+      settings.userAgent = 'Changed/2';
+      await remote.initRpcClient();
+      const client = remote.requireRpcClient();
+      sinon.stub(client, 'send').resolves();
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'first');
+      assert.strictEqual(send.callCount, 3);
+      sinon.assert.calledWith(send, 'Page.overrideSetting', sinon.match({setting: 'WebSecurityEnabled', value: false}));
+      sinon.assert.calledWith(
+        send,
+        'Page.overrideUserPreference',
+        sinon.match({name: 'PrefersContrast', value: 'More'}),
+      );
+      sinon.assert.calledWith(send, 'Page.overrideUserAgent', sinon.match({value: 'Initial/1'}));
+    });
+  }
+
+  for (const realDevice of [false, true]) {
     it(`retains runtime policy after reconnect and removes cleared values (real=${realDevice})`, async function () {
       const remote = realDevice ? new RemoteDebuggerRealDevice({udid: 'test'}) : new RemoteDebugger();
-      await remote.setPageSetting('ImagesEnabled', false);
-      await remote.setUserPreference('PrefersColorScheme', 'Dark');
+      await remote.setWebInspectorSettings({
+        pageSettings: {ImagesEnabled: false},
+        userPreferences: {PrefersColorScheme: 'Dark'},
+      });
       for (let attempt = 0; attempt < 2; attempt++) {
         await remote.initRpcClient();
         const client = remote.requireRpcClient();
@@ -132,8 +173,7 @@ describe('page overrides', function () {
         );
         remote.teardown();
       }
-      await remote.setPageSetting('ImagesEnabled', undefined);
-      await remote.setUserPreference('PrefersColorScheme', undefined);
+      await remote.setWebInspectorSettings({});
       await remote.initRpcClient();
       const client = remote.requireRpcClient();
       sinon.stub(client, 'send').resolves();
@@ -144,10 +184,13 @@ describe('page overrides', function () {
   }
 
   it('does not retain a rejected preference for reconnect', async function () {
-    const remote = new RemoteDebugger({userPreferences: {PrefersContrast: 'More'}});
+    const remote = new RemoteDebugger({webInspectorSettings: {userPreferences: {PrefersContrast: 'More'}}});
     await remote.initRpcClient();
-    sinon.stub(remote.requireRpcClient(), 'setUserPreference').rejects(new Error('Rejected'));
-    await assert.rejects(remote.setUserPreference('PrefersContrast', 'NoPreference'), /Rejected/);
+    sinon.stub(remote.requireRpcClient(), 'setWebInspectorSettings').rejects(new Error('Rejected'));
+    await assert.rejects(
+      remote.setWebInspectorSettings({userPreferences: {PrefersContrast: 'NoPreference'}}),
+      /Rejected/,
+    );
     remote.teardown();
     await remote.initRpcClient();
     const client = remote.requireRpcClient();

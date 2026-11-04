@@ -10,9 +10,12 @@ import {RpcClient} from '../../../lib/rpc/rpc-client.js';
 describe('rpc-client', function () {
   describe('page web security', function () {
     for (const fullPageInitialization of [false, true]) {
-      for (const disableWebSecurity of [undefined, false, true]) {
-        it(`initializes new and provisional targets with full=${fullPageInitialization}, disableWebSecurity=${disableWebSecurity}`, async function () {
-          const client = new RpcClient({fullPageInitialization, disableWebSecurity});
+      for (const webSecurityEnabled of [undefined, false, true]) {
+        it(`initializes new and provisional targets with full=${fullPageInitialization}, WebSecurityEnabled=${webSecurityEnabled}`, async function () {
+          const client = new RpcClient({
+            fullPageInitialization,
+            webInspectorSettings: {pageSettings: {WebSecurityEnabled: webSecurityEnabled}},
+          });
           const send = sinon.stub(client, 'send').resolves();
           sinon.stub(client, 'sendToDevice').callsFake(send);
           (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
@@ -25,14 +28,14 @@ describe('rpc-client', function () {
             await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional, isPaused: true});
 
             const overrides = send.getCalls().filter(({args}) => args[0] === 'Page.overrideSetting');
-            assert.strictEqual(overrides.length, disableWebSecurity ? 1 : 0);
-            if (disableWebSecurity) {
+            assert.strictEqual(overrides.length, webSecurityEnabled === undefined ? 0 : 1);
+            if (webSecurityEnabled !== undefined) {
               assert.deepStrictEqual(overrides[0].args[1], {
                 appIdKey: 'app',
                 pageIdKey: '1',
                 targetId,
                 setting: 'WebSecurityEnabled',
-                value: false,
+                value: webSecurityEnabled,
               });
               const methods = send.getCalls().map(({args}) => args[0]);
               assert.ok(methods.indexOf('Page.enable') < methods.indexOf('Page.overrideSetting'));
@@ -45,7 +48,10 @@ describe('rpc-client', function () {
       }
 
       it(`resumes a target when the override is unsupported (full=${fullPageInitialization})`, async function () {
-        const client = new RpcClient({fullPageInitialization, disableWebSecurity: true});
+        const client = new RpcClient({
+          fullPageInitialization,
+          webInspectorSettings: {pageSettings: {WebSecurityEnabled: false}},
+        });
         const send = sinon.stub(client, 'send').resolves();
         sinon.stub(client, 'sendToDevice').callsFake(send);
         send.withArgs('Page.overrideSetting').rejects(new Error('Unknown method'));
@@ -83,7 +89,7 @@ describe('rpc-client', function () {
       await addPage(client, 'page-1');
       await addPage(client, 'page-2', '2');
       await addPage(client, 'page-3', '2', true);
-      await client.setDisableWebSecurity(true);
+      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
       assert.deepStrictEqual(
         send.getCalls().map(({args}) => args[1]),
         [
@@ -93,7 +99,7 @@ describe('rpc-client', function () {
         ],
       );
       send.resetHistory();
-      await client.setDisableWebSecurity(false);
+      await client.setWebInspectorSettings({});
       assert.strictEqual(send.callCount, 3);
       for (const {args} of send.getCalls()) {
         assert.strictEqual(args[0], 'Page.overrideSetting');
@@ -105,12 +111,12 @@ describe('rpc-client', function () {
       const client = new RpcClient();
       const initialize = sinon.stub(client, 'send').resolves();
       const update = sinon.stub(client, 'sendToDevice').resolves();
-      await client.setDisableWebSecurity(true);
+      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
       await addPage(client, 'page-1');
       sinon.assert.calledWith(update, 'Page.overrideSetting', sinon.match({value: false}));
       update.resetHistory();
       await client.removeTarget(undefined, 'app', {targetId: 'page-1'} as any);
-      await client.setDisableWebSecurity(false);
+      await client.setWebInspectorSettings({});
       sinon.assert.notCalled(update);
       initialize.resetHistory();
       await addPage(client, 'page-2');
@@ -121,7 +127,10 @@ describe('rpc-client', function () {
       for (const blockedDomain of ['Inspector.enable', 'Runtime.enable']) {
         for (const nextValue of [false, true]) {
           it(`allows updates during ${blockedDomain} without stale overrides (full=${fullPageInitialization}, next=${nextValue})`, async function () {
-            const client = new RpcClient({fullPageInitialization, disableWebSecurity: !nextValue});
+            const client = new RpcClient({
+              fullPageInitialization,
+              webInspectorSettings: nextValue ? {} : {pageSettings: {WebSecurityEnabled: false}},
+            });
             const blocked = deferred();
             const entered = deferred();
             const initialize = sinon.stub(client, 'send').resolves();
@@ -134,8 +143,7 @@ describe('rpc-client', function () {
             await entered.promise;
             try {
               // Must complete while the unrelated domain remains blocked.
-              await client.setDisableWebSecurity(nextValue);
-              assert.strictEqual((client as any).disableWebSecurity, nextValue);
+              await client.setWebInspectorSettings(nextValue ? {pageSettings: {WebSecurityEnabled: false}} : {});
             } finally {
               blocked.resolve();
             }
@@ -156,7 +164,10 @@ describe('rpc-client', function () {
       }
 
       it(`serializes an in-flight security override with runtime updates (full=${fullPageInitialization})`, async function () {
-        const client = new RpcClient({fullPageInitialization, disableWebSecurity: true});
+        const client = new RpcClient({
+          fullPageInitialization,
+          webInspectorSettings: {pageSettings: {WebSecurityEnabled: false}},
+        });
         sinon.stub(client, 'send').resolves();
         const blocked = deferred();
         const entered = deferred();
@@ -167,7 +178,7 @@ describe('rpc-client', function () {
         });
         const creation = addPage(client, 'provisional', '1', true);
         await entered.promise;
-        const setting = client.setDisableWebSecurity(false);
+        const setting = client.setWebInspectorSettings({});
         await Promise.resolve();
         sinon.assert.calledOnce(update);
         blocked.resolve();
@@ -176,7 +187,6 @@ describe('rpc-client', function () {
           update.getCalls().map(({args}) => args[1].value),
           [false, undefined],
         );
-        assert.strictEqual((client as any).disableWebSecurity, false);
       });
     }
 
@@ -187,8 +197,10 @@ describe('rpc-client', function () {
       await addPage(client, 'page-2', '2');
       const update = sinon.stub(client, 'sendToDevice').resolves();
       update.onSecondCall().rejects(new Error('Override unavailable'));
-      await assert.rejects(client.setDisableWebSecurity(true), /Override unavailable/);
-      assert.strictEqual((client as any).disableWebSecurity, false);
+      await assert.rejects(
+        client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}}),
+        /Override unavailable/,
+      );
       assert.deepStrictEqual(update.thirdCall.args, [
         'Page.overrideSetting',
         {
@@ -205,9 +217,9 @@ describe('rpc-client', function () {
       sinon.stub(client, 'send').resolves();
       await addPage(client, 'page-1');
       const update = sinon.stub(client, 'sendToDevice').rejects(new Error('Missing target for given targetId'));
-      await client.setDisableWebSecurity(true);
+      await client.setWebInspectorSettings({pageSettings: {WebSecurityEnabled: false}});
       sinon.assert.calledOnce(update);
-      await client.setDisableWebSecurity(false);
+      await client.setWebInspectorSettings({});
       sinon.assert.calledOnce(update);
     });
   });
