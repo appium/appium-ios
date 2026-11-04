@@ -403,13 +403,14 @@
   if (direction) {
     NSString *const distanceString = request.arguments[@"distance"] ?: @"1.0";
     CGFloat distance = (CGFloat)distanceString.doubleValue;
-    if ([direction isEqualToString:@"up"]) {
+    NSString *const directionLower = direction.lowercaseString;
+    if ([directionLower isEqualToString:@"up"]) {
       [element fb_scrollUpByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"down"]) {
+    } else if ([directionLower isEqualToString:@"down"]) {
       [element fb_scrollDownByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"left"]) {
+    } else if ([directionLower isEqualToString:@"left"]) {
       [element fb_scrollLeftByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"right"]) {
+    } else if ([directionLower isEqualToString:@"right"]) {
       [element fb_scrollRightByNormalizedDistance:distance];
     }
     return FBResponseWithOK();
