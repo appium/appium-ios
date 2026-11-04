@@ -7,12 +7,18 @@ import sinon from 'sinon';
 
 import {RpcClient} from '../../../lib/rpc/rpc-client.js';
 
+function connectedClient(options: ConstructorParameters<typeof RpcClient>[0] = {}): RpcClient {
+  const client = new RpcClient(options);
+  client.isConnected = true;
+  return client;
+}
+
 describe('rpc-client', function () {
   describe('page web security', function () {
     for (const fullPageInitialization of [false, true]) {
       for (const webSecurityEnabled of [undefined, false, true]) {
         it(`initializes new and provisional targets with full=${fullPageInitialization}, WebSecurityEnabled=${webSecurityEnabled}`, async function () {
-          const client = new RpcClient({
+          const client = connectedClient({
             fullPageInitialization,
             webInspectorSettings: {pageSettings: {WebSecurityEnabled: webSecurityEnabled}},
           });
@@ -48,7 +54,7 @@ describe('rpc-client', function () {
       }
 
       it(`resumes a target when the override is unsupported (full=${fullPageInitialization})`, async function () {
-        const client = new RpcClient({
+        const client = connectedClient({
           fullPageInitialization,
           webInspectorSettings: {pageSettings: {WebSecurityEnabled: false}},
         });
@@ -83,7 +89,7 @@ describe('rpc-client', function () {
     }
 
     it('updates all inspected pages and provisional targets, then clears the override', async function () {
-      const client = new RpcClient();
+      const client = connectedClient();
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
       await addPage(client, 'page-1');
@@ -108,7 +114,7 @@ describe('rpc-client', function () {
     });
 
     it('uses the updated policy for future targets and forgets destroyed targets', async function () {
-      const client = new RpcClient();
+      const client = connectedClient();
       const initialize = sinon.stub(client, 'send').resolves();
       const update = sinon.stub(client, 'sendToDevice').resolves();
       await client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}});
@@ -127,7 +133,7 @@ describe('rpc-client', function () {
       for (const blockedDomain of ['Inspector.enable', 'Runtime.enable']) {
         for (const nextValue of [false, true]) {
           it(`allows updates during ${blockedDomain} without stale overrides (full=${fullPageInitialization}, next=${nextValue})`, async function () {
-            const client = new RpcClient({
+            const client = connectedClient({
               fullPageInitialization,
               webInspectorSettings: nextValue ? {} : {pageSettings: {WebSecurityEnabled: false}},
             });
@@ -164,7 +170,7 @@ describe('rpc-client', function () {
       }
 
       it(`serializes an in-flight security override with runtime updates (full=${fullPageInitialization})`, async function () {
-        const client = new RpcClient({
+        const client = connectedClient({
           fullPageInitialization,
           webInspectorSettings: {pageSettings: {WebSecurityEnabled: false}},
         });
@@ -191,7 +197,7 @@ describe('rpc-client', function () {
     }
 
     it('rolls back updated pages and retains the previous policy when a target rejects the update', async function () {
-      const client = new RpcClient();
+      const client = connectedClient();
       sinon.stub(client, 'send').resolves();
       await addPage(client, 'page-1');
       await addPage(client, 'page-2', '2');
@@ -201,7 +207,7 @@ describe('rpc-client', function () {
         client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}}),
         /Override unavailable/,
       );
-      assert.deepStrictEqual(update.thirdCall.args, [
+      assert.deepStrictEqual(update.thirdCall.args.slice(0, 2), [
         'Page.overrideSetting',
         {
           appIdKey: 'app',
@@ -213,7 +219,7 @@ describe('rpc-client', function () {
     });
 
     it('ignores a target that disappeared without retrying against a replacement', async function () {
-      const client = new RpcClient();
+      const client = connectedClient();
       sinon.stub(client, 'send').resolves();
       await addPage(client, 'page-1');
       const update = sinon.stub(client, 'sendToDevice').rejects(new Error('Missing target for given targetId'));
