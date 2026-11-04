@@ -110,6 +110,7 @@ export interface RemoteDebuggerOptions {
   /**
    * Disable same-origin security for each inspected page. Defaults to false.
    * Documents loaded before attaching must be reloaded for the override to apply.
+   * Use setDisableWebSecurity to change this value after construction.
    */
   disableWebSecurity?: boolean;
   /**

@@ -8,6 +8,21 @@ describe('RemoteMessages', function () {
   const remoteMessages = new RemoteMessages();
 
   describe('getRemoteCommand', function () {
+    it('omits value when clearing the web security override', function () {
+      const command = remoteMessages.getRemoteCommand('Page.overrideSetting', {
+        id: '1',
+        connId: 'c',
+        senderId: 's',
+        appIdKey: 'app',
+        pageIdKey: '1',
+        targetId: 'page-1',
+        setting: 'WebSecurityEnabled',
+      });
+      const message = JSON.parse((command.__argument.WIRSocketDataKey as any).params.message);
+      assert.strictEqual(message.params.setting, 'WebSecurityEnabled');
+      assert.strictEqual(Object.hasOwn(message.params, 'value'), false);
+    });
+
     it('preserves a false web security override and routes it to the page target', function () {
       const command = remoteMessages.getRemoteCommand('Page.overrideSetting', {
         id: '1',

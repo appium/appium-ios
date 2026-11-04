@@ -81,7 +81,16 @@ export class RpcClient {
   protected readonly logAllCommunicationHexDump?: boolean;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
-  protected readonly disableWebSecurity: boolean;
+  protected disableWebSecurity: boolean;
+  private readonly pageSettingsLock = new AsyncLock();
+  private readonly initializedPageTargets = new Map<
+    string,
+    {
+      appIdKey: AppIdKey;
+      pageIdKey: PageIdKey;
+      targetId: TargetId;
+    }
+  >();
   protected readonly bundleId?: string;
   protected readonly pageLoadTimeoutMs?: number;
   protected readonly platformVersion: string;
@@ -507,6 +516,7 @@ export class RpcClient {
    */
   async disconnect(): Promise<void> {
     this.messageHandler.removeAllListeners();
+    this.initializedPageTargets.clear();
   }
 
   /**
@@ -693,6 +703,7 @@ export class RpcClient {
     }
 
     log.debug(`Target destroyed for app '${app}': ${targetInfo.targetId}`);
+    this.initializedPageTargets.delete(JSON.stringify([String(app), targetInfo.targetId]));
 
     // go through the targets and find the one that has a waiting provisional target
     if (this.targets[app]?.provisional?.oldTargetId === targetInfo.targetId) {
@@ -952,6 +963,60 @@ export class RpcClient {
   }
 
   /**
+   * Applies a runtime setting to every inspected target, including provisional
+   * targets. Serialized with initialization so a navigation cannot apply a stale
+   * value after this method resolves. false clears the override, restoring the
+   * browser's configured default; it does not force WebSecurityEnabled to true.
+   */
+  async setDisableWebSecurity(value: boolean): Promise<void> {
+    if (typeof value !== 'boolean') {
+      throw new TypeError('disableWebSecurity must be a boolean');
+    }
+    await this.pageSettingsLock.acquire('settings', async () => {
+      const previous = this.disableWebSecurity;
+      const updated: string[] = [];
+      try {
+        for (const key of this.initializedPageTargets.keys()) {
+          await this.applyWebSecurityOverride(key, value);
+          updated.push(key);
+        }
+        this.disableWebSecurity = value;
+      } catch (error) {
+        // Keep the Settings API's stored value consistent if an update is rejected.
+        for (const key of updated) {
+          try {
+            await this.applyWebSecurityOverride(key, previous);
+          } catch (rollbackError) {
+            log.warn(`Cannot restore the previous web security override: ${rollbackError}`);
+          }
+        }
+        throw error;
+      }
+    });
+  }
+
+  private async applyWebSecurityOverride(key: string, disabled: boolean): Promise<void> {
+    const target = this.initializedPageTargets.get(key);
+    if (!target) {
+      return;
+    }
+    try {
+      // Do not retry against a replacement target: its initialization acquires
+      // the same settings lock and will pick up the updated policy itself.
+      await this.sendToDevice('Page.overrideSetting', {
+        ...target,
+        setting: 'WebSecurityEnabled',
+        ...(disabled ? {value: false} : {}),
+      });
+    } catch (error: any) {
+      if (!MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+        throw error;
+      }
+      this.initializedPageTargets.delete(key);
+    }
+  }
+
+  /**
    * Initializes a page by enabling various Web Inspector domains.
    * Can perform either simple or full initialization based on configuration.
    * Mimics the steps that Desktop Safari Develop tools uses to initialize
@@ -963,6 +1028,26 @@ export class RpcClient {
    * @returns A promise that resolves to true if initialization succeeded, false otherwise.
    */
   private async _initializePage(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId?: TargetId): Promise<boolean> {
+    return await this.pageSettingsLock.acquire('settings', async () => {
+      const resolvedTargetId = targetId ?? this.getTarget(appIdKey, pageIdKey);
+      if (!resolvedTargetId) {
+        return false;
+      }
+      const key = JSON.stringify([String(appIdKey), resolvedTargetId]);
+      this.initializedPageTargets.set(key, {appIdKey, pageIdKey, targetId: resolvedTargetId});
+      const initialized = await this.initializePageWithSettings(appIdKey, pageIdKey, targetId);
+      if (!initialized) {
+        this.initializedPageTargets.delete(key);
+      }
+      return initialized;
+    });
+  }
+
+  private async initializePageWithSettings(
+    appIdKey: AppIdKey,
+    pageIdKey: PageIdKey,
+    targetId?: TargetId,
+  ): Promise<boolean> {
     const sendOpts: RemoteCommandOpts = {
       appIdKey,
       pageIdKey,

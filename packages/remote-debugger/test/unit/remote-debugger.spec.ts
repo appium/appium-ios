@@ -21,6 +21,33 @@ describe('web security options', function () {
   }
 });
 
+describe('runtime web security settings', function () {
+  it('retains settings applied before connection and across reconnects', async function () {
+    const rd = new RemoteDebugger();
+    await rd.setDisableWebSecurity(true);
+    await rd.initRpcClient();
+    assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, true);
+    await rd.setDisableWebSecurity(false);
+    assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, false);
+    rd.teardown();
+    await rd.initRpcClient();
+    assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, false);
+  });
+
+  it('does not retain a rejected update for the next connection', async function (t) {
+    const rd = new RemoteDebugger();
+    await rd.initRpcClient();
+    t.mock.method(rd.requireRpcClient(), 'setDisableWebSecurity', async () => {
+      throw new Error('Rejected');
+    });
+    await assert.rejects(rd.setDisableWebSecurity(true), /Rejected/);
+    rd.teardown();
+    await rd.initRpcClient();
+    assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, false);
+    await assert.rejects(rd.setDisableWebSecurity(1 as any), TypeError);
+  });
+});
+
 describe('RemoteDebugger', function () {
   describe('initRpcClient', function () {
     it('should forward targetCreationTimeoutMs to the underlying simulator RPC client', async function () {

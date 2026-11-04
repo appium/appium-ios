@@ -105,7 +105,7 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _logAllCommunicationHexDump: boolean;
   protected readonly _webInspectorMaxFrameLength?: number;
   protected readonly _fullPageInitialization?: boolean;
-  protected readonly _disableWebSecurity: boolean;
+  protected _disableWebSecurity: boolean;
   protected readonly _targetCreationTimeoutMs?: number;
 
   constructor(opts: RemoteDebuggerOptions = {}) {
@@ -173,6 +173,19 @@ export class RemoteDebugger extends EventEmitter {
     this._skippedApps = [];
 
     this.setup();
+  }
+
+  /**
+   * Updates inspected pages and the policy used for future targets and connections.
+   * false removes the WebKit override. Reload or navigate after changing this value;
+   * existing document security origins are not changed retroactively.
+   */
+  async setDisableWebSecurity(value: boolean): Promise<void> {
+    if (typeof value !== 'boolean') {
+      throw new TypeError('disableWebSecurity must be a boolean');
+    }
+    await this._rpcClient?.setDisableWebSecurity(value);
+    this._disableWebSecurity = value;
   }
 
   get log(): AppiumLogger {

@@ -60,6 +60,119 @@ describe('rpc-client', function () {
     }
   });
 
+  describe('runtime web security settings', function () {
+    async function addPage(client: RpcClient, targetId: string, pageIdKey = '1', isProvisional = false) {
+      (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey};
+      await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional, isPaused: true});
+    }
+
+    it('updates all inspected pages and provisional targets, then clears the override', async function () {
+      const client = new RpcClient();
+      sinon.stub(client, 'send').resolves();
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'page-1');
+      await addPage(client, 'page-2', '2');
+      await addPage(client, 'page-3', '2', true);
+      await client.setDisableWebSecurity(true);
+      assert.deepStrictEqual(
+        send.getCalls().map(({args}) => args[1]),
+        [
+          {appIdKey: 'app', pageIdKey: '1', targetId: 'page-1', setting: 'WebSecurityEnabled', value: false},
+          {appIdKey: 'app', pageIdKey: '2', targetId: 'page-2', setting: 'WebSecurityEnabled', value: false},
+          {appIdKey: 'app', pageIdKey: '2', targetId: 'page-3', setting: 'WebSecurityEnabled', value: false},
+        ],
+      );
+      send.resetHistory();
+      await client.setDisableWebSecurity(false);
+      assert.strictEqual(send.callCount, 3);
+      for (const {args} of send.getCalls()) {
+        assert.strictEqual(args[0], 'Page.overrideSetting');
+        assert.strictEqual(Object.hasOwn(args[1], 'value'), false);
+      }
+    });
+
+    it('uses the updated policy for future targets and forgets destroyed targets', async function () {
+      const client = new RpcClient();
+      const initialize = sinon.stub(client, 'send').resolves();
+      const update = sinon.stub(client, 'sendToDevice').resolves();
+      await client.setDisableWebSecurity(true);
+      await addPage(client, 'page-1');
+      sinon.assert.calledWith(initialize, 'Page.overrideSetting', sinon.match({value: false}));
+      await client.removeTarget(undefined, 'app', {targetId: 'page-1'} as any);
+      await client.setDisableWebSecurity(false);
+      sinon.assert.notCalled(update);
+      initialize.resetHistory();
+      await addPage(client, 'page-2');
+      assert.strictEqual(initialize.calledWith('Page.overrideSetting'), false);
+    });
+
+    it('does not allow in-flight initialization to overwrite a runtime update', async function () {
+      const client = new RpcClient({disableWebSecurity: true});
+      let release!: () => void;
+      let entered!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const initializing = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const initialize = sinon.stub(client, 'send').resolves();
+      initialize.withArgs('Inspector.enable').callsFake(async () => {
+        entered();
+        await blocked;
+      });
+      const update = sinon.stub(client, 'sendToDevice').resolves();
+      const creation = addPage(client, 'provisional', '1', true);
+      await initializing;
+      const setting = client.setDisableWebSecurity(false);
+      sinon.assert.notCalled(update);
+      release();
+      await Promise.all([creation, setting]);
+      sinon.assert.calledOnceWithExactly(update, 'Page.overrideSetting', {
+        appIdKey: 'app',
+        pageIdKey: '1',
+        targetId: 'provisional',
+        setting: 'WebSecurityEnabled',
+      });
+      assert.strictEqual((client as any).disableWebSecurity, false);
+    });
+
+    it('rolls back updated pages and retains the previous policy when a target rejects the update', async function () {
+      const client = new RpcClient();
+      sinon.stub(client, 'send').resolves();
+      await addPage(client, 'page-1');
+      await addPage(client, 'page-2', '2');
+      const update = sinon.stub(client, 'sendToDevice').resolves();
+      update.onSecondCall().rejects(new Error('Override unavailable'));
+      await assert.rejects(client.setDisableWebSecurity(true), /Override unavailable/);
+      assert.strictEqual((client as any).disableWebSecurity, false);
+      assert.deepStrictEqual(update.thirdCall.args, [
+        'Page.overrideSetting',
+        {
+          appIdKey: 'app',
+          pageIdKey: '1',
+          targetId: 'page-1',
+          setting: 'WebSecurityEnabled',
+        },
+      ]);
+    });
+
+    it('ignores a target that disappeared without retrying against a replacement', async function () {
+      const client = new RpcClient();
+      sinon.stub(client, 'send').resolves();
+      await addPage(client, 'page-1');
+      const update = sinon.stub(client, 'sendToDevice').rejects(new Error('Missing target for given targetId'));
+      await client.setDisableWebSecurity(true);
+      sinon.assert.calledOnce(update);
+      await client.setDisableWebSecurity(false);
+      sinon.assert.calledOnce(update);
+    });
+
+    it('rejects non-boolean updates', async function () {
+      await assert.rejects(new RpcClient().setDisableWebSecurity('true' as any), TypeError);
+    });
+  });
+
   describe('.send', function () {
     it('should send RPC message to device', async function () {});
     it('should send RPC message to device and retry if target id not found', async function () {
