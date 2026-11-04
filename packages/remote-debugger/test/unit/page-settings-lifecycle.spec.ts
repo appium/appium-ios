@@ -3,6 +3,7 @@ import {describe, it} from 'node:test';
 
 import sinon from 'sinon';
 
+import {toPageOverrides, type WebInspectorPageSettings} from '../../lib/page-overrides.js';
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
 import type {AppIdKey, RemoteCommand, RpcClientOptions} from '../../lib/types.js';
 
@@ -181,6 +182,82 @@ describe('page settings connection lifecycle', function () {
       clock.restore();
     }
   });
+
+  const recoveryCases: {name: string; previous: WebInspectorPageSettings; next: WebInspectorPageSettings}[] = [
+    {name: 'changed user agent', previous: {userAgent: 'Old/1'}, next: {userAgent: 'New/2'}},
+    {name: 'added page setting', previous: {}, next: {pageSettings: {WebSecurityEnabled: false}}},
+    {name: 'removed preference', previous: {userPreferences: {PrefersColorScheme: 'Dark'}}, next: {}},
+  ];
+  for (const {name, previous, next} of recoveryCases) {
+    for (const retryNext of [false, true]) {
+      it(`repairs a failed rollback before accepting a policy: ${name}, retryNext=${retryNext}`, async function () {
+        const {client} = connectedClient({webInspectorSettings: previous});
+        const before = [...toPageOverrides(previous).values()][0]?.value;
+        const after = [...toPageOverrides(next).values()][0]?.value;
+        const state = new Map<string, boolean | string | undefined>();
+        let fail = false;
+        const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
+          if (
+            fail &&
+            ((opts.targetId === 'second' && opts.value === after) ||
+              (opts.targetId === 'first' && opts.value === before))
+          ) {
+            throw new Error('Temporary protocol failure');
+          }
+          state.set(String(opts.targetId), opts.value as boolean | string | undefined);
+        });
+        await addPage(client, 'first');
+        await addPage(client, 'second', '2');
+        fail = true;
+        await assert.rejects(client.setWebInspectorPageSettings(next), /Temporary protocol failure/);
+        assert.equal(state.get('first'), after);
+        // A failed repair must also reject; it must not be reported as a no-op success.
+        await assert.rejects(client.setWebInspectorPageSettings(previous), /Temporary protocol failure/);
+        fail = false;
+        send.resetHistory();
+        const requested = retryNext ? next : previous;
+        await client.setWebInspectorPageSettings(requested);
+        assert.equal(state.get('first'), retryNext ? after : before);
+        assert.equal(state.get('second'), retryNext ? after : before);
+        assert.equal(send.callCount, retryNext ? 3 : 1);
+        // A successful repair clears the pending work.
+        send.resetHistory();
+        await client.setWebInspectorPageSettings(requested);
+        sinon.assert.notCalled(send);
+      });
+    }
+  }
+
+  for (const disconnect of [false, true]) {
+    it(`discards pending rollback repairs when a target is removed (disconnect=${disconnect})`, async function () {
+      const {client} = connectedClient({webInspectorSettings: {userAgent: 'Old/1'}});
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'first');
+      await addPage(client, 'second', '2');
+      send
+        .withArgs('Page.overrideUserAgent', sinon.match({targetId: 'second', value: 'New/2'}))
+        .rejects(new Error('Update failed'));
+      send
+        .withArgs('Page.overrideUserAgent', sinon.match({targetId: 'first', value: 'Old/1'}))
+        .rejects(new Error('Rollback failed'));
+      await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'New/2'}), /Update failed/);
+      if (disconnect) {
+        await client.disconnect();
+        client.isConnected = true;
+      } else {
+        await client.removeTarget(undefined, 'app', {targetId: 'first'} as any);
+      }
+      send.reset();
+      send.resolves();
+      await addPage(client, 'first', '3');
+      send.resetHistory();
+      await client.setWebInspectorPageSettings({userAgent: 'Old/1'});
+      sinon.assert.notCalled(send);
+      await client.setWebInspectorPageSettings({userAgent: 'Accepted/3'});
+      assert.ok(send.getCalls().every(({args}) => args[1].value === 'Accepted/3'));
+      assert.equal(send.callCount, disconnect ? 1 : 2);
+    });
+  }
 
   for (const message of ['app not found', 'Application PID:123 does not exist']) {
     it(`removes every stale target of a missing app: ${message}`, async function () {

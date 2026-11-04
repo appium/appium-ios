@@ -105,6 +105,7 @@ export class RpcClient {
       appIdKey: AppIdKey;
       pageIdKey: PageIdKey;
       targetId: TargetId;
+      pendingRestores: Map<string, PageOverride>;
     }
   >();
   protected readonly bundleId?: string;
@@ -1017,6 +1018,15 @@ export class RpcClient {
 
   /** Called under the settings lock; publish the new policy only after every update succeeds. */
   private async replacePageOverrides(next: Map<string, PageOverride>, signal: AbortSignal): Promise<void> {
+    // A failed rollback can leave a page out of sync with the retained policy.
+    // Repair it even when the requested policy has no changes, including resets
+    // for overrides introduced by the failed update.
+    for (const [key, target] of this.initializedPageTargets) {
+      for (const [overrideKey, override] of target.pendingRestores) {
+        await this.applyPageOverride(key, override, signal);
+        target.pendingRestores.delete(overrideKey);
+      }
+    }
     const changes = new Map<string, PageOverride>();
     for (const key of new Set([...next.keys(), ...this.pageOverrides.keys()])) {
       const previous = this.pageOverrides.get(key);
@@ -1030,22 +1040,25 @@ export class RpcClient {
         changes.set(key, {...previous, value: undefined});
       }
     }
-    const updated: {target: string; previous: PageOverride}[] = [];
+    const updated: {target: string; key: string; previous: PageOverride}[] = [];
     try {
       for (const target of this.initializedPageTargets.keys()) {
         for (const [key, override] of changes) {
           const previous = this.pageOverrides.get(key) ?? {...override, value: undefined};
           await this.applyPageOverride(target, override, signal);
-          updated.push({target, previous});
+          updated.push({target, key, previous});
         }
       }
       signal.throwIfAborted();
       this.pageOverrides = next;
     } catch (error) {
-      for (const {target, previous} of updated.reverse()) {
+      for (const {target, key, previous} of updated.reverse()) {
         try {
           await this.applyPageOverride(target, previous, signal);
         } catch (rollbackError) {
+          if (!signal.aborted) {
+            this.initializedPageTargets.get(target)?.pendingRestores.set(key, previous);
+          }
           log.warn(`Cannot restore the previous page override: ${rollbackError}`);
         }
       }
@@ -1106,7 +1119,13 @@ export class RpcClient {
     try {
       await this.sendToDevice(
         override.method,
-        {...target, ...override.params, ...(override.value === undefined ? {} : {value: override.value})},
+        {
+          appIdKey: target.appIdKey,
+          pageIdKey: target.pageIdKey,
+          targetId: target.targetId,
+          ...override.params,
+          ...(override.value === undefined ? {} : {value: override.value}),
+        },
         true,
         AbortSignal.any([connectionSignal, deadline.signal]),
       );
@@ -1160,7 +1179,7 @@ export class RpcClient {
     // overrides with runtime updates; other domains can initialize concurrently.
     await this.pageSettingsLock.acquire('settings', async () => {
       this.assertPageSettingsConnection(signal);
-      const target = {appIdKey, pageIdKey, targetId};
+      const target = {appIdKey, pageIdKey, targetId, pendingRestores: new Map<string, PageOverride>()};
       this.initializedPageTargets.set(toPageTargetKey(appIdKey, targetId), target);
       for (const override of this.pageOverrides.values()) {
         try {
