@@ -969,9 +969,6 @@ export class RpcClient {
    * browser's configured default; it does not force WebSecurityEnabled to true.
    */
   async setDisableWebSecurity(value: boolean): Promise<void> {
-    if (typeof value !== 'boolean') {
-      throw new TypeError('disableWebSecurity must be a boolean');
-    }
     await this.pageSettingsLock.acquire('settings', async () => {
       const previous = this.disableWebSecurity;
       const updated: string[] = [];

@@ -44,7 +44,6 @@ describe('runtime web security settings', function () {
     rd.teardown();
     await rd.initRpcClient();
     assert.strictEqual((rd.requireRpcClient() as any).disableWebSecurity, false);
-    await assert.rejects(rd.setDisableWebSecurity(1 as any), TypeError);
   });
 });
 

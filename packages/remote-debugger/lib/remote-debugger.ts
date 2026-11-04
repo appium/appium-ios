@@ -181,9 +181,6 @@ export class RemoteDebugger extends EventEmitter {
    * existing document security origins are not changed retroactively.
    */
   async setDisableWebSecurity(value: boolean): Promise<void> {
-    if (typeof value !== 'boolean') {
-      throw new TypeError('disableWebSecurity must be a boolean');
-    }
     await this._rpcClient?.setDisableWebSecurity(value);
     this._disableWebSecurity = value;
   }

@@ -167,10 +167,6 @@ describe('rpc-client', function () {
       await client.setDisableWebSecurity(false);
       sinon.assert.calledOnce(update);
     });
-
-    it('rejects non-boolean updates', async function () {
-      await assert.rejects(new RpcClient().setDisableWebSecurity('true' as any), TypeError);
-    });
   });
 
   describe('.send', function () {
