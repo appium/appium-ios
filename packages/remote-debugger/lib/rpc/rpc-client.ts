@@ -1025,25 +1025,42 @@ export class RpcClient {
    * @returns A promise that resolves to true if initialization succeeded, false otherwise.
    */
   private async _initializePage(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId?: TargetId): Promise<boolean> {
-    return await this.pageSettingsLock.acquire('settings', async () => {
-      const resolvedTargetId = targetId ?? this.getTarget(appIdKey, pageIdKey);
-      if (!resolvedTargetId) {
-        return false;
-      }
-      const key = JSON.stringify([String(appIdKey), resolvedTargetId]);
-      this.initializedPageTargets.set(key, {appIdKey, pageIdKey, targetId: resolvedTargetId});
-      const initialized = await this.initializePageWithSettings(appIdKey, pageIdKey, targetId);
+    const resolvedTargetId = targetId ?? this.getTarget(appIdKey, pageIdKey);
+    if (!resolvedTargetId) {
+      return false;
+    }
+    const key = JSON.stringify([String(appIdKey), resolvedTargetId]);
+    let initialized = false;
+    try {
+      initialized = await this.initializePageWithSettings(appIdKey, pageIdKey, resolvedTargetId);
+      return initialized;
+    } finally {
       if (!initialized) {
         this.initializedPageTargets.delete(key);
       }
-      return initialized;
+    }
+  }
+
+  private async initializePageWebSecurity(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId: TargetId): Promise<void> {
+    // Page.enable has completed. Serialize only registration and the security
+    // override with runtime updates; other domains can initialize concurrently.
+    await this.pageSettingsLock.acquire('settings', async () => {
+      const target = {appIdKey, pageIdKey, targetId};
+      this.initializedPageTargets.set(JSON.stringify([String(appIdKey), targetId]), target);
+      if (this.disableWebSecurity) {
+        await this.sendToDevice('Page.overrideSetting', {
+          ...target,
+          setting: 'WebSecurityEnabled',
+          value: false,
+        });
+      }
     });
   }
 
   private async initializePageWithSettings(
     appIdKey: AppIdKey,
     pageIdKey: PageIdKey,
-    targetId?: TargetId,
+    targetId: TargetId,
   ): Promise<boolean> {
     const sendOpts: RemoteCommandOpts = {
       appIdKey,
@@ -1058,9 +1075,8 @@ export class RpcClient {
     const initialDomains: Record<string, RemoteCommandOpts> = {
       'Inspector.enable': sendOpts,
       'Page.enable': sendOpts,
-      ...(this.disableWebSecurity
-        ? {'Page.overrideSetting': {...sendOpts, setting: 'WebSecurityEnabled', value: false}}
-        : {}),
+      // Always visit this step to register the target and read the latest policy.
+      'Page.overrideSetting': sendOpts,
       'Runtime.enable': sendOpts,
     };
     if (!this.fullPageInitialization) {
@@ -1074,7 +1090,11 @@ export class RpcClient {
         'Inspector.initialized': sendOpts,
       })) {
         try {
-          await this.send(domain, opts);
+          if (domain === 'Page.overrideSetting') {
+            await this.initializePageWebSecurity(appIdKey, pageIdKey, targetId);
+          } else {
+            await this.send(domain, opts);
+          }
         } catch (err: any) {
           log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
           if (MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
@@ -1148,7 +1168,10 @@ export class RpcClient {
 
     for (const [domain, opts] of Object.entries(domainsToOptsMap)) {
       try {
-        const res = await this.send(domain, opts);
+        const res =
+          domain === 'Page.overrideSetting'
+            ? await this.initializePageWebSecurity(appIdKey, pageIdKey, targetId)
+            : await this.send(domain, opts);
         if (domain === 'Console.getLoggingChannels') {
           for (const source of (res?.channels || []).map((entry: {source: any}) => entry.source)) {
             try {
