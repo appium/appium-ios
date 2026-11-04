@@ -6,8 +6,10 @@ import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
 import {
-  PAGE_SETTING_NAMES,
-  USER_PREFERENCE_VALUES,
+  toPageOverrides,
+  PAGE_OVERRIDE_METHODS,
+  type PageOverride,
+  type WebInspectorSettings,
   type PageSettingName,
   type UserPreferenceName,
   type PageUserPreferences,
@@ -28,11 +30,17 @@ import {convertJavascriptEvaluationResult, defaults} from '../utils/index.js';
 import {RemoteMessages} from './remote-messages.js';
 import RpcMessageHandler from './rpc-message-handler.js';
 
-interface PageOverride {
-  method: 'Page.overrideSetting' | 'Page.overrideUserPreference';
-  params: {setting: PageSettingName} | {name: UserPreferenceName};
-  value: boolean | string | undefined;
-}
+// Commands shared by simple and full page initialization.
+const PAGE_INITIALIZATION_COMMANDS = {
+  inspectorEnable: 'Inspector.enable',
+  pageEnable: 'Page.enable',
+  runtimeEnable: 'Runtime.enable',
+  networkEnable: 'Network.enable',
+  heapEnable: 'Heap.enable',
+  debuggerEnable: 'Debugger.enable',
+  consoleEnable: 'Console.enable',
+  inspectorInitialized: 'Inspector.initialized',
+} as const;
 
 const DATA_LOG_LENGTH = 200;
 const MIN_WAIT_FOR_TARGET_TIMEOUT_MS = 30000;
@@ -152,18 +160,12 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
-    const initialSettings = {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})};
-    for (const setting of PAGE_SETTING_NAMES) {
-      const value = initialSettings[setting];
-      if (value !== undefined) {
-        this.pageOverrides.set(`setting:${setting}`, {method: 'Page.overrideSetting', params: {setting}, value});
-      }
-    }
-    for (const name of Object.keys(USER_PREFERENCE_VALUES) as UserPreferenceName[]) {
-      const value = opts.userPreferences?.[name];
-      if (value !== undefined) {
-        this.pageOverrides.set(`preference:${name}`, {method: 'Page.overrideUserPreference', params: {name}, value});
-      }
+    const initial = opts.webInspectorSettings ?? {
+      pageSettings: {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})},
+      userPreferences: opts.userPreferences,
+    };
+    for (const [key, override] of toPageOverrides(initial)) {
+      this.pageOverrides.set(key, override);
     }
 
     this.bundleId = bundleId;
@@ -1001,41 +1003,79 @@ export class RpcClient {
   }
 
   async setPageSetting(setting: PageSettingName, value: boolean | undefined): Promise<void> {
-    await this.updatePageOverride(`setting:${setting}`, {method: 'Page.overrideSetting', params: {setting}, value});
+    await this.updatePageOverride(`setting:${setting}`, {
+      method: PAGE_OVERRIDE_METHODS.setting,
+      params: {setting},
+      value,
+    });
   }
 
   async setUserPreference<Name extends UserPreferenceName>(
     name: Name,
     value: PageUserPreferences[Name],
   ): Promise<void> {
-    await this.updatePageOverride(`preference:${name}`, {method: 'Page.overrideUserPreference', params: {name}, value});
+    await this.updatePageOverride(`preference:${name}`, {
+      method: PAGE_OVERRIDE_METHODS.userPreference,
+      params: {name},
+      value,
+    });
+  }
+
+  async setWebInspectorSettings(settings: WebInspectorSettings): Promise<void> {
+    const next = toPageOverrides(settings);
+    await this.pageSettingsLock.acquire('settings', async () => await this.replacePageOverrides(next));
   }
 
   private async updatePageOverride(key: string, override: PageOverride): Promise<void> {
     await this.pageSettingsLock.acquire('settings', async () => {
-      const previous = this.pageOverrides.get(key) ?? {...override, value: undefined};
-      const updated: string[] = [];
-      try {
-        for (const target of this.initializedPageTargets.keys()) {
-          await this.applyPageOverride(target, override);
-          updated.push(target);
-        }
-        if (override.value === undefined) {
-          this.pageOverrides.delete(key);
-        } else {
-          this.pageOverrides.set(key, override);
-        }
-      } catch (error) {
-        for (const target of updated) {
-          try {
-            await this.applyPageOverride(target, previous);
-          } catch (rollbackError) {
-            log.warn(`Cannot restore the previous page override: ${rollbackError}`);
-          }
-        }
-        throw error;
+      const next = new Map(this.pageOverrides);
+      if (override.value === undefined) {
+        next.delete(key);
+      } else {
+        next.set(key, override);
       }
+      await this.replacePageOverrides(next);
     });
+  }
+
+  /** Called under the settings lock; publish the new policy only after every update succeeds. */
+  private async replacePageOverrides(next: Map<string, PageOverride>): Promise<void> {
+    const changes = new Map<string, PageOverride>();
+    for (const key of new Set([...next.keys(), ...this.pageOverrides.keys()])) {
+      const previous = this.pageOverrides.get(key);
+      const override = next.get(key);
+      if (previous?.value === override?.value) {
+        continue;
+      }
+      if (override) {
+        changes.set(key, override);
+      } else if (previous) {
+        changes.set(key, {...previous, value: undefined});
+      }
+    }
+    const updated: {target: string; previous: PageOverride}[] = [];
+    try {
+      for (const target of this.initializedPageTargets.keys()) {
+        for (const [key, override] of changes) {
+          const previous = this.pageOverrides.get(key) ?? {...override, value: undefined};
+          await this.applyPageOverride(target, override);
+          updated.push({target, previous});
+        }
+      }
+      this.pageOverrides.clear();
+      for (const [key, override] of next) {
+        this.pageOverrides.set(key, override);
+      }
+    } catch (error) {
+      for (const {target, previous} of updated.reverse()) {
+        try {
+          await this.applyPageOverride(target, previous);
+        } catch (rollbackError) {
+          log.warn(`Cannot restore the previous page override: ${rollbackError}`);
+        }
+      }
+      throw error;
+    }
   }
 
   private async applyPageOverride(key: string, override: PageOverride): Promise<void> {
@@ -1101,7 +1141,9 @@ export class RpcClient {
             throw error;
           }
           // An unavailable override must not prevent other overrides or target resume.
-          log.info(`Cannot apply ${JSON.stringify(override.params)} during initialization: ${error.message}`);
+          log.warn(
+            `Cannot apply ${override.method} ${JSON.stringify(override.params)} during initialization: ${error.message}`,
+          );
         }
       }
     });
@@ -1122,29 +1164,36 @@ export class RpcClient {
     const timer = new timing.Timer().start();
     // Apply page overrides before Inspector.initialized and Target.resume, including
     // when navigation creates a provisional target.
-    const initialDomains: Record<string, RemoteCommandOpts> = {
-      'Inspector.enable': sendOpts,
-      'Page.enable': sendOpts,
-      // Always visit this step to register the target and read the latest policy.
-      'Page.overrideSetting': sendOpts,
-      'Runtime.enable': sendOpts,
-    };
+    for (const command of [PAGE_INITIALIZATION_COMMANDS.inspectorEnable, PAGE_INITIALIZATION_COMMANDS.pageEnable]) {
+      try {
+        await this.send(command, sendOpts);
+      } catch (error: any) {
+        log.info(`Cannot enable domain '${command}' during initialization: ${error.message}`);
+        if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+          return false;
+        }
+      }
+    }
+    // This is an explicit initialization step, not a synthetic domain command.
+    // Always register the target, including when the current policy is empty.
+    try {
+      await this.initializePageOverrides(appIdKey, pageIdKey, targetId);
+    } catch (error: any) {
+      log.warn(`Cannot initialize page overrides: ${error.message}`);
+      return false;
+    }
     if (!this.fullPageInitialization) {
       // The sequence of domains is important
       for (const [domain, opts] of Object.entries({
-        ...initialDomains,
-        'Network.enable': sendOpts,
-        'Heap.enable': sendOpts,
-        'Debugger.enable': sendOpts,
-        'Console.enable': sendOpts,
-        'Inspector.initialized': sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
+        [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
       })) {
         try {
-          if (domain === 'Page.overrideSetting') {
-            await this.initializePageOverrides(appIdKey, pageIdKey, targetId);
-          } else {
-            await this.send(domain, opts);
-          }
+          await this.send(domain, opts);
         } catch (err: any) {
           log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
           if (MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
@@ -1161,10 +1210,10 @@ export class RpcClient {
 
     // The sequence of commands here is important
     const domainsToOptsMap: Record<string, RemoteCommandOpts> = {
-      ...initialDomains,
+      [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
 
       'Page.getResourceTree': sendOpts,
-      'Network.enable': sendOpts,
+      [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
       'Network.setResourceCachingDisabled': {
         disabled: false,
         ...sendOpts,
@@ -1173,7 +1222,7 @@ export class RpcClient {
       'Database.enable': sendOpts,
       'IndexedDB.enable': sendOpts,
       'CSS.enable': sendOpts,
-      'Heap.enable': sendOpts,
+      [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
       'Memory.enable': sendOpts,
       'ApplicationCache.enable': sendOpts,
       'ApplicationCache.getFramesWithManifests': sendOpts,
@@ -1185,7 +1234,7 @@ export class RpcClient {
         enabled: false,
         ...sendOpts,
       },
-      'Debugger.enable': sendOpts,
+      [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
       'Debugger.setBreakpointsActive': {
         active: true,
         ...sendOpts,
@@ -1209,19 +1258,16 @@ export class RpcClient {
       'LayerTree.enable': sendOpts,
       'Worker.enable': sendOpts,
       'Canvas.enable': sendOpts,
-      'Console.enable': sendOpts,
+      [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
       'DOM.getDocument': sendOpts,
       'Console.getLoggingChannels': sendOpts,
 
-      'Inspector.initialized': sendOpts,
+      [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
     };
 
     for (const [domain, opts] of Object.entries(domainsToOptsMap)) {
       try {
-        const res =
-          domain === 'Page.overrideSetting'
-            ? await this.initializePageOverrides(appIdKey, pageIdKey, targetId)
-            : await this.send(domain, opts);
+        const res = await this.send(domain, opts);
         if (domain === 'Console.getLoggingChannels') {
           for (const source of (res?.channels || []).map((entry: {source: any}) => entry.source)) {
             try {

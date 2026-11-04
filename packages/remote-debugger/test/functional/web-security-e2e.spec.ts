@@ -11,7 +11,7 @@ for (const fullPageInitialization of [false, true]) {
       await fixture.selectTestPage();
       const rd = fixture.rd();
       for (const disableWebSecurity of [false, true, false, true]) {
-        await rd.setDisableWebSecurity(disableWebSecurity);
+        await rd.setWebInspectorSettings(disableWebSecurity ? {pageSettings: {WebSecurityEnabled: false}} : {});
         // WebKit assigns document security origins when loading, so the document
         // that was already loaded before attaching must first be reloaded.
         await rd.navToUrl(fixture.freshUrl());
@@ -53,7 +53,7 @@ for (const fullPageInitialization of [false, true]) {
         }
       }
     });
-    it('retains page settings and preferences on new targets and restores defaults', async function () {
+    it('replaces grouped settings, preferences and UA across new targets and restores defaults', async function () {
       await fixture.selectTestPage();
       const rd = fixture.rd();
       const readPreferences = async () =>
@@ -66,14 +66,15 @@ for (const fullPageInitialization of [false, true]) {
           [],
         ]);
       const baseline = await readPreferences();
-      await rd.setUserPreference('PrefersReducedMotion', 'Reduce');
-      await rd.setUserPreference('PrefersContrast', 'More');
-      await rd.setUserPreference('PrefersColorScheme', 'Dark');
+      const baselineUA = await rd.execute('navigator.userAgent');
+      const userAgent = 'Appium-Grouped-Overrides/1.0';
       let sequence = 0;
       for (const enabled of [false, true]) {
-        await rd.setPageSetting('AuthorAndUserStylesEnabled', enabled);
-        await rd.setPageSetting('ImagesEnabled', enabled);
-        await rd.setPageSetting('ScriptEnabled', enabled);
+        await rd.setWebInspectorSettings({
+          pageSettings: {AuthorAndUserStylesEnabled: enabled, ImagesEnabled: enabled, ScriptEnabled: enabled},
+          userPreferences: {PrefersReducedMotion: 'Reduce', PrefersContrast: 'More', PrefersColorScheme: 'Dark'},
+          userAgent,
+        });
         for (const origin of [fixture.address(), fixture.address().replace('127.0.0.1', 'localhost')]) {
           await rd.navToUrl(`${origin}/page-overrides.html?n=${++sequence}`);
           const state = await rd.executeAtom('execute_script', [
@@ -88,14 +89,28 @@ for (const fullPageInitialization of [false, true]) {
           assert.strictEqual(state.image, enabled ? 1 : 0);
           assert.strictEqual(state.script, enabled ? 'ran' : null);
           assert.deepStrictEqual(await readPreferences(), {motion: true, contrast: true, dark: true});
+          assert.strictEqual(await rd.execute('navigator.userAgent'), userAgent);
         }
       }
-      await rd.setPageSetting('AuthorAndUserStylesEnabled', undefined);
-      await rd.setPageSetting('ImagesEnabled', undefined);
-      await rd.setPageSetting('ScriptEnabled', undefined);
-      await rd.setUserPreference('PrefersReducedMotion', undefined);
-      await rd.setUserPreference('PrefersContrast', undefined);
-      await rd.setUserPreference('PrefersColorScheme', undefined);
+      // A replacement containing only UA must reset all omitted settings/preferences.
+      await rd.setWebInspectorSettings({userAgent: 'Appium-Replacement/2.0'});
+      await rd.navToUrl(`${fixture.address()}/page-overrides.html?n=${++sequence}`);
+      assert.deepStrictEqual(await readPreferences(), baseline);
+      assert.strictEqual(await rd.execute('navigator.userAgent'), 'Appium-Replacement/2.0');
+      assert.deepStrictEqual(
+        await rd.executeAtom('execute_script', [
+          `return {
+            width: getComputedStyle(document.getElementById('styled')).width,
+            image: document.getElementById('image').naturalWidth,
+            script: window.fixtureScriptRan,
+          };`,
+          [],
+        ]),
+        {width: '137px', image: 1, script: 'ran'},
+      );
+      await rd.setWebInspectorSettings({});
+      await rd.navToUrl(`${fixture.address()}/page-overrides.html?n=${sequence + 1}`);
+      assert.strictEqual(await rd.execute('navigator.userAgent'), baselineUA);
       assert.deepStrictEqual(await readPreferences(), baseline);
     });
   });

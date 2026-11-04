@@ -1,5 +1,6 @@
 import {withTimeout} from 'asyncbox';
 
+import {PAGE_OVERRIDE_METHODS} from '../page-overrides.js';
 import type {RemoteDebugger} from '../remote-debugger.js';
 import type {EventListener} from '../types.js';
 import {checkParams, TimeoutError, SAFARI_BUNDLE_ID} from '../utils/index.js';
@@ -55,7 +56,7 @@ export async function stopTimeline(this: RemoteDebugger): Promise<any> {
  */
 export async function overrideUserAgent(this: RemoteDebugger, value: string): Promise<any> {
   this.log.debug('Setting overrideUserAgent');
-  return await this.requireRpcClient().send('Page.overrideUserAgent', {
+  return await this.requireRpcClient().send(PAGE_OVERRIDE_METHODS.userAgent, {
     appIdKey: getAppIdKey(this),
     pageIdKey: getPageIdKey(this),
     value,

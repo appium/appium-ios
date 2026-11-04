@@ -14,7 +14,13 @@ import * as messageHandlerMixins from './mixins/message-handlers.js';
 import * as miscellaneousMixins from './mixins/misc.js';
 import * as navigationMixins from './mixins/navigate.js';
 import * as screenshotMixins from './mixins/screenshot.js';
-import type {PageSettingName, PageSettings, UserPreferenceName, PageUserPreferences} from './page-overrides.js';
+import type {
+  PageSettingName,
+  PageSettings,
+  UserPreferenceName,
+  PageUserPreferences,
+  WebInspectorSettings,
+} from './page-overrides.js';
 import {RpcClientSimulator, type AutomationSession} from './rpc/index.js';
 import type {RpcClient} from './rpc/rpc-client.js';
 import type {RemoteDebuggerOptions, AppDict, EventListener, PageIdKey, AppIdKey} from './types.js';
@@ -106,8 +112,9 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _logAllCommunicationHexDump: boolean;
   protected readonly _webInspectorMaxFrameLength?: number;
   protected readonly _fullPageInitialization?: boolean;
-  protected readonly _pageSettings: PageSettings;
-  protected readonly _userPreferences: PageUserPreferences;
+  protected _pageSettings: PageSettings;
+  protected _userPreferences: PageUserPreferences;
+  protected _userAgent?: string;
   protected readonly _targetCreationTimeoutMs?: number;
 
   constructor(opts: RemoteDebuggerOptions = {}) {
@@ -168,8 +175,13 @@ export class RemoteDebugger extends EventEmitter {
     }
 
     this._fullPageInitialization = fullPageInitialization;
-    this._pageSettings = {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})};
-    this._userPreferences = {...opts.userPreferences};
+    const initial = opts.webInspectorSettings ?? {
+      pageSettings: {...opts.pageSettings, ...(disableWebSecurity ? {WebSecurityEnabled: false} : {})},
+      userPreferences: opts.userPreferences,
+    };
+    this._pageSettings = {...initial.pageSettings};
+    this._userPreferences = {...initial.userPreferences};
+    this._userAgent = initial.userAgent;
     this._targetCreationTimeoutMs = targetCreationTimeoutMs;
 
     this._pageLoadStrategy = pageLoadStrategy;
@@ -208,6 +220,19 @@ export class RemoteDebugger extends EventEmitter {
     } else {
       this._userPreferences[name] = value;
     }
+  }
+
+  /** Replaces the complete policy. Omitted entries are reset; {} clears all overrides. */
+  async setWebInspectorSettings(settings: WebInspectorSettings): Promise<void> {
+    const next = {
+      pageSettings: {...settings.pageSettings},
+      userPreferences: {...settings.userPreferences},
+      userAgent: settings.userAgent,
+    };
+    await this._rpcClient?.setWebInspectorSettings(next);
+    this._pageSettings = next.pageSettings;
+    this._userPreferences = next.userPreferences;
+    this._userAgent = next.userAgent;
   }
 
   get log(): AppiumLogger {
@@ -312,8 +337,11 @@ export class RemoteDebugger extends EventEmitter {
       logAllCommunication: this._logAllCommunication,
       logAllCommunicationHexDump: this._logAllCommunicationHexDump,
       fullPageInitialization: this._fullPageInitialization,
-      pageSettings: this._pageSettings,
-      userPreferences: this._userPreferences,
+      webInspectorSettings: {
+        pageSettings: this._pageSettings,
+        userPreferences: this._userPreferences,
+        userAgent: this._userAgent,
+      },
       webInspectorMaxFrameLength: this._webInspectorMaxFrameLength,
       pageLoadTimeoutMs: this._pageLoadMs,
       targetCreationTimeoutMs: this._targetCreationTimeoutMs,

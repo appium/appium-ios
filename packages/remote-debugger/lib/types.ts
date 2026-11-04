@@ -1,6 +1,6 @@
 import type {StringRecord, AppiumLogger} from '@appium/types';
 
-import type {PageSettings, PageUserPreferences} from './page-overrides.js';
+import type {PageSettings, PageUserPreferences, WebInspectorSettings} from './page-overrides.js';
 
 export interface AppInfo {
   id: string;
@@ -117,6 +117,8 @@ export interface RemoteDebuggerOptions {
   disableWebSecurity?: boolean;
   /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
   pageSettings?: PageSettings;
+  /** Initial complete override policy. Takes precedence over individual constructor options. */
+  webInspectorSettings?: WebInspectorSettings;
   /** Initial CSS user preferences, retained for future targets. */
   userPreferences?: PageUserPreferences;
   /**
@@ -145,6 +147,8 @@ export interface RpcClientOptions {
   disableWebSecurity?: boolean;
   /** Initial page overrides, retained for future targets. Omitted keys use browser defaults. */
   pageSettings?: PageSettings;
+  /** Initial complete override policy. Takes precedence over individual constructor options. */
+  webInspectorSettings?: WebInspectorSettings;
   /** Initial CSS user preferences, retained for future targets. */
   userPreferences?: PageUserPreferences;
   pageLoadTimeoutMs?: number;
