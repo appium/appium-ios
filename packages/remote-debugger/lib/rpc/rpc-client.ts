@@ -96,7 +96,7 @@ export class RpcClient {
   protected readonly logAllCommunicationHexDump?: boolean;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
-  private readonly pageOverrides = new Map<string, PageOverride>();
+  private pageOverrides: Map<string, PageOverride>;
   private readonly pageSettingsLock = new AsyncLock();
   private pageSettingsConnection = new AbortController();
   private readonly initializedPageTargets = new Map<
@@ -151,9 +151,7 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
-    for (const [key, override] of toPageOverrides(opts.webInspectorSettings ?? {})) {
-      this.pageOverrides.set(key, override);
-    }
+    this.pageOverrides = toPageOverrides(opts.webInspectorSettings ?? {});
 
     this.bundleId = bundleId;
     this.platformVersion = platformVersion;
@@ -1042,10 +1040,7 @@ export class RpcClient {
         }
       }
       signal.throwIfAborted();
-      this.pageOverrides.clear();
-      for (const [key, override] of next) {
-        this.pageOverrides.set(key, override);
-      }
+      this.pageOverrides = next;
     } catch (error) {
       for (const {target, previous} of updated.reverse()) {
         try {
@@ -1129,14 +1124,15 @@ export class RpcClient {
    *
    * @param appIdKey - The application identifier key.
    * @param pageIdKey - The page identifier key.
-   * @param targetId - Optional target ID. If not provided, will be retrieved from the targets map.
+   * @param targetId - Target ID, or undefined to retrieve it from the targets map.
+   * @param signal - Cancellation signal captured for the connection starting initialization.
    * @returns A promise that resolves to true if initialization succeeded, false otherwise.
    */
   private async _initializePage(
     appIdKey: AppIdKey,
     pageIdKey: PageIdKey,
-    targetId?: TargetId,
-    signal = this.pageSettingsConnection.signal,
+    targetId: TargetId | undefined,
+    signal: AbortSignal,
   ): Promise<boolean> {
     const resolvedTargetId = targetId ?? this.getTarget(appIdKey, pageIdKey);
     if (!resolvedTargetId || !this.isConnected || signal.aborted) {
@@ -1172,13 +1168,9 @@ export class RpcClient {
         } catch (error: any) {
           if (MISSING_APP_ERROR_PATTERN.test(error.message)) {
             this.removePageTargetsForApp(appIdKey);
+            throw error;
           }
-          if (
-            signal.aborted ||
-            error instanceof TimeoutError ||
-            MISSING_TARGET_ERROR_PATTERN.test(error.message) ||
-            MISSING_APP_ERROR_PATTERN.test(error.message)
-          ) {
+          if (signal.aborted || error instanceof TimeoutError || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
             throw error;
           }
           // An unavailable override must not prevent other overrides or target resume.
