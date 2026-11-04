@@ -137,6 +137,16 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
     return nil;
   }
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+  return [self fb_hingeAngleWithTimeout:FBHingeAngleReadingTimeout error:error];
+#else
+  return nil;
+#endif
+}
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+
+- (nullable NSNumber *)fb_hingeAngleWithTimeout:(NSTimeInterval)timeout error:(NSError **)error
+{
   id<FBAngleManager> manager = [FBAngleManagerClass() new];
   NSOperationQueue *queue = [NSOperationQueue new];
   queue.maxConcurrentOperationCount = 1;
@@ -160,7 +170,7 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
       }
       [condition unlock];
     }];
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:FBHingeAngleReadingTimeout];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     [condition lock];
     while (nil == reading) {
       if (![condition waitUntilDate:deadline]) {
@@ -174,13 +184,12 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   }
   if (nil == result) {
     [[FBErrorBuilder.builder withDescriptionFormat:@"Timed out after %g seconds waiting for a valid hinge angle",
-      FBHingeAngleReadingTimeout] buildError:error];
+      timeout] buildError:error];
   }
   return result;
-#else
-  return nil;
-#endif
 }
+
+#endif
 
 - (BOOL)fb_setSimulatedHingeAngle:(double)angle error:(NSError **)error
 {
@@ -247,8 +256,9 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   [NSThread sleepForTimeInterval:FBHingeSettleDelay];
   NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:FBHingeSettleTimeout];
   NSNumber *previous = nil;
-  while ([deadline timeIntervalSinceNow] > 0) {
-    NSNumber *current = [self fb_getSimulatedHingeAngle:nil];
+  NSTimeInterval remaining;
+  while ((remaining = [deadline timeIntervalSinceNow]) > 0) {
+    NSNumber *current = [self fb_hingeAngleWithTimeout:MIN(remaining, FBHingeAngleReadingTimeout) error:nil];
     if (nil == current) {
       return nil;
     }
