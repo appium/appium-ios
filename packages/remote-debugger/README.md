@@ -32,6 +32,8 @@ Full details are documented in **[docs/update-atoms.md](./docs/update-atoms.md)*
 ```
 npm test
 npm run test:e2e
+# Cross-origin frames and Web Inspector page settings (separate Simulator suite):
+npm run test:e2e:web-security
 ```
 
 ## Optional: CodeGraph for local code navigation
