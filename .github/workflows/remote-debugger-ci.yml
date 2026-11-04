@@ -114,7 +114,7 @@ jobs:
         with:
           timeout_minutes: 40
           max_attempts: 2
-          command: npm run test:e2e:web-security --workspace packages/remote-debugger
+          command: npm run test:e2e:web-inspector-settings --workspace packages/remote-debugger
       - name: Atoms E2E Tests
         uses: nick-fields/retry@v4
         with:
