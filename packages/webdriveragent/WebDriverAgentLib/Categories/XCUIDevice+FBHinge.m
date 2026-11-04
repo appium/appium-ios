@@ -25,6 +25,13 @@ static const double FBHingeSettledEpsilon = 0.01;
 static const double FBHingeAngleTolerance = 0.05;
 static const double FBHingeCorrectionNudge = 0.001;
 static const NSUInteger FBHingeMaxCorrections = 2;
+static const double FBHingeClosedAngle = 0.0;
+static const double FBHingeOpenAngle = 180.0;
+
+static BOOL FBHingeAnglesEqual(double first, double second)
+{
+  return fabs(first - second) <= FBHingeAngleTolerance;
+}
 
 typedef CFDataRef (*FBIOCFSerialize)(CFTypeRef object, CFOptionFlags options);
 typedef CFTypeRef (*FBIOHIDEventCreateVendorDefinedEvent)(CFAllocatorRef allocator,
@@ -263,9 +270,10 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   for (NSUInteger attempt = 0; attempt <= FBHingeMaxCorrections; ++attempt) {
     NSNumber *reading = [self fb_settledHingeAngle];
     // 0 and 180 are the device's snap points, so a reading there is final
-    if (nil == reading || reading.doubleValue <= FBHingeAngleTolerance
-        || reading.doubleValue >= 180 - FBHingeAngleTolerance
-        || fabs(reading.doubleValue - angle) <= FBHingeAngleTolerance
+    if (nil == reading
+        || FBHingeAnglesEqual(reading.doubleValue, FBHingeClosedAngle)
+        || FBHingeAnglesEqual(reading.doubleValue, FBHingeOpenAngle)
+        || FBHingeAnglesEqual(reading.doubleValue, angle)
         || attempt == FBHingeMaxCorrections) {
       return;
     }
