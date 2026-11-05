@@ -37,6 +37,11 @@
 #import "XCUIScreen.h"
 #import "FBUnattachedAppLauncher.h"
 
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+// Observed UIKit identifier on the Duo vertical toolbar; not a public API contract.
+static NSString *const FBDuoSystemBackButtonIdentifier = @"BackButton";
+#endif
+
 @implementation FBCustomCommands
 
 + (NSArray *)routes
@@ -60,6 +65,7 @@
     [[FBRoute GET:@"/wda/activeAppInfo"] respondWithTarget:self action:@selector(handleActiveAppInfo:)],
     [[FBRoute GET:@"/wda/activeAppInfo"].withoutSession respondWithTarget:self action:@selector(handleActiveAppInfo:)],
 #if !TARGET_OS_TV && !TARGET_OS_WATCH // tvOS/watchOS do not provide relevant APIs
+    [[FBRoute POST:@"/wda/back"] respondWithTarget:self action:@selector(handleSystemBack:)],
     [[FBRoute POST:@"/wda/setPasteboard"] respondWithTarget:self action:@selector(handleSetPasteboard:)],
     [[FBRoute POST:@"/wda/setPasteboard"].withoutSession respondWithTarget:self action:@selector(handleSetPasteboard:)],
     [[FBRoute POST:@"/wda/getPasteboard"] respondWithTarget:self action:@selector(handleGetPasteboard:)],
@@ -117,6 +123,49 @@
 
 
 #pragma mark - Commands
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
++ (id<FBResponsePayload>)handleSystemBack:(FBRouteRequest *)request
+{
+  NSError *error = nil;
+  XCUIScreen *screen = [FBScreen currentScreenWithError:&error];
+  if (nil == screen) {
+    return FBResponseWithUnknownError(error);
+  }
+
+  // Duo moves the system Back control outside NavigationBar into a Toolbar.
+  // Resolve windows before checking their display affinity, and never guess
+  // that the first arbitrary toolbar/navigation-bar button means Back.
+  NSMutableArray<XCUIElement *> *candidates = [NSMutableArray array];
+  for (XCUIElement *window in request.session.activeApplication.windows.allElementsBoundByIndex) {
+    CGRect frame = window.frame;
+    if (CGRectIsEmpty(frame) || window.screen.displayID != screen.displayID) {
+      continue;
+    }
+    XCUIElementQuery *buttons = [[window.toolbars descendantsMatchingType:XCUIElementTypeButton]
+      matchingIdentifier:FBDuoSystemBackButtonIdentifier];
+    for (XCUIElement *button in buttons.allElementsBoundByIndex) {
+      if (button.isWDVisible && button.enabled && button.hittable) {
+        [candidates addObject:button];
+      }
+    }
+  }
+  if (0 == candidates.count) {
+    return FBResponseWithStatus([FBCommandStatus noSuchElementErrorWithMessage:
+      @"No actionable system BackButton found in a toolbar on the selected display" traceback:nil]);
+  }
+  if (1 != candidates.count) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:
+      @"Multiple actionable system BackButton controls found on the selected display" traceback:nil]);
+  }
+
+  // As with element click, dispatching a tap does not prove a navigation change.
+  // The caller must verify its expected destination. Custom back controls and
+  // UIKit layouts without this identifier are outside this prototype's scope.
+  [candidates.firstObject tap];
+  return FBResponseWithOK();
+}
+#endif
 
 + (id<FBResponsePayload>)handleHomescreenCommand:(FBRouteRequest *)request
 {
