@@ -80,6 +80,47 @@ app; for diagnosis, compare direct XCTest taps with app-recorded input.
 
 ## XCTest recording on the Duo simulator
 
+### Xcode 27.3 beta / iOS 27.3
+
+On iPhone Duo with **Xcode 27.3 beta (27C5020n)** and **iOS 27.3
+(24C5037i)**, the inner panel produced one black frame despite a successful
+recording start, stop, and retrieval. The selected display ID was resolved from
+the app's window; ordinary screenshots of that screen contained the app.
+
+A direct XCTest probe constructed `XCTVideoEncoding` and
+`XCTScreenRecordingRequest`, then called
+`XCTRunnerDaemonSession.startScreenRecordingWithRequest:withReply:` and
+`stopScreenRecordingWithUUID:withReply:`. It did not use WDA's request wrapper
+or video routes. Automatic diagnostic recordings were disabled before test
+setup to avoid competing with the explicit recording. Two alert interactions
+provided changing content during each recording, and the resulting attachments
+were exported from the result bundle and decoded.
+
+| Selected panel | Request rectangle | Decoded result |
+| --- | --- | --- |
+| Cover (ID 1 in this run) | `CGRectNull` | 136 visible frames, 1398 x 2034 |
+| Cover | Explicit screen bounds | 137 visible frames, 1398 x 2034 |
+| Inner (ID 3 in this run) | `CGRectNull` | One black frame, 1398 x 2034 |
+| Inner | Explicit screen bounds | One black frame, 1398 x 2034 |
+
+The inner display's native bounds were 2007 x 2853. Supplying its bounds did
+not fix the capture. This reproduces downstream of WDA's request construction;
+the failing internal Apple component has not been identified. Do not remap
+screen IDs or treat successful submission as evidence of correct video.
+
+As a verified workaround in this environment, the XCUITest driver's
+`mobile: startScreenRecording` / `mobile: stopScreenRecording` (MJPEG/ffmpeg)
+produced visible videos on both panels while native XCTest recording ran
+concurrently. The cover video contained 86 frames at 1398 x 2034; the landscape
+inner video contained 88 frames at 2852 x 2006. Select `currentDisplayId` before
+starting and restart recording after switching panels. The native
+`mobile: startXCTestScreenRecording` path still returned the black inner video.
+
+Physical devices remain unverified. Track follow-up in
+[appium-ios #154](https://github.com/appium/appium-ios/issues/154).
+
+### Earlier iOS 27.1 observation
+
 On **iOS 27.1 (24A94401), with Xcode 27.2 beta 2**, the native XCTest
 recording path produced black video for the closed Duo's outer display.
 This reproduced after starting WDA afresh while the device was closed, as well
