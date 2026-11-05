@@ -130,6 +130,33 @@
   XCTAssertEqualObjects([self hingeResponseWithArguments:@{}][@"value"][@"error"], @"invalid argument");
 }
 
+- (void)testHingeAngleReadbackMatchesRequestedAngle
+{
+#if TARGET_OS_SIMULATOR
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  XCTSkipUnless(device.fb_supportsHingeAngleReading && device.fb_canAttemptSimulatedHingeAngleInjection,
+                @"Requires a device with a hinge that supports reading and injection");
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle, @"Cannot read the original hinge angle");
+  if (nil == originalAngle) {
+    return;
+  }
+  [self addTeardownBlock:^{
+    [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+  }];
+  // Intermediate angles are the ones iOS 27.2 initially stops short of
+  for (NSNumber *angle in @[@0, @45, @90, @150, @120, @10, @180]) {
+    NSError *error = nil;
+    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
+    NSNumber *reading = [device fb_getSimulatedHingeAngle:&error];
+    XCTAssertNotNil(reading, @"%@", error);
+    XCTAssertEqualWithAccuracy(reading.doubleValue, angle.doubleValue, 0.1, @"Requested %@", angle);
+  }
+#else
+  XCTSkip(@"Hinge injection is only verified on simulators");
+#endif
+}
+
 - (void)testHingeAngleRejectsUnsupportedDevices
 {
   XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a device without an available hinge");

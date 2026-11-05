@@ -16,6 +16,22 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 static const NSTimeInterval FBHingeAngleReadingTimeout = 5.0;
+// iOS 27.2 stops the first move of a hinge gesture ~5% short. A following event with
+// a slightly different value lands exactly, so we verify and correct after settling.
+static const NSTimeInterval FBHingeSettleDelay = 0.4;
+static const NSTimeInterval FBHingeSettlePollInterval = 0.15;
+static const NSTimeInterval FBHingeSettleTimeout = 2.0;
+static const double FBHingeSettledEpsilon = 0.01;
+static const double FBHingeAngleTolerance = 0.05;
+static const double FBHingeCorrectionNudge = 0.001;
+static const NSUInteger FBHingeMaxCorrections = 2;
+static const double FBHingeClosedAngle = 0.0;
+static const double FBHingeOpenAngle = 180.0;
+
+static BOOL FBHingeAnglesEqual(double first, double second)
+{
+  return fabs(first - second) < FBHingeAngleTolerance;
+}
 
 typedef CFDataRef (*FBIOCFSerialize)(CFTypeRef object, CFOptionFlags options);
 typedef CFTypeRef (*FBIOHIDEventCreateVendorDefinedEvent)(CFAllocatorRef allocator,
@@ -121,6 +137,16 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
     return nil;
   }
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+  return [self fb_hingeAngleWithTimeout:FBHingeAngleReadingTimeout error:error];
+#else
+  return nil;
+#endif
+}
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+
+- (nullable NSNumber *)fb_hingeAngleWithTimeout:(NSTimeInterval)timeout error:(NSError **)error
+{
   id<FBAngleManager> manager = [FBAngleManagerClass() new];
   NSOperationQueue *queue = [NSOperationQueue new];
   queue.maxConcurrentOperationCount = 1;
@@ -144,7 +170,7 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
       }
       [condition unlock];
     }];
-    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:FBHingeAngleReadingTimeout];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     [condition lock];
     while (nil == reading) {
       if (![condition waitUntilDate:deadline]) {
@@ -158,13 +184,12 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   }
   if (nil == result) {
     [[FBErrorBuilder.builder withDescriptionFormat:@"Timed out after %g seconds waiting for a valid hinge angle",
-      FBHingeAngleReadingTimeout] buildError:error];
+      timeout] buildError:error];
   }
   return result;
-#else
-  return nil;
-#endif
 }
+
+#endif
 
 - (BOOL)fb_setSimulatedHingeAngle:(double)angle error:(NSError **)error
 {
@@ -175,6 +200,22 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
     return [[FBErrorBuilder.builder withDescription:@"Hinge angle injection requires an available hinge and the IOKit HID APIs"] buildError:error];
   }
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (![self.class fb_dispatchHingeAngle:angle error:error]) {
+    return NO;
+  }
+  if (self.fb_supportsHingeAngleReading) {
+    [self fb_correctHingeAngleToward:angle];
+  }
+  return YES;
+#else
+  return NO;
+#endif
+}
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+
++ (BOOL)fb_dispatchHingeAngle:(double)angle error:(NSError **)error
+{
   // WDA's fb_performIOHIDEventWithPage:usage:duration:error: uses XCDeviceEvent
   // with page, usage, and duration only. The XCDeviceEvent interfaces checked
   // in Xcode 27.1 provide no way to attach the vendor payload containing the
@@ -207,9 +248,52 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
     CFRelease(client);
   }
   return canDispatch || [[FBErrorBuilder.builder withDescription:@"Cannot create the simulated hinge HID event or client"] buildError:error];
-#else
-  return NO;
-#endif
 }
+
+// Waits until two consecutive readings agree; nil if the angle never settles in time.
+- (nullable NSNumber *)fb_settledHingeAngle
+{
+  [NSThread sleepForTimeInterval:FBHingeSettleDelay];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:FBHingeSettleTimeout];
+  NSNumber *previous = nil;
+  NSTimeInterval remaining;
+  while ((remaining = [deadline timeIntervalSinceNow]) > 0) {
+    NSNumber *current = [self fb_hingeAngleWithTimeout:MIN(remaining, FBHingeAngleReadingTimeout) error:nil];
+    if (nil == current) {
+      return nil;
+    }
+    if (nil != previous && fabs(current.doubleValue - previous.doubleValue) < FBHingeSettledEpsilon) {
+      return current;
+    }
+    previous = current;
+    [NSThread sleepForTimeInterval:FBHingeSettlePollInterval];
+  }
+  return nil;
+}
+
+// Best effort: a failed read or correction never fails the original request.
+- (void)fb_correctHingeAngleToward:(double)angle
+{
+  // Identical consecutive values are ignored by the device, so each retry is nudged
+  // inward; values near the ends are not nudged outward as >170 snaps to 180.
+  double direction = angle <= 90 ? 1 : -1;
+  for (NSUInteger attempt = 0; attempt <= FBHingeMaxCorrections; ++attempt) {
+    NSNumber *reading = [self fb_settledHingeAngle];
+    // 0 and 180 are the device's snap points, so a reading there is final
+    if (nil == reading
+        || FBHingeAnglesEqual(reading.doubleValue, FBHingeClosedAngle)
+        || FBHingeAnglesEqual(reading.doubleValue, FBHingeOpenAngle)
+        || FBHingeAnglesEqual(reading.doubleValue, angle)
+        || attempt == FBHingeMaxCorrections) {
+      return;
+    }
+    double nudged = angle + direction * FBHingeCorrectionNudge * (attempt + 1);
+    if (![self.class fb_dispatchHingeAngle:nudged error:nil]) {
+      return;
+    }
+  }
+}
+
+#endif
 
 @end
