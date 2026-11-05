@@ -33,6 +33,9 @@ static const uint32_t FBHIDOrientationUsage = 0x5b;
 static const CFOptionFlags FBHIDBinarySerialization = 1;
 static const NSTimeInterval FBHIDButtonPressDuration = 0.03;
 static const NSTimeInterval FBHIDRotationTimeout = 5.0;
+// Private CADisplay device names observed on Duo simulators.
+static NSString *const FBDuoCoverDisplayDeviceName = @"primary";
+static NSString *const FBDuoInnerDisplayDeviceName = @"primary-1";
 
 typedef struct {
   CFTypeRef (*createKeyboardEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
@@ -144,10 +147,10 @@ static BOOL FBIsInnerDuoDisplay(XCUIScreen *screen)
           || display.displayId != screen.displayID) {
         continue;
       }
-      if ([display.deviceName isEqualToString:@"primary-1"]) {
+      if ([display.deviceName isEqualToString:FBDuoInnerDisplayDeviceName]) {
         return YES;
       }
-      if ([display.deviceName isEqualToString:@"primary"]) {
+      if ([display.deviceName isEqualToString:FBDuoCoverDisplayDeviceName]) {
         return NO;
       }
     }
