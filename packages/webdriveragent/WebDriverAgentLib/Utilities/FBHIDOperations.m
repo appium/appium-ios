@@ -122,6 +122,40 @@ static BOOL FBPressHIDButton(uint32_t usage, NSError **error)
                     withDescription:@"Cannot create the button HID event or client"] buildError:error];
 }
 
+@protocol FBDuoPhysicalDisplay <NSObject>
+@property (readonly) unsigned int displayId;
+@property (readonly) NSString *deviceName;
+@end
+
+@protocol FBDuoDisplayProvider <NSObject>
++ (NSArray<id<FBDuoPhysicalDisplay>> *)displays;
+@end
+
+static BOOL FBIsInnerDuoDisplay(XCUIScreen *screen)
+{
+  // CADisplay keeps the physical panel names while XCTest's main display can
+  // switch after folding (27.3). Resolve the selected ID rather than hardcoding
+  // simulator display IDs or treating the current main display as the cover.
+  Class<FBDuoDisplayProvider> displayClass = (Class)NSClassFromString(@"CADisplay");
+  if ([displayClass respondsToSelector:@selector(displays)]) {
+    for (id<FBDuoPhysicalDisplay> display in [displayClass displays]) {
+      if (![display respondsToSelector:@selector(displayId)]
+          || ![display respondsToSelector:@selector(deviceName)]
+          || display.displayId != screen.displayID) {
+        continue;
+      }
+      if ([display.deviceName isEqualToString:@"primary-1"]) {
+        return YES;
+      }
+      if ([display.deviceName isEqualToString:@"primary"]) {
+        return NO;
+      }
+    }
+  }
+  // Preserve the legacy mapping if physical panel metadata is unavailable.
+  return !screen.isMainScreen;
+}
+
 // Work around XCTest updating Duo device orientation without rotating the app.
 // Reproduction details and checks required before removing this workaround:
 // https://github.com/appium/appium-ios/pull/81
@@ -133,19 +167,20 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
   }
   // The inner panel's native orientation is a quarter turn from the cover.
   // Values match DeviceKit's orientation-picker-control (Xcode 27.1).
+  BOOL isInnerDisplay = FBIsInnerDuoDisplay(screen);
   NSString *value;
   switch (orientation) {
     case UIDeviceOrientationPortrait:
-      value = screen.isMainScreen ? @"portrait" : @"landscape-left";
+      value = !isInnerDisplay ? @"portrait" : @"landscape-left";
       break;
     case UIDeviceOrientationLandscapeLeft:
-      value = screen.isMainScreen ? @"landscape-left" : @"pud";
+      value = !isInnerDisplay ? @"landscape-left" : @"pud";
       break;
     case UIDeviceOrientationLandscapeRight:
-      value = screen.isMainScreen ? @"landscape-right" : @"portrait";
+      value = !isInnerDisplay ? @"landscape-right" : @"portrait";
       break;
     case UIDeviceOrientationPortraitUpsideDown:
-      value = screen.isMainScreen ? @"pud" : @"landscape-right";
+      value = !isInnerDisplay ? @"pud" : @"landscape-right";
       break;
     case UIDeviceOrientationUnknown:
     case UIDeviceOrientationFaceUp:

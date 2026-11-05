@@ -13,6 +13,8 @@
 #import "XCUIDevice+FBHinge.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "XCUIElement.h"
+#import "XCUIScreen.h"
 #import "FBSession.h"
 
 @interface XCUIDeviceRotationTests : FBIntegrationTestCase
@@ -122,12 +124,10 @@
     for (NSNumber *angle in @[@0, @90, @180]) {
       XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
       [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3]];
-      for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
-        if ([screen[@"isMain"] boolValue] == (angle.intValue == 0)) {
-          FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
-        }
-      }
       [self.testedApplication activate];
+      XCUIElement *window = self.testedApplication.windows.firstMatch;
+      (void)window.frame;
+      FBConfiguration.sharedInstance.currentDisplayId = @(window.screen.displayID);
       NSArray *orientations = @[@(UIDeviceOrientationLandscapeLeft),
                                 @(UIDeviceOrientationLandscapeRight),
                                 @(UIDeviceOrientationPortrait)];
@@ -136,7 +136,12 @@
         UIDeviceOrientation orientation = [orientations[i] integerValue];
         XCTAssertTrue([device fb_setDeviceInterfaceOrientation:orientation]);
         XCTAssertTrue([self.testedApplication.staticTexts[labels[i]] waitForExistenceWithTimeout:5]);
-        XCTAssertEqual(device.orientation, orientation);
+        // The physical device and the inner panel have different native axes.
+        // Verify the app's orientation; XCTest's raw device reading can differ.
+        UIInterfaceOrientation expected = orientation == UIDeviceOrientationLandscapeLeft
+          ? UIInterfaceOrientationLandscapeRight : orientation == UIDeviceOrientationLandscapeRight
+          ? UIInterfaceOrientationLandscapeLeft : UIInterfaceOrientationPortrait;
+        XCTAssertEqual(self.testedApplication.interfaceOrientation, expected);
       }
       BOOL rotated = [device fb_setDeviceRotation:@{@"x": @0, @"y": @0, @"z": @270}];
       XCTAssertTrue(rotated);
