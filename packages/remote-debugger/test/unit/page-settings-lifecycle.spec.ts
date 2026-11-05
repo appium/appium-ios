@@ -47,6 +47,87 @@ function assertNoResponseListeners(client: RpcClient) {
 
 describe('page settings connection lifecycle', function () {
   for (const fullPageInitialization of [false, true]) {
+    for (const update of ['unchanged', 'extended', 'cleared']) {
+      it(`repairs failed initialization overrides before an ${update} update (full=${fullPageInitialization})`, async function () {
+        const settings: WebInspectorPageSettings = {
+          pageSettings: {ImagesEnabled: false, WebSecurityEnabled: false},
+          userPreferences: {PrefersColorScheme: 'Dark'},
+          userAgent: 'Initial/1',
+        };
+        const {client, initialize} = connectedClient({fullPageInitialization, webInspectorSettings: settings});
+        const state = new Map<string, unknown>();
+        let failing = true;
+        const send = sinon.stub(client, 'sendMessage').callsFake(async (message) => {
+          const command = commandFrom(message);
+          if (failing && command.params.setting !== 'ImagesEnabled') {
+            (client as any).messageHandler.emit(String(command.id), {
+              code: -32603,
+              message: 'Temporary protocol failure',
+            });
+            return;
+          }
+          state.set(command.params.setting ?? command.params.name ?? 'userAgent', command.params.value);
+          reply(client, command.id);
+        });
+        await addPage(client, 'first');
+        sinon.assert.calledWith(initialize, 'Inspector.initialized');
+        sinon.assert.calledWith(initialize, 'Target.resume');
+        assert.deepStrictEqual([...state], [['ImagesEnabled', false]]);
+        // An unsuccessful repair must reject, including an unchanged policy.
+        await assert.rejects(client.setWebInspectorPageSettings(settings), /Temporary protocol failure/);
+        failing = false;
+        send.resetHistory();
+        const next: WebInspectorPageSettings =
+          update === 'cleared'
+            ? {}
+            : update === 'extended'
+              ? {...settings, pageSettings: {...settings.pageSettings, ScriptEnabled: false}}
+              : settings;
+        await client.setWebInspectorPageSettings(next);
+        assert.equal(send.callCount, update === 'cleared' ? 7 : update === 'extended' ? 4 : 3);
+        const expected = new Map(
+          [...toPageOverrides(next).values()].map((override) => [
+            override.params.setting ?? override.params.name ?? 'userAgent',
+            override.value,
+          ]),
+        );
+        assert.deepStrictEqual(new Map([...state].filter(([, value]) => value !== undefined)), expected);
+        send.resetHistory();
+        await client.setWebInspectorPageSettings(next);
+        sinon.assert.notCalled(send);
+        assertNoResponseListeners(client);
+      });
+    }
+  }
+
+  for (const [code, message] of [
+    [-32601, "'Page.overrideSetting' was not found"],
+    [-32602, "Invalid parameters for method 'Page.overrideSetting'"],
+  ] as const) {
+    it(`does not queue unsupported initialization overrides for repair (${code})`, async function () {
+      const settings = {pageSettings: {ImagesEnabled: false}};
+      const {client, initialize} = connectedClient({webInspectorSettings: settings});
+      const send = sinon.stub(client, 'sendMessage').callsFake(async (messageToSend) => {
+        const command = commandFrom(messageToSend);
+        if (command.method === 'Page.overrideSetting') {
+          (client as any).messageHandler.emit(String(command.id), {code, message});
+        } else {
+          reply(client, command.id);
+        }
+      });
+      await addPage(client, 'first');
+      sinon.assert.calledWith(initialize, 'Target.resume');
+      send.resetHistory();
+      await client.setWebInspectorPageSettings(settings);
+      sinon.assert.notCalled(send);
+      await client.setWebInspectorPageSettings({...settings, userAgent: 'Test/1'});
+      sinon.assert.calledOnce(send);
+      assert.equal(commandFrom(send.firstCall.args[0]).method, 'Page.overrideUserAgent');
+      assertNoResponseListeners(client);
+    });
+  }
+
+  for (const fullPageInitialization of [false, true]) {
     for (const reconnect of [false, true]) {
       it(`does not register stale initialization after disconnect (full=${fullPageInitialization}, reconnect=${reconnect})`, async function () {
         const {client, initialize} = connectedClient({

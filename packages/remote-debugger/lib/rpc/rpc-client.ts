@@ -503,7 +503,11 @@ export class RpcClient {
         } else if (hasSocketData) {
           this.messageHandler.once(msgId.toString(), (err: Error | null, value: any) => {
             if (err) {
-              return reject(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`));
+              return reject(
+                Object.assign(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`), {
+                  code: (err as any).code,
+                }),
+              );
             }
             log.debug(
               `Received data response from send (id: ${msgId}): '${util.truncateString(JSON.stringify(value), DATA_LOG_LENGTH)}'`,
@@ -1018,7 +1022,7 @@ export class RpcClient {
 
   /** Called under the settings lock; publish the new policy only after every update succeeds. */
   private async replacePageOverrides(next: Map<string, PageOverride>, signal: AbortSignal): Promise<void> {
-    // A failed rollback can leave a page out of sync with the retained policy.
+    // Failed initialization or rollback can leave a page out of sync with the retained policy.
     // Repair it even when the requested policy has no changes, including resets
     // for overrides introduced by the failed update.
     for (const [key, target] of this.initializedPageTargets) {
@@ -1181,7 +1185,7 @@ export class RpcClient {
       this.assertPageSettingsConnection(signal);
       const target = {appIdKey, pageIdKey, targetId, pendingRestores: new Map<string, PageOverride>()};
       this.initializedPageTargets.set(toPageTargetKey(appIdKey, targetId), target);
-      for (const override of this.pageOverrides.values()) {
+      for (const [overrideKey, override] of this.pageOverrides) {
         try {
           await this.sendPageOverride(target, override, signal);
         } catch (error: any) {
@@ -1191,6 +1195,12 @@ export class RpcClient {
           }
           if (signal.aborted || error instanceof TimeoutError || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
             throw error;
+          }
+          // MethodNotFound and InvalidParams indicate an unavailable method or
+          // unsupported setting/preference. Other failures must be repaired before
+          // a later update can report success, even if the policy is unchanged.
+          if (error.code !== -32601 && error.code !== -32602) {
+            target.pendingRestores.set(overrideKey, override);
           }
           // An unavailable override must not prevent other overrides or target resume.
           log.warn(
