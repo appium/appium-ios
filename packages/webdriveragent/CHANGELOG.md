@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.9...appium-webdriveragent@16.17.10) (2026-11-05)
+
+### Bug Fixes
+
+* **webdriveragent:** correct hinge angle undershoot on iOS 27.2 simulator ([#152](https://github.com/appium/appium-ios/issues/152)) ([b3ce495](https://github.com/appium/appium-ios/commit/b3ce495b49566f0eebff5192c5698d010e6c0ab1)), closes [#151](https://github.com/appium/appium-ios/issues/151)
+
+
 ## [16.17.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.8...appium-webdriveragent@16.17.9) (2026-11-04)
 
 ### Bug Fixes
