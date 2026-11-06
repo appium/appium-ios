@@ -128,4 +128,13 @@ describe('DeviceHub preferences', () => {
     assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), false);
     assert.equal(debug.lastCall.args[0], error.stack);
   });
+
+  it('gives up on DeviceHub preferences that never become readable', {timeout: 5000}, async () => {
+    const clock = sandbox.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    parse.onFirstCall().returns(new Promise(() => {}));
+    const stuck = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false});
+    await clock.tickAsync(60000);
+    assert.equal(await stuck, false);
+    assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), true);
+  });
 });

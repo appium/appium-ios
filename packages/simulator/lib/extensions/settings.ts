@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import {fs, plist, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import {AsyncLock} from 'asyncbox';
+import {AsyncLock, withTimeout} from 'asyncbox';
 import {exec} from 'teen_process';
 
 import {DEFAULTS_PATH, LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
@@ -43,6 +43,7 @@ const SERVICES_FOR_TRANSLATION = [
 ] as const;
 const GLOBAL_PREFS_PLIST = '.GlobalPreferences.plist';
 const PREFERENCES_PLIST_GUARD = new AsyncLock();
+const DEVICE_HUB_PREFS_TIMEOUT_MS = 10000;
 const DOMAIN = Object.freeze({
   KEYBOARD: 'com.apple.keyboard.preferences',
   ACCESSIBILITY: 'com.apple.Accessibility',
@@ -421,7 +422,7 @@ async function updateDeviceHubPreferences(
     `${DEVICE_HUB_UI_CLIENT_BUNDLE_ID}.plist`,
   );
   return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
-    try {
+    const update = async () => {
       if (updatePasteboard) {
         // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
         const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
@@ -437,6 +438,16 @@ async function updateDeviceHubPreferences(
       await fs.mkdir(path.dirname(plistPath), {recursive: true});
       // defaults -dict-add preserves preferences belonging to other devices.
       await new NSUserDefaults(plistPath).update(prefsToUpdate);
+    };
+    try {
+      // macOS blocks reads of another app's container until the user answers
+      // the "access data from other apps" prompt, which may never be shown.
+      await withTimeout(
+        update(),
+        DEVICE_HUB_PREFS_TIMEOUT_MS,
+        `Timed out after ${DEVICE_HUB_PREFS_TIMEOUT_MS}ms accessing '${plistPath}'. ` +
+          `macOS may be waiting for this process to get permission to access data from other apps`,
+      );
       this.log.debug(`Updated DeviceHub preferences for ${this.udid} with ${JSON.stringify(prefsToUpdate)}`);
       return true;
     } catch (e: any) {
