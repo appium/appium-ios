@@ -177,7 +177,13 @@ export class RemoteDebugger extends EventEmitter {
     this.setup();
   }
 
-  /** Replaces the retained policy. Omitted entries are reset; {} clears all policy overrides. */
+  /**
+   * Replaces the complete retained policy; this does not merge with previous settings.
+   * Omitted entries reset to defaults; {} clears policy-managed overrides, not legacy page-scoped UA values.
+   * Validates before changing state. Device rejection rejects an explicit update with best-effort rollback;
+   * applying the retained policy during target initialization is best-effort and warns on unsupported keys.
+   * Does not reload pages. See docs/web-inspector-settings.md for timing and recovery behavior.
+   */
   async setWebInspectorPageSettings(settings: WebInspectorPageSettings): Promise<void> {
     validateWebInspectorPageSettings(settings);
     const next = structuredClone(settings);

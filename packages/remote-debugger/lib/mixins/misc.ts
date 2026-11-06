@@ -49,7 +49,9 @@ export async function stopTimeline(this: RemoteDebugger): Promise<any> {
 
 /**
  * Overrides the user agent string for the current page.
- * Note: This may not work for mobile Safari.
+ * Does not update the retained Web Inspector policy or persist across target replacement.
+ * Use setWebInspectorPageSettings for a retained UA; avoid mixing the two UA APIs.
+ * A policy reset does not clear a UA managed only by this page-scoped method.
  *
  * @param value - The user agent string to set.
  * @returns A promise that resolves when the user agent has been overridden.
