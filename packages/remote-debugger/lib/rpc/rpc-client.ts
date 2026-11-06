@@ -106,6 +106,7 @@ export class RpcClient {
       pageIdKey: PageIdKey;
       targetId: TargetId;
       pendingRestores: Map<string, PageOverride>;
+      removed: AbortController;
     }
   >();
   protected readonly bundleId?: string;
@@ -751,7 +752,7 @@ export class RpcClient {
     }
 
     log.debug(`Target destroyed for app '${app}': ${targetInfo.targetId}`);
-    this.initializedPageTargets.delete(toPageTargetKey(app, targetInfo.targetId));
+    this.removePageTarget(toPageTargetKey(app, targetInfo.targetId));
 
     // go through the targets and find the one that has a waiting provisional target
     if (this.targets[app]?.provisional?.oldTargetId === targetInfo.targetId) {
@@ -1084,10 +1085,14 @@ export class RpcClient {
       // wait for its initialization while holding the settings lock.
       await this.sendPageOverride(target, override, signal);
     } catch (error: any) {
+      signal.throwIfAborted();
+      if (target.removed.signal.aborted && error === target.removed.signal.reason) {
+        return;
+      }
       if (isMissingAppError(error, target.appIdKey)) {
         this.removePageTargetsForApp(target.appIdKey);
       } else if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
-        this.initializedPageTargets.delete(key);
+        this.removePageTarget(key);
       } else {
         if (error instanceof TimeoutError) {
           // Its final state is unknown; do not let this target block every later update.
@@ -1098,10 +1103,17 @@ export class RpcClient {
     }
   }
 
+  /** Stop response waits when the target is known to have disappeared. */
+  private removePageTarget(key: string): void {
+    const target = this.initializedPageTargets.get(key);
+    this.initializedPageTargets.delete(key);
+    target?.removed.abort(new Error('Page settings target disappeared'));
+  }
+
   private removePageTargetsForApp(appIdKey: AppIdKey): void {
     for (const [key, target] of this.initializedPageTargets) {
       if (String(target.appIdKey) === String(appIdKey)) {
-        this.initializedPageTargets.delete(key);
+        this.removePageTarget(key);
       }
     }
   }
@@ -1114,7 +1126,7 @@ export class RpcClient {
   }
 
   private async sendPageOverride(
-    target: {appIdKey: AppIdKey; pageIdKey: PageIdKey; targetId: TargetId},
+    target: {appIdKey: AppIdKey; pageIdKey: PageIdKey; targetId: TargetId; removed: AbortController},
     override: PageOverride,
     connectionSignal: AbortSignal,
   ): Promise<void> {
@@ -1135,9 +1147,10 @@ export class RpcClient {
           ...(override.value === undefined ? {} : {value: override.value}),
         },
         true,
-        AbortSignal.any([connectionSignal, deadline.signal]),
+        AbortSignal.any([connectionSignal, target.removed.signal, deadline.signal]),
       );
       this.assertPageSettingsConnection(connectionSignal);
+      target.removed.signal.throwIfAborted();
     } finally {
       clearTimeout(timer);
     }
@@ -1187,7 +1200,13 @@ export class RpcClient {
     // overrides with runtime updates; other domains can initialize concurrently.
     await this.pageSettingsLock.acquire('settings', async () => {
       this.assertPageSettingsConnection(signal);
-      const target = {appIdKey, pageIdKey, targetId, pendingRestores: new Map<string, PageOverride>()};
+      const target = {
+        appIdKey,
+        pageIdKey,
+        targetId,
+        pendingRestores: new Map<string, PageOverride>(),
+        removed: new AbortController(),
+      };
       this.initializedPageTargets.set(toPageTargetKey(appIdKey, targetId), target);
       for (const [overrideKey, override] of this.pageOverrides) {
         try {
@@ -1197,7 +1216,7 @@ export class RpcClient {
             this.removePageTargetsForApp(appIdKey);
             throw error;
           }
-          if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+          if (signal.aborted || target.removed.signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
             throw error;
           }
           if (error instanceof TimeoutError) {

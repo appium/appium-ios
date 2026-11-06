@@ -6,6 +6,7 @@ import sinon from 'sinon';
 
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
 import type {RemoteCommand} from '../../lib/types.js';
+import {targetMessage} from './helpers/rpc-messages.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -83,8 +84,8 @@ describe('page settings concurrency', function () {
     }
   });
 
-  for (const code of [-32601, -32602]) {
-    it(`drains in-flight updates before rollback and rejects unsupported runtime changes (${code})`, async function () {
+  for (const code of [-32601, -32602, -32000]) {
+    it(`drains in-flight updates before rollback and rejects protocol errors (${code})`, async function () {
       const client = connectedClient();
       const previous = {pageSettings: {ImagesEnabled: true}, userAgent: 'Old/1'};
       await client.setWebInspectorPageSettings(previous);
@@ -103,13 +104,15 @@ describe('page settings concurrency', function () {
           await release.promise;
         }
         if (value === 'New/2' && command.targetId === '2') {
-          handler.emit(String(command.id), {code, message: 'Unsupported override'});
+          await handler.handleMessage(
+            targetMessage(command.targetId, {id: command.id, error: {code, message: 'Rejected override'}}),
+          );
           failed.resolve();
           return;
         }
         events.push(`${command.targetId}:${key}:${value}`);
         state.set(command.targetId, {...state.get(command.targetId), [key]: value});
-        handler.emit(String(command.id), null, {});
+        await handler.handleMessage(targetMessage(command.targetId, {id: command.id, result: {}}));
       });
       for (let i = 1; i <= 5; i++) {
         await addPage(client, String(i));

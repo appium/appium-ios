@@ -6,6 +6,7 @@ import sinon from 'sinon';
 import {toPageOverrides, type WebInspectorPageSettings} from '../../lib/page-overrides.js';
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
 import type {AppIdKey, RemoteCommand, RpcClientOptions} from '../../lib/types.js';
+import {dataMessage, targetMessage} from './helpers/rpc-messages.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -172,7 +173,9 @@ describe('page settings connection lifecycle', function () {
       const send = sinon.stub(client, 'sendMessage').callsFake(async (messageToSend) => {
         const command = commandFrom(messageToSend);
         if (command.method === 'Page.overrideSetting') {
-          (client as any).messageHandler.emit(String(command.id), {code, message});
+          await (client as any).messageHandler.handleMessage(
+            targetMessage(command.targetId, {id: command.id, error: {code, message}}),
+          );
         } else {
           reply(client, command.id);
         }
@@ -407,6 +410,109 @@ describe('page settings connection lifecycle', function () {
       await client.setWebInspectorPageSettings({userAgent: 'Accepted/3'});
       assert.ok(send.getCalls().every(({args}) => args[1].value === 'Accepted/3'));
       assert.equal(send.callCount, disconnect ? 1 : 2);
+    });
+  }
+
+  for (const removal of ['wrapper error', 'target error', 'app disconnect', 'target destruction']) {
+    it(`cancels disappeared targets' pending waits without rolling back healthy targets (${removal})`, async function () {
+      const {client} = connectedClient();
+      await addPage(client, 'gone-1', '1', 'PID:123');
+      await addPage(client, 'gone-2', '2', 'PID:123');
+      await addPage(client, 'healthy', '1', 'PID:456');
+      const handler = (client as any).messageHandler;
+      const pending = new Map<string, {id: number; wrapperId: number}>();
+      const send = sinon.stub(client, 'sendMessage').callsFake(async (message) => {
+        const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
+        const command = commandFrom(message);
+        if (command.targetId.startsWith('gone-')) {
+          pending.set(command.targetId, {id: command.id, wrapperId: wrapper.id});
+          return;
+        }
+        await handler.handleMessage(targetMessage(command.targetId, {id: command.id, result: {}}, 'PID:456'));
+      });
+      const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      let outcome: unknown = 'pending';
+      const update = client.setWebInspectorPageSettings({userAgent: 'New/1'}).then(
+        () => {
+          outcome = 'resolved';
+        },
+        (error) => {
+          outcome = error;
+        },
+      );
+      try {
+        await clock.tickAsync(0);
+        assert.equal(pending.size, 2, 'both requests must already be waiting');
+        const first = pending.get('gone-1')!;
+        const error = {code: -32000, message: 'Application PID:123 does not exist'};
+        if (removal === 'wrapper error') {
+          await handler.handleMessage(dataMessage({id: first.wrapperId, error}, 'PID:123'));
+        } else if (removal === 'target error') {
+          await handler.handleMessage(targetMessage('gone-1', {id: first.id, error}, 'PID:123'));
+        } else if (removal === 'app disconnect') {
+          await handler.handleMessage({
+            __selector: '_rpc_applicationDisconnected:',
+            __argument: {WIRApplicationIdentifierKey: 'PID:123'},
+          });
+        } else {
+          await handler.handleMessage(
+            dataMessage({method: 'Target.targetDestroyed', params: {targetId: 'gone-1'}}, 'PID:123'),
+          );
+          await clock.tickAsync(0);
+          assert.equal(outcome, 'pending', 'another target of the same app must still wait for its response');
+          await handler.handleMessage(targetMessage('gone-2', {id: pending.get('gone-2')!.id, result: {}}, 'PID:123'));
+        }
+        await clock.tickAsync(0);
+        assert.equal(outcome, 'resolved', 'known disappearance must not wait for the 10-second deadline');
+        assert.equal(send.callCount, 3, 'healthy targets must not be rolled back');
+        assertNoResponseListeners(client);
+        assert.equal(clock.countTimers(), 0);
+        send.resetHistory();
+        await client.setWebInspectorPageSettings({userAgent: 'New/1'});
+        sinon.assert.notCalled(send);
+        await addPage(client, 'new-page', '2', 'PID:456');
+        sinon.assert.calledOnce(send);
+        assert.equal(commandFrom(send.firstCall.args[0]).params.value, 'New/1');
+      } finally {
+        client.isConnected = false;
+        await update;
+        clock.restore();
+      }
+    });
+  }
+
+  for (const removal of ['app disconnect', 'target destruction']) {
+    it(`stops initialization immediately when its target disappears (${removal})`, async function () {
+      const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'New/1'}});
+      const send = sinon.stub(client, 'sendMessage').resolves();
+      const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      let initialized = false;
+      const creation = addPage(client, 'gone', '1', 'PID:123').then(() => {
+        initialized = true;
+      });
+      try {
+        await clock.tickAsync(0);
+        sinon.assert.calledOnce(send);
+        const handler = (client as any).messageHandler;
+        await handler.handleMessage(
+          removal === 'app disconnect'
+            ? {
+                __selector: '_rpc_applicationDisconnected:',
+                __argument: {WIRApplicationIdentifierKey: 'PID:123'},
+              }
+            : dataMessage({method: 'Target.targetDestroyed', params: {targetId: 'gone'}}, 'PID:123'),
+        );
+        await clock.tickAsync(0);
+        assert.equal(initialized, true, 'initialization must finish without a deadline');
+        assert.ok(!initialize.calledWith('Runtime.enable'));
+        assert.ok(!initialize.calledWith('Inspector.initialized'));
+        assertNoResponseListeners(client);
+        assert.equal(clock.countTimers(), 0);
+      } finally {
+        client.isConnected = false;
+        await creation;
+        clock.restore();
+      }
     });
   }
 
