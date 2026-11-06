@@ -51,9 +51,8 @@ export async function assertDeviceHubPreferencesAccess(homeFolderPath: string): 
     }
     throw toAccessError(e, containerPath);
   }
-  // Walk up to the deepest existing directory, since the protection applies to the whole container
-  let dir = path.dirname(getDeviceHubPreferencesPath(homeFolderPath));
-  while (dir !== containerPath) {
+  // Walk up to the deepest existing directory (the container included), since the protection applies to all of it
+  for (let dir = path.dirname(getDeviceHubPreferencesPath(homeFolderPath)); ; dir = path.dirname(dir)) {
     try {
       await fs.access(dir, fsConstants.R_OK | fsConstants.W_OK);
       return;
@@ -61,7 +60,9 @@ export async function assertDeviceHubPreferencesAccess(homeFolderPath: string): 
       if (!isErrno(e, 'ENOENT')) {
         throw toAccessError(e, dir);
       }
-      dir = path.dirname(dir);
+      if (dir === containerPath) {
+        return;
+      }
     }
   }
 }

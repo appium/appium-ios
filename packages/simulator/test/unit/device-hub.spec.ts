@@ -73,7 +73,18 @@ describe('assertDeviceHubPreferencesAccess', () => {
   it('passes if the container exists but has no data directory yet', async () => {
     access.rejects(errno('ENOENT'));
     await assertDeviceHubPreferencesAccess(HOME);
-    assert.equal(access.callCount, 3);
+    assert.equal(access.callCount, 4);
+    assert.equal(access.lastCall.args[0], CONTAINER);
+  });
+
+  it('raises a permission error if only the container is left to check and it is denied', async () => {
+    access.rejects(errno('ENOENT'));
+    access.withArgs(CONTAINER).rejects(errno('EPERM'));
+    await assert.rejects(assertDeviceHubPreferencesAccess(HOME), (e: Error) => {
+      assert.ok(e instanceof DeviceHubAccessError);
+      assert.match(e.message, new RegExp(CONTAINER));
+      return true;
+    });
   });
 
   it('does not wrap unrelated errors', async () => {
