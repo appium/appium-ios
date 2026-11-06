@@ -1493,6 +1493,20 @@ describe('NativeSimctl integration', () => {
           await sim.removeApp(device!.udid, UICATALOG_BUNDLE_ID);
           assert.strictEqual(await sim.isAppInstalled(device!.udid, UICATALOG_BUNDLE_ID), false);
         });
+
+        it('says why an app install failed', async () => {
+          const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coresim-bad-app-'));
+          const bundlePath = path.join(tmpDir, 'NoInfoPlist.app');
+          try {
+            await fs.promises.mkdir(bundlePath);
+            await assert.rejects(
+              sim.installApp(device!.udid, bundlePath),
+              (err: unknown) => err instanceof NativeSimOperationError && /bundle ID/i.test(err.message),
+            );
+          } finally {
+            await fs.promises.rm(tmpDir, {recursive: true, force: true});
+          }
+        });
       }
 
       it('spawns a process with live stdout and reports a clean exit', async () => {
