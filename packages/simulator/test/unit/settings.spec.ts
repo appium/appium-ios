@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, it} from 'node:test';
 
-import {fs, plist} from '@appium/support';
+import {fs} from '@appium/support';
 import sinon from 'sinon';
 
 import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
@@ -11,7 +11,7 @@ import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults} from '../../lib/utils/in
 describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
   let update: sinon.SinonStub;
-  let parse: sinon.SinonStub;
+  let read: sinon.SinonStub;
   let debug: sinon.SinonStub;
   const sim = {
     udid: 'device-a',
@@ -24,7 +24,7 @@ describe('DeviceHub preferences', () => {
     debug = sandbox.stub(sim.log, 'debug');
     sandbox.stub(fs, 'exists').resolves(false);
     sandbox.stub(fs, 'mkdir').resolves();
-    parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
+    read = sandbox.stub(NSUserDefaults.prototype, 'read').resolves({});
     update = sandbox.stub(NSUserDefaults.prototype, 'update').resolves();
   });
   afterEach(() => sandbox.restore());
@@ -51,7 +51,7 @@ describe('DeviceHub preferences', () => {
   }
 
   it('preserves the device’s existing preferences, including when the plist contains data', async () => {
-    parse.resolves({
+    read.resolves({
       lastSelectedDeviceIdentifier: Buffer.from('device-a'),
       DevicePreferences: {
         'DEVICE-A': {zoom: 2, pasteboardSyncEnabled: true},
@@ -67,7 +67,6 @@ describe('DeviceHub preferences', () => {
   it('leaves the clipboard unchanged while applying the default keyboard preference in system mode', async () => {
     const [device, common] = compileSimulatorPreferences.call(sim as any, {pasteboardAutomaticSync: 'system'});
     await updatePreferences.call(sim as any, device, common);
-    assert.equal(parse.called, false);
     assert.equal(update.callCount, 2);
     assert.deepEqual(update.lastCall.args[0], {alwaysSimulateHardwareKeyboard: false});
   });
@@ -80,7 +79,6 @@ describe('DeviceHub preferences', () => {
       });
       assert.equal(await updatePreferences.call(sim as any, device, common), true);
       assert.deepEqual(update.lastCall.args[0], {alwaysSimulateHardwareKeyboard: enabled});
-      assert.equal(parse.called, false);
       assert.equal(update.firstCall.args[0].ConnectHardwareKeyboard, enabled);
     });
   }
@@ -100,7 +98,7 @@ describe('DeviceHub preferences', () => {
   it('skips DeviceHub when no supported preferences are provided', async () => {
     await updatePreferences.call(sim as any, {}, {});
     assert.equal(update.callCount, 1);
-    assert.equal(parse.called, false);
+    assert.equal(read.called, false);
   });
 
   it('reports a keyboard-only write failure', async () => {
@@ -116,25 +114,54 @@ describe('DeviceHub preferences', () => {
       {},
       {PasteboardAutomaticSync: false, ConnectHardwareKeyboard: true},
     );
-    assert.equal(parse.called, false);
+    assert.equal(read.called, false);
     assert.equal(update.callCount, 1);
     assert.equal(update.firstCall.args[0].PasteboardAutomaticSync, false);
     assert.equal(update.firstCall.args[0].ConnectHardwareKeyboard, true);
   });
 
-  it('reports failure if DeviceHub preferences cannot be updated', async () => {
-    const error = new Error('unreadable preferences');
-    parse.rejects(error);
+  it('does not write DeviceHub preferences it could not read', async () => {
+    const error = new Error('timed out');
+    read.rejects(error);
     assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), false);
+    assert.equal(update.callCount, 1);
     assert.equal(debug.lastCall.args[0], error.stack);
   });
 
-  it('gives up on DeviceHub preferences that never become readable', {timeout: 5000}, async () => {
-    const clock = sandbox.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
-    parse.onFirstCall().returns(new Promise(() => {}));
-    const stuck = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false});
-    await clock.tickAsync(60000);
-    assert.equal(await stuck, false);
-    assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), true);
+  describe('when a DeviceHub preferences read is slow', () => {
+    let finishFirstRead: (prefs: Record<string, any>) => void;
+    let failFirstRead: (e: Error) => void;
+    const deviceHubWrites = () =>
+      update
+        .getCalls()
+        .filter((call) => call.thisValue.plist.includes('/Containers/'))
+        .map((call) => call.args[0].DevicePreferences['DEVICE-A'].pasteboardSyncEnabled);
+
+    beforeEach(() => {
+      read.onFirstCall().returns(
+        new Promise((resolve, reject) => {
+          finishFirstRead = resolve;
+          failFirstRead = reject;
+        }),
+      );
+    });
+
+    it('lets a later update wait until the slow one has written', async () => {
+      const first = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false});
+      const second = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: true});
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(deviceHubWrites(), []);
+      finishFirstRead({});
+      assert.deepEqual(await Promise.all([first, second]), [true, true]);
+      assert.deepEqual(deviceHubWrites(), [false, true]);
+    });
+
+    it('lets a later update run after the slow one gives up', async () => {
+      const first = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false});
+      const second = updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: true});
+      failFirstRead(new Error('timed out'));
+      assert.deepEqual(await Promise.all([first, second]), [false, true]);
+      assert.deepEqual(deviceHubWrites(), [true]);
+    });
   });
 });

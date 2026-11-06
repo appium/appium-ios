@@ -1,8 +1,8 @@
 import path from 'node:path';
 
-import {fs, plist, util} from '@appium/support';
+import {fs, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import {AsyncLock, withTimeout} from 'asyncbox';
+import {AsyncLock} from 'asyncbox';
 import {exec} from 'teen_process';
 
 import {DEFAULTS_PATH, LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
@@ -422,10 +422,12 @@ async function updateDeviceHubPreferences(
     `${DEVICE_HUB_UI_CLIENT_BUNDLE_ID}.plist`,
   );
   return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
-    const update = async () => {
+    const defaults = new NSUserDefaults(plistPath);
+    try {
+      // Read first: until the user answers the macOS prompt to access data from other apps,
+      // any access to the container blocks, and only a child process can be stopped.
+      const currentPrefs = await defaults.read(DEVICE_HUB_PREFS_TIMEOUT_MS);
       if (updatePasteboard) {
-        // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
-        const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
         const udidKey = this.udid.toUpperCase();
         const existingDevicePrefs = currentPrefs.DevicePreferences?.[udidKey];
         prefsToUpdate.DevicePreferences = {
@@ -437,17 +439,7 @@ async function updateDeviceHubPreferences(
       }
       await fs.mkdir(path.dirname(plistPath), {recursive: true});
       // defaults -dict-add preserves preferences belonging to other devices.
-      await new NSUserDefaults(plistPath).update(prefsToUpdate);
-    };
-    try {
-      // macOS blocks reads of another app's container until the user answers
-      // the "access data from other apps" prompt, which may never be shown.
-      await withTimeout(
-        update(),
-        DEVICE_HUB_PREFS_TIMEOUT_MS,
-        `Timed out after ${DEVICE_HUB_PREFS_TIMEOUT_MS}ms accessing '${plistPath}'. ` +
-          `macOS may be waiting for this process to get permission to access data from other apps`,
-      );
+      await defaults.update(prefsToUpdate);
       this.log.debug(`Updated DeviceHub preferences for ${this.udid} with ${JSON.stringify(prefsToUpdate)}`);
       return true;
     } catch (e: any) {

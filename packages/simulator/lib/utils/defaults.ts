@@ -1,4 +1,4 @@
-import {util} from '@appium/support';
+import {fs, plist, util} from '@appium/support';
 import {DOMParser, XMLSerializer, type Document, type Element} from '@xmldom/xmldom';
 import {exec} from 'teen_process';
 
@@ -26,6 +26,25 @@ export class NSUserDefaults {
       throw new Error(`'${this.plist}' cannot be converted to JSON. Original error: ${e.stderr || e.message}`, {
         cause: e,
       });
+    }
+  }
+
+  /**
+   * Reads the plist in a child process, so a read that macOS holds back for a privacy prompt can be stopped.
+   * Unlike {@link asJson}, this also accepts plists that contain NSData values.
+   *
+   * @param timeoutMs How long to wait for the read before the child process is killed
+   * @returns The plist content, or an empty object if the plist does not exist
+   */
+  async read(timeoutMs: number): Promise<Record<string, any>> {
+    if (!(await fs.exists(this.plist))) {
+      return {};
+    }
+    try {
+      const {stdout} = await exec('cat', [this.plist], {timeout: timeoutMs, isBuffer: true});
+      return plist.parsePlist(stdout) as Record<string, any>;
+    } catch (e: any) {
+      throw new Error(`'${this.plist}' cannot be read. Original error: ${e.message}`, {cause: e});
     }
   }
 

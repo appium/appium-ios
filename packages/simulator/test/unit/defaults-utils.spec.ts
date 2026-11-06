@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, it} from 'node:test';
 
-import {toXmlArg, generateDefaultsCommandArgs} from '../../lib/utils/index.js';
+import {exec} from 'teen_process';
+
+import {NSUserDefaults, toXmlArg, generateDefaultsCommandArgs} from '../../lib/utils/index.js';
 
 describe('defaults-utils', function () {
   describe('toXmlArg', function () {
@@ -83,5 +88,26 @@ describe('defaults-utils', function () {
         ],
       );
     });
+  });
+
+  describe('NSUserDefaults.read', function () {
+    // A FIFO without a writer blocks open() like a container that macOS has not allowed yet.
+    it(
+      'gives up on a plist that cannot be opened without tying up the fs thread pool',
+      {timeout: 10000},
+      async function () {
+        const dir = await mkdtemp(path.join(os.tmpdir(), 'defaults-'));
+        try {
+          const fifo = path.join(dir, 'blocked.plist');
+          await exec('mkfifo', [fifo]);
+          for (let i = 0; i < 5; i++) {
+            await assert.rejects(new NSUserDefaults(fifo).read(200), /timed out/);
+          }
+          assert.ok((await readFile(new URL(import.meta.url))).length > 0);
+        } finally {
+          await rm(dir, {recursive: true, force: true});
+        }
+      },
+    );
   });
 });
