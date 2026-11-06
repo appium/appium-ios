@@ -31,6 +31,7 @@ const NO_TARGET_PRESENT_YET_ERRORS = [`domain was not found`, `some arguments of
 export const NEW_APP_CONNECTED_ERROR = 'New application has connected';
 export const EMPTY_PAGE_DICTIONARY_ERROR = 'Empty page dictionary received';
 const ON_PAGE_INITIALIZED_EVENT = 'onPageInitialized';
+const SELECT_APP_TIMEOUT_MS = 5000;
 
 /**
  * Details about a pending page target notification.
@@ -840,54 +841,53 @@ export class RpcClient {
    * @param appIdKey - The application identifier key to connect to.
    * @returns A promise that resolves to a tuple containing the connected app ID key
    *          and the page dictionary.
-   * @throws Error if a new application connects during the process or if the page
-   *               dictionary is empty.
+   * @throws Error if the application or its proxy connects during the process, if the page
+   *               dictionary is empty, or if the application does not send its listing in time.
    */
   async selectApp(appIdKey: AppIdKey): Promise<[string, StringRecord]> {
-    return await new Promise<[string, StringRecord]>((resolve, reject) => {
-      // local callback, temporarily added as callback to
-      // `_rpc_applicationConnected:` remote debugger response
-      // to handle the initial connection
-      const onAppChange = (err: Error | null, dict: StringRecord) => {
+    let onAppConnected!: (err: Error | null, dict: StringRecord) => void;
+    let onListing!: (err: Error | null, listingAppIdKey: string, pageDict: StringRecord) => void;
+    const listingPromise = new Promise<[string, StringRecord]>((resolve, reject) => {
+      onAppConnected = (err, dict) => {
         if (err) {
           return reject(err);
         }
-        // from the dictionary returned, get the ids
-        const oldAppIdKey = dict.WIRHostApplicationIdentifierKey;
-        const correctAppIdKey = dict.WIRApplicationIdentifierKey;
-
-        // if this is a report of a proxy redirect from the remote debugger
-        // we want to update our dictionary and get a new app id
-        if (oldAppIdKey && correctAppIdKey !== oldAppIdKey) {
-          log.debug(
-            `We were notified we might have connected to the wrong app. ` +
-              `Using id ${correctAppIdKey} instead of ${oldAppIdKey}`,
-          );
+        // Unrelated apps keep connecting at startup; only this app or a proxy for it voids the request
+        if ([dict.WIRApplicationIdentifierKey, dict.WIRHostApplicationIdentifierKey].includes(appIdKey)) {
+          reject(new Error(NEW_APP_CONNECTED_ERROR));
         }
-
-        reject(new Error(NEW_APP_CONNECTED_ERROR));
       };
-      this.messageHandler.prependOnceListener('_rpc_applicationConnected:', onAppChange);
-
-      // do the actual connecting to the app
-      void (async () => {
-        try {
-          const [connectedAppIdKey, pageDict] = await this.send('connectToApp', {appIdKey});
-          // sometimes the connect logic happens, but with an empty dictionary
-          // which leads to the remote debugger getting disconnected, and into a loop
-          if (util.isEmpty(pageDict)) {
-            reject(new Error(EMPTY_PAGE_DICTIONARY_ERROR));
-          } else {
-            resolve([connectedAppIdKey, pageDict]);
-          }
-        } catch (err: any) {
-          log.warn(`Unable to connect to the app: ${err.message}`);
-          reject(err);
-        } finally {
-          this.messageHandler.off('_rpc_applicationConnected:', onAppChange);
+      // Every application sends its listings through the same selector
+      onListing = (err, listingAppIdKey, pageDict) => {
+        if (err) {
+          return reject(err);
         }
-      })();
+        if (listingAppIdKey === appIdKey) {
+          resolve([listingAppIdKey, pageDict]);
+        }
+      };
     });
+    this.messageHandler.prependListener('_rpc_applicationConnected:', onAppConnected);
+    this.messageHandler.prependListener('_rpc_forwardGetListing:', onListing);
+    try {
+      const [, [listingAppIdKey, pageDict]] = await Promise.all([
+        this.send('connectToApp', {appIdKey}, false),
+        withTimeout(
+          listingPromise,
+          SELECT_APP_TIMEOUT_MS,
+          `The application '${appIdKey}' has not sent its page listing within ${SELECT_APP_TIMEOUT_MS}ms`,
+        ),
+      ]);
+      // sometimes the connect logic happens, but with an empty dictionary
+      // which leads to the remote debugger getting disconnected, and into a loop
+      if (util.isEmpty(pageDict)) {
+        throw new Error(EMPTY_PAGE_DICTIONARY_ERROR);
+      }
+      return [listingAppIdKey, pageDict];
+    } finally {
+      this.messageHandler.off('_rpc_applicationConnected:', onAppConnected);
+      this.messageHandler.off('_rpc_forwardGetListing:', onListing);
+    }
   }
 
   /**
