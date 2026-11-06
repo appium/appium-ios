@@ -36,9 +36,9 @@ jobs:
           # See "Installed Xcode/SDKs/Simulators" in https://github.com/actions/runner-images/tree/main/images/macos
           # (<image>-arm64-Readme.md, e.g. macos-26-arm64, xcode-27-arm64).
           json='[
-            {"xcodeVersion": "27.1", "iosVersion": "27.0", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 11-inch (M4)",
-             "tvosVersion": "27.0", "tvosDeviceName": "Apple TV 4K (3rd generation)",
-             "watchosVersion": "27.0", "watchosDeviceName": "Apple Watch Series 12 (46mm)", "image": "xcode-27"},
+            {"xcodeVersion": "27.2", "iosVersion": "27.2", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 11-inch (M4)",
+             "tvosVersion": "27.2", "tvosDeviceName": "Apple TV 4K (3rd generation)",
+             "watchosVersion": "27.2", "watchosDeviceName": "Apple Watch Series 12 (46mm)", "image": "xcode-27"},
             {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 13-inch (M4)",
              "tvosVersion": "26.5", "tvosDeviceName": "Apple TV 4K (3rd generation)",
              "watchosVersion": "26.5", "watchosDeviceName": "Apple Watch Series 11 (46mm)", "image": "macos-26"}
