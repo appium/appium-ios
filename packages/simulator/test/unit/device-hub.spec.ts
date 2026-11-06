@@ -163,14 +163,14 @@ describe('assertDeviceHubPreferencesAccess', () => {
         await fs.rimraf(realHome);
       });
 
-      it('passes for a writable directory', async () => {
+      it('passes for a readable directory', async () => {
         await fs.mkdir(realPrefsDir, {recursive: true});
         await assertDeviceHubPreferencesAccess(realHome);
       });
 
-      it('reports a read-only directory as denied', {skip: process.getuid?.() === 0}, async () => {
+      it('reports an unreadable directory as denied', {skip: process.getuid?.() === 0}, async () => {
         await fs.mkdir(realPrefsDir, {recursive: true});
-        await fs.chmod(realPrefsDir, 0o500);
+        await fs.chmod(realPrefsDir, 0o000);
         try {
           await assert.rejects(assertDeviceHubPreferencesAccess(realHome), DeviceHubAccessError);
         } finally {

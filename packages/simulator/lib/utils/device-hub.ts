@@ -77,13 +77,14 @@ async function checkDirectoryAccess(dir: string): Promise<AccessProbeResult> {
   }
 }
 
-/** Checks access in a child process, since only a child can be killed if the request never gets answered. */
+/**
+ * Checks access in a child process, since only a child can be killed if the request never gets answered.
+ * It lists the directory, because access() succeeds while the request is pending, whereas readdir/open/create
+ * block and are what raises the permission prompt.
+ */
 async function probeDirectoryAccess(dir: string): Promise<AccessProbeResult> {
   try {
-    await exec('/bin/sh', ['-c', 'test -r "$0" && test -w "$0"', dir], {
-      timeout: ACCESS_PROBE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
+    await exec('/bin/ls', [dir], {timeout: ACCESS_PROBE_TIMEOUT_MS, killSignal: 'SIGKILL'});
     return 'ok';
   } catch (e: any) {
     if (/timed out/.test(e.message)) {
