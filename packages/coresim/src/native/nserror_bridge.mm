@@ -9,14 +9,16 @@ std::string DescribeNSError(NSError* error) {
   for (NSUInteger depth = 0; current != nil && depth < kMaxErrorDepth; ++depth) {
     for (NSString* text in @[ current.localizedDescription ?: @"", current.localizedFailureReason ?: @"" ]) {
       NSString* trimmed = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-      if (trimmed.length == 0 || [parts indexOfObjectPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
-            return [part containsString:trimmed];
-          }] != NSNotFound) {
+      NSUInteger known = [parts indexOfObjectPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
+        return [part containsString:trimmed];
+      }];
+      if (trimmed.length == 0 || known != NSNotFound) {
         continue;
       }
-      [parts removeObjectsAtIndexes:[parts indexesOfObjectsPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
-               return [trimmed containsString:part];
-             }]];
+      NSIndexSet* covered = [parts indexesOfObjectsPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
+        return [trimmed containsString:part];
+      }];
+      [parts removeObjectsAtIndexes:covered];
       [parts addObject:trimmed];
     }
     id underlying = current.userInfo[NSUnderlyingErrorKey];
