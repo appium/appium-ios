@@ -12,9 +12,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface XCUIDevice (FBHinge)
 
-/** Whether the device has a hinge. Does not read its angle or send events. */
-- (BOOL)fb_hasHinge;
-
 /** Whether a hinge and the CoreMotion angle-reading APIs are available. */
 - (BOOL)fb_supportsHingeAngleReading;
 

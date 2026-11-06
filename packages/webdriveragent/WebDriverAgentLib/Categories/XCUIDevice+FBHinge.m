@@ -11,7 +11,6 @@
 #import <dlfcn.h>
 #import <math.h>
 #import <mach/mach_time.h>
-#import <objc/message.h>
 
 #import "FBErrorBuilder.h"
 
@@ -107,19 +106,6 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
 #endif
 
 @implementation XCUIDevice (FBHinge)
-
-- (BOOL)fb_hasHinge
-{
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-  SEL hingeSelector = NSSelectorFromString(@"hinge");
-  if ([self respondsToSelector:hingeSelector]) {
-    return nil != ((id (*)(id, SEL))objc_msgSend)(self, hingeSelector);
-  }
-  return FBHasAvailableHinge();
-#else
-  return NO;
-#endif
-}
 
 - (BOOL)fb_supportsHingeAngleReading
 {

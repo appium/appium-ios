@@ -6,14 +6,15 @@ Simulator builds. Reading an angle and injecting a simulated angle have separate
 requirements.
 
 `GET /wda/device/info` and `GET /session/:sessionId/wda/device/info` include
-`hasHinge`, a JSON boolean indicating whether the device reports a hinge. This
-checks `XCUIDevice.hinge` when that API is available; older XCTest versions use
-CoreMotion hinge availability. It does not read the angle, subscribe to sensor
-updates, or send events. It returns `false` on tvOS and watchOS.
+`hasHinge`, a JSON boolean using the existing `fb_supportsHingeAngleReading`
+check: a hinge and the CoreMotion angle-reading APIs must be available. This
+works with older XCTest versions, including Xcode 27.2. It does not read the
+angle, subscribe to sensor updates, or send events. It returns `false` on tvOS
+and watchOS.
 
-`hasHinge` describes hardware capability, not a particular model, current fold
-state, active display, or support for reading/injecting angles. Clients using
-older WDA builds must account for this field being absent.
+`hasHinge` does not identify a particular model, current fold state, active
+display, or support for injecting angles. Clients using older WDA builds must
+account for this field being absent.
 
 `POST /session/:sessionId/wda/device/hingeAngle` with `{"angle": 90}` sends an
 event requesting a simulated hinge angle of 90 degrees. The angle
