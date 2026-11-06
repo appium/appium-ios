@@ -33,6 +33,8 @@ import {
 const execFileAsync = promisify(execFile);
 
 const IS_CI = Boolean(process.env.CI);
+const REQUESTED_OS_VERSION = process.env.MOBILE_OS_VERSION || null;
+const REQUESTED_DEVICE_NAME = process.env.MOBILE_DEVICE_NAME || null;
 // This suite otherwise shares a single boot cycle per Xcode version (see integration-test.yml) —
 // shutdownAllDevices() needs its own second throwaway device booted/deleted just to exercise it,
 // which would materially add to CI's already-expensive real-boot cost for one extra assertion.
@@ -314,7 +316,10 @@ async function availableRuntimeFixtures(sim: NativeSimctl): Promise<RuntimeFixtu
   const runtimeById = new Map(runtimes.map((r) => [r.identifier, r]));
   const deviceTypeByRuntime = new Map<string, string>();
   for (const device of devices) {
-    if (device.runtimeIdentifier && device.deviceTypeIdentifier && !deviceTypeByRuntime.has(device.runtimeIdentifier)) {
+    if (!device.runtimeIdentifier || !device.deviceTypeIdentifier) {
+      continue;
+    }
+    if (!deviceTypeByRuntime.has(device.runtimeIdentifier) || device.name === REQUESTED_DEVICE_NAME) {
       deviceTypeByRuntime.set(device.runtimeIdentifier, device.deviceTypeIdentifier);
     }
   }
@@ -376,16 +381,20 @@ async function activeSimulatorSdkVersion(): Promise<string | null> {
 // CI runner images pre-install several simulator runtimes as shared, Xcode-independent volumes
 // (simctl list runtimes shows iOS 26.2/26.4/26.5 regardless of the active Xcode) — fixtures[0]
 // would pick an arbitrary one instead of the runtime the job's matrix entry actually asked for.
-// Prefer the runtime matching the active Xcode's own bundled SDK version; fall back to the newest
-// installed only if that exact runtime isn't present.
+// Prefer MOBILE_OS_VERSION (the SDK's own runtime can ship only a multi-display iPhone Duo, e.g.
+// iOS 27.1 on the xcode-27 image), else the runtime matching the active Xcode's own bundled SDK
+// version; fall back to the newest installed only if that exact runtime isn't present.
 async function selectTarget(fixtures: RuntimeFixture[]): Promise<RuntimeFixture[]> {
   if (fixtures.length === 0) {
     return [];
   }
-  const sdkVersion = await activeSimulatorSdkVersion();
-  const exactMatch = sdkVersion
-    ? fixtures.find((f) => f.runtimeVersion === sdkVersion || f.runtimeVersion.startsWith(`${sdkVersion}.`))
+  const version = REQUESTED_OS_VERSION ?? (await activeSimulatorSdkVersion());
+  const exactMatch = version
+    ? fixtures.find((f) => f.runtimeVersion === version || f.runtimeVersion.startsWith(`${version}.`))
     : undefined;
+  if (REQUESTED_OS_VERSION && !exactMatch) {
+    throw new Error(`MOBILE_OS_VERSION is ${REQUESTED_OS_VERSION}, but no device of that iOS runtime is installed`);
+  }
   return [exactMatch ?? [...fixtures].sort((a, b) => compareVersions(b.runtimeVersion, a.runtimeVersion))[0]];
 }
 

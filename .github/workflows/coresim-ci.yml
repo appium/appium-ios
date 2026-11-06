@@ -61,6 +61,8 @@ jobs:
       node-version: lts/*
       test-command: test:integration
       test-name: Integration tests (Xcode ${{ matrix.combo.xcodeVersion }})
+      ios-version: ${{ matrix.combo.iosVersion }}
+      device-name: ${{ matrix.combo.deviceName }}
       # Cheap to run per Xcode version here (no simulator boot involved) and gives warnings-as-
       # errors coverage across the same Xcode/CoreSimulator versions the functional tests cover.
       run-xcodebuild-check: true

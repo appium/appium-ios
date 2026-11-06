@@ -56,6 +56,18 @@ on:
         required: false
         default: false
         type: boolean
+      ios-version:
+        description: iOS runtime version for the integration tests (MOBILE_OS_VERSION; empty picks
+          the runtime matching the selected Xcode's SDK)
+        required: false
+        default: ''
+        type: string
+      device-name:
+        description: Simulator device name whose device type the integration tests use
+          (MOBILE_DEVICE_NAME; empty picks any device of the runtime)
+        required: false
+        default: ''
+        type: string
       timeout-minutes:
         description: Job-level timeout backstop - real simulator boot on a CI runner is far
           slower than on real hardware, so integration callers should raise this well above the
@@ -131,4 +143,7 @@ jobs:
           xcrun simctl list runtimes
 
       - name: Run ${{ inputs.test-name }}
+        env:
+          MOBILE_OS_VERSION: ${{ inputs.ios-version }}
+          MOBILE_DEVICE_NAME: ${{ inputs.device-name }}
         run: npm run ${{ inputs.test-command }} --workspace packages/coresim
