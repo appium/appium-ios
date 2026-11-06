@@ -39,7 +39,7 @@ const MIN_WAIT_FOR_TARGET_TIMEOUT_MS = 30000;
 const DEFAULT_TARGET_CREATION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 const WAIT_FOR_TARGET_INTERVAL_MS = 100;
 const PAGE_OVERRIDE_TIMEOUT_MS = 10000;
-const MISSING_APP_ERROR_PATTERN = /\b(?:app|application)\b.*\b(?:not found|does not exist)\b/i;
+const PAGE_OVERRIDE_TARGET_CONCURRENCY = 4;
 const NO_TARGET_SUPPORTED_ERROR = `'target' domain was not found`;
 const MISSING_TARGET_ERROR_PATTERN = /Missing target/i;
 const NO_TARGET_PRESENT_YET_ERRORS = [`domain was not found`, `some arguments of method`, `missing target`];
@@ -1035,9 +1035,11 @@ export class RpcClient {
         changes.set(key, {...previous, value: undefined});
       }
     }
-    const updated: {target: string; key: string; previous: PageOverride}[] = [];
+    const updated = new Map<string, {key: string; previous: PageOverride}[]>();
     try {
-      for (const [target, details] of this.initializedPageTargets) {
+      await forEachPageTarget([...this.initializedPageTargets], async ([target, details]) => {
+        const targetUpdates: {key: string; previous: PageOverride}[] = [];
+        updated.set(target, targetUpdates);
         const targetChanges = new Map(changes);
         // Reconcile unresolved keys directly to the requested policy. Reapplying
         // a rejected old value first would prevent callers from clearing it.
@@ -1048,23 +1050,26 @@ export class RpcClient {
           const previous = details.pendingRestores.get(key) ??
             this.pageOverrides.get(key) ?? {...override, value: undefined};
           await this.applyPageOverride(target, override, signal);
-          updated.push({target, key, previous});
+          targetUpdates.push({key, previous});
           details.pendingRestores.delete(key);
         }
-      }
+      });
       signal.throwIfAborted();
       this.pageOverrides = next;
     } catch (error) {
-      for (const {target, key, previous} of updated.reverse()) {
-        try {
-          await this.applyPageOverride(target, previous, signal);
-        } catch (rollbackError) {
-          if (!signal.aborted) {
-            this.initializedPageTargets.get(target)?.pendingRestores.set(key, previous);
+      // All in-flight target updates have settled before any rollback starts.
+      await forEachPageTarget([...updated], async ([target, targetUpdates]) => {
+        for (const {key, previous} of targetUpdates.reverse()) {
+          try {
+            await this.applyPageOverride(target, previous, signal);
+          } catch (rollbackError) {
+            if (!signal.aborted) {
+              this.initializedPageTargets.get(target)?.pendingRestores.set(key, previous);
+            }
+            log.warn(`Cannot restore the previous page override: ${rollbackError}`);
           }
-          log.warn(`Cannot restore the previous page override: ${rollbackError}`);
         }
-      }
+      });
       throw error;
     }
   }
@@ -1079,7 +1084,7 @@ export class RpcClient {
       // wait for its initialization while holding the settings lock.
       await this.sendPageOverride(target, override, signal);
     } catch (error: any) {
-      if (MISSING_APP_ERROR_PATTERN.test(error.message)) {
+      if (isMissingAppError(error, target.appIdKey)) {
         this.removePageTargetsForApp(target.appIdKey);
       } else if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
         this.initializedPageTargets.delete(key);
@@ -1188,7 +1193,7 @@ export class RpcClient {
         try {
           await this.sendPageOverride(target, override, signal);
         } catch (error: any) {
-          if (MISSING_APP_ERROR_PATTERN.test(error.message)) {
+          if (isMissingAppError(error, appIdKey)) {
             this.removePageTargetsForApp(appIdKey);
             throw error;
           }
@@ -1497,4 +1502,38 @@ function toPageSelectionKey(appIdKey: AppIdKey, pageIdKey: PageIdKey): string {
 /** Use the same normalized key for registration, destruction and failed initialization. */
 function toPageTargetKey(appIdKey: AppIdKey, targetId: TargetId): string {
   return JSON.stringify([String(appIdKey), targetId]);
+}
+
+/** Recognize only complete missing-app responses, not unrelated application errors. */
+function isMissingAppError(error: unknown, appIdKey: AppIdKey): boolean {
+  const errorMessage = (error as {message?: unknown} | null)?.message;
+  if (typeof errorMessage !== 'string') {
+    return false;
+  }
+  const message = errorMessage.replace(/^Remote debugger error with code '-?\d+': /, '');
+  if (/^app not found\.?$/i.test(message)) {
+    return true;
+  }
+  const match = /^Application PID:(\d+) does not exist\.?$/i.exec(message);
+  return !!match && match[1] === String(appIdKey).replace(/^PID:/i, '');
+}
+
+/** Stop scheduling on failure, but drain every started task before rejecting. */
+async function forEachPageTarget<T>(targets: T[], action: (target: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failure: {error: unknown} | undefined;
+  const worker = async () => {
+    while (!failure && next < targets.length) {
+      const target = targets[next++];
+      try {
+        await action(target);
+      } catch (error) {
+        failure ??= {error};
+      }
+    }
+  };
+  await Promise.all(Array.from({length: Math.min(PAGE_OVERRIDE_TARGET_CONCURRENCY, targets.length)}, worker));
+  if (failure) {
+    throw failure.error;
+  }
 }

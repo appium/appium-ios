@@ -410,23 +410,68 @@ describe('page settings connection lifecycle', function () {
     });
   }
 
-  for (const message of ['app not found', 'Application PID:123 does not exist']) {
+  for (const message of [
+    'app not found',
+    'Application PID:123 does not exist',
+    "Remote debugger error with code '-32000': Application PID:123 does not exist.",
+  ]) {
+    it(`removes a missing app during initialization: ${message}`, async function () {
+      const {client} = connectedClient({webInspectorSettings: {userAgent: 'First/1'}});
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'existing', '1', 'PID:123');
+      await addPage(client, 'healthy', '1', 'alive');
+      send.withArgs('Page.overrideUserAgent', sinon.match({appIdKey: 'PID:123'})).rejects(new Error(message));
+      await addPage(client, 'gone', '2', 'PID:123');
+      send.resetHistory();
+      await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
+      sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'alive', value: 'Next/2'});
+    });
+
     it(`removes every stale target of a missing app: ${message}`, async function () {
       const {client} = connectedClient();
       const send = sinon.stub(client, 'sendToDevice').resolves();
-      await addPage(client, 'stale-1', '1', 'gone');
-      await addPage(client, 'stale-2', '2', 'gone');
+      await addPage(client, 'stale-1', '1', 'PID:123');
+      await addPage(client, 'stale-2', '2', 'PID:123');
       await addPage(client, 'healthy', '1', 'alive');
-      send.withArgs('Page.overrideUserAgent', sinon.match({appIdKey: 'gone'})).rejects(new Error(message));
+      send.withArgs('Page.overrideUserAgent', sinon.match({appIdKey: 'PID:123'})).rejects(new Error(message));
       await client.setWebInspectorPageSettings({userAgent: 'First/1'});
       assert.deepStrictEqual(
         send.getCalls().map(({args}) => args[1].targetId),
-        ['stale-1', 'healthy'],
+        // Both requests may be in flight before the app is reported missing.
+        ['stale-1', 'stale-2', 'healthy'],
       );
       send.resetHistory();
       await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
       sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'alive', value: 'Next/2'});
     });
+  }
+
+  for (const message of [
+    'Application setting not found',
+    'The application database does not exist',
+    'app not found while looking up an optional setting',
+    'Application PID:999 does not exist',
+    "Remote debugger error with code '-32000': Application setting not found",
+  ]) {
+    for (const duringInitialization of [false, true]) {
+      it(`retains targets on unrelated errors (init=${duringInitialization}): ${message}`, async function () {
+        const {client} = connectedClient({
+          webInspectorSettings: duringInitialization ? {userAgent: 'Rejected/1'} : {},
+        });
+        const send = sinon.stub(client, 'sendToDevice').resolves();
+        send.withArgs('Page.overrideUserAgent', sinon.match({value: 'Rejected/1'})).rejects(new Error(message));
+        await addPage(client, 'first', '1', 'PID:123');
+        await addPage(client, 'second', '2', 'PID:123');
+        await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'Rejected/1'}), {message});
+        send.resetHistory();
+        await client.setWebInspectorPageSettings({userAgent: 'Accepted/2'});
+        assert.deepStrictEqual(
+          send.getCalls().map(({args}) => args[1].targetId),
+          ['first', 'second'],
+        );
+        assert.ok(send.getCalls().every(({args}) => args[1].value === 'Accepted/2'));
+      });
+    }
   }
 
   it('forgets all targets when the application disconnect notification arrives', async function () {

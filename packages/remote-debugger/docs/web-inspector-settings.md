@@ -148,9 +148,20 @@ targets and later connections attempt the retained policy during initialization.
   Application-disconnect notifications and recognized missing-app/target errors
   trigger this removal. Unrecognized errors reject runtime updates rather than
   being assumed to mean that a target disappeared.
+  Missing-app recognition accepts complete `app not found` or
+  `Application PID:<digits> does not exist` responses (optionally ending in a
+  period), including the RPC error prefix added by this client. A PID-bearing
+  response must match the destination app. Messages merely containing similar
+  words, or referring to another app's PID, do not remove tracked targets.
 - Registration and policy updates share a lock to prevent stale policy application.
-  Override requests are sequential, so total latency can grow with the number of
-  targets and settings. The 10-second deadline applies per request, not per batch.
+  Runtime updates run on up to four targets concurrently, with commands for each
+  target kept in order. On failure, new target tasks stop being scheduled and all
+  started tasks settle before rollback begins. Rollback also runs on up to four
+  targets concurrently, restoring each target's completed changes in reverse order.
+  The shared lock is held through rollback, so queued updates and override
+  initialization cannot overlap the transaction. Override initialization itself
+  remains serialized under this lock. Total latency can still grow with the number
+  of targets and settings; the 10-second deadline is per request, not per batch.
 
 Await each update before starting work that depends on it. A slow target can delay
 other updates and target initialization; queuing more setters does not bypass
