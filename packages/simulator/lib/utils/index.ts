@@ -7,7 +7,12 @@ export {
   MIN_DEVICE_HUB_XCODE_VERSION,
 } from './constants.js';
 export {NSUserDefaults, toXmlArg, generateDefaultsCommandArgs} from './defaults.js';
-export {DeviceHubAccessError, assertDeviceHubPreferencesAccess, getDeviceHubPreferencesPath} from './device-hub.js';
+export {
+  DeviceHubAccessError,
+  assertDeviceHubPreferencesAccess,
+  getDeviceHubPreferencesPath,
+  macOs,
+} from './device-hub.js';
 export {createSimulator} from './create-simulator.js';
 export {listSimulators} from './list-simulators.js';
 export {getSimulatorInfo, simExists} from './devices.js';

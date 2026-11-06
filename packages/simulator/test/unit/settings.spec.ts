@@ -6,7 +6,7 @@ import {fs, plist} from '@appium/support';
 import sinon from 'sinon';
 
 import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
-import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults} from '../../lib/utils/index.js';
+import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, macOs} from '../../lib/utils/index.js';
 
 describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
@@ -27,6 +27,7 @@ describe('DeviceHub preferences', () => {
     sandbox.stub(fs, 'mkdir').resolves();
     sandbox.stub(fs, 'stat').resolves({} as any);
     access = sandbox.stub(fs, 'access').resolves();
+    sandbox.stub(macOs, 'getMajorVersion').resolves(27);
     parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
     update = sandbox.stub(NSUserDefaults.prototype, 'update').resolves();
   });
