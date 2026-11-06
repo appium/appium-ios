@@ -7,6 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
 #import "FBCustomCommands.h"
 #import "FBElementCache.h"
@@ -20,9 +21,17 @@
 #if !TARGET_OS_TV && __clang_major__ >= 15
 
 @interface FBCustomCommands (FBWDATestable)
++ (id<FBResponsePayload>)handleGetDeviceInfo:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleKeyboardInput:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleGetSimulatedHingeAngle:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSetSimulatedHingeAngle:(FBRouteRequest *)request;
+@end
+
+// A hinge object without an angle accessor: detection must not read the angle.
+@interface FBHingeDeviceDouble : NSObject
+@property (nonatomic, strong) NSObject *hinge;
+@end
+@implementation FBHingeDeviceDouble
 @end
 
 @interface FBCustomCommandsTests : XCTestCase
@@ -91,6 +100,55 @@
   RouteResponse *response = [RouteResponse new];
   [[FBCustomCommands handleSetSimulatedHingeAngle:request] dispatchWithResponse:response];
   return [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
+}
+
+- (BOOL)hasHingeForDevice:(id)device
+{
+  SEL selector = @selector(fb_hasHinge);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
+  BOOL (*hasHinge)(id, SEL) = (BOOL (*)(id, SEL))class_getMethodImplementation(XCUIDevice.class, selector);
+#pragma clang diagnostic pop
+  return hasHinge(device, selector);
+}
+
+- (void)testHasHingeUsesNativeHingeWithoutReadingItsAngle
+{
+  FBHingeDeviceDouble *device = [FBHingeDeviceDouble new];
+  device.hinge = [NSObject new];
+  XCTAssertTrue([self hasHingeForDevice:device]);
+  device.hinge = nil;
+  // A supported getter returning nil must not fall back to CoreMotion,
+  // including when this test runs on a hinge-capable simulator.
+  XCTAssertFalse([self hasHingeForDevice:device]);
+}
+
+- (void)testHasHingeSupportsLegacyXCTest
+{
+  // No hinge selector: exercise the CoreMotion fallback on the current device.
+  BOOL hasHinge = [self hasHingeForDevice:[NSObject new]];
+  if (XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
+    XCTAssertTrue(hasHinge);
+  }
+  NSLog(@"Legacy hasHinge: %@", hasHinge ? @"true" : @"false");
+}
+
+- (void)testDeviceInfoIncludesHasHinge
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/device/info"]
+                                                  parameters:@{}
+                                                   arguments:@{}];
+  RouteResponse *response = [RouteResponse new];
+  [[FBCustomCommands handleGetDeviceInfo:request] dispatchWithResponse:response];
+  NSDictionary *body = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
+  id hasHinge = body[@"value"][@"hasHinge"];
+  XCTAssertNotNil(hasHinge);
+  if (nil == hasHinge) {
+    return;
+  }
+  XCTAssertEqual(CFGetTypeID((__bridge CFTypeRef)hasHinge), CFBooleanGetTypeID());
+  XCTAssertEqual([hasHinge boolValue], XCUIDevice.sharedDevice.fb_hasHinge);
+  NSLog(@"Device info hasHinge: %@", [hasHinge boolValue] ? @"true" : @"false");
 }
 
 - (void)testHingeAngleReading
