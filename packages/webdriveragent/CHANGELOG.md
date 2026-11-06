@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.17.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.10...appium-webdriveragent@16.17.11) (2026-11-06)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
 ## [16.17.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.9...appium-webdriveragent@16.17.10) (2026-11-05)
 
 ### Bug Fixes

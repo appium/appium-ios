@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.14.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.14.0...@appium/coresim@1.14.1) (2026-11-06)
+
+### Bug Fixes
+
+* **coresim:** include the failure reason and underlying errors in operation errors ([#163](https://github.com/appium/appium-ios/issues/163)) ([0032a91](https://github.com/appium/appium-ios/commit/0032a918d11d6d883f2896b907b0fbca2a734353))
+
+
 ## [1.14.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.13.2...@appium/coresim@1.14.0) (2026-10-24)
 
 ### Features
