@@ -1,3 +1,5 @@
+import {util} from '@appium/support';
+
 /** Web Inspector methods shared by initial policy construction and runtime updates. */
 export const PAGE_OVERRIDE_METHODS = {
   setting: 'Page.overrideSetting',
@@ -43,8 +45,49 @@ export interface PageOverride {
   value: boolean | string | undefined;
 }
 
+function validateObject(
+  value: unknown,
+  path: string,
+  keys: readonly string[],
+): asserts value is Record<string, unknown> {
+  if (!util.isPlainObject(value)) {
+    throw new TypeError(`${path} must be an object`);
+  }
+  for (const key of Object.keys(value as object)) {
+    if (!keys.includes(key)) {
+      throw new TypeError(`Unknown Web Inspector setting: ${path}.${key}`);
+    }
+  }
+}
+
+/** Validate JavaScript callers before retaining a policy or sending any commands. */
+export function validateWebInspectorPageSettings(settings: unknown): asserts settings is WebInspectorPageSettings {
+  validateObject(settings, 'webInspectorSettings', WEB_INSPECTOR_SETTING_KEYS);
+  if (settings.pageSettings !== undefined) {
+    validateObject(settings.pageSettings, 'pageSettings', PAGE_SETTING_NAMES);
+    for (const [name, value] of Object.entries(settings.pageSettings)) {
+      if (value !== undefined && typeof value !== 'boolean') {
+        throw new TypeError(`pageSettings.${name} must be a boolean`);
+      }
+    }
+  }
+  if (settings.userPreferences !== undefined) {
+    validateObject(settings.userPreferences, 'userPreferences', Object.keys(USER_PREFERENCE_VALUES));
+    for (const [name, value] of Object.entries(settings.userPreferences)) {
+      const allowed: readonly string[] = USER_PREFERENCE_VALUES[name as UserPreferenceName];
+      if (value !== undefined && (typeof value !== 'string' || !allowed.includes(value))) {
+        throw new TypeError(`userPreferences.${name} must be one of: ${allowed.join(', ')}`);
+      }
+    }
+  }
+  if (settings.userAgent !== undefined && typeof settings.userAgent !== 'string') {
+    throw new TypeError('userAgent must be a string');
+  }
+}
+
 /** Snapshot supported values; callers cannot mutate the retained policy afterward. */
 export function toPageOverrides(settings: WebInspectorPageSettings): Map<string, PageOverride> {
+  validateWebInspectorPageSettings(settings);
   const result = new Map<string, PageOverride>();
   for (const setting of PAGE_SETTING_NAMES) {
     const value = settings.pageSettings?.[setting];
@@ -64,20 +107,5 @@ export function toPageOverrides(settings: WebInspectorPageSettings): Map<string,
   return result;
 }
 
-// Not exposed: iPad mini (A17 Pro), iPadOS 27.2 Safari and the matching Simulator
-// accepted these overrides without observable effects after reload:
-// - InputTypeMonthEnabled / InputTypeWeekEnabled: both input types stayed enabled.
-// - FullScreenEnabled: document.fullscreenEnabled stayed true. On physical iPad,
-//   requestFullscreen also succeeded with false in an HTTPS follow-up test.
-// - PointerLockEnabled / NotificationsEnabled / PushAPIEnabled: enabling did not
-//   expose the APIs (also checked on HTTPS on physical iPad, localhost on Simulator).
-// Installed web apps were not tested.
-// Do not interpret command acceptance as proof of functionality.
-//
-// Also not exposed because effects were NOT verified (rather than proven broken):
-// MockCaptureDevicesEnabled (enumeration unchanged; capture not requested),
-// FixedBackgroundsPaintRelativeToDocument, ShowDebugBorders, ShowRepaintCounter,
-// NeedsSiteSpecificQuirks, PrivateClickMeasurementDebugModeEnabled, ITPDebugModeEnabled.
-//
-// https://github.com/WebKit/WebKit/blob/main/Source/JavaScriptCore/inspector/protocol/Page.json
-//
+// Verification scope and excluded protocol settings are documented in
+// docs/web-inspector-settings.md.

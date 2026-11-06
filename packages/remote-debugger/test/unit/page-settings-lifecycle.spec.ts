@@ -84,7 +84,7 @@ describe('page settings connection lifecycle', function () {
               ? {...settings, pageSettings: {...settings.pageSettings, ScriptEnabled: false}}
               : settings;
         await client.setWebInspectorPageSettings(next);
-        assert.equal(send.callCount, update === 'cleared' ? 7 : update === 'extended' ? 4 : 3);
+        assert.equal(send.callCount, update === 'unchanged' ? 3 : 4);
         const expected = new Map(
           [...toPageOverrides(next).values()].map((override) => [
             override.params.setting ?? override.params.name ?? 'userAgent',
@@ -99,6 +99,68 @@ describe('page settings connection lifecycle', function () {
       });
     }
   }
+
+  for (const settings of [
+    {pageSettings: {WebSecurityEnabled: false}},
+    {userPreferences: {PrefersColorScheme: 'Dark' as const}},
+    {userAgent: 'Rejected/1'},
+  ]) {
+    for (const clear of [false, true]) {
+      it(`replaces persistently rejected initialization values (${JSON.stringify(settings)}, clear=${clear})`, async function () {
+        const {client} = connectedClient({webInspectorSettings: settings});
+        const initial = [...toPageOverrides(settings).values()][0];
+        const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
+          if (opts.value === initial.value) {
+            throw Object.assign(new Error('Rejected value'), {code: -32000});
+          }
+        });
+        await addPage(client, 'first');
+        await assert.rejects(client.setWebInspectorPageSettings(settings), /Rejected value/);
+        send.resetHistory();
+        const next: WebInspectorPageSettings = clear
+          ? {}
+          : initial.method === 'Page.overrideSetting'
+            ? {pageSettings: {WebSecurityEnabled: true}}
+            : initial.method === 'Page.overrideUserPreference'
+              ? {userPreferences: {PrefersColorScheme: 'Light'}}
+              : {userAgent: 'Accepted/2'};
+        await client.setWebInspectorPageSettings(next);
+        sinon.assert.calledOnce(send);
+        assert.equal(send.firstCall.args[1].value, [...toPageOverrides(next).values()][0]?.value);
+        send.resetHistory();
+        await client.setWebInspectorPageSettings(next);
+        sinon.assert.notCalled(send);
+        await addPage(client, 'future', '2');
+        assert.equal(send.callCount, clear ? 0 : 1);
+      });
+    }
+  }
+
+  it('retains pending repairs when replacing them succeeds but a later target rejects the batch', async function () {
+    const {client} = connectedClient({webInspectorSettings: {userAgent: 'Old/1'}});
+    let failOld = true;
+    let failNew = true;
+    const state = new Map<string, unknown>();
+    const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
+      if ((failOld && opts.value === 'Old/1') || (failNew && opts.targetId === 'second' && opts.value === 'New/2')) {
+        throw new Error('Rejected value');
+      }
+      state.set(String(opts.targetId), opts.value);
+    });
+    await addPage(client, 'first');
+    await addPage(client, 'second', '2');
+    await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'New/2'}), /Rejected value/);
+    assert.equal(state.get('first'), 'New/2');
+    // The failed rollback must still be repaired even though the retained policy is unchanged.
+    await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'Old/1'}), /Rejected value/);
+    failOld = false;
+    failNew = false;
+    await client.setWebInspectorPageSettings({userAgent: 'Old/1'});
+    assert.deepStrictEqual([...state.values()], ['Old/1', 'Old/1']);
+    send.resetHistory();
+    await client.setWebInspectorPageSettings({userAgent: 'Old/1'});
+    sinon.assert.notCalled(send);
+  });
 
   for (const [code, message] of [
     [-32601, "'Page.overrideSetting' was not found"],
@@ -169,7 +231,10 @@ describe('page settings connection lifecycle', function () {
     }
 
     it(`times out initialization without blocking other targets (full=${fullPageInitialization})`, async function () {
-      const {client} = connectedClient({fullPageInitialization, webInspectorSettings: {userAgent: 'Initial/1'}});
+      const {client, initialize} = connectedClient({
+        fullPageInitialization,
+        webInspectorSettings: {userAgent: 'Initial/1'},
+      });
       const entered = deferred();
       const observed: {targetId: string; value: string}[] = [];
       sinon.stub(client, 'sendMessage').callsFake(async (message) => {
@@ -188,6 +253,9 @@ describe('page settings connection lifecycle', function () {
         const healthy = addPage(client, 'healthy', '2');
         await clock.tickAsync(10000);
         await Promise.all([hung, healthy]);
+        for (const method of ['Runtime.enable', 'Inspector.initialized', 'Target.resume']) {
+          sinon.assert.calledWith(initialize, method, sinon.match({targetId: 'hung'}));
+        }
         await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
         assert.deepStrictEqual(observed, [
           {targetId: 'hung', value: 'Initial/1'},
@@ -277,11 +345,11 @@ describe('page settings connection lifecycle', function () {
         const after = [...toPageOverrides(next).values()][0]?.value;
         const state = new Map<string, boolean | string | undefined>();
         let fail = false;
+        let keepRejectingRestore = false;
         const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
           if (
-            fail &&
-            ((opts.targetId === 'second' && opts.value === after) ||
-              (opts.targetId === 'first' && opts.value === before))
+            (fail && opts.targetId === 'second' && opts.value === after) ||
+            ((fail || keepRejectingRestore) && opts.targetId === 'first' && opts.value === before)
           ) {
             throw new Error('Temporary protocol failure');
           }
@@ -295,12 +363,14 @@ describe('page settings connection lifecycle', function () {
         // A failed repair must also reject; it must not be reported as a no-op success.
         await assert.rejects(client.setWebInspectorPageSettings(previous), /Temporary protocol failure/);
         fail = false;
+        // Retrying the new policy must not require the old, still rejected value.
+        keepRejectingRestore = retryNext;
         send.resetHistory();
         const requested = retryNext ? next : previous;
         await client.setWebInspectorPageSettings(requested);
         assert.equal(state.get('first'), retryNext ? after : before);
         assert.equal(state.get('second'), retryNext ? after : before);
-        assert.equal(send.callCount, retryNext ? 3 : 1);
+        assert.equal(send.callCount, retryNext ? 2 : 1);
         // A successful repair clears the pending work.
         send.resetHistory();
         await client.setWebInspectorPageSettings(requested);

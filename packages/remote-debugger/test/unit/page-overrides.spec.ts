@@ -3,7 +3,12 @@ import {describe, it} from 'node:test';
 
 import sinon from 'sinon';
 
-import {PAGE_SETTING_NAMES, USER_PREFERENCE_VALUES, type UserPreferenceName} from '../../lib/page-overrides.js';
+import {
+  PAGE_SETTING_NAMES,
+  USER_PREFERENCE_VALUES,
+  toPageOverrides,
+  type UserPreferenceName,
+} from '../../lib/page-overrides.js';
 import {RemoteDebuggerRealDevice} from '../../lib/remote-debugger-real-device.js';
 import {RemoteDebugger} from '../../lib/remote-debugger.js';
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
@@ -20,6 +25,58 @@ async function addPage(client: RpcClient, targetId: string, pageIdKey = '1', isP
 }
 
 describe('page overrides', function () {
+  const invalidSettings = [
+    null,
+    [],
+    false,
+    {pageSetting: {}},
+    {pageSettings: null},
+    {pageSettings: []},
+    {pageSettings: {WebSecurityEnable: false}},
+    {pageSettings: {WebSecurityEnabled: 'false'}},
+    {pageSettings: {WebSecurityEnabled: null}},
+    {userPreferences: 'Dark'},
+    {userPreferences: {Unknown: 'Dark'}},
+    {userPreferences: {PrefersColorScheme: 'dark'}},
+    {userPreferences: {PrefersContrast: 'Dark'}},
+    {userAgent: 123},
+  ];
+  for (const settings of invalidSettings) {
+    it(`rejects invalid settings before changing the retained policy: ${JSON.stringify(settings)}`, async function () {
+      assert.throws(() => toPageOverrides(settings as any), TypeError);
+      assert.throws(() => new RpcClient({webInspectorSettings: settings as any}), TypeError);
+      assert.throws(() => new RemoteDebugger({webInspectorSettings: settings as any}), TypeError);
+      const remote = new RemoteDebugger({webInspectorSettings: {userAgent: 'Retained/1'}});
+      await assert.rejects(remote.setWebInspectorPageSettings(settings as any), TypeError);
+      await remote.initRpcClient();
+      const client = remote.requireRpcClient();
+      client.isConnected = true;
+      sinon.stub(client, 'send').resolves();
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'first');
+      sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {value: 'Retained/1'});
+      send.resetHistory();
+      await assert.rejects(remote.setWebInspectorPageSettings(settings as any), TypeError);
+      await assert.rejects(client.setWebInspectorPageSettings(settings as any), TypeError);
+      sinon.assert.notCalled(send);
+      await addPage(client, 'next', '2');
+      sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {value: 'Retained/1'});
+    });
+  }
+
+  it('accepts omitted values and an empty user agent', function () {
+    assert.deepStrictEqual(
+      [
+        ...toPageOverrides({
+          pageSettings: {ImagesEnabled: undefined},
+          userPreferences: undefined,
+          userAgent: '',
+        }).values(),
+      ],
+      [{method: 'Page.overrideUserAgent', params: {}, value: ''}],
+    );
+  });
+
   for (const setting of PAGE_SETTING_NAMES) {
     it(`retains explicit false, updates and removes ${setting} on current and future targets`, async function () {
       const client = connectedClient();

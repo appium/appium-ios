@@ -152,7 +152,7 @@ export class RpcClient {
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 
     this.fullPageInitialization = fullPageInitialization;
-    this.pageOverrides = toPageOverrides(opts.webInspectorSettings ?? {});
+    this.pageOverrides = toPageOverrides(opts.webInspectorSettings === undefined ? {} : opts.webInspectorSettings);
 
     this.bundleId = bundleId;
     this.platformVersion = platformVersion;
@@ -1022,15 +1022,6 @@ export class RpcClient {
 
   /** Called under the settings lock; publish the new policy only after every update succeeds. */
   private async replacePageOverrides(next: Map<string, PageOverride>, signal: AbortSignal): Promise<void> {
-    // Failed initialization or rollback can leave a page out of sync with the retained policy.
-    // Repair it even when the requested policy has no changes, including resets
-    // for overrides introduced by the failed update.
-    for (const [key, target] of this.initializedPageTargets) {
-      for (const [overrideKey, override] of target.pendingRestores) {
-        await this.applyPageOverride(key, override, signal);
-        target.pendingRestores.delete(overrideKey);
-      }
-    }
     const changes = new Map<string, PageOverride>();
     for (const key of new Set([...next.keys(), ...this.pageOverrides.keys()])) {
       const previous = this.pageOverrides.get(key);
@@ -1046,11 +1037,19 @@ export class RpcClient {
     }
     const updated: {target: string; key: string; previous: PageOverride}[] = [];
     try {
-      for (const target of this.initializedPageTargets.keys()) {
-        for (const [key, override] of changes) {
-          const previous = this.pageOverrides.get(key) ?? {...override, value: undefined};
+      for (const [target, details] of this.initializedPageTargets) {
+        const targetChanges = new Map(changes);
+        // Reconcile unresolved keys directly to the requested policy. Reapplying
+        // a rejected old value first would prevent callers from clearing it.
+        for (const [key, restore] of details.pendingRestores) {
+          targetChanges.set(key, next.get(key) ?? {...restore, value: undefined});
+        }
+        for (const [key, override] of targetChanges) {
+          const previous = details.pendingRestores.get(key) ??
+            this.pageOverrides.get(key) ?? {...override, value: undefined};
           await this.applyPageOverride(target, override, signal);
           updated.push({target, key, previous});
+          details.pendingRestores.delete(key);
         }
       }
       signal.throwIfAborted();
@@ -1193,8 +1192,15 @@ export class RpcClient {
             this.removePageTargetsForApp(appIdKey);
             throw error;
           }
-          if (signal.aborted || error instanceof TimeoutError || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+          if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
             throw error;
+          }
+          if (error instanceof TimeoutError) {
+            // Its override state is unknown. Stop sending overrides to this target,
+            // but still enable the core domains and finish the inspector handshake.
+            this.initializedPageTargets.delete(toPageTargetKey(appIdKey, targetId));
+            log.warn(`Cannot initialize page overrides: ${error.message}`);
+            return;
           }
           // MethodNotFound and InvalidParams indicate an unavailable method or
           // unsupported setting/preference. Other failures must be repaired before

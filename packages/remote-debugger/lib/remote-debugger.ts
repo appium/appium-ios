@@ -14,7 +14,7 @@ import * as messageHandlerMixins from './mixins/message-handlers.js';
 import * as miscellaneousMixins from './mixins/misc.js';
 import * as navigationMixins from './mixins/navigate.js';
 import * as screenshotMixins from './mixins/screenshot.js';
-import type {WebInspectorPageSettings} from './page-overrides.js';
+import {validateWebInspectorPageSettings, type WebInspectorPageSettings} from './page-overrides.js';
 import {RpcClientSimulator, type AutomationSession} from './rpc/index.js';
 import type {RpcClient} from './rpc/rpc-client.js';
 import type {RemoteDebuggerOptions, AppDict, EventListener, PageIdKey, AppIdKey} from './types.js';
@@ -166,7 +166,9 @@ export class RemoteDebugger extends EventEmitter {
     }
 
     this._fullPageInitialization = fullPageInitialization;
-    this._webInspectorSettings = structuredClone(opts.webInspectorSettings ?? {});
+    const webInspectorSettings = opts.webInspectorSettings === undefined ? {} : opts.webInspectorSettings;
+    validateWebInspectorPageSettings(webInspectorSettings);
+    this._webInspectorSettings = structuredClone(webInspectorSettings);
     this._targetCreationTimeoutMs = targetCreationTimeoutMs;
 
     this._pageLoadStrategy = pageLoadStrategy;
@@ -175,8 +177,9 @@ export class RemoteDebugger extends EventEmitter {
     this.setup();
   }
 
-  /** Replaces the complete policy. Omitted entries are reset; {} clears all overrides. */
+  /** Replaces the retained policy. Omitted entries are reset; {} clears all policy overrides. */
   async setWebInspectorPageSettings(settings: WebInspectorPageSettings): Promise<void> {
+    validateWebInspectorPageSettings(settings);
     const next = structuredClone(settings);
     await this._rpcClient?.setWebInspectorPageSettings(next);
     this._webInspectorSettings = next;
