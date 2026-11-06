@@ -115,8 +115,6 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
   if ([self respondsToSelector:hingeSelector]) {
     return nil != ((id (*)(id, SEL))objc_msgSend)(self, hingeSelector);
   }
-  // Older XCTest versions do not expose XCUIDevice.hinge. Sensor availability
-  // does not require angle subscriptions or the HID injection APIs.
   return FBHasAvailableHinge();
 #else
   return NO;
