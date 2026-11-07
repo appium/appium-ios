@@ -23,7 +23,13 @@ import type {
   RunOptions,
   LocalizationOptions,
 } from '../types.js';
-import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, generateDefaultsCommandArgs} from '../utils/index.js';
+import {
+  DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
+  NSUserDefaults,
+  assertDeviceHubPreferencesAccess,
+  generateDefaultsCommandArgs,
+  getDeviceHubPreferencesPath,
+} from '../utils/index.js';
 
 declare module '../simulator-xcode-15.js' {
   interface SimulatorXcode15 extends HasSettings {}
@@ -410,18 +416,11 @@ async function updateDeviceHubPreferences(
   if (!updatePasteboard && Object.keys(prefsToUpdate).length === 0) {
     return true;
   }
-  const plistPath = path.resolve(
-    homeFolderPath,
-    'Library',
-    'Containers',
-    DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
-    'Data',
-    'Library',
-    'Preferences',
-    `${DEVICE_HUB_UI_CLIENT_BUNDLE_ID}.plist`,
-  );
+  const plistPath = getDeviceHubPreferencesPath(homeFolderPath);
   return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
     try {
+      // A denied container is reported as a warning with a hint, not a failure of the whole run
+      await assertDeviceHubPreferencesAccess(homeFolderPath);
       if (updatePasteboard) {
         // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
         const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
