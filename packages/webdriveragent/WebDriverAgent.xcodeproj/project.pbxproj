@@ -1224,6 +1224,7 @@
 		EEDFE1211D9C06F800E6FFE5 /* XCUIDevice+FBHealthCheck.h in Headers */ = {isa = PBXBuildFile; fileRef = EEDFE11F1D9C06F800E6FFE5 /* XCUIDevice+FBHealthCheck.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		EEDFE1221D9C06F800E6FFE5 /* XCUIDevice+FBHealthCheck.m in Sources */ = {isa = PBXBuildFile; fileRef = EEDFE1201D9C06F800E6FFE5 /* XCUIDevice+FBHealthCheck.m */; };
 		EEE16E971D33A25500172525 /* FBConfigurationTests.m in Sources */ = {isa = PBXBuildFile; fileRef = EEE16E961D33A25500172525 /* FBConfigurationTests.m */; };
+		71A7EB002C800001001DA4F2 /* FBScreenRecordingContainerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 71A7EAFF2C800001001DA4F2 /* FBScreenRecordingContainerTests.m */; };
 		EEE376431D59F81400ED88DD /* XCUIDevice+FBRotation.h in Headers */ = {isa = PBXBuildFile; fileRef = EEE3763D1D59F81400ED88DD /* XCUIDevice+FBRotation.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		EEE376441D59F81400ED88DD /* XCUIDevice+FBRotation.m in Sources */ = {isa = PBXBuildFile; fileRef = EEE3763E1D59F81400ED88DD /* XCUIDevice+FBRotation.m */; };
 		EEE376451D59F81400ED88DD /* XCUIElement+FBUtilities.h in Headers */ = {isa = PBXBuildFile; fileRef = EEE3763F1D59F81400ED88DD /* XCUIElement+FBUtilities.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1994,6 +1995,7 @@
 		EEDFE1201D9C06F800E6FFE5 /* XCUIDevice+FBHealthCheck.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "XCUIDevice+FBHealthCheck.m"; sourceTree = "<group>"; };
 		EEDFE1231D9C08C700E6FFE5 /* XCUIDeviceHealthCheckTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = XCUIDeviceHealthCheckTests.m; sourceTree = "<group>"; };
 		EEE16E961D33A25500172525 /* FBConfigurationTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBConfigurationTests.m; sourceTree = "<group>"; };
+		71A7EAFF2C800001001DA4F2 /* FBScreenRecordingContainerTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBScreenRecordingContainerTests.m; sourceTree = "<group>"; };
 		EEE3763D1D59F81400ED88DD /* XCUIDevice+FBRotation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "XCUIDevice+FBRotation.h"; sourceTree = "<group>"; };
 		EEE3763E1D59F81400ED88DD /* XCUIDevice+FBRotation.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "XCUIDevice+FBRotation.m"; sourceTree = "<group>"; };
 		EEE3763F1D59F81400ED88DD /* XCUIElement+FBUtilities.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "XCUIElement+FBUtilities.h"; sourceTree = "<group>"; };
@@ -2750,6 +2752,7 @@
 				ADBC39951D07840300327304 /* Doubles */,
 				71A7EAFB1E229302001DA4F2 /* FBClassChainTests.m */,
 				EEE16E961D33A25500172525 /* FBConfigurationTests.m */,
+				71A7EAFF2C800001001DA4F2 /* FBScreenRecordingContainerTests.m */,
 				ADBC39931D0782CD00327304 /* FBElementCacheTests.m */,
 				EE3F8CFF1D08B05F006F02CE /* FBElementTypeTransformerTests.m */,
 				719FF5B81DAD21F5008E0099 /* FBElementUtilitiesTests.m */,
@@ -4927,6 +4930,7 @@
 				EE3F8D001D08B05F006F02CE /* FBElementTypeTransformerTests.m in Sources */,
 				13FFF2F2287DBEE600E561E4 /* XCElementSnapshotDouble.m in Sources */,
 				EEE16E971D33A25500172525 /* FBConfigurationTests.m in Sources */,
+				71A7EB002C800001001DA4F2 /* FBScreenRecordingContainerTests.m in Sources */,
 				ADBC39941D0782CD00327304 /* FBElementCacheTests.m in Sources */,
 				715D554B2229891B00524509 /* FBExceptionHandlerTests.m in Sources */,
 				718F49C8230844330045FE8B /* FBProtocolHelpersTests.m in Sources */,
