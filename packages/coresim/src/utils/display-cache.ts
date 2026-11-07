@@ -13,9 +13,9 @@ interface CachedDisplay {
 interface DisplayCacheEntry {
   display?: CachedDisplay;
   // New operations supersede writers without discarding the mapping.
-  owner: object;
+  owner: symbol;
   // Invalidation also revokes pending writers that observed the old mapping.
-  generation: object;
+  generation: symbol;
 }
 const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, DisplayCacheEntry>>();
 
@@ -39,14 +39,14 @@ export async function beginDisplaySelection(
   let cache = displayCaches.get(client);
   const cacheable = useCache && typeof displayId === 'number';
   let cached: CachedDisplay | undefined;
-  const owner = {};
+  const owner = Symbol('display-cache-owner');
   let entry: DisplayCacheEntry | undefined;
   if (cacheable) {
     if (!cache) {
       cache = new LRUCache<string, DisplayCacheEntry>({max: MAX_CACHED_DEVICES});
       displayCaches.set(client, cache);
     }
-    entry = cache.get(key) ?? {owner, generation: {}};
+    entry = cache.get(key) ?? {owner, generation: Symbol('display-cache-generation')};
     cached = entry.display;
     entry.owner = owner;
     cache.set(key, entry);
@@ -57,7 +57,7 @@ export async function beginDisplaySelection(
   const invalidateCached = () => {
     if (entry && cached && cache?.peek(key) === entry && entry.display === cached) {
       entry.display = undefined;
-      entry.generation = {};
+      entry.generation = Symbol('display-cache-generation');
       if (entry.owner === owner) {
         generation = entry.generation;
       }
