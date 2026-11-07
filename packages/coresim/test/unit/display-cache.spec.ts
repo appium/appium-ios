@@ -22,6 +22,31 @@ describe('shared display cache', () => {
     assert.equal(getDisplays.mock.callCount(), 1);
   });
 
+  it('keeps a warm mapping available to overlapping operations', async () => {
+    const {client, getDisplays} = fixture();
+    const warm = await beginDisplaySelection(client, 'device-a', 1, true);
+    warm.commit(await warm.resolveFresh());
+    const first = await beginDisplaySelection(client, 'device-a', 1, true);
+    const second = await beginDisplaySelection(client, 'device-a', 1, true);
+    assert.equal(first.cachedPortId, 'port-a');
+    assert.equal(second.cachedPortId, 'port-a');
+    first.commit(first.cachedPortId);
+    second.commit(second.cachedPortId);
+    assert.equal(getDisplays.mock.callCount(), 1);
+  });
+
+  it('does not restore a mapping invalidated by another in-flight operation', async () => {
+    const {client, getDisplays} = fixture();
+    const warm = await beginDisplaySelection(client, 'device-a', 1, true);
+    warm.commit(await warm.resolveFresh());
+    const first = await beginDisplaySelection(client, 'device-a', 1, true);
+    const second = await beginDisplaySelection(client, 'device-a', 1, true);
+    getDisplays.mock.mockImplementation(async () => [{id: 'port-b', screenId: 1, displayClass: 0, isMain: true}]);
+    await first.resolveFresh();
+    second.commit(second.cachedPortId);
+    assert.equal((await beginDisplaySelection(client, 'device-a', 1, true)).cachedPortId, undefined);
+  });
+
   it('does not publish a selection before the caller commits success', async () => {
     const {client} = fixture();
     const first = await beginDisplaySelection(client, 'device-a', 1, true);

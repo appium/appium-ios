@@ -12,6 +12,10 @@ interface CachedDisplay {
 }
 interface DisplayCacheEntry {
   display?: CachedDisplay;
+  // New operations supersede writers without discarding the mapping.
+  owner: object;
+  // Invalidation also revokes pending writers that observed the old mapping.
+  generation: object;
 }
 const displayCaches = new WeakMap<NativeSimctl, LRUCache<string, DisplayCacheEntry>>();
 
@@ -24,7 +28,7 @@ export interface DisplaySelection {
   commit(portId: string | undefined): boolean;
 }
 
-/** Reserves cache ownership before lookup. Disabled/default/UUID selections invalidate the device entry. */
+/** Reserves write ownership while retaining the mapping; uncached selections invalidate it. */
 export async function beginDisplaySelection(
   client: NativeSimctl,
   udid: string,
@@ -35,33 +39,64 @@ export async function beginDisplaySelection(
   let cache = displayCaches.get(client);
   const cacheable = useCache && typeof displayId === 'number';
   let cached: CachedDisplay | undefined;
-  const entry: DisplayCacheEntry = {};
+  const owner = {};
+  let entry: DisplayCacheEntry | undefined;
   if (cacheable) {
     if (!cache) {
       cache = new LRUCache<string, DisplayCacheEntry>({max: MAX_CACHED_DEVICES});
       displayCaches.set(client, cache);
     }
-    cached = cache.get(key)?.display;
+    entry = cache.get(key) ?? {owner, generation: {}};
+    cached = entry.display;
+    entry.owner = owner;
     cache.set(key, entry);
   } else {
     cache?.delete(key);
   }
+  let generation = entry?.generation;
+  const invalidateCached = () => {
+    if (entry && cached && cache?.peek(key) === entry && entry.display === cached) {
+      entry.display = undefined;
+      entry.generation = {};
+      if (entry.owner === owner) {
+        generation = entry.generation;
+      }
+    }
+  };
   const device = await client._findDevice(udid);
   let bootMarker = cacheable ? readBootMarker(device) : null;
   const cachedPortId =
     bootMarker !== null && cached && cached.screenId === displayId && cached.bootMarker === bootMarker
       ? cached.portId
       : undefined;
+  if (cached && (bootMarker === null || cached.bootMarker !== bootMarker)) {
+    invalidateCached();
+  }
   return {
     device,
     cachedPortId,
     async resolveFresh() {
+      if (cachedPortId !== undefined) {
+        invalidateCached();
+      }
       bootMarker = cacheable ? readBootMarker(device) : null;
       return await resolveDisplayPortId(device, displayId);
     },
     commit(portId) {
       const sameBoot = bootMarker !== null && readBootMarker(device) === bootMarker;
-      if (sameBoot && bootMarker !== null && cacheable && portId && cache?.peek(key) === entry) {
+      if (!sameBoot) {
+        invalidateCached();
+      }
+      if (
+        sameBoot &&
+        bootMarker !== null &&
+        cacheable &&
+        portId &&
+        entry &&
+        cache?.peek(key) === entry &&
+        entry.owner === owner &&
+        entry.generation === generation
+      ) {
         entry.display = {screenId: displayId, portId, bootMarker};
       }
       return sameBoot;

@@ -180,6 +180,34 @@ describe('opt-in screenshot display cache', () => {
     });
   }
 
+  it('reuses a warm mapping while another capture is in flight', async () => {
+    const f = fixture();
+    await f.capture();
+    let started!: () => void;
+    const start = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let release!: () => void;
+    const finish = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.screenshot.mock.mockImplementationOnce(async () => {
+      started();
+      await finish;
+      return Buffer.from('port-a');
+    });
+    const pending = f.capture();
+    await start;
+    try {
+      assert.equal((await f.capture()).toString(), 'port-a');
+    } finally {
+      release();
+      await pending;
+    }
+    await f.capture();
+    assert.equal(f.getDisplays.mock.callCount(), 1);
+  });
+
   it('refreshes a replaced UUID on a failed hit and retries the same numeric ID', async () => {
     const f = fixture();
     await f.capture();
@@ -199,7 +227,7 @@ describe('opt-in screenshot display cache', () => {
     assert.equal((await f.capture()).toString(), 'new');
   });
 
-  it('does not retry unrelated capture failures or cache failed captures', async () => {
+  it('preserves the mapping after unrelated capture failures without retrying', async () => {
     const f = fixture();
     await f.capture();
     f.screenshot.mock.mockImplementation(async () => {
@@ -210,7 +238,7 @@ describe('opt-in screenshot display cache', () => {
     assert.equal(f.getDisplays.mock.callCount(), 1);
     await assert.rejects(f.capture(), /Encoder failed/);
     assert.equal(f.screenshot.mock.callCount(), 3);
-    assert.equal(f.getDisplays.mock.callCount(), 2);
+    assert.equal(f.getDisplays.mock.callCount(), 1);
   });
 
   for (const [domain, code] of [
@@ -235,6 +263,9 @@ describe('opt-in screenshot display cache', () => {
       );
       assert.equal(f.getDisplays.mock.callCount(), 1);
       assert.equal(f.screenshot.mock.callCount(), 2);
+      f.screenshot.mock.mockImplementation(async () => Buffer.from('port-a'));
+      await f.capture();
+      assert.equal(f.getDisplays.mock.callCount(), 1);
     });
   }
 
