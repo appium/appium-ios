@@ -286,14 +286,19 @@ async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
   if (!fs.existsSync(prefsDir)) {
     return;
   }
-  await execFileAsync('defaults', [
-    'write',
-    path.join(prefsDir, 'com.apple.dt.Devices.plist'),
-    'DevicePreferences',
-    '-dict-add',
-    udid,
-    '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
-  ]);
+  try {
+    await execFileAsync('defaults', [
+      'write',
+      path.join(prefsDir, 'com.apple.dt.Devices.plist'),
+      'DevicePreferences',
+      '-dict-add',
+      udid,
+      '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
+    ]);
+  } catch (err) {
+    // macOS 27 denies other apps' containers unless the runner has Full Disk Access
+    process.emitWarning(`Cannot disable the DeviceHub pasteboard sync, the pasteboard tests may be flaky: ${err}`);
+  }
 }
 
 interface RuntimeFixture {
