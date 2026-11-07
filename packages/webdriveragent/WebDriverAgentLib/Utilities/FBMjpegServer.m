@@ -29,7 +29,7 @@ static const NSUInteger MAX_PENDING_FRAMES_PER_CLIENT = 4;
 static const NSTimeInterval FAILURE_BACKOFF_MIN = 1.0;
 static const NSTimeInterval FAILURE_BACKOFF_MAX = 10.0;
 // The screen lookup is a round trip to testmanagerd, so it is not repeated for every frame.
-static const uint64_t SCREEN_REFRESH_INTERVAL = 1 * NSEC_PER_SEC;
+static const uint64_t SCREEN_REFRESH_INTERVAL = 3 * NSEC_PER_SEC;
 
 static NSString *const SERVER_NAME = @"WDA MJPEG Server";
 static const char *QUEUE_NAME = "JPEG Screenshots Provider Queue";
