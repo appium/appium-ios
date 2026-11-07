@@ -113,7 +113,10 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   if (isCacheValid) {
     return self.cachedScreen;
   }
-  self.cachedScreen = [FBScreen currentScreenWithError:error];
+  // Resolve with the captured id, so the cache key always matches the cached screen.
+  self.cachedScreen = nil == displayId
+    ? XCUIScreen.mainScreen
+    : [FBScreen screenWithDisplayID:displayId.longLongValue error:error];
   self.cachedScreenDisplayId = displayId;
   self.cachedScreenTimestamp = now;
   return self.cachedScreen;
