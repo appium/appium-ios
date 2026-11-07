@@ -6,12 +6,13 @@ import {fs, plist} from '@appium/support';
 import sinon from 'sinon';
 
 import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
-import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults} from '../../lib/utils/index.js';
+import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, macOs} from '../../lib/utils/index.js';
 
 describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
   let update: sinon.SinonStub;
   let parse: sinon.SinonStub;
+  let access: sinon.SinonStub;
   let debug: sinon.SinonStub;
   const sim = {
     udid: 'device-a',
@@ -24,6 +25,9 @@ describe('DeviceHub preferences', () => {
     debug = sandbox.stub(sim.log, 'debug');
     sandbox.stub(fs, 'exists').resolves(false);
     sandbox.stub(fs, 'mkdir').resolves();
+    sandbox.stub(fs, 'stat').resolves({} as any);
+    access = sandbox.stub(fs, 'access').resolves();
+    sandbox.stub(macOs, 'getMajorVersion').resolves(27);
     parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
     update = sandbox.stub(NSUserDefaults.prototype, 'update').resolves();
   });
@@ -120,6 +124,15 @@ describe('DeviceHub preferences', () => {
     assert.equal(update.callCount, 1);
     assert.equal(update.firstCall.args[0].PasteboardAutomaticSync, false);
     assert.equal(update.firstCall.args[0].ConnectHardwareKeyboard, true);
+  });
+
+  it('warns with a Full Disk Access hint and skips DeviceHub if macOS denies container access', async () => {
+    const warn: sinon.SinonStub = sandbox.stub(sim.log, 'warn');
+    access.rejects(Object.assign(new Error('operation not permitted'), {code: 'EPERM'}));
+    assert.equal(await updatePreferences.call(sim as any, {}, {PasteboardAutomaticSync: false}), false);
+    assert.match(warn.lastCall.args[0], /Full Disk Access/);
+    assert.equal(parse.called, false);
+    assert.equal(update.callCount, 1);
   });
 
   it('reports failure if DeviceHub preferences cannot be updated', async () => {
