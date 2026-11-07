@@ -601,3 +601,145 @@ describe('page settings connection lifecycle', function () {
     sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'other', targetId: 'same'});
   });
 });
+
+describe('target lifetime during initialization', function () {
+  for (const fullPageInitialization of [false, true]) {
+    for (const isProvisional of [false, true]) {
+      for (const blockedDomain of ['Inspector.enable', 'Page.enable', 'Runtime.enable']) {
+        for (const removal of ['target', 'app']) {
+          it(`cancels ${blockedDomain} on ${removal} removal (full=${fullPageInitialization}, provisional=${isProvisional})`, async function () {
+            const client = new RpcClient({fullPageInitialization, webInspectorSettings: {userAgent: 'Test/1'}});
+            client.isConnected = true;
+            const entered = deferred();
+            const methods: string[] = [];
+            sinon.stub(client, 'sendMessage').callsFake(async (message) => {
+              const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
+              const command =
+                wrapper.method === 'Target.sendMessageToTarget' ? JSON.parse(wrapper.params.message) : wrapper;
+              methods.push(command.method);
+              if (command.method === blockedDomain) {
+                entered.resolve();
+                return; // The device never responds; removal must cancel the wait.
+              }
+              await (client as any).messageHandler.handleMessage(
+                wrapper.method === 'Target.sendMessageToTarget'
+                  ? targetMessage('gone', {id: command.id, result: {}})
+                  : dataMessage({id: command.id, result: {}}),
+              );
+            });
+            (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+            const creation = client.addTarget(undefined, 'app', {
+              targetId: 'gone',
+              type: 'page',
+              isProvisional,
+              isPaused: true,
+            });
+            await entered.promise;
+            if (removal === 'target') {
+              await client.removeTarget(undefined, 'app', {targetId: 'gone'} as any);
+            } else {
+              (client as any).messageHandler.emit('_rpc_applicationDisconnected:', null, {
+                WIRApplicationIdentifierKey: 'app',
+              });
+            }
+            await creation;
+            assert.equal(methods.at(-1), blockedDomain);
+            assert.ok(!methods.includes('Target.resume'));
+            assert.ok(!methods.includes('Inspector.initialized'));
+            assert.equal(client.getTarget('app', '1'), undefined);
+            assert.equal((client as any).initializedPageTargets.size, 0);
+            assertNoResponseListeners(client);
+            const count = methods.length;
+            await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
+            assert.equal(methods.length, count, 'dead targets must not receive later overrides');
+          });
+        }
+      }
+    }
+  }
+
+  it('does not register a destroyed target queued behind a settings update', async function () {
+    const {client} = connectedClient();
+    const entered = deferred();
+    const release = deferred();
+    const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
+      if (opts.targetId === 'healthy' && opts.value === 'Next/2') {
+        entered.resolve();
+        await release.promise;
+      }
+    });
+    await addPage(client, 'healthy', '1');
+    const update = client.setWebInspectorPageSettings({userAgent: 'Next/2'});
+    await entered.promise;
+    const creation = addPage(client, 'gone', '2');
+    // Let the core domains finish and initialization queue for the settings lock.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await client.removeTarget(undefined, 'app', {targetId: 'gone'} as any);
+    release.resolve();
+    await Promise.all([creation, update]);
+    assert.ok(send.getCalls().every(({args}) => args[1].targetId === 'healthy'));
+    assert.equal(client.getTarget('app', '2'), undefined);
+  });
+
+  for (const error of ['Missing target for given targetId', 'app not found']) {
+    it(`invalidates routing after an override reports ${error}`, async function () {
+      const {client, initialize} = connectedClient();
+      const send = sinon.stub(client, 'sendToDevice').resolves();
+      await addPage(client, 'gone');
+      send.withArgs('Page.overrideUserAgent', sinon.match({targetId: 'gone'})).rejects(new Error(error));
+      await client.setWebInspectorPageSettings({userAgent: 'New/1'});
+      assert.equal(client.getTarget('app', '1'), undefined);
+      initialize.resetHistory();
+      initialize.withArgs('setSenderKey').callsFake(async () => {
+        // Real notifications arrive after socket setup has returned.
+        setImmediate(() => {
+          void addPage(client, 'replacement');
+        });
+      });
+      await client.selectPage('app', '1');
+      sinon.assert.calledWith(initialize, 'setSenderKey');
+      assert.equal(client.getTarget('app', '1'), 'replacement');
+      sinon.assert.calledWithMatch(send, 'Page.overrideUserAgent', {targetId: 'replacement', value: 'New/1'});
+    });
+  }
+
+  it('preserves a committed provisional replacement and resumes its later creation notification', async function () {
+    const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'Test/1'}});
+    const send = sinon.stub(client, 'sendToDevice').resolves();
+    await addPage(client, 'old');
+    await client.addTarget(undefined, 'app', {targetId: 'new', type: 'page', isProvisional: true, isPaused: true});
+    await client.updateTarget(undefined, 'app', {oldTargetId: 'old', newTargetId: 'new'});
+    await client.removeTarget(undefined, 'app', {targetId: 'old'} as any);
+    assert.equal(client.getTarget('app', '1'), 'new');
+    initialize.resetHistory();
+    send.resetHistory();
+    await addPage(client, 'new');
+    sinon.assert.notCalled(send);
+    assert.ok(!initialize.calledWith('Page.enable'), 'successfully provisioned targets need no second initialization');
+    sinon.assert.calledWithMatch(initialize, 'Target.resume', {targetId: 'new'});
+    await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
+    sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {targetId: 'new', value: 'Next/2'});
+  });
+
+  it('clears provisional routing when its replacement disappears', async function () {
+    const {client} = connectedClient();
+    await addPage(client, 'old');
+    await client.addTarget(undefined, 'app', {targetId: 'new', type: 'page', isProvisional: true, isPaused: true});
+    await client.updateTarget(undefined, 'app', {oldTargetId: 'old', newTargetId: 'new'});
+    await client.removeTarget(undefined, 'app', {targetId: 'new'} as any);
+    assert.equal(client.targets.app.provisional, undefined);
+    await client.removeTarget(undefined, 'app', {targetId: 'old'} as any);
+    assert.equal(client.getTarget('app', '1'), undefined);
+  });
+
+  for (const isProvisional of [false, true]) {
+    it(`does not resume a target after a missing-app initialization error (provisional=${isProvisional})`, async function () {
+      const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'Test/1'}});
+      sinon.stub(client, 'sendToDevice').rejects(new Error('app not found'));
+      (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+      await client.addTarget(undefined, 'app', {targetId: 'gone', type: 'page', isProvisional, isPaused: true});
+      assert.ok(!initialize.calledWith('Target.resume'));
+      assert.equal(client.getTarget('app', '1'), undefined);
+    });
+  }
+});

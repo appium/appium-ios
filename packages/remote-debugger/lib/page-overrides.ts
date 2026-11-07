@@ -7,7 +7,11 @@ export const PAGE_OVERRIDE_METHODS = {
   userAgent: 'Page.overrideUserAgent',
 } as const;
 
-/** Page settings with observable effects verified on iPadOS 27.2 Safari and iOS 27.2 Simulator. */
+/**
+ * Page settings checked on iPadOS 27.2 Safari and iOS 27.2 Simulator.
+ * Media-related checks covered API exposure only, not capture permission or operation.
+ * See docs/web-inspector-settings.md for verification scope.
+ */
 export const PAGE_SETTING_NAMES = [
   'AuthorAndUserStylesEnabled',
   'ImagesEnabled',

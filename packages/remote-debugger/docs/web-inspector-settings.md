@@ -143,11 +143,14 @@ targets and later connections attempt the retained policy during initialization.
   `Inspector.initialized` handshake are still attempted. During a runtime update,
   timeout rejects the update and attempts rollback on responsive targets.
 - Disconnects cancel pending override waits; missing applications and targets
-  are removed from override tracking and their pending waits are canceled.
+  are removed from override tracking and page-to-target routing, and their pending
+  waits are canceled. Target lifetime is tracked before the first initialization
+  command, so removal also cancels initialization before override registration.
   A missing application cancels waits for all of its targets, allowing updates
   on healthy targets to complete without waiting for the missing app's deadline
   or rolling back solely because it disappeared. Disconnected or missing targets stop
-  initialization rather than continuing commands on a dead target.
+  initialization rather than continuing commands on a dead target. Resume requires
+  successful initialization (including an already initialized provisional target).
   Application-disconnect notifications and recognized missing-app/target errors
   trigger this removal. Unrecognized errors reject runtime updates rather than
   being assumed to mean that a target disappeared.

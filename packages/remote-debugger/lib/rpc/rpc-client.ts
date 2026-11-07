@@ -47,9 +47,16 @@ export const NEW_APP_CONNECTED_ERROR = 'New application has connected';
 export const EMPTY_PAGE_DICTIONARY_ERROR = 'Empty page dictionary received';
 const ON_PAGE_INITIALIZED_EVENT = 'onPageInitialized';
 
-/**
- * Details about a pending page target notification.
- */
+/** Target lifetime, including the period before settings registration. */
+interface PageTarget {
+  appIdKey: AppIdKey;
+  pageIdKey: PageIdKey;
+  targetId: TargetId;
+  pendingRestores: Map<string, PageOverride>;
+  removed: AbortController;
+}
+
+/** Details about a pending page target notification. */
 interface PendingPageTargetDetails {
   appIdKey: AppIdKey;
   pageIdKey: PageIdKey;
@@ -99,16 +106,9 @@ export class RpcClient {
   private pageOverrides: Map<string, PageOverride>;
   private readonly pageSettingsLock = new AsyncLock();
   private pageSettingsConnection = new AbortController();
-  private readonly initializedPageTargets = new Map<
-    string,
-    {
-      appIdKey: AppIdKey;
-      pageIdKey: PageIdKey;
-      targetId: TargetId;
-      pendingRestores: Map<string, PageOverride>;
-      removed: AbortController;
-    }
-  >();
+  // Track lifetime before any initialization RPC or lock wait begins.
+  private readonly pageTargets = new Map<string, PageTarget>();
+  private readonly initializedPageTargets = new Map<string, PageTarget>();
   protected readonly bundleId?: string;
   protected readonly pageLoadTimeoutMs?: number;
   protected readonly platformVersion: string;
@@ -117,7 +117,7 @@ export class RpcClient {
   protected readonly _targetSubscriptions: EventEmitter;
   protected _pendingTargetNotification?: PendingPageTargetDetails;
   protected readonly _targetCreationTimeoutMs: number;
-  protected readonly _provisionedPages: Set<PageIdKey>;
+  protected readonly _provisionedPages: Set<string>;
   protected readonly _pageSelectionLock: AsyncLock;
   protected readonly _pageSelectionMonitor: EventEmitter;
 
@@ -228,6 +228,11 @@ export class RpcClient {
     if (!this.connected) {
       this.pageSettingsConnection.abort(new Error('Web Inspector disconnected while applying page settings'));
       this.initializedPageTargets.clear();
+      this.pageTargets.clear();
+      this._provisionedPages.clear();
+      for (const app of Object.keys(this.targets)) {
+        delete this.targets[app];
+      }
     } else if (this.pageSettingsConnection.signal.aborted) {
       // In-flight work retains the old signal and cannot register on this connection.
       this.pageSettingsConnection = new AbortController();
@@ -373,18 +378,25 @@ export class RpcClient {
    * @param waitForResponse - Whether to wait for a response. Defaults to true.
    * @returns A promise that resolves to the command result or options.
    */
-  async send(command: string, opts: RemoteCommandOpts, waitForResponse: boolean = true): Promise<any> {
+  async send(
+    command: string,
+    opts: RemoteCommandOpts,
+    waitForResponse: boolean = true,
+    signal?: AbortSignal,
+  ): Promise<any> {
     const timer = new timing.Timer().start();
     try {
-      return await this.sendToDevice(command, opts, waitForResponse);
+      return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
     } catch (err: any) {
+      signal?.throwIfAborted();
       const {appIdKey, pageIdKey} = opts;
       const messageLc = (err.message || '').toLowerCase();
       if (messageLc.includes(NO_TARGET_SUPPORTED_ERROR)) {
-        return await this.sendToDevice(command, opts, waitForResponse);
+        return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
       } else if (appIdKey && NO_TARGET_PRESENT_YET_ERRORS.some((error) => messageLc.includes(error))) {
         await this.waitForTarget(appIdKey, pageIdKey as PageIdKey);
-        return await this.sendToDevice(command, opts, waitForResponse);
+        signal?.throwIfAborted();
+        return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
       }
       throw err;
     } finally {
@@ -608,13 +620,27 @@ export class RpcClient {
       return;
     }
     const {appIdKey, pageIdKey, pageReadinessDetector} = pendingPageTargetDetails;
-    const {signal} = this.pageSettingsConnection;
+    if (!this.isConnected) {
+      return;
+    }
+    const connectionSignal = this.pageSettingsConnection.signal;
+    const key = toPageTargetKey(appIdKey, targetInfo.targetId);
+    const target = this.pageTargets.get(key) ?? {
+      appIdKey,
+      pageIdKey,
+      targetId: targetInfo.targetId,
+      pendingRestores: new Map<string, PageOverride>(),
+      removed: new AbortController(),
+    };
+    this.pageTargets.set(key, target);
+    const signal = AbortSignal.any([connectionSignal, target.removed.signal]);
 
     if (!util.isPlainObject(this.targets[appIdKey])) {
       this.targets[appIdKey] = {
         lock: new AsyncLock({maxOccupationTime: this._targetCreationTimeoutMs}),
       } as PagesToTargets;
     }
+    const targetLock = this.targets[appIdKey].lock;
     const timer = new timing.Timer().start();
 
     const adjustPageReadinessDetector = (): PageReadinessDetector | undefined => {
@@ -638,20 +664,16 @@ export class RpcClient {
         `Provisional target created for app '${appIdKey}' and page '${pageIdKey}': '${JSON.stringify(targetInfo)}'`,
       );
 
-      this._provisionedPages.add(pageIdKey);
       try {
-        await this.targets[appIdKey].lock.acquire(String(pageIdKey), async () => {
-          let wasInitialized: boolean;
+        await targetLock.acquire(String(pageIdKey), async () => {
+          let wasInitialized = false;
           try {
-            wasInitialized = await this._initializePage(appIdKey, pageIdKey, targetInfo.targetId, signal);
+            wasInitialized = await this._initializePage(target, signal);
           } finally {
-            if (targetInfo.isPaused && !signal.aborted) {
-              await this._resumeTarget(appIdKey, pageIdKey, targetInfo.targetId);
-            } else {
-              log.debug(`Provisional target ${targetInfo.targetId}@${appIdKey} is not paused, so not resuming`);
-            }
+            await this.resumeInitializedTarget(target, targetInfo.isPaused, wasInitialized, signal, connectionSignal);
           }
-          if (wasInitialized) {
+          if (wasInitialized && !signal.aborted) {
+            this._provisionedPages.add(key);
             await this._waitForPageReadiness(appIdKey, pageIdKey, targetInfo.targetId, adjustPageReadinessDetector());
           }
         });
@@ -680,27 +702,35 @@ export class RpcClient {
           pageIdKey,
         },
         false,
+        signal,
       );
     } catch (e: any) {
       log.debug(`Cannot setup pause on start for app '${appIdKey}' and page '${pageIdKey}': ${e.message}`);
     }
 
     try {
-      await this.targets[appIdKey].lock.acquire(String(pageIdKey), async () => {
+      await targetLock.acquire(String(pageIdKey), async () => {
         let wasInitialized = false;
+        let alreadyProvisioned = false;
         try {
-          if (this._provisionedPages.has(pageIdKey)) {
+          signal.throwIfAborted();
+          if (this._provisionedPages.has(key)) {
             log.debug(`Page '${pageIdKey}' has been already provisioned`);
-            this._provisionedPages.delete(pageIdKey);
+            this._provisionedPages.delete(key);
+            alreadyProvisioned = true;
           } else {
-            wasInitialized = await this._initializePage(appIdKey, pageIdKey, undefined, signal);
+            wasInitialized = await this._initializePage(target, signal);
           }
         } finally {
-          if (targetInfo.isPaused && !signal.aborted) {
-            await this._resumeTarget(appIdKey, pageIdKey, targetInfo.targetId);
-          }
+          await this.resumeInitializedTarget(
+            target,
+            targetInfo.isPaused,
+            wasInitialized || alreadyProvisioned,
+            signal,
+            connectionSignal,
+          );
         }
-        if (wasInitialized) {
+        if (wasInitialized && !signal.aborted) {
           await this._waitForPageReadiness(appIdKey, pageIdKey, targetInfo.targetId, adjustPageReadinessDetector());
         }
       });
@@ -710,7 +740,9 @@ export class RpcClient {
       // Target creation is happening after provisioning,
       // which means the above lock would be already released
       // after provisioning is completed.
-      this._pageSelectionMonitor.emit(ON_PAGE_INITIALIZED_EVENT, appIdKey, pageIdKey);
+      if (!signal.aborted) {
+        this._pageSelectionMonitor.emit(ON_PAGE_INITIALIZED_EVENT, appIdKey, pageIdKey);
+      }
     }
   }
 
@@ -752,42 +784,7 @@ export class RpcClient {
     }
 
     log.debug(`Target destroyed for app '${app}': ${targetInfo.targetId}`);
-    this.removePageTarget(toPageTargetKey(app, targetInfo.targetId));
-
-    // go through the targets and find the one that has a waiting provisional target
-    if (this.targets[app]?.provisional?.oldTargetId === targetInfo.targetId) {
-      const {oldTargetId, newTargetId} = this.targets[app].provisional;
-      delete this.targets[app].provisional;
-
-      // we do not know the page, so go through and find the existing target
-      const appTargetsMap = this.targets[app];
-      for (const [page, targetId] of Object.entries(appTargetsMap)) {
-        if (targetId === oldTargetId) {
-          log.debug(
-            `Found provisional target for app '${app}'. ` +
-              `Old target: '${oldTargetId}', new target: '${newTargetId}'. Updating`,
-          );
-          appTargetsMap[page] = newTargetId;
-          return;
-        }
-      }
-      log.warn(
-        `Provisional target for app '${app}' found, but no suitable existing target found. This may cause problems`,
-      );
-      log.warn(
-        `Old target: '${oldTargetId}', new target: '${newTargetId}'. Existing targets: ${JSON.stringify(appTargetsMap)}`,
-      );
-    }
-
-    // if there is no waiting provisional target, just get rid of the existing one
-    const targets = this.targets[app];
-    for (const [page, targetId] of Object.entries(targets)) {
-      if (targetId === targetInfo.targetId) {
-        delete targets[page];
-        return;
-      }
-    }
-    log.debug(`Target '${targetInfo.targetId}' deleted for app '${app}', but no such target exists`);
+    this.removePageTarget(app, targetInfo.targetId);
   }
 
   /**
@@ -1092,7 +1089,7 @@ export class RpcClient {
       if (isMissingAppError(error, target.appIdKey)) {
         this.removePageTargetsForApp(target.appIdKey);
       } else if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
-        this.removePageTarget(key);
+        this.removePageTarget(target.appIdKey, target.targetId);
       } else {
         if (error instanceof TimeoutError) {
           // Its final state is unknown; do not let this target block every later update.
@@ -1103,19 +1100,41 @@ export class RpcClient {
     }
   }
 
-  /** Stop response waits when the target is known to have disappeared. */
-  private removePageTarget(key: string): void {
-    const target = this.initializedPageTargets.get(key);
+  /** Cancel initialization/overrides and invalidate routing, preserving a committed replacement. */
+  private removePageTarget(appIdKey: AppIdKey, targetId: TargetId): void {
+    const key = toPageTargetKey(appIdKey, targetId);
+    const target = this.pageTargets.get(key);
+    this.pageTargets.delete(key);
     this.initializedPageTargets.delete(key);
+    this._provisionedPages.delete(key);
     target?.removed.abort(new Error('Page settings target disappeared'));
+    const mappings = this.targets[appIdKey];
+    if (!mappings) {
+      return;
+    }
+    const provisional = mappings.provisional;
+    const replacement = provisional?.oldTargetId === targetId ? provisional.newTargetId : undefined;
+    if (provisional?.oldTargetId === targetId || provisional?.newTargetId === targetId) {
+      delete mappings.provisional;
+    }
+    for (const [page, mappedTarget] of Object.entries(mappings)) {
+      if (mappedTarget === targetId) {
+        if (replacement) {
+          mappings[page] = replacement;
+        } else {
+          delete mappings[page];
+        }
+      }
+    }
   }
 
   private removePageTargetsForApp(appIdKey: AppIdKey): void {
-    for (const [key, target] of this.initializedPageTargets) {
+    for (const target of this.pageTargets.values()) {
       if (String(target.appIdKey) === String(appIdKey)) {
-        this.removePageTarget(key);
+        this.removePageTarget(target.appIdKey, target.targetId);
       }
     }
+    delete this.targets[appIdKey];
   }
 
   private assertPageSettingsConnection(signal: AbortSignal): void {
@@ -1162,61 +1181,46 @@ export class RpcClient {
    * Mimics the steps that Desktop Safari Develop tools uses to initialize
    * a Web Inspector session.
    *
-   * @param appIdKey - The application identifier key.
-   * @param pageIdKey - The page identifier key.
-   * @param targetId - Target ID, or undefined to retrieve it from the targets map.
-   * @param signal - Cancellation signal captured for the connection starting initialization.
+   * @param target - Target lifetime captured before initialization starts.
+   * @param signal - Combined connection and target cancellation signal.
    * @returns A promise that resolves to true if initialization succeeded, false otherwise.
    */
-  private async _initializePage(
-    appIdKey: AppIdKey,
-    pageIdKey: PageIdKey,
-    targetId: TargetId | undefined,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    const resolvedTargetId = targetId ?? this.getTarget(appIdKey, pageIdKey);
-    if (!resolvedTargetId || !this.isConnected || signal.aborted) {
+  private async _initializePage(target: PageTarget, signal: AbortSignal): Promise<boolean> {
+    const {appIdKey, targetId} = target;
+    if (!this.isConnected || signal.aborted) {
       return false;
     }
-    const key = toPageTargetKey(appIdKey, resolvedTargetId);
+    const key = toPageTargetKey(appIdKey, targetId);
     let initialized = false;
     try {
-      initialized = await this.initializePageWithSettings(appIdKey, pageIdKey, resolvedTargetId, signal);
+      initialized = await this.initializePageWithSettings(target, signal);
       return initialized;
     } finally {
-      if (!initialized && signal === this.pageSettingsConnection.signal) {
+      if (!initialized && this.initializedPageTargets.get(key) === target) {
         this.initializedPageTargets.delete(key);
       }
     }
   }
 
-  private async initializePageOverrides(
-    appIdKey: AppIdKey,
-    pageIdKey: PageIdKey,
-    targetId: TargetId,
-    signal: AbortSignal,
-  ): Promise<void> {
-    // Page.enable has completed. Serialize only registration and page
-    // overrides with runtime updates; other domains can initialize concurrently.
+  private async initializePageOverrides(target: PageTarget, signal: AbortSignal): Promise<void> {
+    const {appIdKey, targetId} = target;
+    // Registration and overrides share the update lock; lifetime is tracked before it.
     await this.pageSettingsLock.acquire('settings', async () => {
       this.assertPageSettingsConnection(signal);
-      const target = {
-        appIdKey,
-        pageIdKey,
-        targetId,
-        pendingRestores: new Map<string, PageOverride>(),
-        removed: new AbortController(),
-      };
       this.initializedPageTargets.set(toPageTargetKey(appIdKey, targetId), target);
       for (const [overrideKey, override] of this.pageOverrides) {
         try {
           await this.sendPageOverride(target, override, signal);
         } catch (error: any) {
+          signal.throwIfAborted();
           if (isMissingAppError(error, appIdKey)) {
             this.removePageTargetsForApp(appIdKey);
             throw error;
           }
-          if (signal.aborted || target.removed.signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+          if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+            this.removePageTarget(appIdKey, targetId);
+          }
+          if (signal.aborted || target.removed.signal.aborted) {
             throw error;
           }
           if (error instanceof TimeoutError) {
@@ -1241,12 +1245,8 @@ export class RpcClient {
     });
   }
 
-  private async initializePageWithSettings(
-    appIdKey: AppIdKey,
-    pageIdKey: PageIdKey,
-    targetId: TargetId,
-    signal: AbortSignal,
-  ): Promise<boolean> {
+  private async initializePageWithSettings(target: PageTarget, signal: AbortSignal): Promise<boolean> {
+    const {appIdKey, pageIdKey, targetId} = target;
     const sendOpts: RemoteCommandOpts = {
       appIdKey,
       pageIdKey,
@@ -1260,10 +1260,10 @@ export class RpcClient {
     for (const command of [PAGE_INITIALIZATION_COMMANDS.inspectorEnable, PAGE_INITIALIZATION_COMMANDS.pageEnable]) {
       try {
         this.assertPageSettingsConnection(signal);
-        await this.send(command, sendOpts);
+        await this.send(command, sendOpts, true, signal);
       } catch (error: any) {
         log.info(`Cannot enable domain '${command}' during initialization: ${error.message}`);
-        if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+        if (this.stopInitializingTarget(target, error, signal)) {
           return false;
         }
       }
@@ -1271,7 +1271,7 @@ export class RpcClient {
     // This is an explicit initialization step, not a synthetic domain command.
     // Always register the target, including when the current policy is empty.
     try {
-      await this.initializePageOverrides(appIdKey, pageIdKey, targetId, signal);
+      await this.initializePageOverrides(target, signal);
     } catch (error: any) {
       log.warn(`Cannot initialize page overrides: ${error.message}`);
       return false;
@@ -1288,10 +1288,10 @@ export class RpcClient {
       })) {
         try {
           this.assertPageSettingsConnection(signal);
-          await this.send(domain, opts);
+          await this.send(domain, opts, true, signal);
         } catch (err: any) {
           log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
-          if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
+          if (this.stopInitializingTarget(target, err, signal)) {
             return false;
           }
         }
@@ -1363,7 +1363,7 @@ export class RpcClient {
     for (const [domain, opts] of Object.entries(domainsToOptsMap)) {
       try {
         this.assertPageSettingsConnection(signal);
-        const res = await this.send(domain, opts);
+        const res = await this.send(domain, opts, true, signal);
         if (domain === 'Console.getLoggingChannels') {
           for (const source of (res?.channels || []).map((entry: {source: any}) => entry.source)) {
             try {
@@ -1376,10 +1376,12 @@ export class RpcClient {
                   },
                   sendOpts,
                 ),
+                true,
+                signal,
               );
             } catch (err: any) {
               log.info(`Cannot set logging channel level for '${source}': ${err.message}`);
-              if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
+              if (this.stopInitializingTarget(target, err, signal)) {
                 return false;
               }
             }
@@ -1387,7 +1389,7 @@ export class RpcClient {
         }
       } catch (err: any) {
         log.info(`Cannot enable domain '${domain}' during full initialization: ${err.message}`);
-        if (signal.aborted || MISSING_TARGET_ERROR_PATTERN.test(err.message)) {
+        if (this.stopInitializingTarget(target, err, signal)) {
           return false;
         }
       }
@@ -1399,23 +1401,72 @@ export class RpcClient {
     return !signal.aborted;
   }
 
+  private stopInitializingTarget(target: PageTarget, error: Error, signal: AbortSignal): boolean {
+    if (signal.aborted) {
+      return true;
+    }
+    if (isMissingAppError(error, target.appIdKey)) {
+      this.removePageTargetsForApp(target.appIdKey);
+      return true;
+    }
+    if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
+      this.removePageTarget(target.appIdKey, target.targetId);
+      return true;
+    }
+    return false;
+  }
+
+  private async resumeInitializedTarget(
+    target: PageTarget,
+    isPaused: boolean | undefined,
+    initialized: boolean,
+    signal: AbortSignal,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const reason = connectionSignal.aborted
+      ? 'connection disconnected'
+      : signal.aborted
+        ? 'target disappeared'
+        : !initialized
+          ? 'initialization failed'
+          : !isPaused
+            ? 'target is not paused'
+            : undefined;
+    if (reason) {
+      log.debug(`Not resuming target ${target.targetId}@${target.appIdKey}: ${reason}`);
+      return;
+    }
+    await this._resumeTarget(target.appIdKey, target.pageIdKey, target.targetId, signal);
+  }
+
   /**
    * Resumes a paused target.
    *
    * @param appIdKey - The application identifier key.
    * @param pageIdKey - The page identifier key.
    * @param targetId - The target ID to resume.
+   * @param signal - Combined connection and target cancellation signal.
    */
-  private async _resumeTarget(appIdKey: AppIdKey, pageIdKey: PageIdKey, targetId: TargetId): Promise<void> {
+  private async _resumeTarget(
+    appIdKey: AppIdKey,
+    pageIdKey: PageIdKey,
+    targetId: TargetId,
+    signal: AbortSignal,
+  ): Promise<void> {
     if (!this.isConnected) {
       return;
     }
     try {
-      await this.send('Target.resume', {
-        appIdKey,
-        pageIdKey,
-        targetId,
-      });
+      await this.send(
+        'Target.resume',
+        {
+          appIdKey,
+          pageIdKey,
+          targetId,
+        },
+        true,
+        signal,
+      );
       log.debug(`Successfully resumed the target ${targetId}@${appIdKey}`);
     } catch (e: any) {
       log.warn(`Could not resume the target ${targetId}@${appIdKey}: ${e.message}`);
