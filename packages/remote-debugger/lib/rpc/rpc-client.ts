@@ -56,6 +56,13 @@ interface PageTarget {
   removed: AbortController;
 }
 
+interface PageInitialization {
+  target: PageTarget;
+  isPaused?: boolean;
+  signal: AbortSignal;
+  connectionSignal: AbortSignal;
+}
+
 /** Details about a pending page target notification. */
 interface PendingPageTargetDetails {
   appIdKey: AppIdKey;
@@ -659,88 +666,49 @@ export class RpcClient {
       };
     };
 
-    if (targetInfo.isProvisional) {
-      log.debug(
-        `Provisional target created for app '${appIdKey}' and page '${pageIdKey}': '${JSON.stringify(targetInfo)}'`,
-      );
-
-      try {
-        await targetLock.acquire(String(pageIdKey), async () => {
-          let wasInitialized = false;
-          try {
-            wasInitialized = await this._initializePage(target, signal);
-          } finally {
-            await this.resumeInitializedTarget(target, targetInfo.isPaused, wasInitialized, signal, connectionSignal);
-          }
-          if (wasInitialized && !signal.aborted) {
-            this._provisionedPages.add(key);
-            await this._waitForPageReadiness(appIdKey, pageIdKey, targetInfo.targetId, adjustPageReadinessDetector());
-          }
-        });
-      } catch (e: any) {
-        log.warn(
-          `Cannot complete the initialization of the provisional target '${targetInfo.targetId}' ` +
-            `after ${timer.getDuration().asMilliSeconds}ms: ${e.message}`,
-        );
-      }
-      return;
-    }
-
+    const {isProvisional, isPaused} = targetInfo;
+    const initialization = {target, isPaused, signal, connectionSignal};
     log.debug(`Target created for app '${appIdKey}' and page '${pageIdKey}': ${JSON.stringify(targetInfo)}`);
-    if (Object.hasOwn(this.targets[appIdKey], pageIdKey)) {
-      const existingTarget = this.targets[appIdKey][pageIdKey] as TargetId;
-      log.debug(`There is already a target for this app and page ('${existingTarget}'). This might cause problems`);
-    }
-    this.targets[appIdKey][pageIdKey] = targetInfo.targetId;
-
-    try {
-      await this.send(
-        'Target.setPauseOnStart',
-        {
-          pauseOnStart: true,
-          appIdKey,
-          pageIdKey,
-        },
-        false,
-        signal,
-      );
-    } catch (e: any) {
-      log.debug(`Cannot setup pause on start for app '${appIdKey}' and page '${pageIdKey}': ${e.message}`);
+    if (!isProvisional) {
+      if (Object.hasOwn(this.targets[appIdKey], pageIdKey)) {
+        log.debug(`There is already a target for app '${appIdKey}' and page '${pageIdKey}'`);
+      }
+      this.targets[appIdKey][pageIdKey] = target.targetId;
+      try {
+        await this.send('Target.setPauseOnStart', {pauseOnStart: true, appIdKey, pageIdKey}, false, signal);
+      } catch (e: any) {
+        log.debug(`Cannot setup pause on start for app '${appIdKey}' and page '${pageIdKey}': ${e.message}`);
+      }
     }
 
     try {
       await targetLock.acquire(String(pageIdKey), async () => {
-        let wasInitialized = false;
+        let initialized = false;
         let alreadyProvisioned = false;
         try {
           signal.throwIfAborted();
-          if (this._provisionedPages.has(key)) {
-            log.debug(`Page '${pageIdKey}' has been already provisioned`);
-            this._provisionedPages.delete(key);
-            alreadyProvisioned = true;
-          } else {
-            wasInitialized = await this._initializePage(target, signal);
-          }
+          alreadyProvisioned = !isProvisional && this._provisionedPages.delete(key);
+          initialized = alreadyProvisioned || (await this._initializePage(target, signal));
         } finally {
-          await this.resumeInitializedTarget(
-            target,
-            targetInfo.isPaused,
-            wasInitialized || alreadyProvisioned,
-            signal,
-            connectionSignal,
-          );
+          await this.resumeInitializedTarget(initialization, initialized);
         }
-        if (wasInitialized && !signal.aborted) {
-          await this._waitForPageReadiness(appIdKey, pageIdKey, targetInfo.targetId, adjustPageReadinessDetector());
+        if (initialized && !signal.aborted) {
+          if (isProvisional) {
+            this._provisionedPages.add(key);
+          }
+          if (!alreadyProvisioned) {
+            await this._waitForPageReadiness(appIdKey, pageIdKey, target.targetId, adjustPageReadinessDetector());
+          }
         }
       });
     } catch (e: any) {
-      log.warn(e.message);
+      log.warn(
+        `Cannot complete initialization of target '${target.targetId}' ` +
+          `after ${timer.getDuration().asMilliSeconds}ms: ${e.message}`,
+      );
     } finally {
-      // Target creation is happening after provisioning,
-      // which means the above lock would be already released
-      // after provisioning is completed.
-      if (!signal.aborted) {
+      // A provisional target is reported ready when its regular creation event arrives.
+      if (!isProvisional && !signal.aborted) {
         this._pageSelectionMonitor.emit(ON_PAGE_INITIALIZED_EVENT, appIdKey, pageIdKey);
       }
     }
@@ -1145,7 +1113,7 @@ export class RpcClient {
   }
 
   private async sendPageOverride(
-    target: {appIdKey: AppIdKey; pageIdKey: PageIdKey; targetId: TargetId; removed: AbortController},
+    target: PageTarget,
     override: PageOverride,
     connectionSignal: AbortSignal,
   ): Promise<void> {
@@ -1276,89 +1244,71 @@ export class RpcClient {
       log.warn(`Cannot initialize page overrides: ${error.message}`);
       return false;
     }
-    if (!this.fullPageInitialization) {
-      // The sequence of domains is important
-      for (const [domain, opts] of Object.entries({
-        [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
-        [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
-        [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
-        [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
-        [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
-        [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
-      })) {
-        try {
-          this.assertPageSettingsConnection(signal);
-          await this.send(domain, opts, true, signal);
-        } catch (err: any) {
-          log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
-          if (this.stopInitializingTarget(target, err, signal)) {
-            return false;
-          }
+    // Keep both command sequences explicit; share execution and error handling.
+    const domainsToOptsMap: Record<string, RemoteCommandOpts> = !this.fullPageInitialization
+      ? {
+          [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
         }
-      }
-      log.debug(
-        `Simple initialization of page '${pageIdKey}' for app '${appIdKey}' completed ` +
-          `in ${timer.getDuration().asMilliSeconds}ms`,
-      );
-      return !signal.aborted;
-    }
+      : {
+          [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
 
-    // The sequence of commands here is important
-    const domainsToOptsMap: Record<string, RemoteCommandOpts> = {
-      [PAGE_INITIALIZATION_COMMANDS.runtimeEnable]: sendOpts,
+          'Page.getResourceTree': sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
+          'Network.setResourceCachingDisabled': {
+            disabled: false,
+            ...sendOpts,
+          },
+          'DOMStorage.enable': sendOpts,
+          'Database.enable': sendOpts,
+          'IndexedDB.enable': sendOpts,
+          'CSS.enable': sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
+          'Memory.enable': sendOpts,
+          'ApplicationCache.enable': sendOpts,
+          'ApplicationCache.getFramesWithManifests': sendOpts,
+          'Timeline.setInstruments': {
+            instruments: ['Timeline', 'ScriptProfiler', 'CPU'],
+            ...sendOpts,
+          },
+          'Timeline.setAutoCaptureEnabled': {
+            enabled: false,
+            ...sendOpts,
+          },
+          [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
+          'Debugger.setBreakpointsActive': {
+            active: true,
+            ...sendOpts,
+          },
+          'Debugger.setPauseOnExceptions': {
+            state: 'none',
+            ...sendOpts,
+          },
+          'Debugger.setPauseOnAssertions': {
+            enabled: false,
+            ...sendOpts,
+          },
+          'Debugger.setAsyncStackTraceDepth': {
+            depth: 200,
+            ...sendOpts,
+          },
+          'Debugger.setPauseForInternalScripts': {
+            shouldPause: false,
+            ...sendOpts,
+          },
+          'LayerTree.enable': sendOpts,
+          'Worker.enable': sendOpts,
+          'Canvas.enable': sendOpts,
+          [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
+          'DOM.getDocument': sendOpts,
+          'Console.getLoggingChannels': sendOpts,
 
-      'Page.getResourceTree': sendOpts,
-      [PAGE_INITIALIZATION_COMMANDS.networkEnable]: sendOpts,
-      'Network.setResourceCachingDisabled': {
-        disabled: false,
-        ...sendOpts,
-      },
-      'DOMStorage.enable': sendOpts,
-      'Database.enable': sendOpts,
-      'IndexedDB.enable': sendOpts,
-      'CSS.enable': sendOpts,
-      [PAGE_INITIALIZATION_COMMANDS.heapEnable]: sendOpts,
-      'Memory.enable': sendOpts,
-      'ApplicationCache.enable': sendOpts,
-      'ApplicationCache.getFramesWithManifests': sendOpts,
-      'Timeline.setInstruments': {
-        instruments: ['Timeline', 'ScriptProfiler', 'CPU'],
-        ...sendOpts,
-      },
-      'Timeline.setAutoCaptureEnabled': {
-        enabled: false,
-        ...sendOpts,
-      },
-      [PAGE_INITIALIZATION_COMMANDS.debuggerEnable]: sendOpts,
-      'Debugger.setBreakpointsActive': {
-        active: true,
-        ...sendOpts,
-      },
-      'Debugger.setPauseOnExceptions': {
-        state: 'none',
-        ...sendOpts,
-      },
-      'Debugger.setPauseOnAssertions': {
-        enabled: false,
-        ...sendOpts,
-      },
-      'Debugger.setAsyncStackTraceDepth': {
-        depth: 200,
-        ...sendOpts,
-      },
-      'Debugger.setPauseForInternalScripts': {
-        shouldPause: false,
-        ...sendOpts,
-      },
-      'LayerTree.enable': sendOpts,
-      'Worker.enable': sendOpts,
-      'Canvas.enable': sendOpts,
-      [PAGE_INITIALIZATION_COMMANDS.consoleEnable]: sendOpts,
-      'DOM.getDocument': sendOpts,
-      'Console.getLoggingChannels': sendOpts,
-
-      [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
-    };
+          [PAGE_INITIALIZATION_COMMANDS.inspectorInitialized]: sendOpts,
+        };
 
     for (const [domain, opts] of Object.entries(domainsToOptsMap)) {
       try {
@@ -1388,14 +1338,14 @@ export class RpcClient {
           }
         }
       } catch (err: any) {
-        log.info(`Cannot enable domain '${domain}' during full initialization: ${err.message}`);
+        log.info(`Cannot enable domain '${domain}' during initialization: ${err.message}`);
         if (this.stopInitializingTarget(target, err, signal)) {
           return false;
         }
       }
     }
     log.debug(
-      `Full initialization of page '${pageIdKey}' for app '${appIdKey}' completed ` +
+      `${this.fullPageInitialization ? 'Full' : 'Simple'} initialization of page '${pageIdKey}' for app '${appIdKey}' completed ` +
         `in ${timer.getDuration().asMilliSeconds}ms`,
     );
     return !signal.aborted;
@@ -1417,11 +1367,8 @@ export class RpcClient {
   }
 
   private async resumeInitializedTarget(
-    target: PageTarget,
-    isPaused: boolean | undefined,
+    {target, isPaused, signal, connectionSignal}: PageInitialization,
     initialized: boolean,
-    signal: AbortSignal,
-    connectionSignal: AbortSignal,
   ): Promise<void> {
     const reason = connectionSignal.aborted
       ? 'connection disconnected'
@@ -1436,26 +1383,7 @@ export class RpcClient {
       log.debug(`Not resuming target ${target.targetId}@${target.appIdKey}: ${reason}`);
       return;
     }
-    await this._resumeTarget(target.appIdKey, target.pageIdKey, target.targetId, signal);
-  }
-
-  /**
-   * Resumes a paused target.
-   *
-   * @param appIdKey - The application identifier key.
-   * @param pageIdKey - The page identifier key.
-   * @param targetId - The target ID to resume.
-   * @param signal - Combined connection and target cancellation signal.
-   */
-  private async _resumeTarget(
-    appIdKey: AppIdKey,
-    pageIdKey: PageIdKey,
-    targetId: TargetId,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (!this.isConnected) {
-      return;
-    }
+    const {appIdKey, pageIdKey, targetId} = target;
     try {
       await this.send(
         'Target.resume',

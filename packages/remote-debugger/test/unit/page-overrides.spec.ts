@@ -12,17 +12,7 @@ import {
 import {RemoteDebuggerRealDevice} from '../../lib/remote-debugger-real-device.js';
 import {RemoteDebugger} from '../../lib/remote-debugger.js';
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
-
-function connectedClient(options: ConstructorParameters<typeof RpcClient>[0] = {}): RpcClient {
-  const client = new RpcClient(options);
-  client.isConnected = true;
-  return client;
-}
-
-async function addPage(client: RpcClient, targetId: string, pageIdKey = '1', isProvisional = false) {
-  (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey};
-  await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional, isPaused: true});
-}
+import {connectedClient, addPage} from './helpers/page-settings.js';
 
 describe('page overrides', function () {
   const invalidSettings = [
@@ -59,7 +49,7 @@ describe('page overrides', function () {
       await assert.rejects(remote.setWebInspectorPageSettings(settings as any), TypeError);
       await assert.rejects(client.setWebInspectorPageSettings(settings as any), TypeError);
       sinon.assert.notCalled(send);
-      await addPage(client, 'next', '2');
+      await addPage(client, 'next', {pageIdKey: '2'});
       sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {value: 'Retained/1'});
     });
   }
@@ -91,7 +81,7 @@ describe('page overrides', function () {
         setting,
         value: false,
       });
-      await addPage(client, 'provisional', '1', true);
+      await addPage(client, 'provisional', {isProvisional: true});
       send.resetHistory();
       await client.setWebInspectorPageSettings({pageSettings: {[setting]: true}});
       assert.strictEqual(send.callCount, 2);
@@ -101,7 +91,7 @@ describe('page overrides', function () {
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
-      await addPage(client, 'next', '2');
+      await addPage(client, 'next', {pageIdKey: '2'});
       sinon.assert.notCalled(send);
     });
   }
@@ -114,7 +104,7 @@ describe('page overrides', function () {
       for (const value of USER_PREFERENCE_VALUES[name]) {
         await client.setWebInspectorPageSettings({userPreferences: {[name]: value}});
         send.resetHistory();
-        await addPage(client, `target-${value}`, '1', true);
+        await addPage(client, `target-${value}`, {isProvisional: true});
         sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserPreference', {
           appIdKey: 'app',
           pageIdKey: '1',
@@ -128,7 +118,7 @@ describe('page overrides', function () {
       assert.strictEqual(send.callCount, 2);
       assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
       send.resetHistory();
-      await addPage(client, 'next', '2');
+      await addPage(client, 'next', {pageIdKey: '2'});
       sinon.assert.notCalled(send);
     });
   }
@@ -140,7 +130,7 @@ describe('page overrides', function () {
     sinon.stub(client, 'send').resolves();
     const send = sinon.stub(client, 'sendToDevice').resolves();
     await addPage(client, 'first');
-    await addPage(client, 'second', '2');
+    await addPage(client, 'second', {pageIdKey: '2'});
     send.resetHistory();
     send.onSecondCall().rejects(new Error('Rejected'));
     await assert.rejects(
@@ -159,7 +149,7 @@ describe('page overrides', function () {
     });
     send.reset();
     send.resolves();
-    await addPage(client, 'next', '3');
+    await addPage(client, 'next', {pageIdKey: '3'});
     sinon.assert.calledWith(send, 'Page.overrideSetting', sinon.match({setting: 'ImagesEnabled', value: false}));
     sinon.assert.calledWith(send, 'Page.overrideUserPreference', sinon.match({name: 'PrefersContrast', value: 'More'}));
   });
@@ -286,7 +276,7 @@ describe('page overrides', function () {
       assert.strictEqual(Object.hasOwn(args[1], 'value'), false);
     }
     send.resetHistory();
-    await addPage(client, 'provisional', '1', true);
+    await addPage(client, 'provisional', {isProvisional: true});
     sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {
       appIdKey: 'app',
       pageIdKey: '1',
@@ -298,7 +288,7 @@ describe('page overrides', function () {
     assert.strictEqual(send.callCount, 2);
     assert.ok(send.getCalls().every(({args}) => !Object.hasOwn(args[1], 'value')));
     send.resetHistory();
-    await addPage(client, 'next', '2');
+    await addPage(client, 'next', {pageIdKey: '2'});
     sinon.assert.notCalled(send);
   });
 
@@ -329,7 +319,7 @@ describe('page overrides', function () {
       return {};
     });
     await addPage(client, 'first');
-    await addPage(client, 'second', '2');
+    await addPage(client, 'second', {pageIdKey: '2'});
     const baseline = structuredClone(state);
     failAt = calls + 6;
     await assert.rejects(
@@ -341,7 +331,7 @@ describe('page overrides', function () {
       /Rejected batch/,
     );
     assert.deepStrictEqual(state, baseline);
-    await addPage(client, 'next', '3');
+    await addPage(client, 'next', {pageIdKey: '3'});
     assert.deepStrictEqual(state.get('next'), baseline.get('first'));
   });
 

@@ -6,12 +6,7 @@ import {AsyncLock} from 'asyncbox';
 import sinon from 'sinon';
 
 import {RpcClient} from '../../../lib/rpc/rpc-client.js';
-
-function connectedClient(options: ConstructorParameters<typeof RpcClient>[0] = {}): RpcClient {
-  const client = new RpcClient(options);
-  client.isConnected = true;
-  return client;
-}
+import {connectedClient, addPage, deferred} from '../helpers/page-settings.js';
 
 describe('rpc-client', function () {
   describe('page web security', function () {
@@ -75,26 +70,13 @@ describe('rpc-client', function () {
   });
 
   describe('runtime web security settings', function () {
-    function deferred() {
-      let resolve!: () => void;
-      const promise = new Promise<void>((done) => {
-        resolve = done;
-      });
-      return {promise, resolve};
-    }
-
-    async function addPage(client: RpcClient, targetId: string, pageIdKey = '1', isProvisional = false) {
-      (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey};
-      await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional, isPaused: true});
-    }
-
     it('updates all inspected pages and provisional targets, then clears the override', async function () {
       const client = connectedClient();
       sinon.stub(client, 'send').resolves();
       const send = sinon.stub(client, 'sendToDevice').resolves();
       await addPage(client, 'page-1');
-      await addPage(client, 'page-2', '2');
-      await addPage(client, 'page-3', '2', true);
+      await addPage(client, 'page-2', {pageIdKey: '2'});
+      await addPage(client, 'page-3', {pageIdKey: '2', isProvisional: true});
       await client.setWebInspectorPageSettings({pageSettings: {WebSecurityEnabled: false}});
       assert.deepStrictEqual(
         send.getCalls().map(({args}) => args[1]),
@@ -145,7 +127,7 @@ describe('rpc-client', function () {
               await blocked.promise;
             });
             const update = sinon.stub(client, 'sendToDevice').resolves();
-            const creation = addPage(client, 'provisional', '1', true);
+            const creation = addPage(client, 'provisional', {isProvisional: true});
             await entered.promise;
             try {
               // Must complete while the unrelated domain remains blocked.
@@ -182,7 +164,7 @@ describe('rpc-client', function () {
           entered.resolve();
           await blocked.promise;
         });
-        const creation = addPage(client, 'provisional', '1', true);
+        const creation = addPage(client, 'provisional', {isProvisional: true});
         await entered.promise;
         const setting = client.setWebInspectorPageSettings({});
         await Promise.resolve();
@@ -200,7 +182,7 @@ describe('rpc-client', function () {
       const client = connectedClient();
       sinon.stub(client, 'send').resolves();
       await addPage(client, 'page-1');
-      await addPage(client, 'page-2', '2');
+      await addPage(client, 'page-2', {pageIdKey: '2'});
       const update = sinon.stub(client, 'sendToDevice').resolves();
       update.onSecondCall().rejects(new Error('Override unavailable'));
       await assert.rejects(

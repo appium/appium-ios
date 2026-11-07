@@ -4,40 +4,14 @@ import {setImmediate} from 'node:timers/promises';
 
 import sinon from 'sinon';
 
-import {RpcClient} from '../../lib/rpc/rpc-client.js';
-import type {RemoteCommand} from '../../lib/types.js';
-import {targetMessage} from './helpers/rpc-messages.js';
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return {promise, resolve};
-}
-
-function connectedClient() {
-  const client = new RpcClient();
-  client.isConnected = true;
-  sinon.stub(client, 'send').resolves();
-  return client;
-}
-
-async function addPage(client: RpcClient, targetId: string) {
-  (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: targetId};
-  await client.addTarget(undefined, 'app', {targetId, type: 'page', isProvisional: false, isPaused: true});
-}
-
-function commandFrom(message: RemoteCommand) {
-  const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
-  return {...JSON.parse(wrapper.params.message), targetId: wrapper.params.targetId};
-}
+import {stubPageClient, addPage, deferred} from './helpers/page-settings.js';
+import {commandFrom, targetMessage} from './helpers/rpc-messages.js';
 
 describe('page settings concurrency', function () {
   it('bounds target concurrency while preserving command order within each target', async function () {
-    const client = connectedClient();
+    const {client} = stubPageClient();
     for (let i = 0; i < 6; i++) {
-      await addPage(client, String(i + 1));
+      await addPage(client, String(i + 1), {pageIdKey: String(i + 1)});
     }
     const release = Array.from({length: 6}, deferred);
     const firstWave = deferred();
@@ -86,7 +60,7 @@ describe('page settings concurrency', function () {
 
   for (const code of [-32601, -32602, -32000]) {
     it(`drains in-flight updates before rollback and rejects protocol errors (${code})`, async function () {
-      const client = connectedClient();
+      const {client} = stubPageClient();
       const previous = {pageSettings: {ImagesEnabled: true}, userAgent: 'Old/1'};
       await client.setWebInspectorPageSettings(previous);
       const state = new Map<string, Record<string, unknown>>();
@@ -115,7 +89,7 @@ describe('page settings concurrency', function () {
         await handler.handleMessage(targetMessage(command.targetId, {id: command.id, result: {}}));
       });
       for (let i = 1; i <= 5; i++) {
-        await addPage(client, String(i));
+        await addPage(client, String(i), {pageIdKey: String(i)});
       }
       events.length = 0;
       let settled = false;
@@ -150,16 +124,16 @@ describe('page settings concurrency', function () {
       events.length = 0;
       await client.setWebInspectorPageSettings(previous);
       assert.deepStrictEqual(events, []);
-      await addPage(client, '6');
+      await addPage(client, '6', {pageIdKey: '6'});
       assert.deepStrictEqual(state.get('6'), {ImagesEnabled: true, userAgent: 'Old/1'});
       assert.ok(!(client as any).messageHandler.eventNames().some((name: string) => /^\d+$/.test(name)));
     });
   }
 
   it('keeps queued policy updates and target initialization outside an active batch', async function () {
-    const client = connectedClient();
+    const {client} = stubPageClient();
     await addPage(client, '1');
-    await addPage(client, '2');
+    await addPage(client, '2', {pageIdKey: '2'});
     const entered = deferred();
     const release = deferred();
     const seen: {target: string; value: unknown}[] = [];
@@ -173,7 +147,7 @@ describe('page settings concurrency', function () {
     const first = client.setWebInspectorPageSettings({userAgent: 'First/1'});
     await entered.promise;
     const second = client.setWebInspectorPageSettings({userAgent: 'Second/2'});
-    const creation = addPage(client, '3');
+    const creation = addPage(client, '3', {pageIdKey: '3'});
     try {
       await setImmediate();
       assert.deepStrictEqual(seen, [
@@ -192,9 +166,9 @@ describe('page settings concurrency', function () {
   });
 
   it('aborts all parallel waits on disconnect and does not start queued targets', async function () {
-    const client = connectedClient();
+    const {client} = stubPageClient();
     for (let i = 1; i <= 5; i++) {
-      await addPage(client, String(i));
+      await addPage(client, String(i), {pageIdKey: String(i)});
     }
     const entered = deferred();
     const targets: string[] = [];
@@ -213,7 +187,7 @@ describe('page settings concurrency', function () {
   });
 
   it('bounds parallel rollback and keeps the next update queued until every restore finishes', async function () {
-    const client = connectedClient();
+    const {client} = stubPageClient();
     await client.setWebInspectorPageSettings({userAgent: 'Old/1'});
     const release = Array.from({length: 5}, deferred);
     const firstWave = deferred();
@@ -245,7 +219,7 @@ describe('page settings concurrency', function () {
       state.set(target, opts.value);
     });
     for (let i = 1; i <= 6; i++) {
-      await addPage(client, String(i));
+      await addPage(client, String(i), {pageIdKey: String(i)});
     }
     updating = true;
     const rejected = assert.rejects(client.setWebInspectorPageSettings({userAgent: 'New/2'}), /Rejected update/);

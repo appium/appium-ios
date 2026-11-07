@@ -5,46 +5,8 @@ import sinon from 'sinon';
 
 import {toPageOverrides, type WebInspectorPageSettings} from '../../lib/page-overrides.js';
 import {RpcClient} from '../../lib/rpc/rpc-client.js';
-import type {AppIdKey, RemoteCommand, RpcClientOptions} from '../../lib/types.js';
-import {dataMessage, targetMessage} from './helpers/rpc-messages.js';
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return {promise, resolve};
-}
-
-function connectedClient(options: RpcClientOptions = {}) {
-  const client = new RpcClient(options);
-  client.isConnected = true;
-  const initialize = sinon.stub(client, 'send').resolves();
-  return {client, initialize};
-}
-
-async function addPage(client: RpcClient, targetId: string, pageIdKey = '1', appIdKey: AppIdKey = 'app') {
-  (client as any)._pendingTargetNotification = {appIdKey, pageIdKey};
-  await client.addTarget(undefined, appIdKey, {targetId, type: 'page', isProvisional: false, isPaused: true});
-}
-
-function commandFrom(message: RemoteCommand) {
-  const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
-  const command = JSON.parse(wrapper.params.message);
-  return {...command, targetId: wrapper.params.targetId};
-}
-
-function reply(client: RpcClient, id: number) {
-  (client as any).messageHandler.emit(String(id), null, {});
-}
-
-function assertNoResponseListeners(client: RpcClient) {
-  const events: (string | symbol)[] = (client as any).messageHandler.eventNames();
-  assert.deepStrictEqual(
-    events.filter((name) => /^\d+$/.test(String(name))),
-    [],
-  );
-}
+import {stubPageClient, addPage, deferred, reply, assertNoResponseListeners} from './helpers/page-settings.js';
+import {commandFrom, dataMessage, targetMessage} from './helpers/rpc-messages.js';
 
 describe('page settings connection lifecycle', function () {
   for (const fullPageInitialization of [false, true]) {
@@ -55,7 +17,7 @@ describe('page settings connection lifecycle', function () {
           userPreferences: {PrefersColorScheme: 'Dark'},
           userAgent: 'Initial/1',
         };
-        const {client, initialize} = connectedClient({fullPageInitialization, webInspectorSettings: settings});
+        const {client, initialize} = stubPageClient({fullPageInitialization, webInspectorSettings: settings});
         const state = new Map<string, unknown>();
         let failing = true;
         const send = sinon.stub(client, 'sendMessage').callsFake(async (message) => {
@@ -108,7 +70,7 @@ describe('page settings connection lifecycle', function () {
   ]) {
     for (const clear of [false, true]) {
       it(`replaces persistently rejected initialization values (${JSON.stringify(settings)}, clear=${clear})`, async function () {
-        const {client} = connectedClient({webInspectorSettings: settings});
+        const {client} = stubPageClient({webInspectorSettings: settings});
         const initial = [...toPageOverrides(settings).values()][0];
         const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
           if (opts.value === initial.value) {
@@ -131,14 +93,14 @@ describe('page settings connection lifecycle', function () {
         send.resetHistory();
         await client.setWebInspectorPageSettings(next);
         sinon.assert.notCalled(send);
-        await addPage(client, 'future', '2');
+        await addPage(client, 'future', {pageIdKey: '2'});
         assert.equal(send.callCount, clear ? 0 : 1);
       });
     }
   }
 
   it('retains pending repairs when replacing them succeeds but a later target rejects the batch', async function () {
-    const {client} = connectedClient({webInspectorSettings: {userAgent: 'Old/1'}});
+    const {client} = stubPageClient({webInspectorSettings: {userAgent: 'Old/1'}});
     let failOld = true;
     let failNew = true;
     const state = new Map<string, unknown>();
@@ -149,7 +111,7 @@ describe('page settings connection lifecycle', function () {
       state.set(String(opts.targetId), opts.value);
     });
     await addPage(client, 'first');
-    await addPage(client, 'second', '2');
+    await addPage(client, 'second', {pageIdKey: '2'});
     await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'New/2'}), /Rejected value/);
     assert.equal(state.get('first'), 'New/2');
     // The failed rollback must still be repaired even though the retained policy is unchanged.
@@ -169,7 +131,7 @@ describe('page settings connection lifecycle', function () {
   ] as const) {
     it(`does not queue unsupported initialization overrides for repair (${code})`, async function () {
       const settings = {pageSettings: {ImagesEnabled: false}};
-      const {client, initialize} = connectedClient({webInspectorSettings: settings});
+      const {client, initialize} = stubPageClient({webInspectorSettings: settings});
       const send = sinon.stub(client, 'sendMessage').callsFake(async (messageToSend) => {
         const command = commandFrom(messageToSend);
         if (command.method === 'Page.overrideSetting') {
@@ -195,7 +157,7 @@ describe('page settings connection lifecycle', function () {
   for (const fullPageInitialization of [false, true]) {
     for (const reconnect of [false, true]) {
       it(`does not register stale initialization after disconnect (full=${fullPageInitialization}, reconnect=${reconnect})`, async function () {
-        const {client, initialize} = connectedClient({
+        const {client, initialize} = stubPageClient({
           fullPageInitialization,
           webInspectorSettings: {userAgent: 'Old/1'},
         });
@@ -216,7 +178,7 @@ describe('page settings connection lifecycle', function () {
           client.isConnected = true;
           // Reuse the target key before old initialization finishes. Its finally
           // block must not remove this connection's newly registered entry.
-          await addPage(client, 'same-target', '2');
+          await addPage(client, 'same-target', {pageIdKey: '2'});
           send.resetHistory();
         }
         release.resolve();
@@ -234,7 +196,7 @@ describe('page settings connection lifecycle', function () {
     }
 
     it(`times out initialization without blocking other targets (full=${fullPageInitialization})`, async function () {
-      const {client, initialize} = connectedClient({
+      const {client, initialize} = stubPageClient({
         fullPageInitialization,
         webInspectorSettings: {userAgent: 'Initial/1'},
       });
@@ -253,7 +215,7 @@ describe('page settings connection lifecycle', function () {
       try {
         const hung = addPage(client, 'hung');
         await entered.promise;
-        const healthy = addPage(client, 'healthy', '2');
+        const healthy = addPage(client, 'healthy', {pageIdKey: '2'});
         await clock.tickAsync(10000);
         await Promise.all([hung, healthy]);
         for (const method of ['Runtime.enable', 'Inspector.initialized', 'Target.resume']) {
@@ -273,7 +235,7 @@ describe('page settings connection lifecycle', function () {
   }
 
   it('aborts a pending override and queued update immediately on transport disconnect', async function () {
-    const {client} = connectedClient({webInspectorSettings: {userAgent: 'Initial/1'}});
+    const {client} = stubPageClient({webInspectorSettings: {userAgent: 'Initial/1'}});
     const entered = deferred();
     const wire = sinon.stub(client, 'sendMessage').callsFake(async () => {
       entered.resolve();
@@ -288,13 +250,13 @@ describe('page settings connection lifecycle', function () {
     wire.resetHistory();
     client.isConnected = true;
     const send = sinon.stub(client, 'sendToDevice').resolves();
-    await addPage(client, 'fresh', '2');
+    await addPage(client, 'fresh', {pageIdKey: '2'});
     sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {targetId: 'fresh', value: 'Initial/1'});
     sinon.assert.notCalled(wire);
   });
 
   it('bounds a runtime update, rolls healthy targets back, and unblocks queued updates', async function () {
-    const {client} = connectedClient({webInspectorSettings: {userAgent: 'Old/1'}});
+    const {client} = stubPageClient({webInspectorSettings: {userAgent: 'Old/1'}});
     let hang = false;
     const entered = deferred();
     const observed: {targetId: string; value: string}[] = [];
@@ -308,7 +270,7 @@ describe('page settings connection lifecycle', function () {
       }
     });
     await addPage(client, 'healthy');
-    await addPage(client, 'hung', '2');
+    await addPage(client, 'hung', {pageIdKey: '2'});
     observed.length = 0;
     hang = true;
     const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
@@ -328,7 +290,7 @@ describe('page settings connection lifecycle', function () {
         {targetId: 'healthy', value: 'Accepted/3'},
       ]);
       assertNoResponseListeners(client);
-      await addPage(client, 'next', '3');
+      await addPage(client, 'next', {pageIdKey: '3'});
       assert.deepStrictEqual(observed.at(-1), {targetId: 'next', value: 'Accepted/3'});
     } finally {
       clock.restore();
@@ -343,7 +305,7 @@ describe('page settings connection lifecycle', function () {
   for (const {name, previous, next} of recoveryCases) {
     for (const retryNext of [false, true]) {
       it(`repairs a failed rollback before accepting a policy: ${name}, retryNext=${retryNext}`, async function () {
-        const {client} = connectedClient({webInspectorSettings: previous});
+        const {client} = stubPageClient({webInspectorSettings: previous});
         const before = [...toPageOverrides(previous).values()][0]?.value;
         const after = [...toPageOverrides(next).values()][0]?.value;
         const state = new Map<string, boolean | string | undefined>();
@@ -359,7 +321,7 @@ describe('page settings connection lifecycle', function () {
           state.set(String(opts.targetId), opts.value as boolean | string | undefined);
         });
         await addPage(client, 'first');
-        await addPage(client, 'second', '2');
+        await addPage(client, 'second', {pageIdKey: '2'});
         fail = true;
         await assert.rejects(client.setWebInspectorPageSettings(next), /Temporary protocol failure/);
         assert.equal(state.get('first'), after);
@@ -384,10 +346,10 @@ describe('page settings connection lifecycle', function () {
 
   for (const disconnect of [false, true]) {
     it(`discards pending rollback repairs when a target is removed (disconnect=${disconnect})`, async function () {
-      const {client} = connectedClient({webInspectorSettings: {userAgent: 'Old/1'}});
+      const {client} = stubPageClient({webInspectorSettings: {userAgent: 'Old/1'}});
       const send = sinon.stub(client, 'sendToDevice').resolves();
       await addPage(client, 'first');
-      await addPage(client, 'second', '2');
+      await addPage(client, 'second', {pageIdKey: '2'});
       send
         .withArgs('Page.overrideUserAgent', sinon.match({targetId: 'second', value: 'New/2'}))
         .rejects(new Error('Update failed'));
@@ -403,7 +365,7 @@ describe('page settings connection lifecycle', function () {
       }
       send.reset();
       send.resolves();
-      await addPage(client, 'first', '3');
+      await addPage(client, 'first', {pageIdKey: '3'});
       send.resetHistory();
       await client.setWebInspectorPageSettings({userAgent: 'Old/1'});
       sinon.assert.notCalled(send);
@@ -415,10 +377,10 @@ describe('page settings connection lifecycle', function () {
 
   for (const removal of ['wrapper error', 'target error', 'app disconnect', 'target destruction']) {
     it(`cancels disappeared targets' pending waits without rolling back healthy targets (${removal})`, async function () {
-      const {client} = connectedClient();
-      await addPage(client, 'gone-1', '1', 'PID:123');
-      await addPage(client, 'gone-2', '2', 'PID:123');
-      await addPage(client, 'healthy', '1', 'PID:456');
+      const {client} = stubPageClient();
+      await addPage(client, 'gone-1', {appIdKey: 'PID:123'});
+      await addPage(client, 'gone-2', {pageIdKey: '2', appIdKey: 'PID:123'});
+      await addPage(client, 'healthy', {appIdKey: 'PID:456'});
       const handler = (client as any).messageHandler;
       const pending = new Map<string, {id: number; wrapperId: number}>();
       const send = sinon.stub(client, 'sendMessage').callsFake(async (message) => {
@@ -470,7 +432,7 @@ describe('page settings connection lifecycle', function () {
         send.resetHistory();
         await client.setWebInspectorPageSettings({userAgent: 'New/1'});
         sinon.assert.notCalled(send);
-        await addPage(client, 'new-page', '2', 'PID:456');
+        await addPage(client, 'new-page', {pageIdKey: '2', appIdKey: 'PID:456'});
         sinon.assert.calledOnce(send);
         assert.equal(commandFrom(send.firstCall.args[0]).params.value, 'New/1');
       } finally {
@@ -483,11 +445,11 @@ describe('page settings connection lifecycle', function () {
 
   for (const removal of ['app disconnect', 'target destruction']) {
     it(`stops initialization immediately when its target disappears (${removal})`, async function () {
-      const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'New/1'}});
+      const {client, initialize} = stubPageClient({webInspectorSettings: {userAgent: 'New/1'}});
       const send = sinon.stub(client, 'sendMessage').resolves();
       const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
       let initialized = false;
-      const creation = addPage(client, 'gone', '1', 'PID:123').then(() => {
+      const creation = addPage(client, 'gone', {appIdKey: 'PID:123'}).then(() => {
         initialized = true;
       });
       try {
@@ -522,23 +484,23 @@ describe('page settings connection lifecycle', function () {
     "Remote debugger error with code '-32000': Application PID:123 does not exist.",
   ]) {
     it(`removes a missing app during initialization: ${message}`, async function () {
-      const {client} = connectedClient({webInspectorSettings: {userAgent: 'First/1'}});
+      const {client} = stubPageClient({webInspectorSettings: {userAgent: 'First/1'}});
       const send = sinon.stub(client, 'sendToDevice').resolves();
-      await addPage(client, 'existing', '1', 'PID:123');
-      await addPage(client, 'healthy', '1', 'alive');
+      await addPage(client, 'existing', {appIdKey: 'PID:123'});
+      await addPage(client, 'healthy', {appIdKey: 'alive'});
       send.withArgs('Page.overrideUserAgent', sinon.match({appIdKey: 'PID:123'})).rejects(new Error(message));
-      await addPage(client, 'gone', '2', 'PID:123');
+      await addPage(client, 'gone', {pageIdKey: '2', appIdKey: 'PID:123'});
       send.resetHistory();
       await client.setWebInspectorPageSettings({userAgent: 'Next/2'});
       sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'alive', value: 'Next/2'});
     });
 
     it(`removes every stale target of a missing app: ${message}`, async function () {
-      const {client} = connectedClient();
+      const {client} = stubPageClient();
       const send = sinon.stub(client, 'sendToDevice').resolves();
-      await addPage(client, 'stale-1', '1', 'PID:123');
-      await addPage(client, 'stale-2', '2', 'PID:123');
-      await addPage(client, 'healthy', '1', 'alive');
+      await addPage(client, 'stale-1', {appIdKey: 'PID:123'});
+      await addPage(client, 'stale-2', {pageIdKey: '2', appIdKey: 'PID:123'});
+      await addPage(client, 'healthy', {appIdKey: 'alive'});
       send.withArgs('Page.overrideUserAgent', sinon.match({appIdKey: 'PID:123'})).rejects(new Error(message));
       await client.setWebInspectorPageSettings({userAgent: 'First/1'});
       assert.deepStrictEqual(
@@ -561,13 +523,13 @@ describe('page settings connection lifecycle', function () {
   ]) {
     for (const duringInitialization of [false, true]) {
       it(`retains targets on unrelated errors (init=${duringInitialization}): ${message}`, async function () {
-        const {client} = connectedClient({
+        const {client} = stubPageClient({
           webInspectorSettings: duringInitialization ? {userAgent: 'Rejected/1'} : {},
         });
         const send = sinon.stub(client, 'sendToDevice').resolves();
         send.withArgs('Page.overrideUserAgent', sinon.match({value: 'Rejected/1'})).rejects(new Error(message));
-        await addPage(client, 'first', '1', 'PID:123');
-        await addPage(client, 'second', '2', 'PID:123');
+        await addPage(client, 'first', {appIdKey: 'PID:123'});
+        await addPage(client, 'second', {pageIdKey: '2', appIdKey: 'PID:123'});
         await assert.rejects(client.setWebInspectorPageSettings({userAgent: 'Rejected/1'}), {message});
         send.resetHistory();
         await client.setWebInspectorPageSettings({userAgent: 'Accepted/2'});
@@ -581,21 +543,21 @@ describe('page settings connection lifecycle', function () {
   }
 
   it('forgets all targets when the application disconnect notification arrives', async function () {
-    const {client} = connectedClient();
+    const {client} = stubPageClient();
     const send = sinon.stub(client, 'sendToDevice').resolves();
-    await addPage(client, 'first', '1', 123);
-    await addPage(client, 'second', '2', 123);
-    await addPage(client, 'healthy', '1', 'other');
+    await addPage(client, 'first', {appIdKey: 123});
+    await addPage(client, 'second', {pageIdKey: '2', appIdKey: 123});
+    await addPage(client, 'healthy', {appIdKey: 'other'});
     (client as any).messageHandler.emit('_rpc_applicationDisconnected:', null, {WIRApplicationIdentifierKey: '123'});
     await client.setWebInspectorPageSettings({userAgent: 'Test/1'});
     sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'other'});
   });
 
   it('normalizes app keys and keeps identical target IDs in different apps separate', async function () {
-    const {client} = connectedClient();
+    const {client} = stubPageClient();
     const send = sinon.stub(client, 'sendToDevice').resolves();
-    await addPage(client, 'same', '1', 123);
-    await addPage(client, 'same', '1', 'other');
+    await addPage(client, 'same', {appIdKey: 123});
+    await addPage(client, 'same', {appIdKey: 'other'});
     await client.removeTarget(undefined, '123', {targetId: 'same'} as any);
     await client.setWebInspectorPageSettings({userAgent: 'Test/1'});
     sinon.assert.calledOnceWithMatch(send, 'Page.overrideUserAgent', {appIdKey: 'other', targetId: 'same'});
@@ -659,7 +621,7 @@ describe('target lifetime during initialization', function () {
   }
 
   it('does not register a destroyed target queued behind a settings update', async function () {
-    const {client} = connectedClient();
+    const {client} = stubPageClient();
     const entered = deferred();
     const release = deferred();
     const send = sinon.stub(client, 'sendToDevice').callsFake(async (_method, opts) => {
@@ -668,10 +630,10 @@ describe('target lifetime during initialization', function () {
         await release.promise;
       }
     });
-    await addPage(client, 'healthy', '1');
+    await addPage(client, 'healthy');
     const update = client.setWebInspectorPageSettings({userAgent: 'Next/2'});
     await entered.promise;
-    const creation = addPage(client, 'gone', '2');
+    const creation = addPage(client, 'gone', {pageIdKey: '2'});
     // Let the core domains finish and initialization queue for the settings lock.
     await new Promise<void>((resolve) => setImmediate(resolve));
     await client.removeTarget(undefined, 'app', {targetId: 'gone'} as any);
@@ -683,7 +645,7 @@ describe('target lifetime during initialization', function () {
 
   for (const error of ['Missing target for given targetId', 'app not found']) {
     it(`invalidates routing after an override reports ${error}`, async function () {
-      const {client, initialize} = connectedClient();
+      const {client, initialize} = stubPageClient();
       const send = sinon.stub(client, 'sendToDevice').resolves();
       await addPage(client, 'gone');
       send.withArgs('Page.overrideUserAgent', sinon.match({targetId: 'gone'})).rejects(new Error(error));
@@ -704,7 +666,7 @@ describe('target lifetime during initialization', function () {
   }
 
   it('preserves a committed provisional replacement and resumes its later creation notification', async function () {
-    const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'Test/1'}});
+    const {client, initialize} = stubPageClient({webInspectorSettings: {userAgent: 'Test/1'}});
     const send = sinon.stub(client, 'sendToDevice').resolves();
     await addPage(client, 'old');
     await client.addTarget(undefined, 'app', {targetId: 'new', type: 'page', isProvisional: true, isPaused: true});
@@ -722,7 +684,7 @@ describe('target lifetime during initialization', function () {
   });
 
   it('clears provisional routing when its replacement disappears', async function () {
-    const {client} = connectedClient();
+    const {client} = stubPageClient();
     await addPage(client, 'old');
     await client.addTarget(undefined, 'app', {targetId: 'new', type: 'page', isProvisional: true, isPaused: true});
     await client.updateTarget(undefined, 'app', {oldTargetId: 'old', newTargetId: 'new'});
@@ -734,7 +696,7 @@ describe('target lifetime during initialization', function () {
 
   for (const isProvisional of [false, true]) {
     it(`does not resume a target after a missing-app initialization error (provisional=${isProvisional})`, async function () {
-      const {client, initialize} = connectedClient({webInspectorSettings: {userAgent: 'Test/1'}});
+      const {client, initialize} = stubPageClient({webInspectorSettings: {userAgent: 'Test/1'}});
       sinon.stub(client, 'sendToDevice').rejects(new Error('app not found'));
       (client as any)._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
       await client.addTarget(undefined, 'app', {targetId: 'gone', type: 'page', isProvisional, isPaused: true});
