@@ -1116,6 +1116,16 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
     });
   }
 
+  Napi::Value StartPasteboardSync(const Napi::CallbackInfo& info) {
+    id device = device_;
+    return RunAsyncVoid(info.Env(), [device]() { coresim::StartPasteboardSync(device); });
+  }
+
+  Napi::Value StopPasteboardSync(const Napi::CallbackInfo& info) {
+    id device = device_;
+    return RunAsyncVoid(info.Env(), [device]() { coresim::StopPasteboardSync(device); });
+  }
+
   // See native/sim_process.h.
   Napi::Value GetWebInspectorSocket(const Napi::CallbackInfo& info) {
     NSString* udid = DeviceUDID(device_).UUIDString;
@@ -1830,6 +1840,8 @@ void NativeDevice::Init(Napi::Env env) {
                       InstanceMethod<&NativeDevice::AddVideo>("addVideo"),
                       InstanceMethod<&NativeDevice::GetPasteboard>("getPasteboard"),
                       InstanceMethod<&NativeDevice::SetPasteboard>("setPasteboard"),
+                      InstanceMethod<&NativeDevice::StartPasteboardSync>("startPasteboardSync"),
+                      InstanceMethod<&NativeDevice::StopPasteboardSync>("stopPasteboardSync"),
                       InstanceMethod<&NativeDevice::GetWebInspectorSocket>("getWebInspectorSocket"),
                       InstanceMethod<&NativeDevice::Screenshot>("screenshot"),
                       InstanceMethod<&NativeDevice::GetDisplays>("getDisplays"),

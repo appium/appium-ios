@@ -478,6 +478,8 @@ export interface NativeDeviceHandle {
   addVideo(filePath: string): Promise<void>;
   getPasteboard(): Promise<string>;
   setPasteboard(content: string): Promise<void>;
+  startPasteboardSync(): Promise<void>;
+  stopPasteboardSync(): Promise<void>;
   getWebInspectorSocket(): Promise<string>;
   screenshot(options?: {format?: 'png' | 'jpeg'; displayId?: string; quality?: number}): Promise<Buffer>;
   getDisplays(): Promise<SimDisplayInfo[]>;

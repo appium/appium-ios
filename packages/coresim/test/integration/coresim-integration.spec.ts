@@ -286,14 +286,19 @@ async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
   if (!fs.existsSync(prefsDir)) {
     return;
   }
-  await execFileAsync('defaults', [
-    'write',
-    path.join(prefsDir, 'com.apple.dt.Devices.plist'),
-    'DevicePreferences',
-    '-dict-add',
-    udid,
-    '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
-  ]);
+  try {
+    await execFileAsync('defaults', [
+      'write',
+      path.join(prefsDir, 'com.apple.dt.Devices.plist'),
+      'DevicePreferences',
+      '-dict-add',
+      udid,
+      '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
+    ]);
+  } catch (err) {
+    // macOS 27 denies other apps' containers unless the runner has Full Disk Access
+    process.emitWarning(`Cannot disable the DeviceHub pasteboard sync, the pasteboard tests may be flaky: ${err}`);
+  }
 }
 
 interface RuntimeFixture {
@@ -814,6 +819,38 @@ describe('NativeSimctl integration', () => {
           {waitMs: 10000, intervalMs: 500, error: `expected the device pasteboard to eventually read '${expected}'`},
         );
         assert.strictEqual(actual, expected);
+      });
+
+      it('keeps the device pasteboard in sync with the host pasteboard while pasteboard sync runs', async (t) => {
+        const hostPasteboard = {
+          get: async () => (await execFileAsync('pbpaste', [])).stdout,
+          set: async (value: string) => {
+            const child = execFile('pbcopy');
+            child.stdin!.end(value);
+            await once(child, 'exit');
+          },
+        };
+        const savedHostPasteboard = await hostPasteboard.get();
+        try {
+          await sim.startPasteboardSync(device!.udid);
+        } catch (err) {
+          if (err instanceof NativeSimUnavailableError) {
+            return t.skip(`continuous pasteboard sync unavailable on this CoreSimulator: ${err.message}`);
+          }
+          throw err;
+        }
+        try {
+          const expected = 'coresim-pasteboard-sync-test';
+          await hostPasteboard.set(expected);
+          await waitForCondition(async () => (await sim.getPasteboard(device!.udid)) === expected, {
+            waitMs: 15000,
+            intervalMs: 500,
+            error: `expected the device pasteboard to follow the host pasteboard to '${expected}'`,
+          });
+        } finally {
+          await sim.stopPasteboardSync(device!.udid);
+          await hostPasteboard.set(savedHostPasteboard);
+        }
       });
 
       it('locates the booted device WebInspector socket and can connect to it', async () => {

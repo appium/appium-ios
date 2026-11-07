@@ -134,6 +134,15 @@ toolchain (`make` and `xcodebuild`).
   than being idempotent no-ops — callers need to check state first.
 - **Pasteboard sync (`getPasteboard`/`setPasteboard`) needs no special entitlement** — see
   `sim_pasteboard.mm` for the two private mechanisms it picks between and how.
+- **`startPasteboardSync`/`stopPasteboardSync` replace the UI client's automatic pasteboard sync**
+  (Simulator.app's `PasteboardAutomaticSync`, DeviceHub's "Use Shared Clipboard") by keeping a
+  `SimPasteboardInterface` bound to the host's general pasteboard alive in this process and calling
+  its `enableRemoteAutosync` — confirmed empirically in both directions (a guest-side `UIPasteboard`
+  write reaches the host; a host write reaches the device), and without `enableRemoteAutosync`
+  nothing syncs. `simctl pbcopy`/`setPasteboard` pushes do **not** count as device-originated changes.
+  The delegate must read each applied snapshot right away (`resolvesAppliedData`): the data is
+  provided lazily by this process, and with no main run loop (Node) other processes asking for it
+  — `pbpaste`, other apps — hang until timeout. The session ends when the device disconnects.
 - **Screenshot capture (`getScreenshot`) reads the device's live framebuffer `IOSurface` in-process**
   — no entitlement, no temp file, no `simctl` subprocess — see `sim_screenshot.mm` for how the main
   display's IO port is found and rendered to PNG.

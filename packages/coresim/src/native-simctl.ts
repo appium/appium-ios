@@ -40,7 +40,7 @@ import {
 } from './commands/lifecycle.js';
 import {addMedia, addPhoto, addVideo} from './commands/media.js';
 import {shake} from './commands/misc.js';
-import {getPasteboard, setPasteboard} from './commands/pasteboard.js';
+import {getPasteboard, setPasteboard, startPasteboardSync, stopPasteboardSync} from './commands/pasteboard.js';
 import {getPermission, grantPermission, resetPermission, revokePermission} from './commands/permissions.js';
 import {getRuntimeRootPath, listProcesses} from './commands/process.js';
 import {getDisplays, getScreenshot} from './commands/screenshot.js';
@@ -283,6 +283,8 @@ Object.assign(NativeSimctl.prototype, {
   // pasteboard
   getPasteboard,
   setPasteboard,
+  startPasteboardSync,
+  stopPasteboardSync,
 
   // screenshot
   getScreenshot,
