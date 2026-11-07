@@ -51,7 +51,7 @@
     "@appium/support": "^7.2.7",
     "@xmldom/xmldom": "^0.x",
     "appium-xcode": "^7.2.4",
-    "asyncbox": "^6.5.0",
+    "asyncbox": "^6.6.0",
     "semver": "^7.8.5",
     "teen_process": "^4.2.0"
   },
