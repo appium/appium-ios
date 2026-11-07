@@ -108,7 +108,7 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
   uint64_t now = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   BOOL isCacheValid = nil != self.cachedScreen
-    && (displayId == self.cachedScreenDisplayId || [displayId isEqualToNumber:self.cachedScreenDisplayId])
+    && (displayId == self.cachedScreenDisplayId || [displayId isEqual:self.cachedScreenDisplayId])
     && now - self.cachedScreenTimestamp < SCREEN_REFRESH_INTERVAL;
   if (isCacheValid) {
     return self.cachedScreen;
