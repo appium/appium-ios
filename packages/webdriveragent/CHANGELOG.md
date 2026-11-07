@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.11...appium-webdriveragent@16.18.0) (2026-11-07)
+
+### Features
+
+* **webdriveragent:** add hasHinge ([#162](https://github.com/appium/appium-ios/issues/162)) ([6bd7f4c](https://github.com/appium/appium-ios/commit/6bd7f4c2a0f16cfa3e13a0c69ac3e16e512cee77))
+
+
 ## [16.17.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.10...appium-webdriveragent@16.17.11) (2026-11-06)
 
 **Note:** Version bump only for package appium-webdriveragent
