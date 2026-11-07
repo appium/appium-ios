@@ -5,7 +5,7 @@ import {describe, it} from 'node:test';
 import {AsyncLock} from 'asyncbox';
 import sinon from 'sinon';
 
-import {RpcClient} from '../../../lib/rpc/rpc-client.js';
+import {EMPTY_PAGE_DICTIONARY_ERROR, NEW_APP_CONNECTED_ERROR, RpcClient} from '../../../lib/rpc/rpc-client.js';
 
 describe('rpc-client', function () {
   describe('.send', function () {
@@ -92,6 +92,101 @@ describe('rpc-client', function () {
       assert.strictEqual(fullOpts.senderId, 'default-sender-id');
       assert.strictEqual(fullOpts.connId, 'connection-id');
     });
+
+    for (const [kind, socketData, expected] of [
+      ['without', undefined, []],
+      ['with', {method: 'Page.enable'}, ['1', '2']],
+    ] as const) {
+      it(`should only listen for replies that can come when not waiting on a command ${kind} socket data`, async function () {
+        const {sendToDevice} = RpcClient.prototype;
+        const messageHandler = new EventEmitter();
+        const mockRpcClient = {
+          msgId: 1,
+          messageHandler,
+          remoteMessages: {
+            getRemoteCommand: (_command: string, opts: any) => ({
+              __argument: {...opts, ...(socketData && {WIRSocketDataKey: {...socketData}})},
+              __selector: '_rpc_forwardGetListing:',
+            }),
+          },
+          getTarget: sinon.stub().returns(undefined),
+          sendMessage: sinon.stub().resolves(),
+        };
+        await sendToDevice.call(mockRpcClient as any, 'connectToApp', {appIdKey: 'PID:1'} as any, false);
+        assert.deepStrictEqual(messageHandler.eventNames().sort(), [...expected]);
+      });
+    }
+  });
+
+  describe('.selectApp', function () {
+    const page = {1: {WIRTitleKey: '', WIRURLKey: 'https://example.test/'}};
+
+    function mockClient(onSend: (handler: EventEmitter) => void) {
+      const messageHandler = new EventEmitter();
+      return {
+        messageHandler,
+        send: sinon.stub().callsFake(async () => onSend(messageHandler)),
+      };
+    }
+
+    it('should resolve with the listing of the requested application', async function () {
+      const client = mockClient((handler) => {
+        handler.emit('_rpc_forwardGetListing:', null, 'PID:2', {});
+        handler.emit('_rpc_forwardGetListing:', null, 'PID:1', page);
+      });
+      const result = await RpcClient.prototype.selectApp.call(client as any, 'PID:1');
+      assert.deepStrictEqual(result, ['PID:1', page]);
+      assert.deepStrictEqual(client.send.firstCall.args, ['connectToApp', {appIdKey: 'PID:1'}, false]);
+    });
+
+    it('should keep waiting when an unrelated application connects', async function () {
+      const client = mockClient((handler) => {
+        handler.emit('_rpc_applicationConnected:', null, {WIRApplicationIdentifierKey: 'PID:2'});
+        handler.emit('_rpc_forwardGetListing:', null, 'PID:1', page);
+      });
+      const result = await RpcClient.prototype.selectApp.call(client as any, 'PID:1');
+      assert.deepStrictEqual(result, ['PID:1', page]);
+    });
+
+    it('should reject when a proxy of the requested application connects', async function () {
+      const client = mockClient((handler) => {
+        handler.emit('_rpc_applicationConnected:', null, {
+          WIRApplicationIdentifierKey: 'PID:2',
+          WIRHostApplicationIdentifierKey: 'PID:1',
+        });
+      });
+      await assert.rejects(RpcClient.prototype.selectApp.call(client as any, 'PID:1'), {
+        message: NEW_APP_CONNECTED_ERROR,
+      });
+    });
+
+    it('should reject when the requested application reconnects', async function () {
+      const client = mockClient((handler) => {
+        handler.emit('_rpc_applicationConnected:', null, {WIRApplicationIdentifierKey: 'PID:1'});
+      });
+      await assert.rejects(RpcClient.prototype.selectApp.call(client as any, 'PID:1'), {
+        message: NEW_APP_CONNECTED_ERROR,
+      });
+    });
+
+    it('should reject when the requested application sends an empty listing', async function () {
+      const client = mockClient((handler) => handler.emit('_rpc_forwardGetListing:', null, 'PID:1', {}));
+      await assert.rejects(RpcClient.prototype.selectApp.call(client as any, 'PID:1'), {
+        message: EMPTY_PAGE_DICTIONARY_ERROR,
+      });
+    });
+
+    for (const [outcome, listing] of [
+      ['selected', page],
+      ['rejected', {}],
+    ] as const) {
+      it(`should stop listening once the application is ${outcome}`, async function () {
+        const client = mockClient((handler) => handler.emit('_rpc_forwardGetListing:', null, 'PID:1', listing));
+        await RpcClient.prototype.selectApp.call(client as any, 'PID:1').catch(() => {});
+        assert.strictEqual(client.messageHandler.listenerCount('_rpc_forwardGetListing:'), 0);
+        assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+      });
+    }
   });
 
   describe('.selectPage', function () {
