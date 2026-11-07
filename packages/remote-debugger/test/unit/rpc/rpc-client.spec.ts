@@ -92,6 +92,30 @@ describe('rpc-client', function () {
       assert.strictEqual(fullOpts.senderId, 'default-sender-id');
       assert.strictEqual(fullOpts.connId, 'connection-id');
     });
+
+    for (const [kind, socketData, expected] of [
+      ['without', undefined, []],
+      ['with', {method: 'Page.enable'}, ['1', '2']],
+    ] as const) {
+      it(`should only listen for replies that can come when not waiting on a command ${kind} socket data`, async function () {
+        const {sendToDevice} = RpcClient.prototype;
+        const messageHandler = new EventEmitter();
+        const mockRpcClient = {
+          msgId: 1,
+          messageHandler,
+          remoteMessages: {
+            getRemoteCommand: (_command: string, opts: any) => ({
+              __argument: {...opts, ...(socketData && {WIRSocketDataKey: {...socketData}})},
+              __selector: '_rpc_forwardGetListing:',
+            }),
+          },
+          getTarget: sinon.stub().returns(undefined),
+          sendMessage: sinon.stub().resolves(),
+        };
+        await sendToDevice.call(mockRpcClient as any, 'connectToApp', {appIdKey: 'PID:1'} as any, false);
+        assert.deepStrictEqual(messageHandler.eventNames().sort(), [...expected]);
+      });
+    }
   });
 
   describe('.selectApp', function () {

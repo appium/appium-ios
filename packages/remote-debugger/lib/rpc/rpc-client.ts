@@ -378,12 +378,6 @@ export class RpcClient {
         const msgId = this.msgId++;
         // for target-base communication, everything is wrapped up
         const wrapperMsgId = this.msgId++;
-        // acknowledge wrapper message
-        this.messageHandler.on(wrapperMsgId.toString(), function (err: Error | null) {
-          if (err) {
-            reject(err);
-          }
-        });
 
         const appIdKey = opts.appIdKey;
         const pageIdKey = opts.pageIdKey;
@@ -422,6 +416,12 @@ export class RpcClient {
           if (!Number.isInteger(socketData.id)) {
             // ! This must be a number
             socketData.id = wrapperMsgId;
+            // acknowledge wrapper message
+            this.messageHandler.once(wrapperMsgId.toString(), (err: Error | null) => {
+              if (err) {
+                reject(err);
+              }
+            });
           }
           finalCommand.__argument.WIRSocketDataKey = Buffer.from(JSON.stringify(socketData));
         }
@@ -430,21 +430,23 @@ export class RpcClient {
         if (!waitForResponse) {
           // the promise will be resolved as soon as the socket has been sent
           messageHandled = false;
-          // do not log receipts
-          this.messageHandler.once(msgId.toString(), (err: Error | null) => {
-            if (err) {
-              // we are not waiting for this, and if it errors it is most likely
-              // a protocol change. Log and check during testing
-              log.error(
-                `Received error from send that is not being waited for (id: ${msgId}): ` +
-                  util.truncateString(JSON.stringify(err), DATA_LOG_LENGTH),
-              );
-              // reject, though it is very rare that this will be triggered, since
-              // the promise is resolved directly after send. On the off chance,
-              // though, it will alert of a protocol change.
-              reject(err);
-            }
-          });
+          // only socket data replies come back under the message id
+          if (hasSocketData) {
+            this.messageHandler.once(msgId.toString(), (err: Error | null) => {
+              if (err) {
+                // we are not waiting for this, and if it errors it is most likely
+                // a protocol change. Log and check during testing
+                log.error(
+                  `Received error from send that is not being waited for (id: ${msgId}): ` +
+                    util.truncateString(JSON.stringify(err), DATA_LOG_LENGTH),
+                );
+                // reject, though it is very rare that this will be triggered, since
+                // the promise is resolved directly after send. On the off chance,
+                // though, it will alert of a protocol change.
+                reject(err);
+              }
+            });
+          }
         } else if (this.messageHandler.listenerCount(cmd.__selector)) {
           this.messageHandler.prependOnceListener(cmd.__selector, (err: Error | null, ...args: any[]) => {
             if (err) {
