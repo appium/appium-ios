@@ -705,3 +705,89 @@ describe('target lifetime during initialization', function () {
     });
   }
 });
+
+describe('initialization polling cancellation', function () {
+  for (const fullPageInitialization of [false, true]) {
+    for (const stage of ['target lookup', 'readiness response', 'readiness interval']) {
+      for (const removal of ['target', 'reconnect']) {
+        it(
+          `releases the page lock during ${stage} on ${removal} (full=${fullPageInitialization})`,
+          {timeout: 3000},
+          async function () {
+            const client = new RpcClient({fullPageInitialization});
+            client.isConnected = true;
+            const entered = deferred();
+            const commands: {targetId: string; method: string}[] = [];
+            const lookup = sinon.spy(client, 'waitForTarget');
+            const wire = sinon.stub(client, 'sendMessage').callsFake(async (message) => {
+              const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
+              const command =
+                wrapper.method === 'Target.sendMessageToTarget' ? JSON.parse(wrapper.params.message) : wrapper;
+              const targetId = wrapper.params?.targetId ?? command.params?.targetId;
+              commands.push({targetId, method: command.method});
+              let result = {};
+              let error;
+              if (targetId === 'old') {
+                if (stage === 'target lookup' && command.method === 'Inspector.enable') {
+                  error = {code: -32000, message: 'Missing target for given targetId'};
+                  entered.resolve();
+                } else if (command.method === 'Runtime.evaluate') {
+                  entered.resolve();
+                  if (stage === 'readiness response') {
+                    return; // Cancellation must release an unanswered RPC too.
+                  }
+                  result = {result: {type: 'string', value: 'loading'}};
+                }
+              }
+              const response = {id: command.id, ...(error ? {error} : {result})};
+              await (client as any).messageHandler.handleMessage(
+                wrapper.method === 'Target.sendMessageToTarget'
+                  ? targetMessage(targetId, response)
+                  : dataMessage(response),
+              );
+            });
+            (client as any)._pendingTargetNotification = {
+              appIdKey: 'app',
+              pageIdKey: '1',
+              pageReadinessDetector: {timeoutMs: 30000, readinessDetector: () => false},
+            };
+            // Provisional initialization has no normal page mapping, exposing the retry wait.
+            const old = client.addTarget(undefined, 'app', {
+              targetId: 'old',
+              type: 'page',
+              isProvisional: true,
+              isPaused: true,
+            });
+            await entered.promise;
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            if (stage === 'target lookup') {
+              sinon.assert.calledOnce(lookup);
+            }
+            // Queue a replacement on the same page lock before cancelling the old work.
+            const replacement = addPage(client, 'replacement', {isProvisional: true});
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            assert.ok(!commands.some(({targetId}) => targetId === 'replacement'));
+            if (removal === 'target') {
+              await client.removeTarget(undefined, 'app', {targetId: 'old'} as any);
+            } else {
+              client.isConnected = false;
+              client.isConnected = true;
+            }
+            const oldCount = commands.filter(({targetId}) => targetId === 'old').length;
+            await Promise.all([old, replacement]);
+            if (removal === 'reconnect') {
+              await addPage(client, 'new-connection');
+            } else {
+              assert.ok(
+                commands.some(({targetId, method}) => targetId === 'replacement' && method === 'Target.resume'),
+              );
+            }
+            assert.equal(commands.filter(({targetId}) => targetId === 'old').length, oldCount);
+            assertNoResponseListeners(client);
+            wire.restore();
+          },
+        );
+      }
+    }
+  }
+});

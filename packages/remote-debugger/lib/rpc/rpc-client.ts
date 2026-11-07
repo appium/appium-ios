@@ -1,8 +1,9 @@
 import {EventEmitter} from 'node:events';
+import {setTimeout as delay} from 'node:timers/promises';
 
 import {util, timing} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import {AsyncLock, sleep, waitForCondition, withTimeout, TimeoutError} from 'asyncbox';
+import {AsyncLock, sleep, withTimeout, TimeoutError} from 'asyncbox';
 
 import {log} from '../logger.js';
 import {toPageOverrides, type PageOverride, type WebInspectorPageSettings} from '../page-overrides.js';
@@ -342,7 +343,8 @@ export class RpcClient {
    * @returns A promise that resolves to the target ID if found, undefined otherwise.
    * @throws Error if no target is found after the timeout.
    */
-  async waitForTarget(appIdKey: AppIdKey, pageIdKey: PageIdKey): Promise<TargetId | undefined> {
+  async waitForTarget(appIdKey: AppIdKey, pageIdKey: PageIdKey, signal?: AbortSignal): Promise<TargetId | undefined> {
+    signal?.throwIfAborted();
     let target = this.getTarget(appIdKey, pageIdKey);
     if (target) {
       log.debug(`The target '${target}' for app '${appIdKey}' and page '${pageIdKey}' already exists, no need to wait`);
@@ -352,26 +354,20 @@ export class RpcClient {
     // otherwise waiting is necessary to see what the target is
     const waitMs = Math.max(MIN_WAIT_FOR_TARGET_TIMEOUT_MS, this.pageLoadTimeoutMs || 0);
     log.debug(`Waiting up to ${waitMs}ms for a target to be created for app '${appIdKey}' and page '${pageIdKey}'`);
-    try {
-      await waitForCondition(
-        () => {
-          target = this.getTarget(appIdKey, pageIdKey);
-          return !util.isEmpty(target);
-        },
-        {
-          waitMs,
-          intervalMs: WAIT_FOR_TARGET_INTERVAL_MS,
-        },
-      );
-      return target;
-    } catch (err: any) {
-      if (!err.message.includes('Condition unmet')) {
-        throw err;
+    const deadline = Date.now() + waitMs;
+    while (true) {
+      signal?.throwIfAborted();
+      target = this.getTarget(appIdKey, pageIdKey);
+      if (!util.isEmpty(target)) {
+        return target;
       }
-      throw new Error(
-        `No targets could be matched for the app '${appIdKey}' and page '${pageIdKey}' after ${waitMs}ms`,
-        {cause: err},
-      );
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        throw new Error(
+          `No targets could be matched for the app '${appIdKey}' and page '${pageIdKey}' after ${waitMs}ms`,
+        );
+      }
+      await delay(Math.min(WAIT_FOR_TARGET_INTERVAL_MS, remainingMs), undefined, {signal});
     }
   }
 
@@ -401,7 +397,7 @@ export class RpcClient {
       if (messageLc.includes(NO_TARGET_SUPPORTED_ERROR)) {
         return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
       } else if (appIdKey && NO_TARGET_PRESENT_YET_ERRORS.some((error) => messageLc.includes(error))) {
-        await this.waitForTarget(appIdKey, pageIdKey as PageIdKey);
+        await this.waitForTarget(appIdKey, pageIdKey as PageIdKey, ...(signal ? [signal] : []));
         signal?.throwIfAborted();
         return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
       }
@@ -697,7 +693,7 @@ export class RpcClient {
             this._provisionedPages.add(key);
           }
           if (!alreadyProvisioned) {
-            await this._waitForPageReadiness(appIdKey, pageIdKey, target.targetId, adjustPageReadinessDetector());
+            await this._waitForPageReadiness(target, signal, adjustPageReadinessDetector());
           }
         }
       });
@@ -1405,17 +1401,16 @@ export class RpcClient {
    * Waits for a page to be ready by periodically checking the document readyState.
    * Uses the provided readiness detector to determine when the page is ready.
    *
-   * @param appIdKey - The application identifier key.
-   * @param pageIdKey - The page identifier key.
-   * @param targetId - The target ID.
+   * @param target - The target being initialized.
+   * @param signal - Combined connection and target cancellation signal.
    * @param pageReadinessDetector - The detector for determining page readiness.
    */
   private async _waitForPageReadiness(
-    appIdKey: AppIdKey,
-    pageIdKey: PageIdKey,
-    targetId: TargetId,
+    {appIdKey, pageIdKey, targetId}: PageTarget,
+    signal: AbortSignal,
     pageReadinessDetector?: PageReadinessDetector,
   ): Promise<void> {
+    signal.throwIfAborted();
     if (!pageReadinessDetector) {
       return;
     }
@@ -1423,6 +1418,7 @@ export class RpcClient {
     log.debug(`Waiting up to ${pageReadinessDetector.timeoutMs}ms for page readiness`);
     const timer = new timing.Timer().start();
     while (pageReadinessDetector.timeoutMs - timer.getDuration().asMilliSeconds > 0) {
+      signal.throwIfAborted();
       let readyState: string;
       try {
         const commandTimeoutMs = Math.max(
@@ -1430,25 +1426,32 @@ export class RpcClient {
           Math.trunc((pageReadinessDetector.timeoutMs - timer.getDuration().asMilliSeconds) * 0.8),
         );
         const rawResult = await withTimeout(
-          this.send('Runtime.evaluate', {
-            expression: 'document.readyState;',
-            returnByValue: true,
-            appIdKey,
-            pageIdKey,
-            targetId,
-          }),
+          this.send(
+            'Runtime.evaluate',
+            {
+              expression: 'document.readyState;',
+              returnByValue: true,
+              appIdKey,
+              pageIdKey,
+              targetId,
+            },
+            true,
+            signal,
+          ),
           commandTimeoutMs,
         );
         readyState = convertJavascriptEvaluationResult(rawResult);
       } catch (e: any) {
+        signal.throwIfAborted();
         log.debug(`Cannot determine page readiness: ${e.message}`);
         continue;
       }
+      signal.throwIfAborted();
       if (pageReadinessDetector.readinessDetector(readyState)) {
         log.info(`Page '${pageIdKey}' for app '${appIdKey}' is ready after ${timer.getDuration().asMilliSeconds}ms`);
         return;
       }
-      await sleep(100);
+      await delay(100, undefined, {signal});
     }
     log.warn(
       `Page '${pageIdKey}' for app '${appIdKey}' is not ready after ` +
