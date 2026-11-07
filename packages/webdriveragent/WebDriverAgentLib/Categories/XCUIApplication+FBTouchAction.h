@@ -55,6 +55,42 @@ NS_ASSUME_NONNULL_BEGIN
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 /**
+ Builds the event record used by
+ -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:
+ without sending it, so a caller can dispatch it itself. The confirmed path and any caller
+ that skips the daemon confirmation therefore produce the same gesture from the same inputs.
+
+ @param startCoordinate The coordinate to press at
+ @param pressDuration How long to hold still at startCoordinate before dragging, in seconds (>= 0)
+ @param endCoordinate The coordinate to drag to
+ @param velocity Drag velocity in points per second, or one of the XCUIGestureVelocity constants
+ @param holdDuration How long to hold still at endCoordinate before lifting, in seconds (>= 0)
+ @param error If there is an error, upon return contains an NSError object that describes the problem
+ @return The event record, ready to be synthesized, or nil if the points cannot be resolved
+ @throws FBInvalidArgumentException if a duration or the velocity is out of range
+ */
+- (nullable XCSynthesizedEventRecord *)fb_pressDragEventFromCoordinate:(XCUICoordinate *)startCoordinate
+                                                          forDuration:(NSTimeInterval)pressDuration
+                                                         toCoordinate:(XCUICoordinate *)endCoordinate
+                                                         withVelocity:(XCUIGestureVelocity)velocity
+                                                 thenHoldForDuration:(NSTimeInterval)holdDuration
+                                                               error:(NSError * _Nullable*)error;
+
+/**
+ Builds the event record for a single tap at an already resolved screen point, matching
+ the touch path -[XCUICoordinate tap] produces. Exposed so a caller can dispatch the
+ event without waiting for XCTest's daemon confirmation.
+
+ @param point The screen point to tap
+ @param displayID The display to send the gesture to (0 is the main display)
+ @param interfaceOrientation The interface orientation the point is expressed in
+ @return The event record, ready to be synthesized
+ */
++ (XCSynthesizedEventRecord *)fb_tapEventFromPoint:(CGPoint)point
+                                         displayID:(long long)displayID
+                              interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation;
+
+/**
  Builds the synthesized event used by
  -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:
  from already resolved screen points. Exposed for testing.

@@ -11,6 +11,7 @@
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
+#import "FBLogger.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
 #import "FBRunLoopSpinner.h"
@@ -23,7 +24,9 @@
 #import "FBRuntimeUtils.h"
 #import "NSPredicate+FBFormat.h"
 #import "XCTestPrivateSymbols.h"
+#import "FBXCTestDaemonsProxy.h"
 #import "XCUIApplication+FBTouchAction.h"
+
 #import "XCUICoordinate.h"
 #import "XCUIDevice.h"
 #import "XCUIElement+FBIsVisible.h"
@@ -43,6 +46,9 @@
 #import "FBXCodeCompatibility.h"
 
 @interface FBElementCommands ()
+
++ (void)fb_dispatchEventInBackground:(XCSynthesizedEventRecord *)event name:(NSString *)name;
+
 @end
 
 @implementation FBElementCommands
@@ -466,6 +472,27 @@
   XCUIApplication *application = [target isKindOfClass:XCUIApplication.class]
     ? (XCUIApplication *)target
     : target.application;
+  if ([request.arguments[@"fast"] boolValue]) {
+#if TARGET_OS_WATCH
+    // Gesture synthesis is not available on watchOS at all.
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on watchOS"
+                                                                           traceback:nil]);
+#else
+    // The same event record the confirmed path builds, dispatched without waiting for the
+    // daemon to confirm it. See handleTap: for the response contract.
+    XCSynthesizedEventRecord *event = [application fb_pressDragEventFromCoordinate:startCoordinate
+                                                                       forDuration:duration
+                                                                      toCoordinate:endCoordinate
+                                                                      withVelocity:XCUIGestureVelocityDefault
+                                                               thenHoldForDuration:0
+                                                                             error:&error];
+    if (nil == event) {
+      return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
+    }
+    [self fb_dispatchEventInBackground:event name:@"drag"];
+    return FBResponseWithOK();
+#endif
+  }
   if (![application fb_pressAtCoordinate:startCoordinate
                              forDuration:duration
                     thenDragToCoordinate:endCoordinate
@@ -507,8 +534,75 @@
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
                                                                        traceback:nil]);
   }
-  [target tap];
+  if (![request.arguments[@"fast"] boolValue]) {
+    [target tap];
+    return FBResponseWithOK();
+  }
+
+#if TARGET_OS_WATCH
+  // Gesture synthesis is not available on watchOS at all.
+  return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on watchOS"
+                                                                         traceback:nil]);
+#else
+  // Opt-in fast mode: the event is queued and the reply is sent without waiting for XCTest
+  // to confirm it, so the touch has not landed when the caller reads this response. Callers
+  // that need proof of delivery have to observe the screen instead.
+  XCUICoordinate *coordinate = [target isKindOfClass:XCUICoordinate.class]
+    ? (XCUICoordinate *)target
+    : [(XCUIElement *)target coordinateWithNormalizedOffset:CGVectorMake(0.5, 0.5)];
+  CGPoint point = coordinate.screenPoint;
+  if (!isfinite(point.x) || !isfinite(point.y)) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot resolve the on-screen position of the tap target. Make sure it is visible and idle, then retry"
+                                                                           traceback:nil]);
+  }
+  XCUIElement *anchor = [target isKindOfClass:XCUICoordinate.class]
+    ? ((XCUICoordinate *)target).element
+    : (XCUIElement *)target;
+  XCUIApplication *application = [anchor isKindOfClass:XCUIApplication.class]
+    ? (XCUIApplication *)anchor
+    : anchor.application;
+  if (nil == application) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot determine the application of the tap target"
+                                                                           traceback:nil]);
+  }
+  // Like XCTest, send the event to the display the target belongs to.
+  XCUIElement *referencedElement = coordinate.referencedElement;
+  long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
+    ? referencedElement.displayID
+    : 0;
+  [self fb_dispatchEventInBackground:[XCUIApplication fb_tapEventFromPoint:point
+                                                                 displayID:displayID
+                                                      interfaceOrientation:application.interfaceOrientation]
+                                name:@"tap"];
   return FBResponseWithOK();
+#endif
+}
+
+/**
+ Dispatches an already built event record without waiting for the daemon to confirm it.
+ The queue is serial, so consecutive fast gestures reach the daemon in the order they were
+ requested. A failure is only reported to the WDA log, because the reply has been sent.
+
+ @param event The event record to synthesize
+ @param name A short gesture name for the failure log message
+ */
++ (void)fb_dispatchEventInBackground:(XCSynthesizedEventRecord *)event name:(NSString *)name
+{
+  static dispatch_queue_t synthesisQueue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    synthesisQueue = dispatch_queue_create("com.facebook.WebDriverAgent.fast-gesture",
+                                           DISPATCH_QUEUE_SERIAL);
+    dispatch_set_target_queue(synthesisQueue,
+                              dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+  });
+  dispatch_async(synthesisQueue, ^{
+    NSError *error = nil;
+    if (![FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:&error]) {
+      [FBLogger logFmt:@"Failed to synthesize the %@ event without waiting for confirmation: %@",
+       name, error.localizedDescription ?: @"unknown error"];
+    }
+  });
 }
 
 + (id<FBResponsePayload>)handlePinch:(FBRouteRequest *)request
