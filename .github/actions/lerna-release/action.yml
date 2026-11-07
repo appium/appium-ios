@@ -88,6 +88,19 @@ runs:
           return 1
         }
 
+        # Polls until "<pkg_name>@<pkg_version>" is visible on npm (default timeout 10 min).
+        wait_for_npm_version() {
+          local spec="$1" timeout="${2:-600}" waited=0
+          while [ "$waited" -lt "$timeout" ]; do
+            if npm view "$spec" version >/dev/null 2>&1; then
+              return 0
+            fi
+            sleep 15
+            waited=$((waited + 15))
+          done
+          return 1
+        }
+
         # Publishes each "<pkg_name>@<pkg_version>" package spec passed as an argument.
         # `lerna publish` has no per-package scope filter, so this runs `npm publish`
         # directly from each package's directory instead. Returns non-zero if any
@@ -107,9 +120,22 @@ runs:
 
             echo "Publishing ${pkg_spec}"
             set +e
-            (cd "$pkg_dir" && npm publish)
+            publish_output="$(cd "$pkg_dir" && npm publish 2>&1)"
             publish_exit_code=$?
             set -e
+            printf '%s\n' "$publish_output"
+            if [ $publish_exit_code -ne 0 ]; then
+              # npm processes publishes asynchronously (npm/cli#9889): a version accepted moments ago
+              # isn't visible yet and a re-publish gets this 409. Wait for it to show up instead.
+              if [[ "$publish_output" == *"previously staged version"* ]]; then
+                echo "${pkg_spec} was already accepted by npm and is still processing; waiting for it to appear"
+                if wait_for_npm_version "$pkg_spec"; then
+                  publish_exit_code=0
+                else
+                  echo "${pkg_spec} did not appear on npm in time"
+                fi
+              fi
+            fi
             if [ $publish_exit_code -ne 0 ]; then
               echo "npm publish failed for ${pkg_spec} (exit code ${publish_exit_code})"
               overall_status=1
