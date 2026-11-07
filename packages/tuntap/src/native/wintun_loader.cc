@@ -130,6 +130,7 @@ bool WintunApi::ResolveEntryPoints(std::string& error) {
   if (!Resolve(module_, "WintunCreateAdapter", CreateAdapter, error) ||
       !Resolve(module_, "WintunOpenAdapter", OpenAdapter, error) ||
       !Resolve(module_, "WintunCloseAdapter", CloseAdapter, error) ||
+      !Resolve(module_, "WintunGetAdapterLUID", GetAdapterLUID, error) ||
       !Resolve(module_, "WintunGetRunningDriverVersion", GetRunningDriverVersion, error) ||
       !Resolve(module_, "WintunStartSession", StartSession, error) ||
       !Resolve(module_, "WintunEndSession", EndSession, error) ||
@@ -155,6 +156,7 @@ void WintunApi::ClearEntryPoints() {
   CreateAdapter = nullptr;
   OpenAdapter = nullptr;
   CloseAdapter = nullptr;
+  GetAdapterLUID = nullptr;
   GetRunningDriverVersion = nullptr;
   StartSession = nullptr;
   EndSession = nullptr;

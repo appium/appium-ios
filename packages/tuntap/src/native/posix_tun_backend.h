@@ -49,6 +49,20 @@ class PosixTunBackend : public TunPlatformBackend {
     return fd_.get();
   }
 
+  bool GetStats(TunInterfaceStats& out, std::string& error) override {
+    std::string ifname;
+    {
+      std::shared_lock lock(fd_mutex_);
+      if (!fd_.is_valid() || interface_name_.empty()) {
+        error = "Device not open";
+        return false;
+      }
+      ifname = interface_name_;
+    }
+
+    return GetInterfaceStats(ifname, out, error);
+  }
+
   bool WaitReadable(const std::atomic<bool>& running, std::string& error) override {
     return WaitForEvents(POLLIN, running, error);
   }
