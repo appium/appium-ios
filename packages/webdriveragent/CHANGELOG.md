@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.1...appium-webdriveragent@16.18.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
 ## [16.18.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.0...appium-webdriveragent@16.18.1) (2026-11-07)
 
 **Note:** Version bump only for package appium-webdriveragent

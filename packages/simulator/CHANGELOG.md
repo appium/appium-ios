@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.11.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.1...appium-ios-simulator@10.11.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
 ## [10.11.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.0...appium-ios-simulator@10.11.1) (2026-11-07)
 
 ### Bug Fixes

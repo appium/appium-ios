@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.15.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.15.0...@appium/coresim@1.15.1) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
 ## [1.15.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.14.1...@appium/coresim@1.15.0) (2026-11-07)
 
 ### Features
