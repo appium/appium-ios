@@ -234,7 +234,7 @@
   NSArray<NSNumber *> *frame = [self measurement][@"canvasWindowRect"];
   BOOL checkedSecondaryDisplay = NO;
   for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
-    if ([screen[@"isMain"] boolValue] || [screen[@"displayId"] isEqual:fixtureDisplay]) {
+    if ([screen[@"displayId"] isEqual:fixtureDisplay]) {
       continue;
     }
     checkedSecondaryDisplay = YES;

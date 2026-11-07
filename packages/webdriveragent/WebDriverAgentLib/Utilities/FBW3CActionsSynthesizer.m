@@ -69,8 +69,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 @interface FBW3CGestureItem : FBBaseGestureItem
 
 @property (nullable, readonly, nonatomic) FBW3CGestureItem *previousItem;
-@property (nonatomic) CGVector displayCorrection;
-@property (nonatomic) BOOL usesDisplayCorrection;
 @property (readonly, nonatomic) CGPoint screenPoint;
 
 @end
@@ -132,7 +130,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
     self.application = application;
     self.offset = offset;
     _previousItem = previousItem;
-    _usesDisplayCorrection = previousItem.usesDisplayCorrection;
     NSNumber *durationObj = FBOptDuration(actionItem, @0, error);
     if (nil == durationObj) {
       return nil;
@@ -150,10 +147,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 
 - (CGPoint)screenPoint
 {
-  CGPoint point = self.atPosition.screenPoint;
-  return self.usesDisplayCorrection
-    ? CGPointMake(point.x + self.displayCorrection.dx, point.y + self.displayCorrection.dy)
-    : point;
+  return self.atPosition.screenPoint;
 }
 
 - (nullable XCUICoordinate *)positionWithError:(NSError **)error
@@ -172,26 +166,19 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
                                   positionOffset:(nullable NSValue *)positionOffset
                                            error:(NSError **)error
 {
-  XCUIScreen *screen = nil;
-  if (element.elementType == XCUIElementTypeApplication) {
-    screen = [FBScreen currentScreenWithError:error];
-    if (nil == screen) {
-      return nil;
+  if (nil == element || element.elementType == XCUIElementTypeApplication) {
+    CGPoint point = positionOffset == nil ? CGPointZero : positionOffset.CGPointValue;
+    if (nil != element) {
+      CGRect frame = element.wdFrame;
+      if (CGRectIsEmpty(frame)) {
+        return [super hitpointWithElement:element positionOffset:positionOffset error:error];
+      }
+      // Client element offsets are relative to the center of the reported rect.
+      point.x += CGRectGetMidX(frame);
+      point.y += CGRectGetMidY(frame);
     }
-  }
-  if (nil != screen && screen.displayID != XCUIScreen.mainScreen.displayID) {
-    // Unlike ordinary elements, application-root coordinates rotate using the
-    // main display. Resolve the client-visible rect's center into viewport
-    // coordinates, then let screenPoint apply the selected-display correction.
-    // Do not use a normalized app center: XCTest may report a portrait app rect
-    // for a landscape window, so its normalized center uses a different space.
-    CGRect frame = element.wdFrame;
-    if (CGRectIsEmpty(frame)) {
-      return [super hitpointWithElement:element positionOffset:positionOffset error:error];
-    }
-    CGPoint offset = nil == positionOffset ? CGPointZero : positionOffset.CGPointValue;
-    CGPoint point = CGPointMake(CGRectGetMidX(frame) + offset.x, CGRectGetMidY(frame) + offset.y);
-    return [super hitpointWithElement:nil positionOffset:[NSValue valueWithCGPoint:point] error:error];
+    return [FBScreen coordinateWithApplication:self.application
+                                       offset:CGVectorMake(point.x, point.y) error:error];
   }
   if (nil == element || nil == positionOffset) {
     return [super hitpointWithElement:element positionOffset:positionOffset error:error];
@@ -315,10 +302,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
   
   if (nil != element) {
-    // Application origins need viewport display correction; other elements use their own display.
-    // This correction does not fix XCTest's legacy-SDK compatibility issue:
-    // see docs/multiple-displays.md#legacy-sdk-compatibility-windows.
-    self.usesDisplayCorrection = element.elementType == XCUIElementTypeApplication;
     if (nil == x && nil == y) {
       return [self hitpointWithElement:element positionOffset:nil error:error];
     }
@@ -326,7 +309,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
   
   if ([origin isKindOfClass:NSString.class] && [origin isEqualToString:FB_ORIGIN_TYPE_VIEWPORT]) {
-    self.usesDisplayCorrection = YES;
     return [self hitpointWithElement:nil positionOffset:[NSValue valueWithCGPoint:CGPointMake(x.floatValue, y.floatValue)] error:error];
   }
   
@@ -679,7 +661,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 
 
 @interface FBW3CActionsSynthesizer ()
-@property (nonatomic) CGVector displayCorrection;
 @end
 
 @implementation FBW3CActionsSynthesizer
@@ -866,7 +847,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
       return nil;
     }
 
-    gestureItem.displayCorrection = self.displayCorrection;
     [chain addItem:gestureItem];
   }
 
@@ -956,32 +936,21 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   if (nil == screen) {
     return nil;
   }
-  XCSynthesizedEventRecord *eventRecord;
-  self.displayCorrection = CGVectorMake(0, 0);
-  if (screen.displayID == XCUIScreen.mainScreen.displayID) {
-    eventRecord = [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
-                                            interfaceOrientation:self.application.interfaceOrientation];
-  } else {
-    if (![XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
-      if (error) {
-        *error = [[FBErrorBuilder.builder
-                   withDescription:@"Actions on a display other than the main one are not supported by this XCTest version"] build];
-      }
-      return nil;
-    }
-    eventRecord = [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
-                                                       displayID:(unsigned long long)screen.displayID
-                                            interfaceOrientation:self.application.interfaceOrientation];
-    // Viewport coordinates use the main display's size when rotating screenPoint.
-    // Element coordinates already use their own display. Apply this correction
-    // per gesture item so mixed origins and pointer-relative moves stay aligned.
-    XCUIScreen *mainScreen = XCUIScreen.mainScreen;
-    self.displayCorrection = FBDisplayCoordinateOffset(
-      CGSizeMake(mainScreen.bounds.size.width / mainScreen.scale, mainScreen.bounds.size.height / mainScreen.scale),
-      CGSizeMake(screen.bounds.size.width / screen.scale, screen.bounds.size.height / screen.scale),
-      eventRecord.interfaceOrientation);
+  if ([self actionsRequireDisplay:actions]
+      && [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
+    return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                               displayID:(unsigned long long)screen.displayID
+                                    interfaceOrientation:self.application.interfaceOrientation];
   }
-  return eventRecord;
+  if (screen.displayID != XCUIScreen.mainScreen.displayID) {
+    if (error) {
+      *error = [[FBErrorBuilder.builder
+                 withDescription:@"Actions on a display other than the main one are not supported by this XCTest version"] build];
+    }
+    return nil;
+  }
+  return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                interfaceOrientation:self.application.interfaceOrientation];
 }
 
 - (nullable XCSynthesizedEventRecord *)synthesizeWithError:(NSError **)error
