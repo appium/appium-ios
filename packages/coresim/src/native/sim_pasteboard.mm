@@ -22,10 +22,9 @@
 @property(atomic) dispatch_semaphore_t appliedSema;
 @property(atomic, strong) NSError* appliedError;
 @property(atomic) BOOL connectionLost;
-// Invoked (once the flag above is set) when the connection drops, for long-lived sessions.
+// Called after the connection drops (long-lived sessions only).
 @property(atomic, copy) void (^onConnectionLost)(void);
-// Reads each applied snapshot right away. The data may be provided lazily by this process, and
-// there is no main run loop here to answer other processes asking for it (they would hang).
+// Reads applied snapshots right away; our lazily provided data would hang other processes.
 @property(atomic) BOOL resolvesAppliedData;
 @end
 
@@ -56,7 +55,9 @@
                    incomingGeneration:(long long)incomingGeneration
                          toPasteboard:(NSPasteboard*)pasteboard
                          atGeneration:(long long)atGeneration {
-  if (self.resolvesAppliedData) [pasteboard stringForType:NSPasteboardTypeString];
+  if (self.resolvesAppliedData) {
+    for (NSPasteboardType type in pasteboard.types) [pasteboard dataForType:type];
+  }
   dispatch_semaphore_signal(self.appliedSema);
 }
 
@@ -305,47 +306,68 @@ BOOL PushPasteboardString(id device, NSString* content, NSError** error) {
 
 namespace {
 
-// One entry per device being synced. The interface must stay alive for the sync to keep running.
 struct SyncSession {
   id interface;
   CoresimPasteboardDelegate* delegate;
   dispatch_queue_t queue;
 };
-std::mutex gSyncMutex;
-std::unordered_map<std::string, SyncSession> gSyncSessions;
+// Leaked on purpose: connection callbacks may still arrive while the process exits
+auto& gSyncMutex = *new std::mutex;
+auto& gSyncSessions = *new std::unordered_map<std::string, SyncSession>;
+
+void RemoveSyncSession(const std::string& udid, const void* delegateToken) {
+  std::lock_guard<std::mutex> guard(gSyncMutex);
+  auto it = gSyncSessions.find(udid);
+  if (it != gSyncSessions.end() && (__bridge const void*)it->second.delegate == delegateToken) {
+    gSyncSessions.erase(it);
+  }
+}
 
 }  // namespace
 
-// The device's SimPasteboardInterface pushes/pulls on its own once remote autosync is enabled: it
-// watches the managed (here: general) pasteboard for host changes, and the device announces its own
-// (AUTONOTIFY). Confirmed empirically in both directions; without enableRemoteAutosync, nothing syncs.
+// Once remote autosync is enabled, the interface syncs both ways on its own while it stays alive.
 void StartPasteboardSync(id device) {
   if (!ModernPasteboardAvailable()) {
     throw NativeSimUnavailableError("class", kListenerClassName, "Continuous pasteboard sync is unavailable");
   }
   const std::string udid = DeviceUDID(device).UUIDString.UTF8String;
-  std::lock_guard<std::mutex> lock(gSyncMutex);
-  if (gSyncSessions.count(udid)) return;
+  {
+    std::lock_guard<std::mutex> lock(gSyncMutex);
+    if (gSyncSessions.count(udid)) return;
+  }
 
   CoresimPasteboardDelegate* delegate = [CoresimPasteboardDelegate new];
   delegate.activeSema = dispatch_semaphore_create(0);
   delegate.appliedSema = dispatch_semaphore_create(0);
   delegate.resolvesAppliedData = YES;
-  dispatch_queue_t queue = dispatch_queue_create("io.appium.coresim.pasteboard.sync", DISPATCH_QUEUE_SERIAL);
-  id interface = ConnectPasteboardInterface(device, [NSPasteboard generalPasteboard], delegate, queue);
-  SafeInvoke([&] {
-    ((void (*)(id, SEL))objc_msgSend)(interface, NSSelectorFromString(@"enableRemoteAutosync"));
-    return true;
-  });
-  // Drop the session if the device goes away, so a later start can reconnect. Done off the
-  // delegate queue, since erasing releases the interface that is delivering this callback.
+  const void* token = (__bridge const void*)delegate;
+  // Set before connecting, so a drop right after activation is not missed. Runs off the delegate
+  // queue, since removing the session releases the interface that delivers this callback.
   delegate.onConnectionLost = ^{
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-      std::lock_guard<std::mutex> guard(gSyncMutex);
-      gSyncSessions.erase(udid);
+      RemoveSyncSession(udid, token);
     });
   };
-  gSyncSessions[udid] = SyncSession{interface, delegate, queue};
+  dispatch_queue_t queue = dispatch_queue_create("io.appium.coresim.pasteboard.sync", DISPATCH_QUEUE_SERIAL);
+  // Connect without holding the lock, since it can wait for the device for several seconds
+  id interface = ConnectPasteboardInterface(device, [NSPasteboard generalPasteboard], delegate, queue);
+  {
+    std::lock_guard<std::mutex> lock(gSyncMutex);
+    if (gSyncSessions.count(udid)) return;  // a concurrent start won; ours is released
+    if (delegate.connectionLost) {
+      throw NSErrorException(MakeError(7, @"Lost the connection to the device's pasteboard"));
+    }
+    gSyncSessions[udid] = SyncSession{interface, delegate, queue};
+  }
+  try {
+    SafeInvoke([&] {
+      ((void (*)(id, SEL))objc_msgSend)(interface, NSSelectorFromString(@"enableRemoteAutosync"));
+      return true;
+    });
+  } catch (...) {
+    RemoveSyncSession(udid, token);
+    throw;
+  }
 }
 
 void StopPasteboardSync(id device) {
@@ -359,10 +381,16 @@ void StopPasteboardSync(id device) {
     gSyncSessions.erase(it);
   }
   session.delegate.onConnectionLost = nil;
-  SafeInvoke([&] {
-    ((void (*)(id, SEL))objc_msgSend)(session.interface, NSSelectorFromString(@"disableRemoteAutosync"));
-    return true;
-  });
+  try {
+    SafeInvoke([&] {
+      ((void (*)(id, SEL))objc_msgSend)(session.interface, NSSelectorFromString(@"disableRemoteAutosync"));
+      return true;
+    });
+  } catch (...) {
+    // A dead connection is already stopped
+  }
+  dispatch_sync(session.queue, ^{
+                });  // let in-flight callbacks finish before releasing
 }
 
 }  // namespace coresim

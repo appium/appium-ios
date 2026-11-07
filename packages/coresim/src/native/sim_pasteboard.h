@@ -13,10 +13,8 @@ NSString* PullPasteboardString(id device, NSError** error);
 // Writes `content` as the device's pasteboard content, via the same mechanism selection.
 BOOL PushPasteboardString(id device, NSString* content, NSError** error);
 
-// Starts keeping the device's pasteboard in sync with the host's general pasteboard in both
-// directions, for as long as this process keeps the session alive. Idempotent per device. Only
-// available with the modern SimPasteboardPlus mechanism (throws NativeSimUnavailableError otherwise).
-// The session ends on StopPasteboardSync or when the device goes away (e.g. shuts down).
+// Syncs the device pasteboard with the host's general one in both directions until stopped or the
+// device disconnects. Idempotent; throws NativeSimUnavailableError without SimPasteboardPlus.
 void StartPasteboardSync(id device);
 
 // Ends the session started by StartPasteboardSync. Does nothing if there is none.

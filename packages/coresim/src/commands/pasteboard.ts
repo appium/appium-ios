@@ -33,11 +33,9 @@ export async function setPasteboard(this: NativeSimctl, udid: string, content: s
 }
 
 /**
- * Keeps the device's pasteboard in sync with the host's general pasteboard in both directions,
- * which is what the Simulator UI client's "automatic pasteboard sync" does. The sync runs in this
- * process, so it lasts until `stopPasteboardSync`, the end of the process, or the device
- * shutting down. Does nothing if it is already running for the device.
- * Rejects with `NativeSimUnavailableError` if this CoreSimulator has no continuous sync support.
+ * Syncs the device pasteboard with the host's general pasteboard in both directions until
+ * `stopPasteboardSync`, process exit or device shutdown. Idempotent.
+ * Rejects with `NativeSimUnavailableError` if this CoreSimulator cannot do it.
  *
  * @param udid — UDID of the target device; must be booted
  */
@@ -46,7 +44,7 @@ export async function startPasteboardSync(this: NativeSimctl, udid: string): Pro
 }
 
 /**
- * Stops the sync started by `startPasteboardSync`. Does nothing if it is not running.
+ * Stops the sync started by `startPasteboardSync`. Idempotent.
  *
  * @param udid — UDID of the target device
  */

@@ -286,19 +286,14 @@ async function disableDeviceHubPasteboardSync(udid: string): Promise<void> {
   if (!fs.existsSync(prefsDir)) {
     return;
   }
-  try {
-    await execFileAsync('defaults', [
-      'write',
-      path.join(prefsDir, 'com.apple.dt.Devices.plist'),
-      'DevicePreferences',
-      '-dict-add',
-      udid,
-      '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
-    ]);
-  } catch (err) {
-    // macOS 27 denies other apps' containers unless the runner has Full Disk Access
-    process.emitWarning(`Cannot disable the DeviceHub pasteboard sync, the pasteboard tests may be flaky: ${err}`);
-  }
+  await execFileAsync('defaults', [
+    'write',
+    path.join(prefsDir, 'com.apple.dt.Devices.plist'),
+    'DevicePreferences',
+    '-dict-add',
+    udid,
+    '<dict><key>pasteboardSyncEnabled</key><false/></dict>',
+  ]);
 }
 
 interface RuntimeFixture {
@@ -840,6 +835,8 @@ describe('NativeSimctl integration', () => {
           throw err;
         }
         try {
+          // Starting again must not break the running sync
+          await sim.startPasteboardSync(device!.udid);
           const expected = 'coresim-pasteboard-sync-test';
           await hostPasteboard.set(expected);
           await waitForCondition(async () => (await sim.getPasteboard(device!.udid)) === expected, {
@@ -847,6 +844,11 @@ describe('NativeSimctl integration', () => {
             intervalMs: 500,
             error: `expected the device pasteboard to follow the host pasteboard to '${expected}'`,
           });
+          await sim.stopPasteboardSync(device!.udid);
+          await sim.stopPasteboardSync(device!.udid);
+          await hostPasteboard.set('coresim-pasteboard-after-stop');
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          assert.strictEqual(await sim.getPasteboard(device!.udid), expected);
         } finally {
           await sim.stopPasteboardSync(device!.udid);
           await hostPasteboard.set(savedHostPasteboard);
