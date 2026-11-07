@@ -6,6 +6,7 @@ import {retry, retryInterval} from 'asyncbox';
 
 import {createRemoteDebugger} from '../../lib/index.js';
 import type {RemoteDebugger} from '../../lib/remote-debugger.js';
+import type {RemoteDebuggerOptions} from '../../lib/types.js';
 import {startHttpServer, stopHttpServer} from './http-server.js';
 
 export const PAGE_TITLE = 'Remote debugger test page';
@@ -83,7 +84,7 @@ export interface RdFixture {
  * serve the test fixture page over HTTP, and connect a RemoteDebugger to Safari before each
  * test. Call once per describe block.
  */
-export function useRemoteDebuggerFixture(): RdFixture {
+export function useRemoteDebuggerFixture(options: RemoteDebuggerOptions = {}): RdFixture {
   let udid: string;
   let simCreated = false;
   let address: string;
@@ -139,6 +140,7 @@ export function useRemoteDebuggerFixture(): RdFixture {
         logAllCommunicationHexDump: false,
         pageReadyTimeout: 30000,
         targetCreationTimeoutMs: process.env.CI ? 10 * 1000 * 60 : 60000,
+        ...options,
       },
       false,
     );

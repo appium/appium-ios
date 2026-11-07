@@ -18,10 +18,10 @@ on:
     # Also triggered by packages/coresim/** - the e2e job's simulator boot goes through
     # @appium/coresim (see test/functional/rd-fixture.ts), so a coresim regression can only show
     # up here.
-    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**', '.github/workflows/remote-debugger-ci.yml']
   pull_request:
     branches: [main]
-    paths: ['packages/remote-debugger/**', 'packages/coresim/**']
+    paths: ['packages/remote-debugger/**', 'packages/coresim/**', '.github/workflows/remote-debugger-ci.yml']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -109,6 +109,12 @@ jobs:
           timeout_minutes: 40
           max_attempts: 2
           command: npm run test:e2e --workspace packages/remote-debugger
+      - name: Web Inspector Page Settings E2E Tests
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 40
+          max_attempts: 2
+          command: npm run test:e2e:web-inspector-settings --workspace packages/remote-debugger
       - name: Atoms E2E Tests
         uses: nick-fields/retry@v4
         with:

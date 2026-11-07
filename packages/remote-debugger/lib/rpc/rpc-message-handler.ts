@@ -187,8 +187,9 @@ export default class RpcMessageHandler extends EventEmitter {
    */
   private async handleDataMessage(plist: StringRecord): Promise<void> {
     const dataKey = this.parseDataKey(plist);
-    let msgId = (dataKey.id || '').toString();
+    let msgId = (dataKey.id ?? '').toString();
     let result = dataKey.result;
+    let responseError = dataKey.error;
 
     let method = dataKey.method;
     let params = dataKey.params;
@@ -199,19 +200,19 @@ export default class RpcMessageHandler extends EventEmitter {
         const message =
           result?.result?.value || result?.result?.description
             ? result?.result?.value || result?.result?.description
-            : (dataKey.error ?? defaultMessage);
+            : (responseError ?? defaultMessage);
         return new Error(message);
       }
-      if (dataKey.error) {
-        if (util.isPlainObject(dataKey.error)) {
-          const dataKeyError = dataKey.error as DataErrorMessage;
+      if (responseError) {
+        if (util.isPlainObject(responseError)) {
+          const dataKeyError = responseError as DataErrorMessage;
           const error = new Error(defaultMessage);
           for (const key of Object.keys(dataKeyError)) {
             (error as any)[key] = dataKeyError[key as keyof DataErrorMessage];
           }
           return error;
         }
-        return new Error(String(dataKey.error || defaultMessage));
+        return new Error(String(responseError || defaultMessage));
       }
       return undefined;
     };
@@ -234,6 +235,7 @@ export default class RpcMessageHandler extends EventEmitter {
             method = message.method;
             result = message.result || message;
             params = result.params;
+            responseError = message.error;
           } catch (err: any) {
             // if this happens then some aspect of the protocol is missing to us
             // so print the entire message to get visibility into what is going on
