@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.11.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.0...appium-ios-simulator@10.11.1) (2026-11-07)
+
+### Bug Fixes
+
+* **simulator:** hint at Full Disk Access when DeviceHub preferences are denied ([#161](https://github.com/appium/appium-ios/issues/161)) ([ff8eed9](https://github.com/appium/appium-ios/commit/ff8eed96742db2c24cd5fdd98ba37ea713fc2591))
+
+
 ## [10.11.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.2...appium-ios-simulator@10.11.0) (2026-11-07)
 
 ### Features
