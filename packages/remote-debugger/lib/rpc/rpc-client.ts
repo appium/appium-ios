@@ -2,7 +2,7 @@ import {EventEmitter} from 'node:events';
 
 import {util, timing} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
+import {AsyncLock, ConditionUnmetError, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
 import type {
@@ -312,7 +312,7 @@ export class RpcClient {
       );
       return target;
     } catch (err: any) {
-      if (!err.message.includes('Condition unmet')) {
+      if (!(err instanceof ConditionUnmetError)) {
         throw err;
       }
       throw new Error(
