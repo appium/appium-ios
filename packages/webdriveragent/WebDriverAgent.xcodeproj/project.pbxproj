@@ -119,6 +119,7 @@
 		208F3FB46E41B0A1C87B8800 /* FBScreenshot.m in Sources */ = {isa = PBXBuildFile; fileRef = 71C9EAAB25E8415A00470CD8 /* FBScreenshot.m */; };
 		2112EC67BDFFA4A0B2CF24EB /* RouteRequest.h in Headers */ = {isa = PBXBuildFile; fileRef = D585660F7A04651223F29B07 /* RouteRequest.h */; };
 		21C0068C990412E75A135DD4 /* FBCustomCommandsTests.m in Sources */ = {isa = PBXBuildFile; fileRef = B817F776DE7106D3B7B1C049 /* FBCustomCommandsTests.m */; };
+		3C7A624760DBBCCB12311C1F /* FBSessionCommandsTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 7977BA36D36BBAE9A89946B9 /* FBSessionCommandsTests.m */; };
 		2238B4FC5C7DCD4B4215444D /* XCTMessagingRole_ProtectedResourceAuthorization-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = CCCBEAE654102DBB1C8C22CD /* XCTMessagingRole_ProtectedResourceAuthorization-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		227E3F36FAA2C3881F89FD81 /* WDAClickIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C878996F07A9B26E66FC4EAC /* WDAClickIntegrationTests.swift */; };
 		229F9F5B85C1255447495847 /* XCUIApplicationAutomationSessionProviding-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 603D97F0F9A5B9D4E6442BF2 /* XCUIApplicationAutomationSessionProviding-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1796,6 +1797,7 @@
 		B3FDA51EB36F03592BF48762 /* XCTMeasureOptions.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = XCTMeasureOptions.h; sourceTree = "<group>"; };
 		B43D656732067585371ADD31 /* XCTMessagingRole_ProcessMonitoring-Protocol.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "XCTMessagingRole_ProcessMonitoring-Protocol.h"; sourceTree = "<group>"; };
 		B817F776DE7106D3B7B1C049 /* FBCustomCommandsTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = FBCustomCommandsTests.m; sourceTree = "<group>"; };
+		7977BA36D36BBAE9A89946B9 /* FBSessionCommandsTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = FBSessionCommandsTests.m; sourceTree = "<group>"; };
 		B8A163261EFA440E42CA6AC1 /* XCTRunnerDaemonSessionUIAutomationDelegate-Protocol.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "XCTRunnerDaemonSessionUIAutomationDelegate-Protocol.h"; sourceTree = "<group>"; };
 		B98A9F937EF98D6359FCCC7A /* XCTRuntimeIssueDetectionPolicy.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = XCTRuntimeIssueDetectionPolicy.h; sourceTree = "<group>"; };
 		BCED63DFD03326F6351165FE /* WDAFindIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WDAFindIntegrationTests.swift; sourceTree = "<group>"; };
@@ -2775,6 +2777,7 @@
 				71A224E71DE326C500844D55 /* NSPredicateFBFormatTests.m */,
 				713914591DF01989005896C2 /* XCUIElementHelpersTests.m */,
 				B817F776DE7106D3B7B1C049 /* FBCustomCommandsTests.m */,
+				7977BA36D36BBAE9A89946B9 /* FBSessionCommandsTests.m */,
 			);
 			path = UnitTests;
 			sourceTree = "<group>";
@@ -4949,6 +4952,7 @@
 				71A7EAFC1E229302001DA4F2 /* FBClassChainTests.m in Sources */,
 				EE18883D1DA663EB00307AA8 /* FBMathUtilsTests.m in Sources */,
 				21C0068C990412E75A135DD4 /* FBCustomCommandsTests.m in Sources */,
+				3C7A624760DBBCCB12311C1F /* FBSessionCommandsTests.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
