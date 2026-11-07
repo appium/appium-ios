@@ -2,8 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {timing, util} from '@appium/support';
-import AsyncLock from 'async-lock';
-import {waitForCondition} from 'asyncbox';
+import {AsyncLock, waitForCondition} from 'asyncbox';
 import {exec} from 'teen_process';
 
 import type {HasNativeSimctl} from '../native/types.js';

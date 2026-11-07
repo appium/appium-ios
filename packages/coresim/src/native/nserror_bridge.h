@@ -11,6 +11,10 @@
 
 namespace coresim {
 
+// localizedDescription is often generic ("Simulator device failed to install the application."), so
+// the failure reason and the NSUnderlyingErrorKey chain are appended.
+std::string DescribeNSError(NSError* error);
+
 // Thrown by async work lambdas (see async_bridge.h) when a native call fails via an NSError**
 // out-param rather than raising. domain/code/message are captured immediately at throw time
 // (never the NSError* itself), since this only ever needs to survive within the same background
@@ -18,7 +22,7 @@ namespace coresim {
 class NSErrorException : public std::runtime_error {
  public:
   explicit NSErrorException(NSError* error)
-      : std::runtime_error(error.localizedDescription ? error.localizedDescription.UTF8String : "Operation failed"),
+      : std::runtime_error(DescribeNSError(error)),
         domain(error.domain ? error.domain.UTF8String : ""),
         code(error.code) {}
 

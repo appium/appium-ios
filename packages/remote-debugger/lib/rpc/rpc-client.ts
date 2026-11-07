@@ -2,8 +2,7 @@ import {EventEmitter} from 'node:events';
 
 import {util, timing} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import AsyncLock from 'async-lock';
-import {sleep, waitForCondition, withTimeout} from 'asyncbox';
+import {AsyncLock, sleep, waitForCondition, withTimeout} from 'asyncbox';
 
 import {log} from '../logger.js';
 import type {
@@ -80,7 +79,6 @@ export class RpcClient {
   protected readonly udid!: string;
   protected readonly logAllCommunication?: boolean;
   protected readonly logAllCommunicationHexDump?: boolean;
-  protected readonly socketChunkSize?: number;
   protected readonly webInspectorMaxFrameLength?: number;
   protected readonly fullPageInitialization?: boolean;
   protected readonly bundleId?: string;
@@ -106,7 +104,6 @@ export class RpcClient {
       logAllCommunication = false,
       logAllCommunicationHexDump = false,
       webInspectorMaxFrameLength,
-      socketChunkSize,
       fullPageInitialization = false,
       udid,
       pageLoadTimeoutMs,
@@ -124,7 +121,6 @@ export class RpcClient {
 
     this.logAllCommunication = logAllCommunication;
     this.logAllCommunicationHexDump = logAllCommunicationHexDump;
-    this.socketChunkSize = socketChunkSize;
     this.webInspectorMaxFrameLength = webInspectorMaxFrameLength;
     this.pageLoadTimeoutMs = pageLoadTimeoutMs;
 

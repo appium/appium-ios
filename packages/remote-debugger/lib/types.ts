@@ -106,8 +106,6 @@ export interface RemoteDebuggerOptions {
   logAllCommunicationHexDump?: boolean;
   /** The maximum size in bytes of a single data frame in the device communication protocol */
   webInspectorMaxFrameLength?: number;
-  /** size, in bytes, of chunks of data sent to Web Inspector (real device only) */
-  socketChunkSize?: number;
   fullPageInitialization?: boolean;
   /**
    * How long to wait until a new target is created for a page.
@@ -130,7 +128,6 @@ export interface RpcClientOptions {
   logAllCommunication?: boolean;
   logAllCommunicationHexDump?: boolean;
   webInspectorMaxFrameLength?: number;
-  socketChunkSize?: number;
   fullPageInitialization?: boolean;
   pageLoadTimeoutMs?: number;
   udid?: string;
@@ -197,8 +194,19 @@ export interface ProvisionalTargetInfo {
   oldTargetId: string;
   newTargetId: string;
 }
+/**
+ * How a real device's Web Inspector service is reached: through the RemoteXPC tunnel (preferred)
+ * or, as a temporary fallback when no tunnel is running, through lockdown over usbmux.
+ */
+export type RemoteDebuggerTransport = 'tunnel' | 'usbmux';
+
 interface RemoteDebuggerRealDeviceSpecificOptions {
   udid: string;
+  /**
+   * The caller decides the transport (e.g. by checking whether a tunnel is running).
+   * Defaults to `tunnel`. Ignored for simulators.
+   */
+  transport?: RemoteDebuggerTransport;
 }
 
 type SocketDataKey = Buffer | StringRecord;

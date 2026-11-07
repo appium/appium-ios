@@ -2,8 +2,16 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
 import {MediaProxyEncoderUnavailableError, MediaProxyOptionError} from '../../src/errors.js';
-import {TimestampConverter, Transcoder, pipeThrough, resolveOptions} from '../../src/transcoder.js';
+import {
+  DEFAULT_AUDIO_SPECIFIC_CONFIG,
+  TimestampConverter,
+  Transcoder,
+  pipeThrough,
+  resolveOptions,
+  transcode,
+} from '../../src/transcoder.js';
 import type {
+  AudioAccessUnit,
   JpegFrame,
   NativeConfig,
   NativeModule,
@@ -17,6 +25,7 @@ import type {
 interface FakeBackend extends NativeModule {
   config?: NativeConfig;
   pushes: {chunks: Buffer[]; ts: number; key: boolean}[];
+  audioPushes: {data: Buffer; ts: number}[];
   emit(unit: Partial<NativeUnit> & {data: Buffer}): void;
   fail(err: Error): void;
   keyFrameRequests: number;
@@ -31,6 +40,7 @@ function fakeBackend(
   let onError!: (e: Error) => void;
   const backend: FakeBackend = {
     pushes: [],
+    audioPushes: [],
     keyFrameRequests: 0,
     closed: false,
     capabilities: () => ({decoders: [], encoders: []}),
@@ -48,6 +58,7 @@ function fakeBackend(
             onUnit({data: chunks[0], isKeyFrame: key, timestampMicros: ts});
           }
         },
+        pushAudio: (data, ts) => void backend.audioPushes.push({data, ts}),
         requestKeyFrame: () => void backend.keyFrameRequests++,
         close: async () => {
           backend.closed = true;
@@ -78,6 +89,9 @@ describe('resolveOptions', () => {
       bitrate: 4_000_000,
       quality: 80,
       scale: 100,
+      audio: false,
+      audioSpecificConfig: DEFAULT_AUDIO_SPECIFIC_CONFIG,
+      audioBitratePerChannel: 64_000,
     });
     assert.strictEqual(resolveOptions(mjpeg).quality, 80);
   });
@@ -112,6 +126,24 @@ describe('resolveOptions', () => {
       assert.throws(() => resolveOptions(opts as TranscoderOptions), MediaProxyOptionError);
     });
   }
+});
+
+describe('resolveOptions audio', () => {
+  it('is off by default and takes the device ASC with 480-sample frames', () => {
+    assert.strictEqual(resolveOptions({codec: 'h264'}).audio, false);
+    const config = resolveOptions({codec: 'h264', audio: true});
+    assert.ok(config.audio);
+    assert.deepStrictEqual([...config.audioSpecificConfig], [0xf8, 0xe6, 0x50, 0x00]);
+  });
+
+  it('takes a caller-supplied AudioSpecificConfig', () => {
+    const asc = Buffer.from([0x11, 0x90]);
+    assert.strictEqual(resolveOptions({codec: 'h264', audio: true, audioSpecificConfig: asc}).audioSpecificConfig, asc);
+  });
+
+  it('rejects an empty AudioSpecificConfig', () => {
+    assert.throws(() => resolveOptions({codec: 'h264', audio: true, audioSpecificConfig: Buffer.alloc(0)}), RangeError);
+  });
 });
 
 describe('TimestampConverter', () => {
@@ -440,3 +472,223 @@ describe('pipeThrough() / transcode()', () => {
     assert.throws(() => new Transcoder(h264, backend), MediaProxyEncoderUnavailableError);
   });
 });
+
+const audioAu = (ts: number, receivedAt?: number): AudioAccessUnit => ({
+  data: Buffer.from([ts & 0xff]),
+  timestamp: ts,
+  receivedAt,
+});
+const withAudio: TranscoderOptions = {codec: 'h264', audio: true};
+
+describe('Transcoder audio', () => {
+  it('needs the audio option', () => {
+    const t = new Transcoder(h264, fakeBackend());
+    assert.throws(() => t.pushAudio(audioAu(0)), MediaProxyOptionError);
+  });
+
+  it('hands the native side the config and scales the 48 kHz clock to microseconds', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    assert.ok(backend.config?.audio);
+    t.pushAudio(audioAu(1000, 0));
+    t.pushAudio(audioAu(1480, 10));
+    assert.deepStrictEqual(
+      backend.audioPushes.map((p) => p.ts),
+      [0, 10_000],
+    );
+  });
+
+  it('offsets each track by when it first arrived relative to the first unit overall', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    t.pushAudio(audioAu(0, 1000));
+    t.push({...au(90_000, true), receivedAt: 1040});
+    t.push({...au(90_000 + 3000), receivedAt: 1073});
+    t.pushAudio(audioAu(480, 1010));
+    assert.deepStrictEqual(
+      backend.pushes.map((p) => p.ts),
+      [40_000, 73_333],
+    );
+    assert.deepStrictEqual(
+      backend.audioPushes.map((p) => p.ts),
+      [0, 10_000],
+    );
+  });
+
+  it('numbers video and audio units separately and tells them apart', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    backend.emit({data: Buffer.from('idr'), isKeyFrame: true, timestampMicros: 0});
+    backend.emit({data: Buffer.from('a0'), isKeyFrame: true, timestampMicros: 5, audio: true});
+    backend.emit({data: Buffer.from('a1'), isKeyFrame: true, timestampMicros: 26, audio: true});
+    backend.emit({data: Buffer.from('p'), timestampMicros: 16});
+    const seen: VideoAccessUnit[] = [];
+    for await (const u of t.units()) {
+      seen.push(u as VideoAccessUnit);
+      if (seen.length === 4) {
+        break;
+      }
+    }
+    assert.deepStrictEqual(
+      seen.map((u) => [u.track, u.sequence]),
+      [
+        ['video', 0],
+        ['audio', 0],
+        ['audio', 1],
+        ['video', 1],
+      ],
+    );
+    await t.close();
+  });
+
+  it('keeps audio through a video overflow, and audio does not end the resync', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    for (let i = 0; i < 600; i++) {
+      backend.emit({data: Buffer.from('p'), timestampMicros: i});
+    }
+    assert.strictEqual(backend.keyFrameRequests, 1);
+    backend.emit({data: Buffer.from('a'), isKeyFrame: true, timestampMicros: 90, audio: true});
+    backend.emit({data: Buffer.from('p'), timestampMicros: 91});
+    backend.emit({data: Buffer.from('idr'), isKeyFrame: true, timestampMicros: 92});
+    await t.end();
+    const seen: VideoAccessUnit[] = [];
+    for await (const u of t.units()) {
+      seen.push(u as VideoAccessUnit);
+    }
+    assert.deepStrictEqual(
+      seen.map((u) => u.track),
+      ['audio', 'video'],
+    );
+    assert.ok(seen[1].isKeyFrame);
+  });
+});
+
+describe('Transcoder audio buffered before a video overflow', () => {
+  it('survives the overflow eviction', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    backend.emit({data: Buffer.from('a'), isKeyFrame: true, timestampMicros: 0, audio: true});
+    for (let i = 0; i < 600; i++) {
+      backend.emit({data: Buffer.from('p'), timestampMicros: i + 1});
+    }
+    assert.strictEqual(backend.keyFrameRequests, 1);
+    backend.emit({data: Buffer.from('idr'), isKeyFrame: true, timestampMicros: 700});
+    await t.end();
+    const tracks = [];
+    for await (const u of t.units()) {
+      tracks.push((u as VideoAccessUnit).track);
+    }
+    assert.deepStrictEqual(tracks, ['audio', 'video']);
+  });
+
+  it('does not request a key frame when only audio overflows', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(withAudio, backend);
+    for (let i = 0; i < 600; i++) {
+      backend.emit({data: Buffer.from('a'), isKeyFrame: true, timestampMicros: i, audio: true});
+    }
+    assert.strictEqual(backend.keyFrameRequests, 0);
+    await t.close();
+  });
+});
+
+describe('transcode() with an audio source', () => {
+  async function* audioSource(...items: AudioAccessUnit[]) {
+    yield* items;
+  }
+
+  it('requires audio: true', async () => {
+    const source = async function* () {
+      yield au(0, true);
+    };
+    for (const opts of [{codec: 'h264'}, {codec: 'mjpeg'}] as const) {
+      await assert.rejects(
+        transcode(source(), opts as never, undefined, audioSource(audioAu(0))).next(),
+        MediaProxyOptionError,
+      );
+    }
+  });
+
+  it('pushes both sources and stops the audio when the video ends', async () => {
+    const backend = fakeBackend({echo: true});
+    const t = new Transcoder(withAudio, backend);
+    const idleAudio = idleAudioSource([audioAu(0), audioAu(480)]);
+    async function* video() {
+      yield au(0, true);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const seen = [];
+    for await (const u of pipeThrough(t, video(), undefined, {[Symbol.asyncIterator]: () => idleAudio.iterator})) {
+      seen.push(u);
+    }
+    assert.strictEqual(seen.length, 1);
+    assert.strictEqual(backend.audioPushes.length, 2);
+    assert.ok(idleAudio.state.returned, 'audio return() was called');
+  });
+
+  it('fails the stream, after what was produced, when the audio source throws', async () => {
+    const t = new Transcoder(withAudio, fakeBackend({echo: true}));
+    async function* video() {
+      yield au(0, true);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    const audio: AsyncIterable<AudioAccessUnit> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          throw new Error('audio went away');
+        },
+      }),
+    };
+    const seen = [];
+    await assert.rejects(async () => {
+      for await (const u of pipeThrough(t, video(), undefined, audio)) {
+        seen.push(u);
+      }
+    }, /audio went away/);
+    assert.strictEqual(seen.length, 1);
+  });
+
+  it('reports an audio failure although the video read never settles', async () => {
+    const t = new Transcoder(withAudio, fakeBackend({echo: true}));
+    const video: AsyncIterable<NalAccessUnit> = {
+      [Symbol.asyncIterator]: () => ({
+        next: () => new Promise<IteratorResult<NalAccessUnit>>(() => {}),
+        return: async () => ({value: undefined, done: true}),
+      }),
+    };
+    const audio: AsyncIterable<AudioAccessUnit> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error('audio went away');
+        },
+      }),
+    };
+    await assert.rejects(async () => {
+      for await (const _ of pipeThrough(t, video, undefined, audio)) {
+        // drain
+      }
+    }, /audio went away/);
+  });
+});
+
+/** Audio source that yields `items`, then blocks on an idle read that `return()` does not unblock. */
+function idleAudioSource(items: AudioAccessUnit[]) {
+  let index = 0;
+  const state = {returned: false};
+  const iterator: AsyncIterableIterator<AudioAccessUnit> = {
+    [Symbol.asyncIterator]: () => iterator,
+    async next() {
+      if (index < items.length) {
+        return {value: items[index++], done: false};
+      }
+      return new Promise<IteratorResult<AudioAccessUnit>>(() => {});
+    },
+    async return() {
+      state.returned = true;
+      return {value: undefined, done: true};
+    },
+  };
+  return {iterator, state};
+}

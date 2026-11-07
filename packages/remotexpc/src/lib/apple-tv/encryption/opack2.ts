@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../../dictionary.js';
 import * as constants from '../constants.js';
 import {AppleTVError} from '../errors.js';
 
@@ -78,7 +79,7 @@ export class Opack2 {
     this.ensureAvailable(data, offset, 1);
     const marker = data[offset++];
 
-    if (marker === constants.OPACK2_NULL) {
+    if (marker === constants.OPACK2_NULL || marker === constants.OPACK2_TERMINATOR) {
       return {value: null, offset};
     }
     if (marker === constants.OPACK2_TRUE) {
@@ -209,7 +210,7 @@ export class Opack2 {
         throw new AppleTVError('OPACK2 dictionary key is not a string');
       }
       const value = this.decode(data, key.offset);
-      result[key.value] = value.value;
+      setDictionaryEntry(result, key.value, value.value);
       currentOffset = value.offset;
     }
     return {value: result, offset: currentOffset};
@@ -238,11 +239,12 @@ export class Opack2 {
     const result: SerializableArray = [];
     let currentOffset = offset;
     while (true) {
+      this.ensureAvailable(data, currentOffset, 1);
+      if (data[currentOffset] === constants.OPACK2_TERMINATOR) {
+        return {value: result, offset: currentOffset + 1};
+      }
       const decoded = this.decode(data, currentOffset);
       currentOffset = decoded.offset;
-      if (decoded.value === null) {
-        return {value: result, offset: currentOffset};
-      }
       result.push(decoded.value);
     }
   }
@@ -260,7 +262,7 @@ export class Opack2 {
       if (typeof key.value !== 'string') {
         throw new AppleTVError('OPACK2 dictionary key is not a string');
       }
-      result[key.value] = value.value;
+      setDictionaryEntry(result, key.value, value.value);
     }
   }
 
@@ -383,7 +385,7 @@ export class Opack2 {
   private static encodeArray(arr: SerializableValue[]): Buffer {
     const length = arr.length;
 
-    if (length <= constants.OPACK2_SMALL_ARRAY_MAX) {
+    if (length < constants.OPACK2_SMALL_ARRAY_MAX) {
       const parts: Buffer[] = [Buffer.from([constants.OPACK2_SMALL_ARRAY_BASE + length])];
       for (const item of arr) {
         parts.push(this.encode(item));
@@ -395,7 +397,7 @@ export class Opack2 {
     for (const item of arr) {
       parts.push(this.encode(item));
     }
-    parts.push(Buffer.from([constants.OPACK2_NULL]));
+    parts.push(Buffer.from([constants.OPACK2_TERMINATOR]));
     return Buffer.concat(parts);
   }
 
@@ -422,7 +424,7 @@ export class Opack2 {
       parts.push(this.encode(key));
       parts.push(this.encode(value));
     }
-    parts.push(Buffer.from([constants.OPACK2_NULL, constants.OPACK2_NULL]));
+    parts.push(Buffer.from([constants.OPACK2_TERMINATOR, constants.OPACK2_TERMINATOR]));
     return Buffer.concat(parts);
   }
 }

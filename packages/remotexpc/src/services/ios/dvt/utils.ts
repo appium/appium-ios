@@ -1,3 +1,5 @@
+import {setDictionaryEntry} from '../../../lib/dictionary.js';
+import {PlistUID} from '../../../lib/plist/plist-uid.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 
 /**
@@ -12,6 +14,25 @@ export function isPlainObject(value: any): value is Record<string, any> {
  */
 export function hasProperties(obj: any, ...props: string[]): boolean {
   return isPlainObject(obj) ? props.every((prop) => prop in obj) : false;
+}
+
+/**
+ * Return the `$objects` index a UID points at, or null when the value is not a UID.
+ * Binary plists yield `PlistUID`, XML plists yield `{CF$UID: n}`.
+ */
+export function toUidIndex(value: any): number | null {
+  if (value instanceof PlistUID) {
+    return value.value;
+  }
+  return isPlainObject(value) && typeof value.CF$UID === 'number' ? value.CF$UID : null;
+}
+
+/**
+ * Return the `$objects` index of a value in a slot that only ever holds
+ * references, such as `NS.objects` members or `$top.root`, so a plain index is accepted too.
+ */
+export function toRefIndex(value: any): number | null {
+  return typeof value === 'number' ? value : toUidIndex(value);
 }
 
 /**
@@ -69,10 +90,14 @@ export function extractNSDictionary(dictObj: any, objects: any[]): PlistDictiona
 
   const result: PlistDictionary = {};
   for (let i = 0; i < keysRef.length; i++) {
-    const key = objects[keysRef[i]];
-    const value = objects[valuesRef[i]];
+    const keyIndex = toRefIndex(keysRef[i]);
+    const valueIndex = toRefIndex(valuesRef[i]);
+    if (keyIndex === null || valueIndex === null) {
+      continue;
+    }
+    const key = objects[keyIndex];
     if (typeof key === 'string') {
-      result[key] = value;
+      setDictionaryEntry(result, key, objects[valueIndex]);
     }
   }
 
@@ -89,7 +114,7 @@ export function extractCapabilityStrings(objects: any[]): PlistDictionary {
   for (let i = 1; i < objects.length; i++) {
     const obj = objects[i];
     if (typeof obj === 'string' && obj !== '$null') {
-      result[obj] = true;
+      setDictionaryEntry(result, obj, true);
     }
   }
 

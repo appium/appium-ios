@@ -1,6 +1,6 @@
 {
   "name": "appium-xcode",
-  "version": "7.2.3",
+  "version": "7.2.4",
   "description": "Interact with Xcode",
   "keywords": [
     "appium",
@@ -43,13 +43,13 @@
   },
   "dependencies": {
     "@appium/support": "^7.2.8",
-    "asyncbox": "^6.4.3",
+    "asyncbox": "^6.5.0",
     "semver": "^7.8.5",
     "teen_process": "^4.2.1"
   },
   "devDependencies": {
     "@appium/tsconfig": "^1.2.1",
-    "@appium/types": "^1.7.1",
+    "@appium/types": "^1.7.2",
     "@types/node": "^26.6.5",
     "@types/semver": "^7.8.0"
   },

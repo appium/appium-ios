@@ -54,16 +54,11 @@ function writeHeader(
 export function encodeApstFrame(unit: VideoAccessUnit | JpegFrame): [Buffer, Buffer] {
   const isVideo = 'track' in unit;
   const flags = isVideo && unit.isKeyFrame ? FLAG_KEYFRAME : 0;
-  return [
-    writeHeader(
-      isVideo ? ApstTrack.Video : ApstTrack.Jpeg,
-      flags,
-      unit.sequence,
-      unit.timestampMicros,
-      unit.data.length,
-    ),
-    unit.data,
-  ];
+  let track = ApstTrack.Jpeg;
+  if (isVideo) {
+    track = unit.track === 'audio' ? ApstTrack.Audio : ApstTrack.Video;
+  }
+  return [writeHeader(track, flags, unit.sequence, unit.timestampMicros, unit.data.length), unit.data];
 }
 
 /** Single concatenated buffer variant of {@link encodeApstFrame}. */

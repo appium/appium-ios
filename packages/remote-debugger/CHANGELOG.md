@@ -3,6 +3,165 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [18.0.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.8...appium-remote-debugger@18.0.9) (2026-11-06)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.7...appium-remote-debugger@18.0.8) (2026-11-02)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.6...appium-remote-debugger@18.0.7) (2026-11-01)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.5...appium-remote-debugger@18.0.6) (2026-10-31)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.4...appium-remote-debugger@18.0.5) (2026-10-30)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.3...appium-remote-debugger@18.0.4) (2026-10-30)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.2...appium-remote-debugger@18.0.3) (2026-10-28)
+
+### Bug Fixes
+
+* **remote-debugger:** remove timeline listener on stopTimeline ([#126](https://github.com/appium/appium-ios/issues/126)) ([4ac7445](https://github.com/appium/appium-ios/commit/4ac7445cbb729671cc614a744e3c0e63a8f5cac1))
+
+
+## [18.0.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.1...appium-remote-debugger@18.0.2) (2026-10-27)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.0...appium-remote-debugger@18.0.1) (2026-10-26)
+
+### Bug Fixes
+
+* **remote-debugger:** connect real-device clients after listeners are attached and release lost services ([#123](https://github.com/appium/appium-ios/issues/123)) ([c2ffd94](https://github.com/appium/appium-ios/commit/c2ffd94ca4c8d2c1952da80a816f9d8ed3188521))
+
+
+## [18.0.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.13...appium-remote-debugger@18.0.0) (2026-10-26)
+
+### ⚠ BREAKING CHANGES
+
+* **remote-debugger:** appium-ios-device is no longer used, so the legacy lockdown Web Inspector client is gone. Real devices require a RemoteXPC tunnel unless the caller opts into the usbmux transport, and the socketChunkSize option has been removed.
+
+### Features
+
+* **remote-debugger:** drop appium-ios-device; real devices use RemoteXPC (tunnel or usbmux) ([#112](https://github.com/appium/appium-ios/issues/112)) ([5739cb5](https://github.com/appium/appium-ios/commit/5739cb56c2af18122fe9b964d6edd437073349ab))
+
+
+## [17.7.13](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.12...appium-remote-debugger@17.7.13) (2026-10-26)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.11...appium-remote-debugger@17.7.12) (2026-10-26)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.10...appium-remote-debugger@17.7.11) (2026-10-26)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.9...appium-remote-debugger@17.7.10) (2026-10-24)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.8...appium-remote-debugger@17.7.9) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
+## [17.7.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.7...appium-remote-debugger@17.7.8) (2026-10-23)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.6...appium-remote-debugger@17.7.7) (2026-10-23)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.5...appium-remote-debugger@17.7.6) (2026-10-22)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [17.7.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.4...appium-remote-debugger@17.7.5) (2026-10-20)
+
+### Bug Fixes
+
+* **remote-debugger:** give a javascript error for a script error without a code ([#100](https://github.com/appium/appium-ios/issues/100)) ([af541de](https://github.com/appium/appium-ios/commit/af541de46d5ebcd3a16fe0ffe7629e3b6a5fa4ca))
+
+
+## [17.7.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.3...appium-remote-debugger@17.7.4) (2026-10-19)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
 ## [17.7.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@17.7.2...appium-remote-debugger@17.7.3) (2026-10-17)
 
 ### Bug Fixes

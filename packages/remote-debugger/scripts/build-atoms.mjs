@@ -89,14 +89,14 @@ const OUTPUT_WRAPPER = (bundle) => `function(){${bundle}\nreturn ${GLOBAL_NAME}.
 // Automation-domain atoms run via `Automation.evaluateJavaScriptFunction`, which only relays a
 // thrown error's `.message` string back to Node (see docs/update-atoms.md's "Two atom sets"
 // section) - a thrown BotError's W3C `state` would otherwise be lost. This wrapper catches one
-// (recognized by the `isAutomationError` duck-typing flag - see atoms/src/core/error.ts) and
-// re-throws a plain Error whose message embeds `{state, message}` as JSON, so
+// (recognized by the bundle's own `isBotError` brand, exposed beside the default export - see
+// buildAtom) and re-throws a plain Error whose message embeds `{state, message}` as JSON, so
 // lib/rpc/automation/errors.ts can recover the precise W3C error on the other side.
 const AUTOMATION_OUTPUT_WRAPPER = (bundle) => `function(){${bundle}
 try {
   return ${GLOBAL_NAME}.default.apply(null,arguments);
 } catch (e) {
-  if (e && e.isAutomationError) {
+  if (${GLOBAL_NAME}.isBotError(e)) {
     throw new Error(JSON.stringify({state: e.state, message: e.message}));
   }
   throw e;
@@ -123,10 +123,20 @@ const AUTOMATION_ENTRYPOINTS_DIRECTORY = path.resolve(ENTRYPOINTS_DIRECTORY, 'au
  */
 async function buildAtom(entryPointDir, outputDir, name, wrapper = OUTPUT_WRAPPER) {
   const entryPoint = path.resolve(entryPointDir, `${name}.ts`);
+  // The wrapper of an automation atom needs the brand of the BotErrors of its own bundle
+  const exposeBotError = wrapper === AUTOMATION_OUTPUT_WRAPPER;
 
   log.info(`Building '${name}'`);
   const result = await build({
-    entryPoints: [entryPoint],
+    ...(exposeBotError
+      ? {
+          stdin: {
+            contents: `export {default} from ${JSON.stringify(entryPoint)};\nexport {isBotError} from ${JSON.stringify(path.resolve(ATOMS_SRC_DIRECTORY, 'core', 'error.ts'))};`,
+            resolveDir: entryPointDir,
+            loader: 'ts',
+          },
+        }
+      : {entryPoints: [entryPoint]}),
     bundle: true,
     format: 'iife',
     globalName: GLOBAL_NAME,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
+import {createPlist} from '../../../src/lib/plist/plist-creator.js';
 import {
   type SyslogEntry,
   SyslogLogLevel,
@@ -8,6 +9,7 @@ import {
   formatSyslogEntry,
   formatSyslogEntryColored,
   getLogLevelName,
+  parseActivityReply,
   parseSyslogEntry,
 } from '../../../src/services/ios/syslog-service/syslog-entry-parser.js';
 
@@ -645,5 +647,29 @@ describe('syslog-entry-parser', function () {
         category: 'network',
       });
     });
+  });
+});
+
+describe('parseActivityReply', function () {
+  const body = Buffer.from(createPlist({Status: 'RequestSuccessful'}), 'utf8');
+  const length = Buffer.alloc(2);
+  length.writeUInt16LE(body.length, 0);
+  const reply = Buffer.concat([Buffer.from([2, 0, 0, 0]), length, body]);
+
+  it('returns null until the whole reply has arrived', function () {
+    assert.equal(parseActivityReply(reply.subarray(0, reply.length - 1)), null);
+  });
+
+  it('returns the reply and the bytes after it', function () {
+    const rest = Buffer.from([0x02, 1, 2]);
+
+    assert.deepEqual(parseActivityReply(Buffer.concat([reply, rest])), {
+      response: {Status: 'RequestSuccessful'},
+      rest,
+    });
+  });
+
+  it('rejects a length field wider than 8 bytes', function () {
+    assert.throws(() => parseActivityReply(Buffer.from([9, 0, 0, 0])), /Invalid StartActivity reply/);
   });
 });

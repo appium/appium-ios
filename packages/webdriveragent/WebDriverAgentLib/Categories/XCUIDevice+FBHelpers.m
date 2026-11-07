@@ -13,6 +13,7 @@
 #include <notify.h>
 #import <objc/runtime.h>
 
+#import "FBHIDOperations.h"
 #import "FBErrorBuilder.h"
 #import "FBImageUtils.h"
 #import "FBMacros.h"
@@ -32,7 +33,7 @@ static NSString *const FBClockFaceBundleId = @"com.apple.clockface";
 #endif
 
 #if TARGET_OS_TV
-NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
+NSDictionary<NSString *, NSNumber *> *FBAvailableButtonNames(void) {
   static dispatch_once_t onceToken;
   static NSDictionary *result;
   dispatch_once(&onceToken, ^{
@@ -63,7 +64,7 @@ NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
   return result;
 }
 #else
-NSDictionary<NSString *, NSNumber *> *fb_availableButtonNames(void) {
+NSDictionary<NSString *, NSNumber *> *FBAvailableButtonNames(void) {
   static dispatch_once_t onceToken;
   static NSDictionary *result;
   dispatch_once(&onceToken, ^{
@@ -199,21 +200,32 @@ static bool fb_isLocked;
   if (fb_isLocked) {
     return YES;
   }
-#if TARGET_OS_SIMULATOR
-  [self pressLockButton];
-#else
-  if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
-    // iOS 27: pressLockButton no longer locks; use a direct IOHID Power press (0x0C/0x30, ~0.5s hold).
-    if (![self fb_performIOHIDEventWithPage:0x0C
-                                      usage:0x30
-                                   duration:0.5
-                                      error:error]) {
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if ([FBHIDOperations appliesToDevice:self]) {
+    if (![FBHIDOperations pressLockWithError:error]) {
       return NO;
     }
-  } else {
-    [self pressLockButton];
-  }
+  } else
 #endif
+  {
+#if TARGET_OS_SIMULATOR
+    [self pressLockButton];
+#else
+    if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0")) {
+      // iOS 27: pressLockButton no longer locks; use a short IOHID Power press.
+      // A 0.5s hold can invoke Siri instead of locking the screen.
+      const NSTimeInterval duration = 0.2;
+      if (![self fb_performIOHIDEventWithPage:0x0C
+                                        usage:0x30
+                                     duration:duration
+                                        error:error]) {
+        return NO;
+      }
+    } else {
+      [self pressLockButton];
+    }
+#endif
+  }
   return [[[[FBRunLoopSpinner new]
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets locked"]
@@ -232,14 +244,19 @@ static bool fb_isLocked;
   if (!fb_isLocked) {
     return YES;
   }
-  [self pressButton:XCUIDeviceButtonHome];
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
-#if !TARGET_OS_TV
-  [self pressButton:XCUIDeviceButtonHome];
-#else
-  [self pressButton:XCUIDeviceButtonHome];
+  for (NSUInteger attempt = 0; attempt < 2; attempt++) {
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+    if ([FBHIDOperations appliesToDevice:self]) {
+      if (![FBHIDOperations pressHomeWithError:error]) {
+        return NO;
+      }
+    } else
 #endif
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
+    {
+      [self pressButton:XCUIDeviceButtonHome];
+    }
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:FBHomeButtonCoolOffTime]];
+  }
   return [[[[FBRunLoopSpinner new]
             timeout:FBScreenLockTimeout]
            timeoutErrorMessage:@"Timed out while waiting until the screen gets unlocked"]
@@ -362,7 +379,7 @@ static bool fb_isLocked;
 
 - (BOOL)fb_hasButton:(NSString *)buttonName
 {
-  return fb_availableButtonNames()[buttonName.lowercaseString] != nil;
+  return FBAvailableButtonNames()[buttonName.lowercaseString] != nil;
 }
 
 - (BOOL)fb_pressButton:(NSString *)buttonName
@@ -373,7 +390,7 @@ static bool fb_isLocked;
   return [self fb_pressButton:buttonName error:error];
 #else
 
-  NSDictionary<NSString *, NSNumber *> *availableButtons = fb_availableButtonNames();
+  NSDictionary<NSString *, NSNumber *> *availableButtons = FBAvailableButtonNames();
   NSNumber *buttonValue = availableButtons[buttonName.lowercaseString];
   
   if (!buttonValue) {
@@ -397,7 +414,7 @@ static bool fb_isLocked;
 - (BOOL)fb_pressButton:(NSString *)buttonName
                  error:(NSError **)error
 {
-  NSDictionary<NSString *, NSNumber *> *availableButtons = fb_availableButtonNames();
+  NSDictionary<NSString *, NSNumber *> *availableButtons = FBAvailableButtonNames();
   NSNumber *buttonValue = availableButtons[buttonName.lowercaseString];
   
   if (!buttonValue) {
@@ -406,6 +423,11 @@ static bool fb_isLocked;
              withDescriptionFormat:@"The button '%@' is not supported. The device under test only supports the following buttons: %@", buttonName, sortedKeys]
             buildError:error];
   }
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (buttonValue.unsignedIntegerValue == XCUIDeviceButtonHome && [FBHIDOperations appliesToDevice:self]) {
+    return [FBHIDOperations pressHomeWithError:error];
+  }
+#endif
   [self pressButton:(XCUIDeviceButton)[buttonValue unsignedIntegerValue]];
   return YES;
 }

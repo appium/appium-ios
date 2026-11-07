@@ -3,6 +3,112 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.28.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.7...appium-ios-remotexpc@5.28.8) (2026-11-02)
+
+### Bug Fixes
+
+* **remotexpc:** validate binary plist trailer and lengths against the buffer ([#141](https://github.com/appium/appium-ios/issues/141)) ([b0295c3](https://github.com/appium/appium-ios/commit/b0295c3d4081d120c45c87b3d341cc8955d56e00))
+
+
+## [5.28.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.6...appium-ios-remotexpc@5.28.7) (2026-11-01)
+
+### Miscellaneous Chores
+
+* **remotexpc:** bump minimatch to v11 ([#143](https://github.com/appium/appium-ios/issues/143)) ([3ebd661](https://github.com/appium/appium-ios/commit/3ebd6619e6b236cdf2fab8475f1004342bc33fef))
+
+
+## [5.28.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.5...appium-ios-remotexpc@5.28.6) (2026-10-31)
+
+### Bug Fixes
+
+* **remotexpc:** keep idle AFC connections open past 30s ([#137](https://github.com/appium/appium-ios/issues/137)) ([ef536de](https://github.com/appium/appium-ios/commit/ef536de3072e73c467fe47be4ab208f488d7994f))
+
+
+## [5.28.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.4...appium-ios-remotexpc@5.28.5) (2026-10-30)
+
+### Bug Fixes
+
+* **remotexpc:** make NetworkMonitor.start() idempotent ([#135](https://github.com/appium/appium-ios/issues/135)) ([cda68e3](https://github.com/appium/appium-ios/commit/cda68e391f96c45f8e679528328904fba19a1c5c))
+
+
+## [5.28.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.3...appium-ios-remotexpc@5.28.4) (2026-10-30)
+
+### Miscellaneous Chores
+
+* **deps:** Bump axios from 1.18.1 to 1.21.0 ([#130](https://github.com/appium/appium-ios/issues/130)) ([566da80](https://github.com/appium/appium-ios/commit/566da80f6b43711cdc1bc6d4ca2b85937e9b30e4))
+
+
+## [5.28.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.2...appium-ios-remotexpc@5.28.3) (2026-10-27)
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t fail silent XCTest runs after 60s, clear runner timeout timer ([#124](https://github.com/appium/appium-ios/issues/124)) ([afda8c9](https://github.com/appium/appium-ios/commit/afda8c9d96e6012b0453b5d3e43c2eef57d015ee))
+
+
+## [5.28.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.1...appium-ios-remotexpc@5.28.2) (2026-10-26)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [5.28.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.0...appium-ios-remotexpc@5.28.1) (2026-10-26)
+
+### Bug Fixes
+
+* **remotexpc:** syslog StartActivity reply, early text lines and socket leaks ([#121](https://github.com/appium/appium-ios/issues/121)) ([4a6202e](https://github.com/appium/appium-ios/commit/4a6202e6a6cc0d87f7ae56d6f8cdc6bd265a5b46))
+
+
+## [5.28.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.27.0...appium-ios-remotexpc@5.28.0) (2026-10-26)
+
+### Features
+
+* **remotexpc:** add WebInspectorService.connect() ([#117](https://github.com/appium/appium-ios/issues/117)) ([605ef59](https://github.com/appium/appium-ios/commit/605ef5972b0e7126e833cd9f8985a5e2d46a20c2))
+
+
+## [5.27.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.3...appium-ios-remotexpc@5.27.0) (2026-10-26)
+
+### Features
+
+* **remotexpc:** start lockdown services over usbmux when no tunnel is available ([#113](https://github.com/appium/appium-ios/issues/113)) ([bbd0bf7](https://github.com/appium/appium-ios/commit/bbd0bf7d65ee3e2d42b39eca46c7991ac87f4c69))
+
+
+## [5.26.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.2...appium-ios-remotexpc@5.26.3) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
+## [5.26.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.1...appium-ios-remotexpc@5.26.2) (2026-10-23)
+
+### Bug Fixes
+
+* **remotexpc:** wait for EnergyMonitor start/stop replies, run DVT integration suites serially ([#106](https://github.com/appium/appium-ios/issues/106)) ([d07637d](https://github.com/appium/appium-ios/commit/d07637d9dad27008e78131fdc8ecd02adfbf38e8))
+
+
+## [5.26.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.26.0...appium-ios-remotexpc@5.26.1) (2026-10-23)
+
+### Bug Fixes
+
+* **remotexpc:** keep binary plist UIDs apart from integers in NSKeyedArchiver decoding ([#105](https://github.com/appium/appium-ios/issues/105)) ([f04fd44](https://github.com/appium/appium-ios/commit/f04fd44664025f548f62f36f19f6b9865569896b))
+
+
+## [5.26.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.5...appium-ios-remotexpc@5.26.0) (2026-10-22)
+
+### Features
+
+* add CoreDevice file service for listing, pulling and pushing files ([#52](https://github.com/appium/appium-ios/issues/52)) ([f7b6b64](https://github.com/appium/appium-ios/commit/f7b6b64a6b3551ce6d179abffcc4151ba5914cdb))
+
+
+## [5.25.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.4...appium-ios-remotexpc@5.25.5) (2026-10-19)
+
+### Bug Fixes
+
+* **remotexpc:** opack2 15-element array and null terminator collision ([#95](https://github.com/appium/appium-ios/issues/95)) ([4a5abfb](https://github.com/appium/appium-ios/commit/4a5abfbcd33ed29e4a5edd7375f71462f1d45868))
+
+
 ## [5.25.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.25.3...appium-ios-remotexpc@5.25.4) (2026-10-17)
 
 ### Bug Fixes

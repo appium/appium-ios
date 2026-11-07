@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.2](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.1...node-devicectl@2.2.2) (2026-10-26)
+
+### Bug Fixes
+
+* **remote-debugger:** connect real-device clients after listeners are attached and release lost services ([#123](https://github.com/appium/appium-ios/issues/123)) ([c2ffd94](https://github.com/appium/appium-ios/commit/c2ffd94ca4c8d2c1952da80a816f9d8ed3188521))
+
+
 ## [2.2.1](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.0...node-devicectl@2.2.1) (2026-10-08)
 
 ### Bug Fixes

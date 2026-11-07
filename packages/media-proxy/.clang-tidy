@@ -21,5 +21,5 @@ Checks: >
   -readability-uppercase-literal-suffix
 WarningsAsErrors: '*'
 # Both path separators: on Windows, diagnostics report backslash paths.
-HeaderFilterRegex: 'src[/\\](addon\.cc|native[/\\])'
+HeaderFilterRegex: 'src[/\\](addon\.cc|native[/\\][^/\\]*\.h)'
 FormatStyle: file

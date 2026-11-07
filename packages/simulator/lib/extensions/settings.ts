@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import {fs, plist, util} from '@appium/support';
 import type {StringRecord} from '@appium/types';
-import AsyncLock from 'async-lock';
+import {AsyncLock} from 'asyncbox';
 import {exec} from 'teen_process';
 
 import {DEFAULTS_PATH, LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';

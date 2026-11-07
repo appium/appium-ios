@@ -6,7 +6,7 @@ import type {
   PlistMessage,
 } from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
-import {BaseService} from '../base-service.js';
+import {BaseService, type BaseServiceOptions} from '../base-service.js';
 
 const log = getLogger('NotificationProxyService');
 
@@ -18,6 +18,13 @@ export interface ObserveNotificationRequest extends PlistDictionary {
 export interface PostNotificationRequest extends PlistDictionary {
   Command: 'PostNotification';
   Name: string;
+}
+
+const DEFAULT_TIMEOUT_MS = 10000;
+
+export interface NotificationProxyServiceOptions extends BaseServiceOptions {
+  /** Request timeout in milliseconds */
+  timeout?: number;
 }
 
 /**
@@ -32,9 +39,14 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
   private _conn: ServiceConnection | null = null;
   private _pendingNotificationsObservationSet: Set<string> = new Set();
 
-  constructor(udid: string, timeout: number = 10000) {
-    super(udid);
-    this.timeout = timeout;
+  /**
+   * @param udid Device UDID
+   * @param timeoutOrOptions Request timeout in milliseconds (legacy form), or an options object
+   */
+  constructor(udid: string, timeoutOrOptions?: number | NotificationProxyServiceOptions) {
+    const options = typeof timeoutOrOptions === 'number' ? {timeout: timeoutOrOptions} : (timeoutOrOptions ?? {});
+    super(udid, options);
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**

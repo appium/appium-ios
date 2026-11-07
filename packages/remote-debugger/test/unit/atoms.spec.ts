@@ -7,6 +7,7 @@ import {JSDOM} from 'jsdom';
 
 import {getAtom, getScriptForAtom} from '../../lib/atoms.js';
 import {executeAtom} from '../../lib/mixins/execute.js';
+import {getAutomationAtomScript} from '../../lib/rpc/automation/atoms.js';
 import {convertJavascriptEvaluationResult} from '../../lib/utils/javascript.js';
 import {patchLayout} from './helpers/layout.js';
 
@@ -415,6 +416,18 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       assert.strictEqual(await runInjectAtom(window, 'get_local_storage_size'), 0);
     });
 
+    for (const [kind, thrown, expected] of [
+      ['a DOMException', 'new window.DOMException("full", "InvalidStateError")', errors.UnknownError],
+      ['a primitive', '"full"', errors.UnknownError],
+      ['null', 'null', errors.UnknownError],
+    ] as const) {
+      it(`gives an unknown error when the storage throws ${kind}`, async function () {
+        window.eval(`window.Storage.prototype.getItem = function () { throw ${thrown}; };`);
+        const raw = await runAtom(window, 'get_local_storage_item', ['foo']);
+        assert.throws(() => convertJavascriptEvaluationResult(raw), expected);
+      });
+    }
+
     it('session storage: set/get/keys/size/key/remove/clear round-trip', async function () {
       assert.strictEqual(await runInjectAtom(window, 'get_session_storage_size'), 0);
       await runInjectAtom(window, 'set_session_storage_item', ['foo', 'bar']);
@@ -461,6 +474,54 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
         const el = await runPromiseScript('return Promise.resolve(document.getElementById("somediv"));');
         assert.strictEqual(typeof el[W3C_ELEMENT_KEY], 'string');
       });
+
+      for (const [kind, script] of [
+        ['an Error', 'throw new Error("boom");'],
+        ['a primitive', 'throw "boom";'],
+        ['a DOMException', 'document.createElement("div").appendChild(document);'],
+        ['a syntax error', 'return (;'],
+        [
+          'an object whose marker getter throws',
+          "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
+        ],
+        ['a spoofed marker with a success code', "throw {message: 'boom', isAutomationError: true, code: 0};"],
+        ['a spoofed marker with a stale element code', "throw {message: 'boom', isAutomationError: true, code: 10};"],
+        ['a spoofed marker with a stale element code', "throw {message: 'boom', isAutomationError: true, code: 10};"],
+        [
+          'a spoofed marker whose message getter throws',
+          'throw {get message() { throw 1; }, isAutomationError: true, code: 17};',
+        ],
+      ]) {
+        it(`gives a javascript error when the script throws ${kind}`, async function () {
+          const raw = await runAtom(window, 'execute_script', [script, [], true]);
+          assert.throws(() => convertJavascriptEvaluationResult(raw), errors.JavaScriptError);
+        });
+      }
+
+      it('keeps the code of an error of the atoms', async function () {
+        const args = [[{[W3C_ELEMENT_KEY]: 'not-in-the-cache'}]];
+        const raw = await runAtom(window, 'execute_script', ['return arguments[0];', ...args, true]);
+        assert.throws(() => convertJavascriptEvaluationResult(raw), errors.StaleElementReferenceError);
+      });
+
+      for (const [script, expected] of [
+        ['throw new RangeError("bad");', /RangeError: bad/],
+        ['throw new TypeError("");', /TypeError/],
+        ['throw {reason: "x"};', /"reason":"x"/],
+        ['throw Object.create(null);', /The script threw an error/],
+      ] as const) {
+        it(`reports a readable message for \`${script}\``, async function () {
+          const raw = await runAtom(window, 'execute_script', [script, [], true]);
+          assert.throws(
+            () => convertJavascriptEvaluationResult(raw),
+            (err: Error) => {
+              assert.ok(err instanceof errors.JavaScriptError);
+              assert.match(err.message, expected);
+              return true;
+            },
+          );
+        });
+      }
 
       it('gives a javascript error for a rejected promise', async function () {
         await assert.rejects(runPromiseScript('return Promise.reject(new Error("boom"));'), (err: Error) => {
@@ -517,6 +578,10 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       for (const [kind, script] of [
         ['sync', "return {get a() { throw 'boom'; }};"],
         ['promise', "return Promise.resolve({get a() { throw 'boom'; }});"],
+        [
+          'promise (marker getter)',
+          "return Promise.resolve({get a() { throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }}; }});",
+        ],
       ]) {
         it(`gives a javascript error when a ${kind} value throws a primitive while serialized`, async function () {
           const atom = await getScriptForAtom('execute_script', [script, [], true]);
@@ -640,6 +705,72 @@ describe('atoms (green path, jsdom, mobile Safari)', function () {
       );
       window.eval(script);
       assert.strictEqual(convertJavascriptEvaluationResult(crossRealmToLocal((window as any)[promiseName])), 123);
+    });
+  });
+
+  describe('execute_async_script errors', function () {
+    for (const [kind, script] of [
+      ['an Error', 'throw new Error("boom");'],
+      ['null', 'throw null;'],
+      ['a primitive', 'throw "boom";'],
+      ['a DOMException', 'document.createElement("div").appendChild(document);'],
+      ['a syntax error', 'return (;'],
+      [
+        'an object whose marker getter throws',
+        "throw {message: 'boom', get isAutomationError() { throw new Error('probe'); }};",
+      ],
+      ['a spoofed marker with a success code', "throw {message: 'boom', isAutomationError: true, code: 0};"],
+      [
+        'a spoofed marker whose message getter throws',
+        'throw {get message() { throw 1; }, isAutomationError: true, code: 17};',
+      ],
+    ]) {
+      it(`gives a javascript error when the script throws ${kind}`, async function () {
+        const callback = 'function (res) { window.atomsSpecAsyncError = res; }';
+        window.eval(await getScriptForAtom('execute_async_script', [script, [], 1000], [], callback));
+        assert.throws(
+          () => convertJavascriptEvaluationResult(crossRealmToLocal((window as any).atomsSpecAsyncError)),
+          errors.JavaScriptError,
+        );
+      });
+    }
+
+    it('keeps the code of an error of the atoms', async function () {
+      const callback = 'function (res) { window.atomsSpecAsyncError = res; }';
+      const args = ['arguments[arguments.length - 1](1);', [{[W3C_ELEMENT_KEY]: 'not-in-the-cache'}], 1000];
+      window.eval(await getScriptForAtom('execute_async_script', args, [], callback));
+      assert.throws(
+        () => convertJavascriptEvaluationResult(crossRealmToLocal((window as any).atomsSpecAsyncError)),
+        errors.StaleElementReferenceError,
+      );
+    });
+
+    it('sends one response when the callback is called synchronously and onDone throws', async function () {
+      const atom = (await getAtom('execute_async_script')).toString('utf8');
+      let calls = 0;
+      (window as any).atomsSpecOnDone = () => {
+        calls++;
+        throw new Error('onDone failed');
+      };
+      window.eval(`(${atom})('arguments[0](1);', [], 1000, window.atomsSpecOnDone, true)`);
+      assert.strictEqual(calls, 1);
+    });
+  });
+
+  describe('automation atoms', function () {
+    // Automation.evaluateJavaScriptFunction relays only the message of a thrown error
+    it('embeds the W3C state of a thrown BotError in the message of a plain Error', async function () {
+      const atom = window.eval(`(${await getAutomationAtomScript('clear')})`) as (el: unknown) => void;
+      assert.throws(
+        () => atom(window.document.getElementById('somediv')),
+        (err: Error) => {
+          assert.deepStrictEqual(JSON.parse(err.message), {
+            state: 'invalid element state',
+            message: 'Element must be user-editable in order to clear it.',
+          });
+          return true;
+        },
+      );
     });
   });
 

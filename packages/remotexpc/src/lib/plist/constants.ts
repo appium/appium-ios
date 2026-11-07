@@ -29,6 +29,9 @@ export const UTF8_ENCODING = 'utf8';
 // Apple epoch offset (seconds between Unix epoch 1970-01-01 and Apple epoch 2001-01-01)
 export const APPLE_EPOCH_OFFSET = 978307200;
 
+// Marker byte of a date object: the DATE type nibble with the 8-byte width CoreFoundation requires
+export const BPLIST_DATE_MARKER = 0x33;
+
 // Binary plist trailer size (last 32 bytes of the file)
 export const BPLIST_TRAILER_SIZE = 32;
 

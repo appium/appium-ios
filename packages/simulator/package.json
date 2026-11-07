@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-simulator",
-  "version": "10.9.1",
+  "version": "10.10.2",
   "description": "iOS Simulator interface for Appium.",
   "keywords": [
     "appium",
@@ -47,21 +47,19 @@
     "test:e2e": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=3600000 \"./build/test/functional/**/*.spec.js\""
   },
   "dependencies": {
-    "@appium/coresim": "^1.13.1",
+    "@appium/coresim": "^1.14.1",
     "@appium/support": "^7.2.7",
     "@xmldom/xmldom": "^0.x",
-    "appium-xcode": "^7.2.3",
-    "async-lock": "^1.0.0",
-    "asyncbox": "^6.4.3",
+    "appium-xcode": "^7.2.4",
+    "asyncbox": "^6.5.0",
     "semver": "^7.8.5",
     "teen_process": "^4.2.0"
   },
   "devDependencies": {
     "@appium/tsconfig": "^1.2.0",
-    "@appium/types": "^1.0.0-rc.1",
-    "@types/async-lock": "^1.4.2",
+    "@appium/types": "^1.7.2",
     "@types/node": "^26.6.5",
-    "@types/sinon": "^22.0.0",
+    "@types/sinon": "^22.0.2",
     "pem": "^1.8.3",
     "sinon": "^22.0.0"
   },

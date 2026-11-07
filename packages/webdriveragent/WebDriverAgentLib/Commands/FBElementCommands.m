@@ -11,7 +11,6 @@
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
-#import "FBKeyboard.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
 #import "FBRunLoopSpinner.h"
@@ -404,13 +403,14 @@
   if (direction) {
     NSString *const distanceString = request.arguments[@"distance"] ?: @"1.0";
     CGFloat distance = (CGFloat)distanceString.doubleValue;
-    if ([direction isEqualToString:@"up"]) {
+    NSString *const directionLower = direction.lowercaseString;
+    if ([directionLower isEqualToString:@"up"]) {
       [element fb_scrollUpByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"down"]) {
+    } else if ([directionLower isEqualToString:@"down"]) {
       [element fb_scrollDownByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"left"]) {
+    } else if ([directionLower isEqualToString:@"left"]) {
       [element fb_scrollLeftByNormalizedDistance:distance];
-    } else if ([direction isEqualToString:@"right"]) {
+    } else if ([directionLower isEqualToString:@"right"]) {
       [element fb_scrollRightByNormalizedDistance:distance];
     }
     return FBResponseWithOK();
@@ -556,6 +556,13 @@
   NSString *textToType = [request.arguments[@"value"] componentsJoinedByString:@""];
   NSUInteger frequency = [request.arguments[@"frequency"] unsignedIntegerValue] ?: FBConfiguration.sharedInstance.maxTypingFrequency;
   NSError *error;
+#if TARGET_OS_IOS
+  NSTimeInterval keyboardWait = FBConfiguration.sharedInstance.keyboardWaitTimeout;
+  if (keyboardWait > 0) {
+    XCUIApplication *application = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+    FBWaitForHittableKey(application, keyboardWait);
+  }
+#endif
   if (!FBTypeText(textToType, frequency, &error)) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description
                                                                            traceback:nil]);

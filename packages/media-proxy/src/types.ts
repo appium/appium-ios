@@ -7,6 +7,20 @@ export interface NalAccessUnit {
   isKeyFrame: boolean;
   /** Raw 32-bit RTP media-clock timestamp (90 kHz). */
   timestamp: number;
+  /** `performance.now()` when the unit arrived; aligns video with audio. Defaults to the push time. */
+  receivedAt?: number;
+}
+
+/**
+ * One native AAC-ELD access unit as produced by `appium-ios-remotexpc`'s `AudioStreamCapture`
+ * (structural): 480 samples (10 ms) of 48 kHz stereo.
+ */
+export interface AudioAccessUnit {
+  data: Buffer;
+  /** Raw 32-bit RTP media-clock timestamp (48 kHz). */
+  timestamp: number;
+  /** `performance.now()` when the unit arrived; aligns audio with video. Defaults to the push time. */
+  receivedAt?: number;
 }
 
 /** Mirrors coresim's `VideoStreamOptions` (minus `displayId`/`codec`/`audio`). */
@@ -32,6 +46,16 @@ export interface JpegStreamOptions {
 
 export interface H264Options extends VideoStreamOptions {
   codec: 'h264';
+  /**
+   * Also transcode the device audio (AAC-ELD, fed through `pushAudio()` or the `audioSource` of
+   * `transcode()`) to ADTS-framed AAC-LC units interleaved into `units()`, like coresim. Defaults to false.
+   */
+  audio?: boolean;
+  /**
+   * `AudioSpecificConfig` of the pushed audio. Defaults to the device's stream, which must be given
+   * its true 480-sample frame length (remotexpc's `AudioStreamCapture.format.audioSpecificConfig`).
+   */
+  audioSpecificConfig?: Buffer;
 }
 
 export interface MjpegOptions extends JpegStreamOptions {
@@ -45,12 +69,13 @@ export type TranscoderOptions = H264Options | MjpegOptions;
  * start codes; a keyframe carries SPS/PPS inline, so it is self-decodable alone.
  */
 export interface VideoAccessUnit {
-  track: 'video';
+  track: 'video' | 'audio';
   data: Buffer;
+  /** Always true for audio: every ADTS unit decodes on its own. */
   isKeyFrame: boolean;
-  /** Monotonically increasing, starting at 0. */
+  /** Monotonically increasing per track, starting at 0. */
   sequence: number;
-  /** Microseconds since the stream started. */
+  /** Microseconds since the stream started, on one clock shared by both tracks. */
   timestampMicros: number;
 }
 
@@ -66,6 +91,8 @@ export interface NativeUnit {
   data: Buffer;
   isKeyFrame: boolean;
   timestampMicros: number;
+  /** Set on audio units. */
+  audio?: boolean;
 }
 
 export interface NativeConfig {
@@ -74,11 +101,16 @@ export interface NativeConfig {
   bitrate: number;
   quality: number;
   scale: number;
+  audio: boolean;
+  audioSpecificConfig: Buffer;
+  audioBitratePerChannel: number;
 }
 
 export interface NativeTranscoderHandle {
   /** Each chunk is one bare HEVC NAL unit (no start code). */
   push(chunks: Buffer[], timestampMicros: number, isKeyFrame: boolean): void;
+  /** One AAC-ELD access unit (only with `audio`). */
+  pushAudio(data: Buffer, timestampMicros: number): void;
   /** Forces the next H.264 output to be an IDR frame (used to resync after an overflow). */
   requestKeyFrame(): void;
   /** Flushes pending frames through `onUnit`, releases resources, then resolves (no callbacks after). */

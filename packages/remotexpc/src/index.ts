@@ -90,6 +90,18 @@ export type {
 } from './services/ios/device-info/index.js';
 export {DeviceControlService} from './services/ios/device-control/index.js';
 export type {DeviceOrientationState, RotateDirection} from './services/ios/device-control/index.js';
+export {CoreDeviceFileService, FILE_SERVICE_DOMAIN} from './services/ios/file-service/index.js';
+export type {
+  FileServiceDomain,
+  FileServiceEntry,
+  FileServiceFileMetadata,
+  FileServiceListOptions,
+  FileServicePushOptions,
+  FileServiceRemoveOptions,
+  FileServiceRequestOptions,
+  FileServiceSessionOptions,
+  FileServiceTransferOptions,
+} from './services/ios/file-service/index.js';
 export {ConfigurationService} from './services/ios/configuration/index.js';
 export type {
   ColorFilterState,
@@ -267,13 +279,26 @@ export type {
   XCTestEvent,
   XCTestSummary,
 } from './services/ios/testmanagerd/xctest-common.js';
-export {createBinaryPlist} from './lib/plist/index.js';
+export {BinaryPlistError, createBinaryPlist} from './lib/plist/index.js';
 export {AppleTVPairingService, UserInputService} from './lib/apple-tv/pairing/index.js';
 export {AppleTVTunnelService} from './lib/apple-tv/tunnel/index.js';
 export type {AppleTVPairingDiscoveryOptions, AppleTVPairingOptions} from './lib/apple-tv/pairing/index.js';
 export type {AppleTVDiscoveryOptions, AppleTVTunnelOptions} from './lib/apple-tv/tunnel/index.js';
 export type {AppleTVDevice, AppleTVPairingResult} from './lib/apple-tv/types.js';
 export type {LockdownService} from './lib/lockdown/index.js';
+export {LockdownError, LockdownStartServiceError} from './lib/lockdown/index.js';
+export {
+  SERVICE_NAMES,
+  UnsupportedTransportError,
+  UsbmuxDeviceUnavailableError,
+  getAvailableTransports,
+} from './lib/service-transport/index.js';
+export type {
+  StartServiceOptions,
+  TransportAvailability,
+  TransportAvailabilityOptions,
+  TransportMode,
+} from './lib/service-transport/index.js';
 
 export {connectViaTunnel, connectViaUsbmux} from './lib/port-forwarding/index.js';
 

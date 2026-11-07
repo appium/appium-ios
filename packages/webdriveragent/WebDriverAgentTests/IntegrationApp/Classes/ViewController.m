@@ -111,10 +111,20 @@
 }
 
 #if !TARGET_OS_TV
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
+{
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  [coordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+    // A 180-degree rotation can leave bounds unchanged. Read the scene after
+    // the transition as well as during layout.
+    [self updateOrentationLabel];
+  }];
+}
+
 - (void)updateOrentationLabel
 {
   NSString *orientation = nil;
-  switch (UIDevice.currentDevice.orientation) {
+  switch (self.view.window.windowScene.interfaceOrientation) {
     case UIInterfaceOrientationPortrait:
       orientation = @"Portrait";
       break;
@@ -126,12 +136,6 @@
       break;
     case UIInterfaceOrientationLandscapeRight:
       orientation = @"LandscapeRight";
-      break;
-    case UIDeviceOrientationFaceUp:
-      orientation = @"FaceUp";
-      break;
-    case UIDeviceOrientationFaceDown:
-      orientation = @"FaceDown";
       break;
     case UIInterfaceOrientationUnknown:
       orientation = @"Unknown";

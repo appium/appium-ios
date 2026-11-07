@@ -4,6 +4,36 @@
 
 namespace coresim {
 
+std::string DescribeNSError(NSError* error) {
+  constexpr NSUInteger kMaxErrorDepth = 10;
+  NSMutableArray<NSString*>* parts = [NSMutableArray array];
+  NSError* current = error;
+  for (NSUInteger depth = 0; current != nil && depth < kMaxErrorDepth; ++depth) {
+    for (NSString* text in @[ current.localizedDescription ?: @"", current.localizedFailureReason ?: @"" ]) {
+      NSString* trimmed = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+      NSUInteger known = [parts indexOfObjectPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
+        return [part containsString:trimmed];
+      }];
+      if (trimmed.length == 0 || known != NSNotFound) {
+        continue;
+      }
+      NSIndexSet* covered = [parts indexesOfObjectsPassingTest:^BOOL(NSString* part, NSUInteger, BOOL*) {
+        return [trimmed containsString:part];
+      }];
+      [parts removeObjectsAtIndexes:covered];
+      [parts addObject:trimmed];
+    }
+    id underlying = current.userInfo[NSUnderlyingErrorKey];
+    current = [underlying isKindOfClass:NSError.class] ? underlying : nil;
+  }
+  NSMutableArray<NSString*>* sentences = [NSMutableArray arrayWithCapacity:parts.count];
+  for (NSString* part in parts) {
+    BOOL terminated = [part hasSuffix:@"."] || [part hasSuffix:@"!"] || [part hasSuffix:@"?"];
+    [sentences addObject:terminated ? part : [part stringByAppendingString:@"."]];
+  }
+  return sentences.count > 0 ? [sentences componentsJoinedByString:@" "].UTF8String : "Operation failed";
+}
+
 Napi::Error NSErrorExceptionToJsError(Napi::Env env, const NSErrorException& error) {
   Napi::Error jsError = Napi::Error::New(env, error.what());
   const bool isDisplayResolutionError =

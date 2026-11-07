@@ -30,7 +30,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  Sends a simulated hinge angle in degrees (0 = closed, 180 = fully open).
- This dispatches the event; the display transition completes asynchronously.
+ Dispatches the event, then waits for the angle to settle and re-sends a slightly
+ nudged value if the reading is off (iOS 27.2 stops intermediate moves short).
  Verified on the iPhone Duo simulator; physical-device behavior is unverified.
  Does not change currentDisplayId.
  */

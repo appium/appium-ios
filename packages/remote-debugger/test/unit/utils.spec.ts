@@ -10,7 +10,6 @@ import {
   deepEqual,
   defaults,
   simpleStringify,
-  canUseWebInspectorShim,
 } from '../../lib/utils/index.js';
 
 describe('utils', function () {
@@ -125,19 +124,6 @@ describe('utils', function () {
     it('only applies fallback values for undefined keys', function () {
       const result = defaults({a: 1, b: undefined, c: null as null | number}, {b: 2, c: 3, d: 4});
       assert.deepStrictEqual(result, {a: 1, b: 2, c: null, d: 4});
-    });
-  });
-
-  describe('canUseWebInspectorShim', function () {
-    it('returns false when platform version is missing', function () {
-      assert.strictEqual(canUseWebInspectorShim(undefined), false);
-      assert.strictEqual(canUseWebInspectorShim(null), false);
-      assert.strictEqual(canUseWebInspectorShim(''), false);
-    });
-
-    it('returns true only for iOS 18 and newer', function () {
-      assert.strictEqual(canUseWebInspectorShim('17.5'), false);
-      assert.strictEqual(canUseWebInspectorShim('18.0'), true);
     });
   });
 

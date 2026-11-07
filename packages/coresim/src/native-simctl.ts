@@ -19,6 +19,8 @@ import {
   postDarwinNotification,
   setDarwinNotificationState,
 } from './commands/darwin-notification.js';
+import {isDuo, setSimulatedHingeAngle, setHidOrientation} from './commands/duo.js';
+import {pressHidButton} from './commands/hid.js';
 import {clearLocation, getEnv, openUrl, pushNotification, setLocation} from './commands/interaction.js';
 import {startJpegStream} from './commands/jpeg-stream.js';
 import {addCertificate, addRootCertificate, resetKeychain} from './commands/keychain.js';
@@ -70,6 +72,7 @@ import type {
 import './commands/app.js';
 import './commands/biometric.js';
 import './commands/darwin-notification.js';
+import './commands/hid.js';
 import './commands/interaction.js';
 import './commands/jpeg-stream.js';
 import './commands/keychain.js';
@@ -297,6 +300,14 @@ Object.assign(NativeSimctl.prototype, {
 
   // spawn
   spawnProcess,
+
+  // To handle Duo specific features
+  isDuo,
+  setSimulatedHingeAngle,
+  setHidOrientation,
+
+  // General HID event sending
+  pressHidButton,
 });
 
 // Loaded lazily (not at module import time) so merely depending on/importing @appium/coresim —

@@ -1,6 +1,6 @@
 {
   "name": "@appium/coresim",
-  "version": "1.13.1",
+  "version": "1.14.1",
   "description": "Native bindings to CoreSimulator.framework for Apple platform simulator control",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@appium/support": "^7.2.0",
-    "asyncbox": "^6.4.3",
+    "asyncbox": "^6.5.0",
     "lru-cache": "^11.5.3",
     "node-addon-api": "^8.5.0",
     "node-gyp-build": "^4.8.4"

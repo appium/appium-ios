@@ -3,6 +3,122 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.11...appium-webdriveragent@16.18.0) (2026-11-07)
+
+### Features
+
+* **webdriveragent:** add hasHinge ([#162](https://github.com/appium/appium-ios/issues/162)) ([6bd7f4c](https://github.com/appium/appium-ios/commit/6bd7f4c2a0f16cfa3e13a0c69ac3e16e512cee77))
+
+
+## [16.17.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.10...appium-webdriveragent@16.17.11) (2026-11-06)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.17.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.9...appium-webdriveragent@16.17.10) (2026-11-05)
+
+### Bug Fixes
+
+* **webdriveragent:** correct hinge angle undershoot on iOS 27.2 simulator ([#152](https://github.com/appium/appium-ios/issues/152)) ([b3ce495](https://github.com/appium/appium-ios/commit/b3ce495b49566f0eebff5192c5698d010e6c0ab1)), closes [#151](https://github.com/appium/appium-ios/issues/151)
+
+
+## [16.17.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.8...appium-webdriveragent@16.17.9) (2026-11-04)
+
+### Bug Fixes
+
+* compare with lowercase for the direction in scroll ([#148](https://github.com/appium/appium-ios/issues/148)) ([4709a5c](https://github.com/appium/appium-ios/commit/4709a5c85e8d4b437a1641b22e3a1e69bef9d23a))
+
+
+## [16.17.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.7...appium-webdriveragent@16.17.8) (2026-11-02)
+
+### Bug Fixes
+
+* **webdriveragent:** return keyboard autocorrection and prediction settings as booleans ([#147](https://github.com/appium/appium-ios/issues/147)) ([efb6024](https://github.com/appium/appium-ios/commit/efb602438c37175e32b38b78e632922c21efbabf))
+
+
+## [16.17.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.6...appium-webdriveragent@16.17.7) (2026-10-30)
+
+### Miscellaneous Chores
+
+* **deps:** Bump axios from 1.18.1 to 1.21.0 ([#130](https://github.com/appium/appium-ios/issues/130)) ([566da80](https://github.com/appium/appium-ios/commit/566da80f6b43711cdc1bc6d4ca2b85937e9b30e4))
+
+
+## [16.17.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.5...appium-webdriveragent@16.17.6) (2026-10-27)
+
+### Bug Fixes
+
+* **remote-debugger:** connect real-device clients after listeners are attached and release lost services ([#123](https://github.com/appium/appium-ios/issues/123)) ([c2ffd94](https://github.com/appium/appium-ios/commit/c2ffd94ca4c8d2c1952da80a816f9d8ed3188521))
+* **webdriveragent:** allow excluding customActions from the JSON page source ([#114](https://github.com/appium/appium-ios/issues/114)) ([8991115](https://github.com/appium/appium-ios/commit/89911153d5e666023fe675d382305d8203fe80e2))
+
+
+## [16.17.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.4...appium-webdriveragent@16.17.5) (2026-10-24)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.17.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.3...appium-webdriveragent@16.17.4) (2026-10-24)
+
+### Bug Fixes
+
+* **webdriveragent:** wait for SpringBoard after background apps resume ([#82](https://github.com/appium/appium-ios/issues/82)) ([b8b0b45](https://github.com/appium/appium-ios/commit/b8b0b45294c47882c3d31c023a9fb6912496518d))
+
+
+## [16.17.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.2...appium-webdriveragent@16.17.3) (2026-10-23)
+
+### Miscellaneous Chores
+
+* use AsyncLock from asyncbox instead of async-lock ([#107](https://github.com/appium/appium-ios/issues/107)) ([c6f7784](https://github.com/appium/appium-ios/commit/c6f7784ce933cc5910103b756645e159453964a2))
+
+
+## [16.17.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.1...appium-webdriveragent@16.17.2) (2026-10-23)
+
+### Bug Fixes
+
+* wait for a hittable key only when keyboardWaitTimeout is set ([#93](https://github.com/appium/appium-ios/issues/93)) ([5a3eed4](https://github.com/appium/appium-ios/commit/5a3eed4b07172fce2413f4d55c1686da68fe6140))
+
+
+## [16.17.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.0...appium-webdriveragent@16.17.1) (2026-10-21)
+
+### Bug Fixes
+
+* **webdriveragent:** do not embed lib_TestingInterop.dylib on Xcode 26.0-26.3 ([#104](https://github.com/appium/appium-ios/issues/104)) ([a78d1fe](https://github.com/appium/appium-ios/commit/a78d1fee46b483613b2e659936b490573cfc81d6))
+
+
+## [16.17.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.5...appium-webdriveragent@16.17.0) (2026-10-21)
+
+### Features
+
+* **webdriveragent:** add route for retrieving pressButton values ([#102](https://github.com/appium/appium-ios/issues/102)) ([5b4eaaa](https://github.com/appium/appium-ios/commit/5b4eaaacc7b97d571ab269f98a4e23396be7bae1))
+
+
+## [16.16.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.4...appium-webdriveragent@16.16.5) (2026-10-21)
+
+### Code Refactoring
+
+* move HID related implementation in a separate module ([#103](https://github.com/appium/appium-ios/issues/103)) ([701eb60](https://github.com/appium/appium-ios/commit/701eb601455c7ab04c283dbc8a0da055eb7e3199))
+
+
+## [16.16.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.3...appium-webdriveragent@16.16.4) (2026-10-21)
+
+### Bug Fixes
+
+* **webdriveragent:** dispatch Home button HID events on Duo simulators ([#78](https://github.com/appium/appium-ios/issues/78)) ([19ce62f](https://github.com/appium/appium-ios/commit/19ce62f69b657e5b0fe2f7f74545c56f9631beb6)), closes [#85](https://github.com/appium/appium-ios/issues/85)
+* **webdriveragent:** fall back to vendor HID events for Duo rotation ([#81](https://github.com/appium/appium-ios/issues/81)) ([71d1ae0](https://github.com/appium/appium-ios/commit/71d1ae01dd1cea5b85063ed74c1b51f02134c6c5))
+
+
+## [16.16.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.2...appium-webdriveragent@16.16.3) (2026-10-19)
+
+### Bug Fixes
+
+* **webdriveragent:** shorten lock button press on iOS 27 ([#91](https://github.com/appium/appium-ios/issues/91)) ([e002283](https://github.com/appium/appium-ios/commit/e002283d4b26738b0dae1200a3a639e611101d79))
+
+
 ## [16.16.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.16.1...appium-webdriveragent@16.16.2) (2026-10-18)
 
 ### Bug Fixes

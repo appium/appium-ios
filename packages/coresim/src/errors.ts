@@ -53,7 +53,7 @@ export class NativeSimOperationError extends NativeSimError {
   public override name = 'NativeSimOperationError';
 
   /**
-   * @param message — `NSError.localizedDescription`
+   * @param message — `NSError.localizedDescription`, followed by its failure reason and underlying errors
    * @param domain — `NSError.domain`
    * @param code — `NSError.code`
    */
