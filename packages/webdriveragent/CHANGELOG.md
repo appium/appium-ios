@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.2...appium-webdriveragent@16.18.3) (2026-11-08)
+
+### Bug Fixes
+
+* **webdriveragent:** cache the screen lookup in the MJPEG server ([#171](https://github.com/appium/appium-ios/issues/171)) ([e764254](https://github.com/appium/appium-ios/commit/e764254f068127669c1ba16d32394836c97307ac))
+
+
 ## [16.18.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.1...appium-webdriveragent@16.18.2) (2026-11-07)
 
 ### Code Refactoring
