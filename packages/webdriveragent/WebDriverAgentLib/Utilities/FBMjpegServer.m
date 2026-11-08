@@ -28,6 +28,8 @@ static const NSTimeInterval FRAME_TIMEOUT = 1.;
 static const NSUInteger MAX_PENDING_FRAMES_PER_CLIENT = 4;
 static const NSTimeInterval FAILURE_BACKOFF_MIN = 1.0;
 static const NSTimeInterval FAILURE_BACKOFF_MAX = 10.0;
+// The screen lookup is a round trip to testmanagerd, so it is not repeated for every frame.
+static const uint64_t SCREEN_REFRESH_INTERVAL = 3 * NSEC_PER_SEC;
 
 static NSString *const SERVER_NAME = @"WDA MJPEG Server";
 static const char *QUEUE_NAME = "JPEG Screenshots Provider Queue";
@@ -48,6 +50,10 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @property (nonatomic, assign) NSUInteger sentFramesCount;
 @property (nonatomic, assign) NSUInteger sentBytesCount;
 @property (nonatomic, assign) NSUInteger droppedFramesCount;
+// Touched only on backgroundQueue.
+@property (nonatomic, strong, nullable) XCUIScreen *cachedScreen;
+@property (nonatomic, strong, nullable) NSNumber *cachedScreenDisplayId;
+@property (nonatomic, assign) uint64_t cachedScreenTimestamp;
 // Frames submitted but not sent yet, per client. Guarded by @synchronized (self.listeningClients).
 @property (nonatomic, readonly) NSMapTable<id, NSNumber *> *pendingFrameCounts;
 
@@ -97,6 +103,25 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   }
 }
 
+- (nullable XCUIScreen *)currentScreenWithError:(NSError **)error
+{
+  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
+  uint64_t now = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  BOOL isCacheValid = nil != self.cachedScreen
+    && (displayId == self.cachedScreenDisplayId || [displayId isEqual:self.cachedScreenDisplayId])
+    && now - self.cachedScreenTimestamp < SCREEN_REFRESH_INTERVAL;
+  if (isCacheValid) {
+    return self.cachedScreen;
+  }
+  // Resolve with the captured id, so the cache key always matches the cached screen.
+  self.cachedScreen = nil == displayId
+    ? XCUIScreen.mainScreen
+    : [FBScreen screenWithDisplayID:displayId.longLongValue error:error];
+  self.cachedScreenDisplayId = displayId;
+  self.cachedScreenTimestamp = now;
+  return self.cachedScreen;
+}
+
 - (void)streamScreenshot
 {
   if (!self.isStreaming) {
@@ -115,13 +140,14 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   NSError *error;
   CGFloat compressionQuality = MAX(FBMinCompressionQuality,
                                    MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
-  XCUIScreen *screen = [FBScreen currentScreenWithError:&error];
+  XCUIScreen *screen = [self currentScreenWithError:&error];
   NSData *screenshotData = nil == screen ? nil : [FBScreenshot takeInOriginalResolutionWithScreenID:screen.displayID
                                                            compressionQuality:compressionQuality
                                                                           uti:UTTypeJPEG
                                                                       timeout:FRAME_TIMEOUT
                                                                         error:&error];
   if (nil == screenshotData) {
+    self.cachedScreen = nil;
     [FBLogger logFmt:@"%@", error.description];
     self.consecutiveScreenshotFailures++;
     NSTimeInterval backoffSeconds = MIN(FAILURE_BACKOFF_MAX,
