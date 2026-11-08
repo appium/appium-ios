@@ -554,6 +554,7 @@
     @"userInterfaceIdiom": @(UIDevice.currentDevice.userInterfaceIdiom),
 #endif
     @"userInterfaceStyle": self.userInterfaceStyle,
+    @"hasHinge": @(XCUIDevice.sharedDevice.fb_supportsHingeAngleReading),
 #if TARGET_OS_SIMULATOR
     @"isSimulator": @(YES),
 #else

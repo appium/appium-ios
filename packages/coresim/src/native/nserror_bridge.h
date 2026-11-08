@@ -11,6 +11,10 @@
 
 namespace coresim {
 
+// localizedDescription is often generic ("Simulator device failed to install the application."), so
+// the failure reason and the NSUnderlyingErrorKey chain are appended.
+std::string DescribeNSError(NSError* error);
+
 // Thrown by async work lambdas (see async_bridge.h) when a native call fails via an NSError**
 // out-param rather than raising. domain/code/message are captured immediately at throw time
 // (never the NSError* itself), since this only ever needs to survive within the same background
@@ -18,7 +22,7 @@ namespace coresim {
 class NSErrorException : public std::runtime_error {
  public:
   explicit NSErrorException(NSError* error)
-      : std::runtime_error(error.localizedDescription ? error.localizedDescription.UTF8String : "Operation failed"),
+      : std::runtime_error(DescribeNSError(error)),
         domain(error.domain ? error.domain.UTF8String : ""),
         code(error.code) {}
 
@@ -26,8 +30,9 @@ class NSErrorException : public std::runtime_error {
   long long code;
 };
 
-// Converts an NSError into a JS Error with {name: 'NativeSimOperationError', domain, code,
-// message} — errors.ts wraps this into NativeSimError. Built from an already-caught
+// Converts an NSError into a named JS Error with domain/code/message. Display resolution
+// failures use NativeSimDisplayResolutionError; other failures use NativeSimOperationError.
+// errors.ts wraps the name into the matching class. Built from an already-caught
 // NSErrorException's extracted fields, never a live NSError*: this only ever runs in OnOK (main
 // thread), after the exception already crossed out of the background thread's try/catch.
 Napi::Error NSErrorExceptionToJsError(Napi::Env env, const NSErrorException& error);

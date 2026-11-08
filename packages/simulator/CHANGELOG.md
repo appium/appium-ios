@@ -3,6 +3,43 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.11.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.1...appium-ios-simulator@10.11.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [10.11.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.0...appium-ios-simulator@10.11.1) (2026-11-07)
+
+### Bug Fixes
+
+* **simulator:** hint at Full Disk Access when DeviceHub preferences are denied ([#161](https://github.com/appium/appium-ios/issues/161)) ([ff8eed9](https://github.com/appium/appium-ios/commit/ff8eed96742db2c24cd5fdd98ba37ea713fc2591))
+
+
+## [10.11.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.2...appium-ios-simulator@10.11.0) (2026-11-07)
+
+### Features
+
+* add opt-in boot-scoped screenshot display cache ([#51](https://github.com/appium/appium-ios/issues/51)) ([692a1f7](https://github.com/appium/appium-ios/commit/692a1f77bfbc64a18184a83282a8d2695ffe8d0a))
+
+
+## [10.10.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.1...appium-ios-simulator@10.10.2) (2026-11-06)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
+## [10.10.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.0...appium-ios-simulator@10.10.1) (2026-11-06)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
 ## [10.10.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.2...appium-ios-simulator@10.10.0) (2026-10-24)
 
 ### Features

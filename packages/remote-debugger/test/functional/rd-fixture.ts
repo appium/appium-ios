@@ -24,14 +24,15 @@ function matchesPlatformVersion(versionString: string, platformVersion: string):
   return platformVersion.split('.').every((part, i) => actual[i] === part);
 }
 
-async function getRuntimeIdentifier(platformVersion: string): Promise<string> {
-  const runtime = (await nativeSimctl.getSupportedRuntimes()).find((r) =>
+// A version can map to several runtimes (e.g. iOS 27.2 also ships a Duo-only variant), so return all.
+async function getRuntimeIdentifiers(platformVersion: string): Promise<string[]> {
+  const runtimes = (await nativeSimctl.getSupportedRuntimes()).filter((r) =>
     matchesPlatformVersion(r.versionString, platformVersion),
   );
-  if (!runtime) {
+  if (runtimes.length === 0) {
     throw new Error(`No supported runtime found for platform version '${platformVersion}'`);
   }
-  return runtime.identifier;
+  return runtimes.map((r) => r.identifier);
 }
 
 async function getDeviceTypeIdentifier(deviceName: string): Promise<string> {
@@ -43,9 +44,26 @@ async function getDeviceTypeIdentifier(deviceName: string): Promise<string> {
 }
 
 async function getExistingDevice(deviceName: string, platformVersion: string): Promise<SimDeviceInfo | null> {
-  const runtimeIdentifier = await getRuntimeIdentifier(platformVersion);
+  const runtimeIdentifiers = await getRuntimeIdentifiers(platformVersion);
   const devices = await nativeSimctl.getDevices();
-  return devices.find((device) => device.name === deviceName && device.runtimeIdentifier === runtimeIdentifier) ?? null;
+  return (
+    devices.find(
+      (device) => device.name === deviceName && runtimeIdentifiers.includes(device.runtimeIdentifier ?? ''),
+    ) ?? null
+  );
+}
+
+// Not every runtime of a version supports the device type, so use the first one that accepts it.
+async function createDeviceOnAnyRuntime(deviceTypeIdentifier: string, runtimeIdentifiers: string[]): Promise<string> {
+  let lastError: unknown;
+  for (const runtimeIdentifier of runtimeIdentifiers) {
+    try {
+      return (await nativeSimctl.createDevice(SIM_NAME, deviceTypeIdentifier, runtimeIdentifier)).udid;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 async function deleteDeviceWithRetry(udid: string): Promise<void> {
@@ -80,11 +98,11 @@ export function useRemoteDebuggerFixture(options: RemoteDebuggerOptions = {}): R
     if (existing) {
       udid = existing.udid;
     } else {
-      const [deviceTypeIdentifier, runtimeIdentifier] = await Promise.all([
+      const [deviceTypeIdentifier, runtimeIdentifiers] = await Promise.all([
         getDeviceTypeIdentifier(DEVICE_NAME),
-        getRuntimeIdentifier(PLATFORM_VERSION),
+        getRuntimeIdentifiers(PLATFORM_VERSION),
       ]);
-      udid = (await nativeSimctl.createDevice(SIM_NAME, deviceTypeIdentifier, runtimeIdentifier)).udid;
+      udid = await createDeviceOnAnyRuntime(deviceTypeIdentifier, runtimeIdentifiers);
       simCreated = true;
     }
 

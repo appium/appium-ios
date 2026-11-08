@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.15.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.15.0...@appium/coresim@1.15.1) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [1.15.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.14.1...@appium/coresim@1.15.0) (2026-11-07)
+
+### Features
+
+* add opt-in boot-scoped screenshot display cache ([#51](https://github.com/appium/appium-ios/issues/51)) ([692a1f7](https://github.com/appium/appium-ios/commit/692a1f77bfbc64a18184a83282a8d2695ffe8d0a))
+
+
+## [1.14.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.14.0...@appium/coresim@1.14.1) (2026-11-06)
+
+### Bug Fixes
+
+* **coresim:** include the failure reason and underlying errors in operation errors ([#163](https://github.com/appium/appium-ios/issues/163)) ([0032a91](https://github.com/appium/appium-ios/commit/0032a918d11d6d883f2896b907b0fbca2a734353))
+
+
 ## [1.14.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.13.2...@appium/coresim@1.14.0) (2026-10-24)
 
 ### Features

@@ -3,6 +3,50 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.2...appium-webdriveragent@16.18.3) (2026-11-08)
+
+### Bug Fixes
+
+* **webdriveragent:** cache the screen lookup in the MJPEG server ([#171](https://github.com/appium/appium-ios/issues/171)) ([e764254](https://github.com/appium/appium-ios/commit/e764254f068127669c1ba16d32394836c97307ac))
+
+
+## [16.18.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.1...appium-webdriveragent@16.18.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [16.18.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.0...appium-webdriveragent@16.18.1) (2026-11-07)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.18.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.11...appium-webdriveragent@16.18.0) (2026-11-07)
+
+### Features
+
+* **webdriveragent:** add hasHinge ([#162](https://github.com/appium/appium-ios/issues/162)) ([6bd7f4c](https://github.com/appium/appium-ios/commit/6bd7f4c2a0f16cfa3e13a0c69ac3e16e512cee77))
+
+
+## [16.17.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.10...appium-webdriveragent@16.17.11) (2026-11-06)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.17.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.9...appium-webdriveragent@16.17.10) (2026-11-05)
+
+### Bug Fixes
+
+* **webdriveragent:** correct hinge angle undershoot on iOS 27.2 simulator ([#152](https://github.com/appium/appium-ios/issues/152)) ([b3ce495](https://github.com/appium/appium-ios/commit/b3ce495b49566f0eebff5192c5698d010e6c0ab1)), closes [#151](https://github.com/appium/appium-ios/issues/151)
+
+
 ## [16.17.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.8...appium-webdriveragent@16.17.9) (2026-11-04)
 
 ### Bug Fixes

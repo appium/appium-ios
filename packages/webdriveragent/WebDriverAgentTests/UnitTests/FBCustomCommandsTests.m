@@ -20,6 +20,7 @@
 #if !TARGET_OS_TV && __clang_major__ >= 15
 
 @interface FBCustomCommands (FBWDATestable)
++ (id<FBResponsePayload>)handleGetDeviceInfo:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleKeyboardInput:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleGetSimulatedHingeAngle:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSetSimulatedHingeAngle:(FBRouteRequest *)request;
@@ -93,6 +94,24 @@
   return [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
 }
 
+- (void)testDeviceInfoIncludesHasHinge
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/device/info"]
+                                                  parameters:@{}
+                                                   arguments:@{}];
+  RouteResponse *response = [RouteResponse new];
+  [[FBCustomCommands handleGetDeviceInfo:request] dispatchWithResponse:response];
+  NSDictionary *body = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
+  id hasHinge = body[@"value"][@"hasHinge"];
+  XCTAssertNotNil(hasHinge);
+  if (nil == hasHinge) {
+    return;
+  }
+  XCTAssertEqual(CFGetTypeID((__bridge CFTypeRef)hasHinge), CFBooleanGetTypeID());
+  XCTAssertEqual([hasHinge boolValue], XCUIDevice.sharedDevice.fb_supportsHingeAngleReading);
+  NSLog(@"Device info hasHinge: %@", [hasHinge boolValue] ? @"true" : @"false");
+}
+
 - (void)testHingeAngleReading
 {
   NSError *error = nil;
@@ -128,6 +147,33 @@
     XCTAssertEqualObjects(response[@"value"][@"error"], @"invalid argument");
   }
   XCTAssertEqualObjects([self hingeResponseWithArguments:@{}][@"value"][@"error"], @"invalid argument");
+}
+
+- (void)testHingeAngleReadbackMatchesRequestedAngle
+{
+#if TARGET_OS_SIMULATOR
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  XCTSkipUnless(device.fb_supportsHingeAngleReading && device.fb_canAttemptSimulatedHingeAngleInjection,
+                @"Requires a device with a hinge that supports reading and injection");
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle, @"Cannot read the original hinge angle");
+  if (nil == originalAngle) {
+    return;
+  }
+  [self addTeardownBlock:^{
+    [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+  }];
+  // Intermediate angles are the ones iOS 27.2 initially stops short of
+  for (NSNumber *angle in @[@0, @45, @90, @150, @120, @10, @180]) {
+    NSError *error = nil;
+    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
+    NSNumber *reading = [device fb_getSimulatedHingeAngle:&error];
+    XCTAssertNotNil(reading, @"%@", error);
+    XCTAssertEqualWithAccuracy(reading.doubleValue, angle.doubleValue, 0.1, @"Requested %@", angle);
+  }
+#else
+  XCTSkip(@"Hinge injection is only verified on simulators");
+#endif
 }
 
 - (void)testHingeAngleRejectsUnsupportedDevices

@@ -137,6 +137,13 @@ export interface DisplayOptions {
 
 /** Options for `NativeSimctl.getScreenshot`. */
 export interface ScreenshotOptions extends DisplayOptions {
+  /**
+   * Cache numeric display-ID lookups per client/device while the observed boot marker is unchanged.
+   * Defaults to `false`, which clears the selection. Missing boot metadata disables caching.
+   * Missing cached ports retry once with fresh resolution. Disable during display-topology changes.
+   * @see https://github.com/appium/appium-ios/pull/51 for boot-marker limitations and validation.
+   */
+  cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**
@@ -423,6 +430,8 @@ export interface NativeDeviceHandle {
   udid(): string;
   name(): string;
   state(): number;
+  /** Last boot's Unix timestamp in milliseconds, or null if never booted; may throw if unsupported. */
+  lastBootedAt(): number | null;
   deviceTypeIdentifier(): string;
   runtimeIdentifier(): string;
   runtimeRootPath(): string;

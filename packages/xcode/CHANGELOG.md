@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [7.2.5](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.4...appium-xcode@7.2.5) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
 ## [7.2.4](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.3...appium-xcode@7.2.4) (2026-10-23)
 
 ### Miscellaneous Chores
