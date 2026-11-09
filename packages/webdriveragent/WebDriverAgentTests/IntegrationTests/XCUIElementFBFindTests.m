@@ -12,6 +12,7 @@
 #import "FBConfiguration.h"
 #import "FBElementUtils.h"
 #import "FBElementCache.h"
+#import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
 #import "FBResponsePayload.h"
 #import "FBTestMacros.h"
@@ -41,6 +42,71 @@
   });
   self.testedView = self.testedApplication.otherElements[@"MainView"];
   FBAssertWaitTillBecomesTrue(self.testedView.exists);
+}
+
+// Based on the lookup snapshot reuse checks from https://github.com/appium/appium-ios/pull/175
+- (void)assertLookupSnapshotsWithIndexBinding:(BOOL)boundByIndex
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = boundByIndex;
+    NSArray<NSArray<XCUIElement *> *> *lookups = @[
+      [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingPredicate:[NSPredicate predicateWithFormat:@"type == 'XCUIElementTypeButton'"]
+                         shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingIdentifier:@"Alerts" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+    ];
+    for (NSArray<XCUIElement *> *elements in lookups) {
+      XCTAssertGreaterThan(elements.count, 1u);
+      FBElementCache *cache = [FBElementCache new];
+      NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+      for (XCUIElement *element in elements) {
+        id<FBXCElementSnapshot> snapshot = element.lastSnapshot;
+        if (boundByIndex) {
+          // Index-bound matches reuse the snapshots of the query that found them
+          XCTAssertNotNil(snapshot);
+        } else {
+          XCTAssertNil(snapshot);
+          XCTAssertNotNil(element.fb_boundAccessibilityElement);
+        }
+        NSString *uid = element.fb_cacheId;
+        XCTAssertEqualObjects([cache storeElement:element], uid);
+        // Cache registration and the compact response must not resolve the element again
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        XCTAssertEqualObjects(FBDictionaryResponseWithElement(element, YES)[@"element-6066-11e4-a52e-4f735466cecf"], uid);
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        [identifiers addObject:uid];
+        // Resolve the element independently to catch order/identity errors
+        id<FBXCElementSnapshot> resolved = [element fb_standardSnapshot];
+        XCTAssertEqualObjects([FBXCElementSnapshotWrapper wdUIDWithSnapshot:resolved], uid);
+        if (nil != snapshot) {
+          XCTAssertEqualObjects(snapshot.label, resolved.label);
+          XCTAssertEqual(snapshot.elementType, resolved.elementType);
+        }
+        element.lastSnapshot = snapshot;
+      }
+      XCTAssertEqual(identifiers.count, elements.count);
+      FBResponseWithCachedElements(elements, cache, YES);
+      for (XCUIElement *element in elements) {
+        XCTAssertNil(element.lastSnapshot);
+        XCTAssertEqual([cache elementForUUID:element.fb_cacheId], element);
+      }
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testLookupSnapshotsWithAccessibilityBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:NO];
+}
+
+- (void)testLookupSnapshotsWithIndexBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:YES];
 }
 
 - (void)testDescendantsWithClassName
@@ -638,6 +704,21 @@
 @interface XCUIElementFBFindTests_StaleAppSnapshot : FBIntegrationTestCase
 @end
 @implementation XCUIElementFBFindTests_StaleAppSnapshot
+
+- (void)testCachedLookupStillChecksStalenessAfterNavigation
+{
+  [self launchApplication];
+  XCUIElement *element = [self.testedApplication fb_descendantsMatchingClassChain:
+    @"**/XCUIElementTypeButton[`label == 'Alerts'`]" shouldReturnAfterFirstMatch:NO].firstObject;
+  NSString *uid = element.fb_cacheId;
+  FBElementCache *cache = [FBElementCache new];
+  FBResponseWithCachedElement(element, cache, YES);
+  XCTAssertNil(element.lastSnapshot);
+
+  [self goToAttributesPage];
+  XCTAssertThrowsSpecificNamed([cache elementForUUID:uid checkStaleness:YES], NSException, FBStaleElementException);
+  XCTAssertFalse([cache hasElementWithUUID:uid]);
+}
 
 // Regression test for https://github.com/appium/appium/issues/22672.
 - (void)testClassChainWithIntermediatePositionAfterStaleAppSnapshot

@@ -82,7 +82,7 @@ static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQu
     ? [scopeQuery childrenMatchingType:type]
     : [scopeQuery descendantsMatchingType:type];
   NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K IN %@", FBStringify(FBXCElementSnapshotWrapper, fb_uid), uids];
-  return [query matchingPredicate:predicate].allElementsBoundByIndex;
+  return [[query matchingPredicate:predicate] fb_allMatchesWithSnapshotsBoundByIndex:YES];
 }
 
 @implementation XCUIElement (FBUtilities)
