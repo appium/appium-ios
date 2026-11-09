@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.3...appium-webdriveragent@16.18.4) (2026-11-09)
+
+### Performance Improvements
+
+* **webdriveragent:** stop resolving every match again in findElements ([#177](https://github.com/appium/appium-ios/issues/177)) ([ea8354c](https://github.com/appium/appium-ios/commit/ea8354caf2a842a19a82114b8103d7c9446a4e09))
+
+
 ## [16.18.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.2...appium-webdriveragent@16.18.3) (2026-11-08)
 
 ### Bug Fixes
