@@ -63,6 +63,11 @@ labels:
     matcher:
       files: ['packages/media-proxy/**']
 
+  - label: 'package:simctl'
+    sync: true
+    matcher:
+      files: ['packages/simctl/**']
+
   - label: 'package:simulator'
     sync: true
     matcher:
