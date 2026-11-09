@@ -14,6 +14,7 @@
 #import "FBLogger.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElementQuery.h"
+#import "XCUIElementQuery+FBHelpers.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCTCapabilities.h"
 #import "XCTMessagingChannel_RunnerToDaemon-Protocol.h"
@@ -46,9 +47,7 @@
 
 - (NSArray<XCUIElement *> *)fb_allMatches
 {
-  return FBConfiguration.sharedInstance.boundElementsByIndex
-    ? self.allElementsBoundByIndex
-    : self.allElementsBoundByAccessibilityElement;
+  return [self fb_allMatchesWithSnapshotsBoundByIndex:FBConfiguration.sharedInstance.boundElementsByIndex];
 }
 
 @end

@@ -23,6 +23,13 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (nullable id<FBXCElementSnapshot>)fb_cachedSnapshot;
 
+/**
+ Enumerates matches using the requested binding strategy and retains their query
+ snapshots for response serialization. Falls back to normal element resolution
+ when the query cannot supply a complete set of cached snapshots.
+ */
+- (NSArray<XCUIElement *> *)fb_allMatchesWithSnapshotsBoundByIndex:(BOOL)boundByIndex;
+
 @end
 
 NS_ASSUME_NONNULL_END

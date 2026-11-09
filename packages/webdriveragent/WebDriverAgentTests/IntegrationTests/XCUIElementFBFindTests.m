@@ -11,6 +11,9 @@
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBElementUtils.h"
+#import "FBElementCache.h"
+#import "FBResponsePayload.h"
+#import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
 #import "FBTestMacros.h"
 #import "XCUIElement.h"
@@ -39,6 +42,60 @@
   });
   self.testedView = self.testedApplication.otherElements[@"MainView"];
   FBAssertWaitTillBecomesTrue(self.testedView.exists);
+}
+
+- (void)assertLookupSnapshotsWithIndexBinding:(BOOL)boundByIndex
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = boundByIndex;
+    NSArray<NSArray<XCUIElement *> *> *lookups = @[
+      [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingPredicate:[NSPredicate predicateWithFormat:@"type == 'XCUIElementTypeButton'"]
+                         shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingIdentifier:@"Alerts" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+    ];
+    for (NSArray<XCUIElement *> *elements in lookups) {
+      XCTAssertGreaterThan(elements.count, 1u);
+      FBElementCache *cache = [FBElementCache new];
+      NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+      for (XCUIElement *element in elements) {
+        id<FBXCElementSnapshot> snapshot = element.lastSnapshot;
+        XCTAssertNotNil(snapshot);
+        NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
+        XCTAssertEqualObjects([cache storeElement:element], uid);
+        // A fresh resolution would replace lastSnapshot. Cache registration and
+        // both response formats must reuse the snapshot captured by the lookup.
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        XCTAssertEqualObjects(FBDictionaryResponseWithElement(element, YES)[@"element-6066-11e4-a52e-4f735466cecf"], uid);
+        XCTAssertEqualObjects(FBDictionaryResponseWithElement(element, NO)[@"label"], snapshot.label);
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        [identifiers addObject:uid];
+        // Resolve the bound element independently to catch order/identity errors.
+        XCTAssertEqualObjects(element.fb_uid, uid);
+      }
+      XCTAssertEqual(identifiers.count, elements.count);
+      FBResponseWithCachedElements(elements, cache, YES);
+      for (XCUIElement *element in elements) {
+        XCTAssertNil(element.lastSnapshot);
+        XCTAssertEqual([cache elementForUUID:element.fb_cacheId], element);
+      }
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testLookupSnapshotsWithAccessibilityBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:NO];
+}
+
+- (void)testLookupSnapshotsWithIndexBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:YES];
 }
 
 - (void)testDescendantsWithClassName
@@ -542,6 +599,22 @@
 @interface XCUIElementFBFindTests_StaleAppSnapshot : FBIntegrationTestCase
 @end
 @implementation XCUIElementFBFindTests_StaleAppSnapshot
+
+- (void)testCachedLookupStillChecksStalenessAfterNavigation
+{
+  [self launchApplication];
+  XCUIElement *element = [self.testedApplication fb_descendantsMatchingClassChain:
+    @"**/XCUIElementTypeButton[`label == 'Alerts'`]" shouldReturnAfterFirstMatch:NO].firstObject;
+  XCTAssertNotNil(element.lastSnapshot);
+  NSString *uid = element.fb_cacheId;
+  FBElementCache *cache = [FBElementCache new];
+  FBResponseWithCachedElement(element, cache, YES);
+  XCTAssertNil(element.lastSnapshot);
+
+  [self goToAttributesPage];
+  XCTAssertThrowsSpecificNamed([cache elementForUUID:uid checkStaleness:YES], NSException, FBStaleElementException);
+  XCTAssertFalse([cache hasElementWithUUID:uid]);
+}
 
 // Regression test for https://github.com/appium/appium/issues/22672.
 - (void)testClassChainWithIntermediatePositionAfterStaleAppSnapshot

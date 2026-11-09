@@ -122,7 +122,7 @@
     : [self.fb_query descendantsMatchingType:type];
   
   NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K IN %@",FBStringify(FBXCElementSnapshotWrapper, fb_uid), matchedIds];
-  [matchedElements addObjectsFromArray:[query matchingPredicate:predicate].allElementsBoundByIndex];
+  [matchedElements addObjectsFromArray:[[query matchingPredicate:predicate] fb_allMatchesWithSnapshotsBoundByIndex:YES]];
 
   for (XCUIElement *el in matchedElements) {
     el.fb_isResolvedNatively = @NO;

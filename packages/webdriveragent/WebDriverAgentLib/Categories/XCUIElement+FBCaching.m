@@ -7,6 +7,7 @@
  */
 
 #import "XCUIElement+FBCaching.h"
+#import "XCUIElement.h"
 
 #import <objc/runtime.h>
 
@@ -31,6 +32,15 @@ static char XCUIELEMENT_CACHE_ID_KEY;
   NSString *uid = self.fb_uid;
   objc_setAssociatedObject(self, &XCUIELEMENT_CACHE_ID_KEY, uid, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   return uid;
+}
+
+- (void)fb_cacheSnapshot:(id<FBXCElementSnapshot>)snapshot
+{
+  NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
+  if (nil != uid) {
+    objc_setAssociatedObject(self, &XCUIELEMENT_CACHE_ID_KEY, uid, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    self.lastSnapshot = snapshot;
+  }
 }
 
 @end
