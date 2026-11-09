@@ -23,13 +23,13 @@
 #import "XCUIScreen.h"
 
 static const NSUInteger MAX_FPS = 60;
-static const NSTimeInterval FRAME_TIMEOUT = 1.;
-// A frame that misses FRAME_TIMEOUT is still awaited this long (testmanagerd answers it after its snapshot).
-static const uint64_t LATE_FRAME_LIMIT = 10 * NSEC_PER_SEC;
+static const NSTimeInterval DEFAULT_FRAME_TIMEOUT = 1.;
+// A frame that misses the frame timeout is still awaited this long (testmanagerd answers it after its snapshot).
+static const NSTimeInterval DEFAULT_LATE_FRAME_LIMIT = 10.;
 // nw_connection_send buffers without backpressure, so a client that stops reading would retain
 // every generated frame. Frames past this cap are dropped instead of queued.
 static const NSUInteger MAX_PENDING_FRAMES_PER_CLIENT = 4;
-static const NSTimeInterval FAILURE_BACKOFF_MIN = 1.0;
+static const NSTimeInterval DEFAULT_FAILURE_BACKOFF_MIN = 1.0;
 static const NSTimeInterval FAILURE_BACKOFF_MAX = 10.0;
 // The screen lookup is a round trip to testmanagerd, so it is not repeated for every frame.
 static const uint64_t SCREEN_REFRESH_INTERVAL = 3 * NSEC_PER_SEC;
@@ -46,8 +46,8 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @interface FBMjpegPendingFrame : NSObject
 @property (nonatomic, readonly, nullable) NSData *data;
 @property (nonatomic, readonly, nullable) NSError *error;
-@property (nonatomic, readonly) BOOL isExpired;
 - (void)fulfillWithData:(nullable NSData *)data error:(nullable NSError *)error;
+- (BOOL)isOlderThan:(NSTimeInterval)seconds;
 // Returns NO if there is no answer yet.
 - (BOOL)waitWithTimeout:(NSTimeInterval)timeout;
 @end
@@ -66,9 +66,9 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return self;
 }
 
-- (BOOL)isExpired
+- (BOOL)isOlderThan:(NSTimeInterval)seconds
 {
-  return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - _timeRequested >= LATE_FRAME_LIMIT;
+  return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - _timeRequested >= (uint64_t)(seconds * NSEC_PER_SEC);
 }
 
 // The result is written before the signal and read only after the wait succeeds.
@@ -101,8 +101,13 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @property (nonatomic, strong, nullable) XCUIScreen *cachedScreen;
 @property (nonatomic, strong, nullable) NSNumber *cachedScreenDisplayId;
 @property (nonatomic, assign) uint64_t cachedScreenTimestamp;
-// The request that missed FRAME_TIMEOUT and is still awaited. Touched only on backgroundQueue.
+// The request that missed the frame timeout and is still awaited. Touched only on backgroundQueue.
 @property (nonatomic, strong, nullable) FBMjpegPendingFrame *pendingFrame;
+// Overridable in tests. The default sends the request to testmanagerd.
+@property (atomic, copy) BOOL (^frameRequest)(void (^completion)(NSData * _Nullable, NSError * _Nullable), NSError **error);
+@property (atomic, assign) NSTimeInterval frameTimeout;
+@property (atomic, assign) NSTimeInterval lateFrameLimit;
+@property (atomic, assign) NSTimeInterval failureBackoffMin;
 // Frames submitted but not sent yet, per client. Guarded by @synchronized (self.listeningClients).
 @property (nonatomic, readonly) NSMapTable<id, NSNumber *> *pendingFrameCounts;
 
@@ -116,6 +121,9 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   if ((self = [super init])) {
     _consecutiveScreenshotFailures = 0;
     _isStreaming = YES;
+    _frameTimeout = DEFAULT_FRAME_TIMEOUT;
+    _lateFrameLimit = DEFAULT_LATE_FRAME_LIMIT;
+    _failureBackoffMin = DEFAULT_FAILURE_BACKOFF_MIN;
     _sentFramesCount = 0;
     _sentBytesCount = 0;
     _listeningClients = [NSMutableArray array];
@@ -125,6 +133,9 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
     dispatch_queue_attr_t queueAttributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0);
     _backgroundQueue = dispatch_queue_create(QUEUE_NAME, queueAttributes);
     __weak typeof(self) weakSelf = self;
+    _frameRequest = ^BOOL(void (^completion)(NSData *, NSError *), NSError **error) {
+      return [weakSelf requestScreenshotWithCompletion:completion error:error];
+    };
     dispatch_async(_backgroundQueue, ^{
       [weakSelf streamScreenshot];
     });
@@ -171,22 +182,28 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return self.cachedScreen;
 }
 
-- (nullable FBMjpegPendingFrame *)requestFrameWithError:(NSError **)error
+- (BOOL)requestScreenshotWithCompletion:(void (^)(NSData * _Nullable, NSError * _Nullable))completion
+                                  error:(NSError **)error
 {
   XCUIScreen *screen = [self currentScreenWithError:error];
   if (nil == screen) {
-    return nil;
+    return NO;
   }
   CGFloat compressionQuality = MAX(FBMinCompressionQuality,
                                    MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
+  return [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
+                                            compressionQuality:compressionQuality
+                                                           uti:UTTypeJPEG
+                                                    completion:completion
+                                                         error:error];
+}
+
+- (nullable FBMjpegPendingFrame *)requestFrameWithError:(NSError **)error
+{
   FBMjpegPendingFrame *frame = [[FBMjpegPendingFrame alloc] init];
-  BOOL isRequested = [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
-                                                        compressionQuality:compressionQuality
-                                                                       uti:UTTypeJPEG
-                                                                completion:^(NSData *data, NSError *err) {
+  BOOL isRequested = self.frameRequest(^(NSData *data, NSError *err) {
     [frame fulfillWithData:data error:err];
-  }
-                                                                     error:error];
+  }, error);
   return isRequested ? frame : nil;
 }
 
@@ -196,7 +213,7 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   [FBLogger logFmt:@"%@", error.description];
   self.consecutiveScreenshotFailures++;
   NSTimeInterval backoffSeconds = MIN(FAILURE_BACKOFF_MAX,
-                                      FAILURE_BACKOFF_MIN * (1 << MIN(self.consecutiveScreenshotFailures, 4)));
+                                      self.failureBackoffMin * (1 << MIN(self.consecutiveScreenshotFailures, 4)));
   uint64_t backoffInterval = (uint64_t)(backoffSeconds * NSEC_PER_SEC);
   [self scheduleNextScreenshotWithInterval:backoffInterval timeStarted:timeStarted];
 }
@@ -221,16 +238,16 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   FBMjpegPendingFrame *frame = self.pendingFrame ?: [self requestFrameWithError:&error];
   self.pendingFrame = nil;
   if (nil != frame) {
-    if ([frame waitWithTimeout:FRAME_TIMEOUT]) {
+    if ([frame waitWithTimeout:self.frameTimeout]) {
       error = frame.error;
-    } else if (!frame.isExpired) {
+    } else if (![frame isOlderThan:self.lateFrameLimit]) {
       // No other request while this one is unanswered; keep waiting for it right away.
       self.pendingFrame = frame;
       [self scheduleNextScreenshotWithInterval:0 timeStarted:timeStarted];
       return;
     } else {
       [[[FBErrorBuilder builder]
-        withDescriptionFormat:@"Cannot take a screenshot within %@ s timeout", @(LATE_FRAME_LIMIT / NSEC_PER_SEC)]
+        withDescriptionFormat:@"Cannot take a screenshot within %@ s timeout", @(self.lateFrameLimit)]
        buildError:&error];
       frame = nil;
     }
