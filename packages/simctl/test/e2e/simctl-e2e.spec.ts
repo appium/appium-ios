@@ -13,7 +13,7 @@ import {Simctl} from '../../lib/simctl.js';
 const BOOT_TIMEOUT_MS = 200000;
 
 describe('simctl', function () {
-  const DEVICE_NAME = process.env.DEVICE_NAME || 'iPhone 17';
+  const DEVICE_NAME = process.env.MOBILE_DEVICE_NAME || 'iPhone 17';
   let randName: string;
   let validSdks: string[] = [];
   let sdk: string;
@@ -30,7 +30,7 @@ describe('simctl', function () {
       throw new Error('No valid SDKs');
     }
     console.log(`Found valid SDKs: ${validSdks.join(', ')}`); // eslint-disable-line no-console
-    sdk = `${process.env.IOS_SDK || validSdks.at(-1)}`;
+    sdk = `${process.env.MOBILE_OS_VERSION || validSdks.at(-1)}`;
 
     // need to find a random name that does not already exist
     // give it 5 tries
@@ -131,8 +131,7 @@ describe('simctl', function () {
 
   describe('on running Simulator', function () {
     before(async function () {
-      const sdk = process.env.IOS_SDK || validSdks.at(-1);
-      simctl.udid = await simctl.createDevice('runningSimTest', DEVICE_NAME, sdk!);
+      simctl.udid = await simctl.createDevice('runningSimTest', DEVICE_NAME, sdk);
 
       await simctl.bootDevice();
       await simctl.startBootMonitor({timeout: BOOT_TIMEOUT_MS});
