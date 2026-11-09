@@ -461,6 +461,25 @@
   }
 }
 
+- (void)testXPathMatchesAreBoundWithoutResolvingEachElement
+{
+  NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton"
+                                                          shouldReturnAfterFirstMatch:NO];
+  XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+  NSMutableSet<NSString *> *uids = [NSMutableSet set];
+  for (XCUIElement *match in matches) {
+    XCTAssertNotNil(match.fb_boundAccessibilityElement);
+    match.lastSnapshot = nil;
+    NSString *uid = match.fb_uid;
+    XCTAssertNil(match.lastSnapshot, @"Getting the uid must not resolve the element");
+    XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);
+    XCTAssertEqual(match.elementType, XCUIElementTypeButton);
+    [uids addObject:uid];
+  }
+  XCTAssertEqual(uids.count, matches.count);
+  XCTAssertEqualObjects([matches valueForKey:@"label"], FBMainViewButtonLabels);
+}
+
 @end
 
 @interface XCUIElementFBFindTests_AttributesPage : FBIntegrationTestCase

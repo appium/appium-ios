@@ -112,6 +112,28 @@
     }
     [matchedElements addObject:stableSelf];
   }
+  XCUIElementQuery *anyQuery = [self.fb_query descendantsMatchingType:XCUIElementTypeAny];
+  if ([anyQuery respondsToSelector:@selector(_elementMatchingAccessibilityElementOfSnapshot:)]) {
+    // Binds each snapshot to its AX element directly, without a query over the whole tree
+    NSMutableArray<XCUIElement *> *boundElements = matchedElements.mutableCopy;
+    BOOL isComplete = YES;
+    for (id<FBXCElementSnapshot> snapshot in snapshots) {
+      NSString *snapshotUid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
+      if (nil != uid && [uid isEqualToString:snapshotUid]) {
+        continue;
+      }
+      XCUIElement *el = [anyQuery _elementMatchingAccessibilityElementOfSnapshot:snapshot];
+      if (nil == el || nil == el.fb_boundAccessibilityElement) {
+        isComplete = NO;
+        break;
+      }
+      el.fb_isResolvedNatively = @NO;
+      [boundElements addObject:el];
+    }
+    if (isComplete) {
+      return boundElements.copy;
+    }
+  }
   XCUIElementType type = XCUIElementTypeAny;
   NSArray<NSNumber *> *uniqueTypes = [snapshots valueForKeyPath:[NSString stringWithFormat:@"@distinctUnionOfObjects.%@", FBStringify(XCUIElement, elementType)]];
   if (uniqueTypes && [uniqueTypes count] == 1) {
