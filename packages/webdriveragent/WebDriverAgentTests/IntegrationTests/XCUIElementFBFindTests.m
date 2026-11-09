@@ -469,7 +469,7 @@
   NSMutableSet<NSString *> *uids = [NSMutableSet set];
   for (XCUIElement *match in matches) {
     XCTAssertNotNil(match.fb_boundAccessibilityElement);
-    match.lastSnapshot = nil;
+    XCTAssertNil(match.lastSnapshot, @"Matches must not retain the snapshots they were found with");
     NSString *uid = match.fb_uid;
     XCTAssertNil(match.lastSnapshot, @"Getting the uid must not resolve the element");
     XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);

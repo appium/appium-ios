@@ -84,7 +84,10 @@ static void FBAttachSnapshots(NSArray<XCUIElement *> *elements)
     return;
   }
   @autoreleasepool {
-    id<FBXCElementSnapshot> root = [elements.firstObject.application fb_standardSnapshot];
+    XCUIApplication *application = elements.firstObject.application;
+    id<FBXCElementSnapshot> root = [application fb_standardSnapshot];
+    // The app is long-lived, so don't let it keep the whole tree after this call
+    application.lastSnapshot = nil;
     NSMutableArray *snapshots = [NSMutableArray arrayWithObject:root];
     [snapshots addObjectsFromArray:[(id)root _allDescendants]];
     for (id<FBXCElementSnapshot> snapshot in snapshots) {
@@ -102,10 +105,17 @@ id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *eleme
     FBAttachSnapshots(elements);
   }
   NSMutableArray *elementsResponse = [NSMutableArray array];
-  for (XCUIElement *element in elements) {
-    [elementCache storeElement:maybeStable(element)];
-    [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
-    element.lastSnapshot = nil;
+  @try {
+    for (XCUIElement *element in elements) {
+      [elementCache storeElement:maybeStable(element)];
+      [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
+      element.lastSnapshot = nil;
+    }
+  } @finally {
+    // Cached elements must not keep the attached snapshots if building a response throws
+    for (XCUIElement *element in elements) {
+      element.lastSnapshot = nil;
+    }
   }
   return FBResponseWithStatus([FBCommandStatus okWithValue:elementsResponse]);
 }
