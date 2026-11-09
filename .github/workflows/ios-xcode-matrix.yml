@@ -37,7 +37,7 @@ jobs:
           # (<image>-arm64-Readme.md, e.g. macos-26-arm64, xcode-27-arm64).
           json='[
             {"xcodeVersion": "27.2", "iosVersion": "27.2", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 11-inch (M4)",
-             "tvosVersion": "27.2", "tvosDeviceName": "Apple TV 4K (3rd generation)",
+             "tvosVersion": "27.2", "tvosDeviceName": "Apple TV 4K (4th generation)",
              "watchosVersion": "27.2", "watchosDeviceName": "Apple Watch Series 12 (46mm)", "image": "xcode-27"},
             {"xcodeVersion": "26.5", "iosVersion": "26.5", "deviceName": "iPhone 17", "ipadDeviceName": "iPad Air 13-inch (M4)",
              "tvosVersion": "26.5", "tvosDeviceName": "Apple TV 4K (3rd generation)",
