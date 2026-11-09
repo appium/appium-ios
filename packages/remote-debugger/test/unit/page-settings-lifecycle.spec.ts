@@ -707,6 +707,29 @@ describe('target lifetime during initialization', function () {
 });
 
 describe('initialization polling cancellation', function () {
+  it('cleans up unanswered readiness RPCs when the readiness deadline expires', async function () {
+    const client = new RpcClient();
+    client.isConnected = true;
+    sinon.stub(client, 'sendMessage').resolves();
+    const controller = new AbortController();
+    const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'hrtime']});
+    try {
+      const readiness = (client as any)._waitForPageReadiness(
+        {appIdKey: 'app', pageIdKey: '1', targetId: 'page'},
+        controller.signal,
+        {timeoutMs: 125, readinessDetector: () => false},
+      );
+      await clock.tickAsync(250);
+      await readiness;
+      assertNoResponseListeners(client);
+      assert.equal(clock.countTimers(), 0);
+      assert.equal(controller.signal.aborted, false, 'a readiness timeout must not cancel the target');
+    } finally {
+      controller.abort();
+      clock.restore();
+    }
+  });
+
   for (const fullPageInitialization of [false, true]) {
     for (const stage of ['target lookup', 'readiness response', 'readiness interval']) {
       for (const removal of ['target', 'reconnect']) {

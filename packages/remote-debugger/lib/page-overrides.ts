@@ -110,6 +110,3 @@ export function toPageOverrides(settings: WebInspectorPageSettings): Map<string,
   }
   return result;
 }
-
-// Verification scope and excluded protocol settings are documented in
-// docs/web-inspector-settings.md.

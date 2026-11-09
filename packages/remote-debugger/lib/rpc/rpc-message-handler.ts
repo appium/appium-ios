@@ -189,7 +189,6 @@ export default class RpcMessageHandler extends EventEmitter {
     const dataKey = this.parseDataKey(plist);
     let msgId = (dataKey.id ?? '').toString();
     let result = dataKey.result;
-    const responseError = dataKey.error;
 
     let method = dataKey.method;
     let params = dataKey.params;
@@ -200,19 +199,19 @@ export default class RpcMessageHandler extends EventEmitter {
         const message =
           result?.result?.value || result?.result?.description
             ? result?.result?.value || result?.result?.description
-            : (responseError ?? defaultMessage);
+            : (dataKey.error ?? defaultMessage);
         return new Error(message);
       }
-      if (responseError) {
-        if (util.isPlainObject(responseError)) {
-          const dataKeyError = responseError as DataErrorMessage;
+      if (dataKey.error) {
+        if (util.isPlainObject(dataKey.error)) {
+          const dataKeyError = dataKey.error as DataErrorMessage;
           const error = new Error(defaultMessage);
           for (const key of Object.keys(dataKeyError)) {
             (error as any)[key] = dataKeyError[key as keyof DataErrorMessage];
           }
           return error;
         }
-        return new Error(String(responseError || defaultMessage));
+        return new Error(String(dataKey.error || defaultMessage));
       }
       return undefined;
     };

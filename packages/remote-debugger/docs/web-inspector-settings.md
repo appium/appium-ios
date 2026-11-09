@@ -149,8 +149,9 @@ targets and later connections attempt the retained policy during initialization.
   A missing application cancels waits for all of its targets, allowing updates
   on healthy targets to complete without waiting for the missing app's deadline
   or rolling back solely because it disappeared. Disconnected or missing targets stop
-  initialization rather than continuing commands on a dead target. Resume requires
-  successful initialization (including an already initialized provisional target).
+  initialization rather than continuing commands on a dead target. A paused target
+  is resumed even if initialization fails, unless the target disappeared or the
+  connection was lost.
   Application-disconnect notifications and recognized missing-app/target errors
   trigger this removal. Unrecognized errors reject runtime updates rather than
   being assumed to mean that a target disappeared.

@@ -233,9 +233,9 @@ describe('rpc-client', function () {
       const opts = {appIdKey: 'appId', pageIdKey: 'pageKey'};
       const res = await send.call(mockRpcClient, 'command', opts, true);
       assert.strictEqual(res, 'success');
-      assert.deepStrictEqual(sendToDeviceSpy.firstCall.args, ['command', opts, true]);
-      assert.deepStrictEqual(sendToDeviceSpy.secondCall.args, ['command', opts, true]);
-      assert.deepStrictEqual(waitForTargetSpy.firstCall.args, ['appId', 'pageKey']);
+      assert.deepStrictEqual(sendToDeviceSpy.firstCall.args, ['command', opts, true, undefined]);
+      assert.deepStrictEqual(sendToDeviceSpy.secondCall.args, ['command', opts, true, undefined]);
+      assert.deepStrictEqual(waitForTargetSpy.firstCall.args, ['appId', 'pageKey', undefined]);
     });
   });
 

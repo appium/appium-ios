@@ -389,17 +389,17 @@ export class RpcClient {
   ): Promise<any> {
     const timer = new timing.Timer().start();
     try {
-      return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
+      return await this.sendToDevice(command, opts, waitForResponse, signal);
     } catch (err: any) {
       signal?.throwIfAborted();
       const {appIdKey, pageIdKey} = opts;
       const messageLc = (err.message || '').toLowerCase();
       if (messageLc.includes(NO_TARGET_SUPPORTED_ERROR)) {
-        return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
+        return await this.sendToDevice(command, opts, waitForResponse, signal);
       } else if (appIdKey && NO_TARGET_PRESENT_YET_ERRORS.some((error) => messageLc.includes(error))) {
-        await this.waitForTarget(appIdKey, pageIdKey as PageIdKey, ...(signal ? [signal] : []));
+        await this.waitForTarget(appIdKey, pageIdKey as PageIdKey, signal);
         signal?.throwIfAborted();
-        return await this.sendToDevice(command, opts, waitForResponse, ...(signal ? [signal] : []));
+        return await this.sendToDevice(command, opts, waitForResponse, signal);
       }
       throw err;
     } finally {
@@ -1115,38 +1115,35 @@ export class RpcClient {
     connectionSignal: AbortSignal,
   ): Promise<void> {
     this.assertPageSettingsConnection(connectionSignal);
-    const deadline = new AbortController();
-    const timer = setTimeout(
-      () => deadline.abort(new TimeoutError(`${override.method} timed out after ${PAGE_OVERRIDE_TIMEOUT_MS}ms`)),
+    const response = await withRpcTimeout(
+      (signal) =>
+        this.sendToDevice(
+          override.method,
+          {
+            appIdKey: target.appIdKey,
+            pageIdKey: target.pageIdKey,
+            targetId: target.targetId,
+            ...override.params,
+            ...(override.value === undefined ? {} : {value: override.value}),
+          },
+          true,
+          signal,
+        ),
       PAGE_OVERRIDE_TIMEOUT_MS,
+      AbortSignal.any([connectionSignal, target.removed.signal]),
+      override.method,
     );
-    try {
-      const response = await this.sendToDevice(
-        override.method,
-        {
-          appIdKey: target.appIdKey,
-          pageIdKey: target.pageIdKey,
-          targetId: target.targetId,
-          ...override.params,
-          ...(override.value === undefined ? {} : {value: override.value}),
-        },
-        true,
-        AbortSignal.any([connectionSignal, target.removed.signal, deadline.signal]),
+    // Wrapped protocol errors remain normal results for existing RPC callers.
+    // Only overrides require them to reject so unsupported settings and rollback work.
+    if (response?.error) {
+      const error = response.error;
+      throw Object.assign(
+        new Error(typeof error === 'string' ? error : error.message),
+        typeof error === 'object' ? error : {},
       );
-      // Wrapped protocol errors remain normal results for existing RPC callers.
-      // Only overrides require them to reject so unsupported settings and rollback work.
-      if (response?.error) {
-        const error = response.error;
-        throw Object.assign(
-          new Error(typeof error === 'string' ? error : error.message),
-          typeof error === 'object' ? error : {},
-        );
-      }
-      this.assertPageSettingsConnection(connectionSignal);
-      target.removed.signal.throwIfAborted();
-    } finally {
-      clearTimeout(timer);
     }
+    this.assertPageSettingsConnection(connectionSignal);
+    target.removed.signal.throwIfAborted();
   }
 
   /**
@@ -1186,15 +1183,7 @@ export class RpcClient {
         try {
           await this.sendPageOverride(target, override, signal);
         } catch (error: any) {
-          signal.throwIfAborted();
-          if (isMissingAppError(error, appIdKey)) {
-            this.removePageTargetsForApp(appIdKey);
-            throw error;
-          }
-          if (MISSING_TARGET_ERROR_PATTERN.test(error.message)) {
-            this.removePageTarget(appIdKey, targetId);
-          }
-          if (signal.aborted || target.removed.signal.aborted) {
+          if (this.stopInitializingTarget(target, error, signal)) {
             throw error;
           }
           if (error instanceof TimeoutError) {
@@ -1436,20 +1425,23 @@ export class RpcClient {
           100,
           Math.trunc((pageReadinessDetector.timeoutMs - timer.getDuration().asMilliSeconds) * 0.8),
         );
-        const rawResult = await withTimeout(
-          this.send(
-            'Runtime.evaluate',
-            {
-              expression: 'document.readyState;',
-              returnByValue: true,
-              appIdKey,
-              pageIdKey,
-              targetId,
-            },
-            true,
-            signal,
-          ),
+        const rawResult = await withRpcTimeout(
+          (requestSignal) =>
+            this.send(
+              'Runtime.evaluate',
+              {
+                expression: 'document.readyState;',
+                returnByValue: true,
+                appIdKey,
+                pageIdKey,
+                targetId,
+              },
+              true,
+              requestSignal,
+            ),
           commandTimeoutMs,
+          signal,
+          'Runtime.evaluate',
         );
         readyState = convertJavascriptEvaluationResult(rawResult);
       } catch (e: any) {
@@ -1547,5 +1539,24 @@ async function forEachPageTarget<T>(targets: T[], action: (target: T) => Promise
   await Promise.all(Array.from({length: Math.min(PAGE_OVERRIDE_TARGET_CONCURRENCY, targets.length)}, worker));
   if (failure) {
     throw failure.error;
+  }
+}
+
+/** Bound the RPC itself so a deadline also removes its pending response listeners. */
+async function withRpcTimeout<T>(
+  action: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal,
+  command: string,
+): Promise<T> {
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () => deadline.abort(new TimeoutError(`${command} timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  try {
+    return await action(AbortSignal.any([signal, deadline.signal]));
+  } finally {
+    clearTimeout(timer);
   }
 }

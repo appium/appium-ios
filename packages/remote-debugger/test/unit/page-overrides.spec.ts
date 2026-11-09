@@ -206,39 +206,6 @@ describe('page overrides', function () {
     });
   }
 
-  for (const realDevice of [false, true]) {
-    it(`retains runtime policy after reconnect and removes cleared values (real=${realDevice})`, async function () {
-      const remote = realDevice ? new RemoteDebuggerRealDevice({udid: 'test'}) : new RemoteDebugger();
-      await remote.setWebInspectorPageSettings({
-        pageSettings: {ImagesEnabled: false},
-        userPreferences: {PrefersColorScheme: 'Dark'},
-      });
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await remote.initRpcClient();
-        const client = remote.requireRpcClient();
-        client.isConnected = true;
-        sinon.stub(client, 'send').resolves();
-        const send = sinon.stub(client, 'sendToDevice').resolves();
-        await addPage(client, 'first');
-        sinon.assert.calledWith(send, 'Page.overrideSetting', sinon.match({setting: 'ImagesEnabled', value: false}));
-        sinon.assert.calledWith(
-          send,
-          'Page.overrideUserPreference',
-          sinon.match({name: 'PrefersColorScheme', value: 'Dark'}),
-        );
-        remote.teardown();
-      }
-      await remote.setWebInspectorPageSettings({});
-      await remote.initRpcClient();
-      const client = remote.requireRpcClient();
-      client.isConnected = true;
-      sinon.stub(client, 'send').resolves();
-      const send = sinon.stub(client, 'sendToDevice').resolves();
-      await addPage(client, 'next');
-      sinon.assert.notCalled(send);
-    });
-  }
-
   it('does not retain a rejected preference for reconnect', async function () {
     const remote = new RemoteDebugger({webInspectorSettings: {userPreferences: {PrefersContrast: 'More'}}});
     await remote.initRpcClient();
@@ -347,12 +314,17 @@ describe('page overrides', function () {
   });
 
   for (const realDevice of [false, true]) {
-    it(`snapshots a grouped policy and retains UA after reconnect (real=${realDevice})`, async function () {
+    it(`snapshots all policy groups across reconnect and clears them (real=${realDevice})`, async function () {
       const remote = realDevice ? new RemoteDebuggerRealDevice({udid: 'test'}) : new RemoteDebugger();
-      const settings = {pageSettings: {ImagesEnabled: false}, userAgent: 'Test/1'};
+      const settings = {
+        pageSettings: {ImagesEnabled: false},
+        userPreferences: {PrefersColorScheme: 'Dark' as const},
+        userAgent: 'Test/1',
+      };
       await remote.setWebInspectorPageSettings(settings);
       settings.pageSettings.ImagesEnabled = true;
       settings.userAgent = 'Changed';
+      delete (settings.userPreferences as {PrefersColorScheme?: string}).PrefersColorScheme;
       for (let i = 0; i < 2; i++) {
         await remote.initRpcClient();
         const client = remote.requireRpcClient();
@@ -362,6 +334,11 @@ describe('page overrides', function () {
         await addPage(client, 'first');
         sinon.assert.calledWith(send, 'Page.overrideSetting', sinon.match({setting: 'ImagesEnabled', value: false}));
         sinon.assert.calledWith(send, 'Page.overrideUserAgent', sinon.match({value: 'Test/1'}));
+        sinon.assert.calledWith(
+          send,
+          'Page.overrideUserPreference',
+          sinon.match({name: 'PrefersColorScheme', value: 'Dark'}),
+        );
         remote.teardown();
       }
       await remote.setWebInspectorPageSettings({});
