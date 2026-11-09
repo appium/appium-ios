@@ -480,6 +480,23 @@
   XCTAssertEqualObjects([matches valueForKey:@"label"], FBMainViewButtonLabels);
 }
 
+- (void)testXPathMatchesAreIndexBoundWhenRequested
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = YES;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+    for (XCUIElement *match in matches) {
+      XCTAssertNil(match.fb_boundAccessibilityElement);
+    }
+    XCTAssertEqualObjects([matches valueForKey:@"label"], FBMainViewButtonLabels);
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
 @end
 
 @interface XCUIElementFBFindTests_AttributesPage : FBIntegrationTestCase

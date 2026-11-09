@@ -65,27 +65,31 @@ id<FBResponsePayload> FBResponseWithCachedElement(XCUIElement *element, FBElemen
 // Resolves snapshots of all the given elements with a single app snapshot instead of one per element
 static void FBAttachSnapshots(NSArray<XCUIElement *> *elements)
 {
-  NSMutableDictionary<NSString *, XCUIElement *> *pending = [NSMutableDictionary dictionary];
+  NSMutableDictionary<NSString *, NSMutableArray<XCUIElement *> *> *pending = [NSMutableDictionary dictionary];
   for (XCUIElement *element in elements) {
     if (nil != element.lastSnapshot || nil == element.fb_boundAccessibilityElement) {
       continue;
     }
     NSString *uid = element.fb_cacheId;
     if (nil != uid) {
-      pending[uid] = element;
+      NSMutableArray<XCUIElement *> *group = pending[uid];
+      if (nil == group) {
+        group = [NSMutableArray array];
+        pending[uid] = group;
+      }
+      [group addObject:element];
     }
   }
   if (0 == pending.count) {
     return;
   }
   @autoreleasepool {
-    id<FBXCElementSnapshot> root = [pending.allValues.firstObject.application fb_standardSnapshot];
+    id<FBXCElementSnapshot> root = [elements.firstObject.application fb_standardSnapshot];
     NSMutableArray *snapshots = [NSMutableArray arrayWithObject:root];
     [snapshots addObjectsFromArray:[(id)root _allDescendants]];
     for (id<FBXCElementSnapshot> snapshot in snapshots) {
       NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
-      XCUIElement *element = nil == uid ? nil : pending[uid];
-      if (nil != element) {
+      for (XCUIElement *element in (nil == uid ? nil : pending[uid])) {
         element.lastSnapshot = snapshot;
       }
     }

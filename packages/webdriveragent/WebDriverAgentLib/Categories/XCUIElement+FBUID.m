@@ -49,9 +49,8 @@
     return [FBElementUtils uidWithAccessibilityElement:[(XCUIApplication *)self accessibilityElement]];
   }
   id<FBXCAccessibilityElement> boundElement = self.fb_boundAccessibilityElement;
-  return nil != boundElement
-    ? [FBElementUtils uidWithAccessibilityElement:boundElement]
-    : [FBXCElementSnapshotWrapper ensureWrapped:[self fb_standardSnapshot]].fb_uid;
+  NSString *boundUid = nil == boundElement ? nil : [FBElementUtils uidWithAccessibilityElement:boundElement];
+  return boundUid ?: [FBXCElementSnapshotWrapper ensureWrapped:[self fb_standardSnapshot]].fb_uid;
 }
 
 @end
