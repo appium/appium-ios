@@ -194,7 +194,8 @@ describe('simctl', function () {
     describe('appInfo', function () {
       it('should extract applications information', async function () {
         const appInfo = await simctl.appInfo('com.apple.springboard');
-        assert.strictEqual(appInfo.ApplicationType, 'Hidden');
+        // SpringBoard is reported as 'Hidden' on older runtimes and 'System' on newer ones
+        assert.ok(['Hidden', 'System'].includes(appInfo.ApplicationType));
       });
       it('should throw an error if the app is not installed', async function () {
         await assert.rejects(simctl.appInfo('com.apple.notinstalled'));
