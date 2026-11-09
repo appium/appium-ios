@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 
 import sinon from 'sinon';
 
+import {SIM_RUNTIME_NAME} from '../../lib/helpers.js';
 import {Simctl} from '../../lib/simctl.js';
 
 const MODULE_NAME = 'node-simctl';
@@ -379,6 +380,40 @@ describe('simctl', function () {
     it('should throw if udid is not set', async function () {
       simctl.udid = null;
       await assert.rejects(simctl.bootDevice(), /udid is required/);
+    });
+  });
+
+  describe('#getRuntimeForPlatformVersionViaJson', function () {
+    let simctl: Simctl;
+    const generic = {name: 'iOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}iOS-27-2`};
+    const variant = {name: 'iOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}iOS-27-2-iPhone19-4`};
+    const watch = {name: 'watchOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}watchOS-27-2`};
+
+    beforeEach(function () {
+      simctl = stubSimctl({path: 'xcrun'});
+    });
+    afterEach(function () {
+      if (execStub) {
+        execStub.restore();
+      }
+    });
+
+    for (const [title, runtimes] of [
+      ['generic first', [generic, variant]],
+      ['variant first', [variant, generic]],
+    ] as const) {
+      it(`should prefer the generic runtime over a device-specific variant (${title})`, async function () {
+        execStub.resolves({stdout: JSON.stringify({runtimes: [watch, ...runtimes]}), stderr: ''});
+        assert.strictEqual(await simctl.getRuntimeForPlatformVersionViaJson('27.2'), generic.identifier);
+      });
+    }
+    it('should fall back to a device-specific runtime if it is the only match', async function () {
+      execStub.resolves({stdout: JSON.stringify({runtimes: [variant]}), stderr: ''});
+      assert.strictEqual(await simctl.getRuntimeForPlatformVersionViaJson('27.2'), variant.identifier);
+    });
+    it('should throw if no runtime matches', async function () {
+      execStub.resolves({stdout: JSON.stringify({runtimes: [generic]}), stderr: ''});
+      await assert.rejects(simctl.getRuntimeForPlatformVersionViaJson('26.0'), /Could not use --json flag/);
     });
   });
 });

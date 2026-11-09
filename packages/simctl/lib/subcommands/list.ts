@@ -192,15 +192,22 @@ export async function getRuntimeForPlatformVersionViaJson(
   const {stdout} = await this.exec('list', {
     args: ['runtimes', '--json'],
   });
+  const matches: string[] = [];
   for (const {version, identifier, name} of JSON.parse(stdout).runtimes) {
     if (
       normalizeVersion(version) === normalizeVersion(platformVersion) &&
       name.toLowerCase().startsWith(platform.toLowerCase())
     ) {
-      return identifier;
+      matches.push(identifier);
     }
   }
-  throw new Error(`Could not use --json flag to parse platform version`);
+  // Prefer the generic runtime (e.g. iOS-27-2) over device-specific
+  // variants (e.g. iOS-27-2-iPhone19-4) that share the same version
+  const runtimeId = matches.find((id) => /-\d+(-\d+)+$/.test(id)) ?? matches[0];
+  if (!runtimeId) {
+    throw new Error(`Could not use --json flag to parse platform version`);
+  }
+  return runtimeId;
 }
 
 /**
