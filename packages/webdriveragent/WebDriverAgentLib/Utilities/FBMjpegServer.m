@@ -14,6 +14,7 @@
 // Textual import, not `@import Network;` - see the comment in FBTCPSocket.h.
 #import <Network/Network.h>
 #import "FBConfiguration.h"
+#import "FBErrorBuilder.h"
 #import "FBLogger.h"
 #import "FBScreenshot.h"
 #import "FBScreen.h"
@@ -23,6 +24,8 @@
 
 static const NSUInteger MAX_FPS = 60;
 static const NSTimeInterval FRAME_TIMEOUT = 1.;
+// A frame that misses FRAME_TIMEOUT is still awaited this long (testmanagerd answers it after its snapshot).
+static const uint64_t LATE_FRAME_LIMIT = 10 * NSEC_PER_SEC;
 // nw_connection_send buffers without backpressure, so a client that stops reading would retain
 // every generated frame. Frames past this cap are dropped instead of queued.
 static const NSUInteger MAX_PENDING_FRAMES_PER_CLIENT = 4;
@@ -39,6 +42,26 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return (0 == framerate || framerate > MAX_FPS) ? MAX_FPS : framerate;
 }
 
+// A screenshot request whose answer may arrive after the stream stopped waiting for it.
+@interface FBMjpegPendingFrame : NSObject
+@property (nonatomic, readonly) dispatch_semaphore_t answered;
+@property (nonatomic, readonly) uint64_t timeRequested;
+// Set before `answered` is signaled, read only after.
+@property (nonatomic, nullable) NSData *data;
+@property (nonatomic, nullable) NSError *error;
+@end
+
+@implementation FBMjpegPendingFrame
+- (instancetype)init
+{
+  if ((self = [super init])) {
+    _answered = dispatch_semaphore_create(0);
+    _timeRequested = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  }
+  return self;
+}
+@end
+
 
 @interface FBMjpegServer()
 
@@ -54,6 +77,8 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @property (nonatomic, strong, nullable) XCUIScreen *cachedScreen;
 @property (nonatomic, strong, nullable) NSNumber *cachedScreenDisplayId;
 @property (nonatomic, assign) uint64_t cachedScreenTimestamp;
+// The request that missed FRAME_TIMEOUT and is still awaited. Touched only on backgroundQueue.
+@property (nonatomic, strong, nullable) FBMjpegPendingFrame *pendingFrame;
 // Frames submitted but not sent yet, per client. Guarded by @synchronized (self.listeningClients).
 @property (nonatomic, readonly) NSMapTable<id, NSNumber *> *pendingFrameCounts;
 
@@ -132,20 +157,52 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   uint64_t timeStarted = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   @synchronized (self.listeningClients) {
     if (0 == self.listeningClients.count) {
+      self.pendingFrame = nil;
       [self scheduleNextScreenshotWithInterval:timerInterval timeStarted:timeStarted];
       return;
     }
   }
 
   NSError *error;
-  CGFloat compressionQuality = MAX(FBMinCompressionQuality,
-                                   MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
-  XCUIScreen *screen = [self currentScreenWithError:&error];
-  NSData *screenshotData = nil == screen ? nil : [FBScreenshot takeInOriginalResolutionWithScreenID:screen.displayID
-                                                           compressionQuality:compressionQuality
-                                                                          uti:UTTypeJPEG
-                                                                      timeout:FRAME_TIMEOUT
-                                                                        error:&error];
+  FBMjpegPendingFrame *frame = self.pendingFrame;
+  if (nil == frame) {
+    CGFloat compressionQuality = MAX(FBMinCompressionQuality,
+                                     MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
+    XCUIScreen *screen = [self currentScreenWithError:&error];
+    FBMjpegPendingFrame *newFrame = [[FBMjpegPendingFrame alloc] init];
+    BOOL isRequested = nil != screen && [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
+                                                                           compressionQuality:compressionQuality
+                                                                                          uti:UTTypeJPEG
+                                                                                   completion:^(NSData *data, NSError *err) {
+      newFrame.data = data;
+      newFrame.error = err;
+      dispatch_semaphore_signal(newFrame.answered);
+    }
+                                                                                        error:&error];
+    if (isRequested) {
+      frame = newFrame;
+    }
+  }
+
+  NSData *screenshotData = nil;
+  if (nil != frame) {
+    if (0 == dispatch_semaphore_wait(frame.answered, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(FRAME_TIMEOUT * NSEC_PER_SEC)))) {
+      self.pendingFrame = nil;
+      screenshotData = frame.data;
+      error = frame.error;
+    } else if (clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - frame.timeRequested < LATE_FRAME_LIMIT) {
+      // No other request while this one is unanswered; keep waiting for it right away.
+      self.pendingFrame = frame;
+      [self scheduleNextScreenshotWithInterval:0 timeStarted:timeStarted];
+      return;
+    } else {
+      self.pendingFrame = nil;
+      [[[FBErrorBuilder builder]
+        withDescriptionFormat:@"Cannot take a screenshot within %@ s timeout", @(LATE_FRAME_LIMIT / NSEC_PER_SEC)]
+       buildError:&error];
+    }
+  }
+
   if (nil == screenshotData) {
     self.cachedScreen = nil;
     [FBLogger logFmt:@"%@", error.description];
