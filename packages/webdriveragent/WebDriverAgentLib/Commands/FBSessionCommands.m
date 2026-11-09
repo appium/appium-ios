@@ -32,15 +32,30 @@
 #import "XCUIApplicationProcessDelay.h"
 
 
+// The characters Apple allows in a bundle identifier: https://developer.apple.com/help/glossary/bundle-id
+static NSString *const FBBundleIdCharacters = @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
+static NSString *const FBBundleIdRule = @"a non-empty string of A-Z, a-z, 0-9, '-' and '.'";
+
 /**
- Whether `bundleId` is a string, or is absent where it is optional.
+ Whether `bundleId` is a bundle identifier, or is absent where it is optional.
 
  XCTest passes the identifier to testmanagerd over XPC, which only accepts NSString there.
  A JSON null (NSNull) makes testmanagerd drop the whole test session and turn Automation Mode off.
  */
 static BOOL FBIsValidBundleId(id bundleId, BOOL isRequired)
 {
-  return [bundleId isKindOfClass:NSString.class] || (nil == bundleId && !isRequired);
+  if (nil == bundleId) {
+    return !isRequired;
+  }
+  if (![bundleId isKindOfClass:NSString.class] || 0 == [(NSString *)bundleId length]) {
+    return NO;
+  }
+  static NSCharacterSet *disallowedCharacters;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    disallowedCharacters = [NSCharacterSet characterSetWithCharactersInString:FBBundleIdCharacters].invertedSet;
+  });
+  return NSNotFound == [(NSString *)bundleId rangeOfCharacterFromSet:disallowedCharacters].location;
 }
 
 static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequired)
@@ -48,13 +63,13 @@ static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequi
   if (FBIsValidBundleId(bundleId, isRequired)) {
     return nil;
   }
-  return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"'bundleId' must be a string"
-                                                                     traceback:nil]);
+  NSString *message = [NSString stringWithFormat:@"'bundleId' must be %@", FBBundleIdRule];
+  return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:message traceback:nil]);
 }
 
 /**
  Runs `action` with the request's `bundleId` and returns its response.
- If `bundleId` is not a string, returns an invalid argument error without running `action`.
+ If `bundleId` is not a bundle identifier, returns an invalid argument error without running `action`.
  */
 static id<FBResponsePayload> FBRunWithValidBundleId(FBRouteRequest *request,
                                                     id<FBResponsePayload> (^action)(NSString *bundleId))
@@ -135,8 +150,8 @@ static id<FBResponsePayload> FBRunWithValidBundleId(FBRouteRequest *request,
   }
   NSString *bundleID = capabilities[FB_CAP_BUNDLE_ID];
   if (!FBIsValidBundleId(bundleID, NO)) {
-    return FBResponseWithStatus([FBCommandStatus sessionNotCreatedError:@"'bundleId' capability must be a string"
-                                                              traceback:nil]);
+    NSString *message = [NSString stringWithFormat:@"'bundleId' capability must be %@", FBBundleIdRule];
+    return FBResponseWithStatus([FBCommandStatus sessionNotCreatedError:message traceback:nil]);
   }
 
   [self applyConfigurationFromCapabilities:capabilities];

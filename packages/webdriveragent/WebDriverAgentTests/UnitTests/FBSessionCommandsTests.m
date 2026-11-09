@@ -174,15 +174,16 @@ static BOOL FBIsBoolean(id value)
   };
 }
 
-- (NSArray *)nonStringBundleIds
+// Values that are not bundle identifiers: not a string, empty, or with a character Apple does not allow
+- (NSArray *)invalidBundleIds
 {
-  return @[NSNull.null, @42, @[@"com.apple.Preferences"]];
+  return @[NSNull.null, @42, @[@"com.apple.Preferences"], @"", @"com.example app", @"com.example_app", @"com.exämple.app"];
 }
 
-- (void)testAppCommandsRejectMissingOrNonStringBundleId
+- (void)testAppCommandsRejectMissingOrInvalidBundleId
 {
   NSMutableArray<NSDictionary *> *argumentsList = [NSMutableArray arrayWithObject:@{}];
-  for (id bundleId in self.nonStringBundleIds) {
+  for (id bundleId in self.invalidBundleIds) {
     [argumentsList addObject:@{@"bundleId": bundleId}];
   }
   for (NSString *handler in self.appHandlers) {
@@ -196,13 +197,12 @@ static BOOL FBIsBoolean(id value)
   }
 }
 
-- (void)testAppCommandsPassStringBundleIdToSession
+- (void)testAppCommandsPassValidBundleIdToSession
 {
   NSDictionary<NSString *, id> *handlers = self.appHandlers;
   for (NSString *handler in handlers) {
     id expectedValue = handlers[handler];
-    // An empty string is still a string: it is passed on as before.
-    for (NSString *bundleId in @[@"com.apple.Preferences", @""]) {
+    for (NSString *bundleId in @[@"com.apple.Preferences", @"io.appium.Test-App2"]) {
       FBAppsSessionDouble *session = [FBAppsSessionDouble new];
       RouteResponse *response = [self responseOf:NSSelectorFromString(handler)
                                        arguments:@{@"bundleId": bundleId}
@@ -216,10 +216,10 @@ static BOOL FBIsBoolean(id value)
   }
 }
 
-- (void)testOpenURLRejectsNonStringBundleId
+- (void)testOpenURLRejectsInvalidBundleId
 {
   [self stubOpenUrl];
-  for (id bundleId in self.nonStringBundleIds) {
+  for (id bundleId in self.invalidBundleIds) {
     RouteResponse *response = [self responseOf:@selector(handleOpenURL:)
                                      arguments:@{@"url": @"https://appium.io", @"bundleId": bundleId}
                                        session:nil];
@@ -267,9 +267,9 @@ static BOOL FBIsBoolean(id value)
   XCTAssertEqualObjects(value[@"sessionId"], FBSession.activeSession.identifier);
 }
 
-- (void)testCreateSessionRejectsNonStringBundleIdCapability
+- (void)testCreateSessionRejectsInvalidBundleIdCapability
 {
-  for (id bundleId in self.nonStringBundleIds) {
+  for (id bundleId in self.invalidBundleIds) {
     RouteResponse *response = [self responseOf:@selector(handleCreateSession:)
                                      arguments:@{@"capabilities": @{@"alwaysMatch": @{@"bundleId": bundleId}}}
                                        session:nil];
