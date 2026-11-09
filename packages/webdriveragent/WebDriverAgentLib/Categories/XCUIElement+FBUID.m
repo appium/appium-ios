@@ -14,6 +14,7 @@
 #import "FBLogger.h"
 #import "XCUIApplication.h"
 #import "XCUIElement+FBUtilities.h"
+#import "XCUIElementQuery.h"
 
 @implementation XCUIElement (FBUID)
 
@@ -24,10 +25,32 @@
                                                      : [self fb_standardSnapshot].accessibilityElement)];
 }
 
+- (id<FBXCAccessibilityElement>)fb_boundAccessibilityElement
+{
+  // Elements from -allElementsBoundByAccessibilityElement carry `accessibilityElement == <AX element>`
+  id transformer = self.query.transformer;
+  NSPredicate *predicate = [transformer respondsToSelector:@selector(predicate)] ? [transformer predicate] : nil;
+  if (![predicate isKindOfClass:NSComparisonPredicate.class]) {
+    return nil;
+  }
+  NSComparisonPredicate *comparison = (NSComparisonPredicate *)predicate;
+  if (comparison.leftExpression.expressionType != NSKeyPathExpressionType
+      || ![comparison.leftExpression.keyPath isEqualToString:@"accessibilityElement"]
+      || comparison.rightExpression.expressionType != NSConstantValueExpressionType) {
+    return nil;
+  }
+  id value = comparison.rightExpression.constantValue;
+  return [value respondsToSelector:@selector(processIdentifier)] ? value : nil;
+}
+
 - (NSString *)fb_uid
 {
-  return [self isKindOfClass:XCUIApplication.class]
-    ? [FBElementUtils uidWithAccessibilityElement:[(XCUIApplication *)self accessibilityElement]]
+  if ([self isKindOfClass:XCUIApplication.class]) {
+    return [FBElementUtils uidWithAccessibilityElement:[(XCUIApplication *)self accessibilityElement]];
+  }
+  id<FBXCAccessibilityElement> boundElement = self.fb_boundAccessibilityElement;
+  return nil != boundElement
+    ? [FBElementUtils uidWithAccessibilityElement:boundElement]
     : [FBXCElementSnapshotWrapper ensureWrapped:[self fb_standardSnapshot]].fb_uid;
 }
 

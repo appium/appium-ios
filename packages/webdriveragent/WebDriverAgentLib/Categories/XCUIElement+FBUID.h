@@ -7,10 +7,14 @@
  */
 
 #import "FBXCElementSnapshotWrapper.h"
+#import "FBXCAccessibilityElement.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface XCUIElement (FBUID)
+
+/*! AX element this element is bound to (see allElementsBoundByAccessibilityElement) or nil. Does not take a snapshot. */
+@property (nonatomic, nullable, readonly) id<FBXCAccessibilityElement> fb_boundAccessibilityElement;
 
 /*! Represents unique internal element identifier, which is the same for an element and its snapshot as UUIDv4 */
 @property (nonatomic, nullable, readonly, copy) NSString *fb_uid;
