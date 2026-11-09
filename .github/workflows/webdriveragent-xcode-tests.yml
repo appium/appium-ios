@@ -2,10 +2,17 @@ name: WebDriverAgent Xcode Tests
 
 on:
   pull_request:
+    # Native WDA sources only; TS-only changes are covered by build.yml (unit) and the functional tests.
     paths:
-      - 'packages/webdriveragent/**'
-      - '!packages/webdriveragent/**/*.md'
-      - '!packages/webdriveragent/docs/**'
+      - 'packages/webdriveragent/Configurations/**'
+      - 'packages/webdriveragent/Fastlane/**'
+      - 'packages/webdriveragent/PrivateHeaders/**'
+      - 'packages/webdriveragent/Scripts/build.sh'
+      - 'packages/webdriveragent/WebDriverAgent.xcodeproj/**'
+      - 'packages/webdriveragent/WebDriverAgentLib/**'
+      - 'packages/webdriveragent/WebDriverAgentRunner/**'
+      - 'packages/webdriveragent/WebDriverAgentTests/**'
+      - 'packages/webdriveragent/Gemfile*'
       - '.github/workflows/webdriveragent-xcode-tests.yml'
       - '.github/actions/webdriveragent-xcode-setup/**'
 
