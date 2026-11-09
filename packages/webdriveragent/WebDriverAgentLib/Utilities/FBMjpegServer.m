@@ -44,14 +44,19 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 
 // A screenshot request whose answer may arrive after the stream stopped waiting for it.
 @interface FBMjpegPendingFrame : NSObject
-@property (nonatomic, readonly) dispatch_semaphore_t answered;
-@property (nonatomic, readonly) uint64_t timeRequested;
-// Set before `answered` is signaled, read only after.
-@property (nonatomic, nullable) NSData *data;
-@property (nonatomic, nullable) NSError *error;
+@property (nonatomic, readonly, nullable) NSData *data;
+@property (nonatomic, readonly, nullable) NSError *error;
+@property (nonatomic, readonly) BOOL isExpired;
+- (void)fulfillWithData:(nullable NSData *)data error:(nullable NSError *)error;
+// Returns NO if there is no answer yet.
+- (BOOL)waitWithTimeout:(NSTimeInterval)timeout;
 @end
 
-@implementation FBMjpegPendingFrame
+@implementation FBMjpegPendingFrame {
+  dispatch_semaphore_t _answered;
+  uint64_t _timeRequested;
+}
+
 - (instancetype)init
 {
   if ((self = [super init])) {
@@ -60,6 +65,25 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   }
   return self;
 }
+
+- (BOOL)isExpired
+{
+  return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - _timeRequested >= LATE_FRAME_LIMIT;
+}
+
+// The result is written before the signal and read only after the wait succeeds.
+- (void)fulfillWithData:(NSData *)data error:(NSError *)error
+{
+  _data = data;
+  _error = error;
+  dispatch_semaphore_signal(_answered);
+}
+
+- (BOOL)waitWithTimeout:(NSTimeInterval)timeout
+{
+  return 0 == dispatch_semaphore_wait(_answered, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)));
+}
+
 @end
 
 
@@ -147,6 +171,36 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return self.cachedScreen;
 }
 
+- (nullable FBMjpegPendingFrame *)requestFrameWithError:(NSError **)error
+{
+  XCUIScreen *screen = [self currentScreenWithError:error];
+  if (nil == screen) {
+    return nil;
+  }
+  CGFloat compressionQuality = MAX(FBMinCompressionQuality,
+                                   MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
+  FBMjpegPendingFrame *frame = [[FBMjpegPendingFrame alloc] init];
+  BOOL isRequested = [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
+                                                        compressionQuality:compressionQuality
+                                                                       uti:UTTypeJPEG
+                                                                completion:^(NSData *data, NSError *err) {
+    [frame fulfillWithData:data error:err];
+  }
+                                                                     error:error];
+  return isRequested ? frame : nil;
+}
+
+- (void)handleScreenshotFailure:(nullable NSError *)error timeStarted:(uint64_t)timeStarted
+{
+  self.cachedScreen = nil;
+  [FBLogger logFmt:@"%@", error.description];
+  self.consecutiveScreenshotFailures++;
+  NSTimeInterval backoffSeconds = MIN(FAILURE_BACKOFF_MAX,
+                                      FAILURE_BACKOFF_MIN * (1 << MIN(self.consecutiveScreenshotFailures, 4)));
+  uint64_t backoffInterval = (uint64_t)(backoffSeconds * NSEC_PER_SEC);
+  [self scheduleNextScreenshotWithInterval:backoffInterval timeStarted:timeStarted];
+}
+
 - (void)streamScreenshot
 {
   if (!self.isStreaming) {
@@ -164,53 +218,27 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   }
 
   NSError *error;
-  FBMjpegPendingFrame *frame = self.pendingFrame;
-  if (nil == frame) {
-    CGFloat compressionQuality = MAX(FBMinCompressionQuality,
-                                     MIN(FBMaxCompressionQuality, (double)FBConfiguration.sharedInstance.mjpegServerScreenshotQuality / 100.0));
-    XCUIScreen *screen = [self currentScreenWithError:&error];
-    FBMjpegPendingFrame *newFrame = [[FBMjpegPendingFrame alloc] init];
-    BOOL isRequested = nil != screen && [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
-                                                                           compressionQuality:compressionQuality
-                                                                                          uti:UTTypeJPEG
-                                                                                   completion:^(NSData *data, NSError *err) {
-      newFrame.data = data;
-      newFrame.error = err;
-      dispatch_semaphore_signal(newFrame.answered);
-    }
-                                                                                        error:&error];
-    if (isRequested) {
-      frame = newFrame;
-    }
-  }
-
-  NSData *screenshotData = nil;
+  FBMjpegPendingFrame *frame = self.pendingFrame ?: [self requestFrameWithError:&error];
+  self.pendingFrame = nil;
   if (nil != frame) {
-    if (0 == dispatch_semaphore_wait(frame.answered, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(FRAME_TIMEOUT * NSEC_PER_SEC)))) {
-      self.pendingFrame = nil;
-      screenshotData = frame.data;
+    if ([frame waitWithTimeout:FRAME_TIMEOUT]) {
       error = frame.error;
-    } else if (clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - frame.timeRequested < LATE_FRAME_LIMIT) {
+    } else if (!frame.isExpired) {
       // No other request while this one is unanswered; keep waiting for it right away.
       self.pendingFrame = frame;
       [self scheduleNextScreenshotWithInterval:0 timeStarted:timeStarted];
       return;
     } else {
-      self.pendingFrame = nil;
       [[[FBErrorBuilder builder]
         withDescriptionFormat:@"Cannot take a screenshot within %@ s timeout", @(LATE_FRAME_LIMIT / NSEC_PER_SEC)]
        buildError:&error];
+      frame = nil;
     }
   }
 
+  NSData *screenshotData = frame.data;
   if (nil == screenshotData) {
-    self.cachedScreen = nil;
-    [FBLogger logFmt:@"%@", error.description];
-    self.consecutiveScreenshotFailures++;
-    NSTimeInterval backoffSeconds = MIN(FAILURE_BACKOFF_MAX,
-                                        FAILURE_BACKOFF_MIN * (1 << MIN(self.consecutiveScreenshotFailures, 4)));
-    uint64_t backoffInterval = (uint64_t)(backoffSeconds * NSEC_PER_SEC);
-    [self scheduleNextScreenshotWithInterval:backoffInterval timeStarted:timeStarted];
+    [self handleScreenshotFailure:error timeStarted:timeStarted];
     return;
   }
 
