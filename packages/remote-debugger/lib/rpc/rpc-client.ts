@@ -686,7 +686,7 @@ export class RpcClient {
           alreadyProvisioned = !isProvisional && this._provisionedPages.delete(key);
           initialized = alreadyProvisioned || (await this._initializePage(target, signal));
         } finally {
-          await this.resumeInitializedTarget(initialization, initialized);
+          await this.resumeInitializedTarget(initialization);
         }
         if (initialized && !signal.aborted) {
           if (isProvisional) {
@@ -703,8 +703,9 @@ export class RpcClient {
           `after ${timer.getDuration().asMilliSeconds}ms: ${e.message}`,
       );
     } finally {
+      // Release selection waiters even when initialization was cancelled.
       // A provisional target is reported ready when its regular creation event arrives.
-      if (!isProvisional && !signal.aborted) {
+      if (!isProvisional) {
         this._pageSelectionMonitor.emit(ON_PAGE_INITIALIZED_EVENT, appIdKey, pageIdKey);
       }
     }
@@ -1120,7 +1121,7 @@ export class RpcClient {
       PAGE_OVERRIDE_TIMEOUT_MS,
     );
     try {
-      await this.sendToDevice(
+      const response = await this.sendToDevice(
         override.method,
         {
           appIdKey: target.appIdKey,
@@ -1132,6 +1133,15 @@ export class RpcClient {
         true,
         AbortSignal.any([connectionSignal, target.removed.signal, deadline.signal]),
       );
+      // Wrapped protocol errors remain normal results for existing RPC callers.
+      // Only overrides require them to reject so unsupported settings and rollback work.
+      if (response?.error) {
+        const error = response.error;
+        throw Object.assign(
+          new Error(typeof error === 'string' ? error : error.message),
+          typeof error === 'object' ? error : {},
+        );
+      }
       this.assertPageSettingsConnection(connectionSignal);
       target.removed.signal.throwIfAborted();
     } finally {
@@ -1362,19 +1372,20 @@ export class RpcClient {
     return false;
   }
 
-  private async resumeInitializedTarget(
-    {target, isPaused, signal, connectionSignal}: PageInitialization,
-    initialized: boolean,
-  ): Promise<void> {
-    const reason = connectionSignal.aborted
-      ? 'connection disconnected'
-      : signal.aborted
-        ? 'target disappeared'
-        : !initialized
-          ? 'initialization failed'
-          : !isPaused
-            ? 'target is not paused'
-            : undefined;
+  private async resumeInitializedTarget({
+    target,
+    isPaused,
+    signal,
+    connectionSignal,
+  }: PageInitialization): Promise<void> {
+    let reason: string | undefined;
+    if (connectionSignal.aborted) {
+      reason = 'connection disconnected';
+    } else if (signal.aborted) {
+      reason = 'target disappeared';
+    } else if (!isPaused) {
+      reason = 'target is not paused';
+    }
     if (reason) {
       log.debug(`Not resuming target ${target.targetId}@${target.appIdKey}: ${reason}`);
       return;

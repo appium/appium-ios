@@ -14,8 +14,13 @@ describe('Web Inspector response parsing', function () {
         const handler = new RpcMessageHandler();
         const error = {code, message: 'Rejected override', data: {setting: 'ImagesEnabled'}};
         let received = false;
-        handler.once('0', (actual) => {
+        handler.once('0', (actual, result) => {
           received = true;
+          if (nested) {
+            assert.equal(actual, undefined);
+            assert.deepStrictEqual(result, {id: 0, error});
+            return;
+          }
           assert.ok(actual instanceof Error);
           assert.equal(actual.message, error.message);
           assert.equal((actual as any).code, error.code);

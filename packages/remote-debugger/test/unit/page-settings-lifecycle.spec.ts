@@ -739,9 +739,10 @@ describe('initialization polling cancellation', function () {
                   result = {result: {type: 'string', value: 'loading'}};
                 }
               }
+              // Core RPC retries use direct errors; wrapped errors preserve legacy resolution.
               const response = {id: command.id, ...(error ? {error} : {result})};
               await (client as any).messageHandler.handleMessage(
-                wrapper.method === 'Target.sendMessageToTarget'
+                wrapper.method === 'Target.sendMessageToTarget' && !error
                   ? targetMessage(targetId, response)
                   : dataMessage(response),
               );
@@ -788,6 +789,90 @@ describe('initialization polling cancellation', function () {
           },
         );
       }
+    }
+  }
+});
+
+describe('page initialization and RPC compatibility', function () {
+  for (const fullPageInitialization of [false, true]) {
+    for (const isProvisional of [false, true]) {
+      for (const throws of [false, true]) {
+        it(`resumes a live target after failed initialization (full=${fullPageInitialization}, provisional=${isProvisional}, throws=${throws})`, async function () {
+          const {client, initialize} = stubPageClient({fullPageInitialization});
+          const failingStep = throws ? '_initializePage' : 'initializePageOverrides';
+          sinon.stub(client as any, failingStep).rejects(new Error('Registration failed'));
+          await addPage(client, 'live', {isProvisional});
+          sinon.assert.calledWithMatch(initialize, 'Target.resume', {targetId: 'live'});
+        });
+      }
+    }
+    for (const removal of ['target', 'app', 'disconnect']) {
+      it(`releases selection after initialization cancellation (full=${fullPageInitialization}, removal=${removal})`, async function () {
+        const {client, initialize} = stubPageClient({fullPageInitialization});
+        const entered = deferred();
+        const release = deferred();
+        initialize.withArgs('Page.enable').callsFake(async () => {
+          entered.resolve();
+          await release.promise;
+        });
+        const selection = client.selectPage('app', '1');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const creation = addPage(client, 'gone');
+        await entered.promise;
+        if (removal === 'disconnect') {
+          client.disconnect();
+        } else if (removal === 'app') {
+          (client as any).removePageTargetsForApp('app');
+        } else {
+          await client.removeTarget(undefined, 'app', {targetId: 'gone'} as any);
+        }
+        release.resolve();
+        await creation;
+        let selected = false;
+        void selection.then(() => {
+          selected = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.equal(selected, true, 'must release selection without waiting for the timeout');
+        assert.equal((client as any)._pageSelectionMonitor.eventNames().length, 0);
+        assert.ok(!initialize.calledWith('Target.resume'));
+        await selection;
+      });
+    }
+  }
+
+  for (const method of ['Page.enable', 'Runtime.evaluate', 'Debugger.enable', 'Target.setPauseOnStart']) {
+    for (const nested of [false, true]) {
+      it(`preserves existing RPC error behavior (${method}, nested=${nested})`, async function () {
+        const client = new RpcClient();
+        client.isConnected = true;
+        const error = {code: -32000, message: 'Existing command failure'};
+        const log = await import('../../lib/logger.js');
+        const errorLog = sinon.spy(log.log, 'error');
+        try {
+          sinon.stub(client, 'sendMessage').callsFake(async (message) => {
+            const wrapper = JSON.parse(String(message.__argument.WIRSocketDataKey));
+            const command = wrapper.params?.message ? commandFrom(message) : wrapper;
+            const response = {id: command.id, error};
+            await (client as any).messageHandler.handleMessage(
+              nested ? targetMessage('page', response) : dataMessage(response),
+            );
+          });
+          const wait = method !== 'Target.setPauseOnStart';
+          const result = client.send(method, {appIdKey: 'app', pageIdKey: '1', targetId: 'page'}, wait);
+          if (!nested) {
+            await assert.rejects(result, /Existing command failure/);
+          } else {
+            const value = await result;
+            if (wait) {
+              assert.deepStrictEqual(value.error, error);
+            }
+            sinon.assert.notCalled(errorLog);
+          }
+        } finally {
+          errorLog.restore();
+        }
+      });
     }
   }
 });

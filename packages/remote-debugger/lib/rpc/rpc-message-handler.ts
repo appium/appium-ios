@@ -189,7 +189,7 @@ export default class RpcMessageHandler extends EventEmitter {
     const dataKey = this.parseDataKey(plist);
     let msgId = (dataKey.id ?? '').toString();
     let result = dataKey.result;
-    let responseError = dataKey.error;
+    const responseError = dataKey.error;
 
     let method = dataKey.method;
     let params = dataKey.params;
@@ -235,7 +235,6 @@ export default class RpcMessageHandler extends EventEmitter {
             method = message.method;
             result = message.result || message;
             params = result.params;
-            responseError = message.error;
           } catch (err: any) {
             // if this happens then some aspect of the protocol is missing to us
             // so print the entire message to get visibility into what is going on
