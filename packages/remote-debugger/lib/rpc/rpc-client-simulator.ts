@@ -54,12 +54,13 @@ export class RpcClientSimulator extends RpcClient {
         // unix domain socket via proxy
         log.debug(`Connecting to remote debugger via proxy through unix domain socket: '${this.messageProxy}'`);
         this.socket = net.connect(this.messageProxy);
+        const proxySocket = this.socket;
 
         // Forward the actual socketPath to the proxy
-        this.socket.once('connect', () => {
+        proxySocket.once('connect', () => {
           log.debug(`Forwarding the actual web inspector socket to the proxy: '${this.socketPath}'`);
-          if (this.socket) {
-            this.socket.write(
+          if (this.socket === proxySocket) {
+            proxySocket.write(
               JSON.stringify({
                 socketPath: this.socketPath,
               }),
@@ -89,21 +90,29 @@ export class RpcClientSimulator extends RpcClient {
       }
     }
 
-    this.socket.setNoDelay(true);
-    this.socket.setKeepAlive(true);
-    this.socket.on('close', () => {
+    const socket = this.socket;
+    socket.setNoDelay(true);
+    socket.setKeepAlive(true);
+    socket.on('close', () => {
+      if (this.socket !== socket) {
+        return;
+      }
       if (this.isConnected) {
         log.debug('Debugger socket disconnected');
       }
       this.isConnected = false;
       this.socket = null;
     });
-    this.socket.on('end', () => {
-      this.isConnected = false;
+    socket.on('end', () => {
+      if (this.socket === socket) {
+        this.isConnected = false;
+      }
     });
-    const socket = this.socket;
     const decoder = (this.decoder = new WebInspectorFrameDecoder(this.webInspectorMaxFrameLength));
     socket.on('data', (chunk: Buffer) => {
+      if (this.socket !== socket) {
+        return;
+      }
       if (this.logAllCommunicationHexDump) {
         logHexDump('received', chunk);
       }
@@ -136,14 +145,18 @@ export class RpcClientSimulator extends RpcClient {
       if (!this.socket) {
         return reject(new Error('RPC socket is not connected. Please contact developers'));
       }
-      this.socket.on('connect', () => {
+      socket.on('connect', () => {
+        if (this.socket !== socket) {
+          reject(new Error('Web Inspector connection was superseded'));
+          return;
+        }
         log.debug(`Debugger socket connected`);
         this.isConnected = true;
 
         resolve();
       });
-      this.socket.on('error', (err) => {
-        if (this.isConnected) {
+      socket.on('error', (err) => {
+        if (this.socket === socket && this.isConnected) {
           log.error(`Socket error: ${err.message}`);
           this.isConnected = false;
         }
@@ -159,15 +172,17 @@ export class RpcClientSimulator extends RpcClient {
    * Closes the socket, and cleans up resources.
    */
   override async disconnect(): Promise<void> {
-    if (!this.isConnected) {
+    const socket = this.socket;
+    if (!this.isConnected && !socket) {
       return;
     }
 
     log.debug('Disconnecting from remote debugger');
-    await super.disconnect();
-    this.socket?.destroy();
+    // Detach before awaiting so delayed callbacks cannot touch a replacement socket.
+    this.socket = null;
     this.decoder = undefined;
-    this.isConnected = false;
+    await super.disconnect();
+    socket?.destroy();
   }
 
   /**

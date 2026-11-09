@@ -22,6 +22,7 @@ export class RemoteDebuggerRealDevice extends RemoteDebugger {
       logAllCommunicationHexDump: this._logAllCommunicationHexDump,
       webInspectorMaxFrameLength: this._webInspectorMaxFrameLength,
       fullPageInitialization: this._fullPageInitialization,
+      webInspectorSettings: this._webInspectorSettings,
       udid: this._udid,
       transport: this._transport,
       pageLoadTimeoutMs: this._pageLoadMs,

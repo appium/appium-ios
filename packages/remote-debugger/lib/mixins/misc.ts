@@ -1,5 +1,6 @@
 import {withTimeout} from 'asyncbox';
 
+import {PAGE_OVERRIDE_METHODS} from '../page-overrides.js';
 import type {RemoteDebugger} from '../remote-debugger.js';
 import type {EventListener} from '../types.js';
 import {checkParams, TimeoutError, SAFARI_BUNDLE_ID} from '../utils/index.js';
@@ -48,14 +49,16 @@ export async function stopTimeline(this: RemoteDebugger): Promise<any> {
 
 /**
  * Overrides the user agent string for the current page.
- * Note: This may not work for mobile Safari.
+ * Does not update the retained Web Inspector policy or persist across target replacement.
+ * Use setWebInspectorPageSettings for a retained UA; avoid mixing the two UA APIs.
+ * A policy reset does not clear a UA managed only by this page-scoped method.
  *
  * @param value - The user agent string to set.
  * @returns A promise that resolves when the user agent has been overridden.
  */
 export async function overrideUserAgent(this: RemoteDebugger, value: string): Promise<any> {
   this.log.debug('Setting overrideUserAgent');
-  return await this.requireRpcClient().send('Page.overrideUserAgent', {
+  return await this.requireRpcClient().send(PAGE_OVERRIDE_METHODS.userAgent, {
     appIdKey: getAppIdKey(this),
     pageIdKey: getPageIdKey(this),
     value,
