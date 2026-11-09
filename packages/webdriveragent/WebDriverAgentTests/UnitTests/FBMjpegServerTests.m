@@ -8,6 +8,7 @@
 
 #import <XCTest/XCTest.h>
 
+#import "FBConfiguration.h"
 #import "FBMjpegServer.h"
 #import "FBTCPSocket.h"
 
@@ -93,6 +94,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 
 - (void)tearDown
 {
+  FBConfiguration.sharedInstance.currentDisplayId = nil;
   [self.server stopStreaming];
   [super tearDown];
 }
@@ -247,6 +249,46 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
                 @"A returning client gets a fresh request");
   [self requestAtIndex:1](self.frameData, nil);
   XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:5]);
+}
+
+- (void)testDoesNotReuseFrameRequestedForPreviousListener
+{
+  nw_connection_t first = [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  // Swap the clients at once, before the loop sees that nobody listens.
+  [self.server didClientDisconnect:first];
+  [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+                @"The new client must not wait for a frame requested for the previous one");
+
+  [self requestAtIndex:0](self.frameData, nil);
+  [self waitFor:0.2];
+  XCTAssertEqual(0, self.socket.framesCount);
+  [self requestAtIndex:1](self.frameData, nil);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:5]);
+}
+
+- (void)testDoesNotReuseFrameRequestedForPreviousDisplay
+{
+  [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  FBConfiguration.sharedInstance.currentDisplayId = @1;
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+                @"A display switch must request the frame again");
+
+  [self requestAtIndex:0](self.frameData, nil);
+  [self waitFor:0.2];
+  XCTAssertEqual(0, self.socket.framesCount);
+}
+
+- (void)testEmptyAnswerBacksOff
+{
+  [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  [self requestAtIndex:0](nil, nil);
+  [self waitFor:1.0];
+  XCTAssertEqual(1, self.requestsCount);
+  XCTAssertEqual(0, self.socket.framesCount);
 }
 
 - (void)testStopsRequestingAfterStopStreaming

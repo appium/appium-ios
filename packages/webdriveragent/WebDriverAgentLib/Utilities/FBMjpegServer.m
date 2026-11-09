@@ -46,6 +46,10 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @interface FBMjpegPendingFrame : NSObject
 @property (nonatomic, readonly, nullable) NSData *data;
 @property (nonatomic, readonly, nullable) NSError *error;
+// What the request was made for: a frame is not reused for other listeners or another display.
+@property (nonatomic, readonly) NSUInteger epoch;
+@property (nonatomic, readonly, nullable) NSNumber *displayId;
+- (instancetype)initWithEpoch:(NSUInteger)epoch displayId:(nullable NSNumber *)displayId;
 - (void)fulfillWithData:(nullable NSData *)data error:(nullable NSError *)error;
 - (BOOL)isOlderThan:(NSTimeInterval)seconds;
 // Returns NO if there is no answer yet.
@@ -57,9 +61,11 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   uint64_t _timeRequested;
 }
 
-- (instancetype)init
+- (instancetype)initWithEpoch:(NSUInteger)epoch displayId:(NSNumber *)displayId
 {
   if ((self = [super init])) {
+    _epoch = epoch;
+    _displayId = displayId;
     _answered = dispatch_semaphore_create(0);
     _timeRequested = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   }
@@ -103,6 +109,8 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 @property (nonatomic, assign) uint64_t cachedScreenTimestamp;
 // The request that missed the frame timeout and is still awaited. Touched only on backgroundQueue.
 @property (nonatomic, strong, nullable) FBMjpegPendingFrame *pendingFrame;
+// Bumped when the last client leaves. Guarded by @synchronized (self.listeningClients).
+@property (nonatomic, assign) NSUInteger listenersEpoch;
 // Overridable in tests. The default sends the request to testmanagerd.
 @property (atomic, copy) BOOL (^frameRequest)(void (^completion)(NSData * _Nullable, NSError * _Nullable), NSError **error);
 @property (atomic, assign) NSTimeInterval frameTimeout;
@@ -198,13 +206,32 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
                                                          error:error];
 }
 
-- (nullable FBMjpegPendingFrame *)requestFrameWithError:(NSError **)error
+- (nullable FBMjpegPendingFrame *)requestFrameWithEpoch:(NSUInteger)epoch error:(NSError **)error
 {
-  FBMjpegPendingFrame *frame = [[FBMjpegPendingFrame alloc] init];
+  FBMjpegPendingFrame *frame = [[FBMjpegPendingFrame alloc] initWithEpoch:epoch
+                                                                displayId:FBConfiguration.sharedInstance.currentDisplayId];
   BOOL isRequested = self.frameRequest(^(NSData *data, NSError *err) {
+    if (nil == data && nil == err) {
+      NSError *emptyError;
+      [[[FBErrorBuilder builder]
+        withDescription:@"The screenshot request has been answered without an image"]
+       buildError:&emptyError];
+      err = emptyError;
+    }
     [frame fulfillWithData:data error:err];
   }, error);
   return isRequested ? frame : nil;
+}
+
+// Takes the awaited frame, unless it was requested for other listeners or another display.
+- (nullable FBMjpegPendingFrame *)takePendingFrameForEpoch:(NSUInteger)epoch
+{
+  FBMjpegPendingFrame *frame = self.pendingFrame;
+  self.pendingFrame = nil;
+  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
+  BOOL isCurrent = frame.epoch == epoch
+    && (displayId == frame.displayId || [displayId isEqual:frame.displayId]);
+  return isCurrent ? frame : nil;
 }
 
 - (void)handleScreenshotFailure:(nullable NSError *)error timeStarted:(uint64_t)timeStarted
@@ -226,7 +253,9 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   NSUInteger framerate = FBNormalizedMjpegFramerate(FBConfiguration.sharedInstance.mjpegServerFramerate);
   uint64_t timerInterval = (uint64_t)(1.0 / (double)framerate * NSEC_PER_SEC);
   uint64_t timeStarted = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  NSUInteger epoch;
   @synchronized (self.listeningClients) {
+    epoch = self.listenersEpoch;
     if (0 == self.listeningClients.count) {
       self.pendingFrame = nil;
       [self scheduleNextScreenshotWithInterval:timerInterval timeStarted:timeStarted];
@@ -235,12 +264,16 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   }
 
   NSError *error;
-  FBMjpegPendingFrame *frame = self.pendingFrame ?: [self requestFrameWithError:&error];
-  self.pendingFrame = nil;
+  FBMjpegPendingFrame *frame = [self takePendingFrameForEpoch:epoch];
+  BOOL wasLate = nil != frame;
+  frame = frame ?: [self requestFrameWithEpoch:epoch error:&error];
   if (nil != frame) {
     if ([frame waitWithTimeout:self.frameTimeout]) {
       error = frame.error;
     } else if (![frame isOlderThan:self.lateFrameLimit]) {
+      if (!wasLate) {
+        [FBLogger verboseLog:@"The screenshot misses the frame timeout, still waiting for it"];
+      }
       // No other request while this one is unanswered; keep waiting for it right away.
       self.pendingFrame = frame;
       [self scheduleNextScreenshotWithInterval:0 timeStarted:timeStarted];
@@ -348,6 +381,9 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   @synchronized (self.listeningClients) {
     [self.listeningClients removeObject:client];
     [self.pendingFrameCounts removeObjectForKey:client];
+    if (0 == self.listeningClients.count) {
+      self.listenersEpoch++;
+    }
   }
   // Nothing is owed to a client that stopped listening, so its socket can go right away.
   nw_connection_cancel(client);
