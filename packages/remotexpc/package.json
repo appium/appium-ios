@@ -91,8 +91,8 @@
     "clean": "npm run clean:build"
   },
   "dependencies": {
-    "@appium/strongbox": "^2.0.0",
-    "@appium/support": "^7.2.6",
+    "@appium/strongbox": "^3.0.0-beta.1",
+    "@appium/support": "^8.0.0-beta.6",
     "@xmldom/xmldom": "^0.x",
     "appium-ios-tuntap": "^2.2.7",
     "asyncbox": "^6.6.0",
@@ -103,15 +103,15 @@
     "path-to-regexp": "^8.4.0"
   },
   "devDependencies": {
-    "@appium/oxc-config": "^1.1.0",
-    "@appium/tsconfig": "^1.2.0",
+    "@appium/oxc-config": "^2.0.0-beta.2",
+    "@appium/tsconfig": "^2.0.0-beta.1",
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.2",
     "rimraf": "^6.0.1",
     "sinon": "^22.0.0"
   },
   "engines": {
-    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "npm": ">=10"
   }
 }
