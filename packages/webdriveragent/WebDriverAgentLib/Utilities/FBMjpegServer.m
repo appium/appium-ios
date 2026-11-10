@@ -223,15 +223,21 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return isRequested ? frame : nil;
 }
 
-// Takes the awaited frame, unless it was requested for other listeners or another display.
-- (nullable FBMjpegPendingFrame *)takePendingFrameForEpoch:(NSUInteger)epoch
+// NO if the frame was requested for other listeners or another display.
+- (BOOL)isFrameCurrent:(FBMjpegPendingFrame *)frame
+{
+  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
+  @synchronized (self.listeningClients) {
+    return frame.epoch == self.listenersEpoch
+      && (displayId == frame.displayId || [displayId isEqual:frame.displayId]);
+  }
+}
+
+- (nullable FBMjpegPendingFrame *)takePendingFrame
 {
   FBMjpegPendingFrame *frame = self.pendingFrame;
   self.pendingFrame = nil;
-  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
-  BOOL isCurrent = frame.epoch == epoch
-    && (displayId == frame.displayId || [displayId isEqual:frame.displayId]);
-  return isCurrent ? frame : nil;
+  return nil != frame && [self isFrameCurrent:frame] ? frame : nil;
 }
 
 - (void)handleScreenshotFailure:(nullable NSError *)error timeStarted:(uint64_t)timeStarted
@@ -264,11 +270,16 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   }
 
   NSError *error;
-  FBMjpegPendingFrame *frame = [self takePendingFrameForEpoch:epoch];
+  FBMjpegPendingFrame *frame = [self takePendingFrame];
   BOOL wasLate = nil != frame;
   frame = frame ?: [self requestFrameWithEpoch:epoch error:&error];
   if (nil != frame) {
     if ([frame waitWithTimeout:self.frameTimeout]) {
+      if (![self isFrameCurrent:frame]) {
+        // The audience or the display has changed while waiting; this is not a failure.
+        [self scheduleNextScreenshotWithInterval:0 timeStarted:timeStarted];
+        return;
+      }
       error = frame.error;
     } else if (![frame isOlderThan:self.lateFrameLimit]) {
       if (!wasLate) {
@@ -299,13 +310,13 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   [self.imageProcessor submitImageData:screenshotData
                          scalingFactor:scalingFactor
                      completionHandler:^(NSData * _Nonnull scaled) {
-    [weakSelf sendScreenshot:scaled];
+    [weakSelf sendScreenshot:scaled forFrame:frame];
   }];
 
   [self scheduleNextScreenshotWithInterval:timerInterval timeStarted:timeStarted];
 }
 
-- (void)sendScreenshot:(NSData *)screenshotData {
+- (void)sendScreenshot:(NSData *)screenshotData forFrame:(FBMjpegPendingFrame *)frame {
   if (!self.isStreaming) {
     return;
   }
@@ -314,7 +325,7 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   [chunk appendData:screenshotData];
   [chunk appendData:(id)[@"\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
   @synchronized (self.listeningClients) {
-    if (!self.isStreaming || 0 == self.listeningClients.count) {
+    if (!self.isStreaming || 0 == self.listeningClients.count || ![self isFrameCurrent:frame]) {
       return;
     }
     NSUInteger clientCount = self.listeningClients.count;

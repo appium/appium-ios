@@ -20,6 +20,11 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 @property (atomic, assign) NSTimeInterval frameTimeout;
 @property (atomic, assign) NSTimeInterval lateFrameLimit;
 @property (atomic, assign) NSTimeInterval failureBackoffMin;
+- (void)sendScreenshot:(NSData *)screenshotData forFrame:(id)frame;
+@end
+
+@interface NSObject (FBMjpegPendingFrameTesting)
+- (instancetype)initWithEpoch:(NSUInteger)epoch displayId:(nullable NSNumber *)displayId;
 @end
 
 // Counts the frames that reach a client instead of writing them anywhere.
@@ -279,6 +284,53 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
   [self requestAtIndex:0](self.frameData, nil);
   [self waitFor:0.2];
   XCTAssertEqual(0, self.socket.framesCount);
+}
+
+- (void)testDropsFrameAnsweredAfterListenerSwitchedWhileWaiting
+{
+  nw_connection_t first = [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  [self waitFor:0.2];
+  // The frame is late now, so the next wait is a long one.
+  self.server.frameTimeout = 2;
+  [self waitFor:0.2];
+  [self.server didClientDisconnect:first];
+  [self connectClient];
+
+  [self requestAtIndex:0](self.frameData, nil);
+  [self waitFor:0.3];
+  XCTAssertEqual(0, self.socket.framesCount, @"The answer was requested for the previous listener");
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+                @"Dropping the stale answer is not a failure, no backoff");
+}
+
+- (void)testDropsFrameAnsweredAfterDisplaySwitchedWhileWaiting
+{
+  [self connectClient];
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  [self waitFor:0.2];
+  self.server.frameTimeout = 2;
+  [self waitFor:0.2];
+  FBConfiguration.sharedInstance.currentDisplayId = @1;
+
+  [self requestAtIndex:0](self.frameData, nil);
+  [self waitFor:0.3];
+  XCTAssertEqual(0, self.socket.framesCount, @"The answer was requested for the previous display");
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2]);
+}
+
+- (void)testDoesNotSendFrameThatWentStaleDuringScaling
+{
+  [self connectClient];
+  Class frameClass = NSClassFromString(@"FBMjpegPendingFrame");
+  NSUInteger epoch = [[self.server valueForKey:@"listenersEpoch"] unsignedIntegerValue];
+
+  [self.server sendScreenshot:self.frameData forFrame:[[frameClass alloc] initWithEpoch:epoch + 1 displayId:nil]];
+  XCTAssertEqual(0, self.socket.framesCount, @"Other listeners");
+  [self.server sendScreenshot:self.frameData forFrame:[[frameClass alloc] initWithEpoch:epoch displayId:@7]];
+  XCTAssertEqual(0, self.socket.framesCount, @"Other display");
+  [self.server sendScreenshot:self.frameData forFrame:[[frameClass alloc] initWithEpoch:epoch displayId:nil]];
+  XCTAssertEqual(1, self.socket.framesCount);
 }
 
 - (void)testEmptyAnswerBacksOff
