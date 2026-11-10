@@ -41,7 +41,7 @@
     "reinstall": "run-s clean clean:deps ci",
     "release": "node scripts/lerna-skip-dev-deps.mjs publish",
     "stage-synced-pkgs": "git add -A \"packages/*/package.json\"",
-    "sync-pkgs": "sync-monorepo-packages --fields=author,license,repository,bugs,homepage,engines",
+    "sync-pkgs": "sync-monorepo-packages -f author -f license -f bugs -f homepage",
     "test": "run-s test:quick",
     "test:e2e": "lerna run test:e2e",
     "test:quick": "run-s lint test:unit",
@@ -50,7 +50,7 @@
     "version": "run-s sync-pkgs stage-synced-pkgs"
   },
   "devDependencies": {
-    "@appium/oxc-config": "^1.1.2",
+    "@appium/oxc-config": "^2.0.0-beta.2",
     "@tsconfig/node22": "^22.0.6",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "lerna": "^10.0.1",
@@ -60,7 +60,7 @@
     "typescript": "^6.0.3"
   },
   "engines": {
-    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "npm": ">=10"
   }
 }
