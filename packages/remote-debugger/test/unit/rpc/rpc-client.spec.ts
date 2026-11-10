@@ -296,6 +296,129 @@ describe('rpc-client', function () {
       assert.strictEqual(fullOpts.senderId, 'default-sender-id');
       assert.strictEqual(fullOpts.connId, 'connection-id');
     });
+
+    function replyingClient(argument: object, replies: [string, Error | null][], sendError?: Error) {
+      const messageHandler = new EventEmitter();
+      return {
+        msgId: 1,
+        connId: 'connection-id',
+        senderId: 'sender-id',
+        messageHandler,
+        remoteMessages: {
+          getRemoteCommand: () => ({
+            __argument: structuredClone(argument),
+            __selector: '_rpc_forwardSocketData:',
+          }),
+        },
+        getTarget: sinon.stub().returns(undefined),
+        sendMessage: sinon.stub().callsFake(async () => {
+          if (sendError) {
+            throw sendError;
+          }
+          setImmediate(() => {
+            for (const [id, err] of replies) {
+              messageHandler.emit(id, err, 'ok');
+            }
+          });
+        }),
+      };
+    }
+
+    const wrapped = {WIRSocketDataKey: {method: 'Target.sendMessageToTarget', params: {}}};
+
+    const answered: [string, object, [string, Error | null][]][] = [
+      [
+        'wrapped',
+        wrapped,
+        [
+          ['2', null],
+          ['1', null],
+        ],
+      ],
+      ['direct', {WIRSocketDataKey: {id: 1, method: 'Target.getTargets'}}, [['1', null]]],
+    ];
+    for (const [kind, argument, replies] of answered) {
+      it(`should leave no listeners once a ${kind} command is answered`, async function () {
+        const client = replyingClient(argument, replies);
+        assert.strictEqual(
+          await RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}),
+          'ok',
+        );
+        assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+      });
+    }
+
+    it('should leave no listeners after a command that does not wait for a reply', async function () {
+      const client = replyingClient({}, []);
+      await RpcClient.prototype.sendToDevice.call(client as any, 'setConnectionKey', {}, false);
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should leave no listeners once a wrapped command that does not wait is acknowledged', async function () {
+      const client = replyingClient(wrapped, [
+        ['2', null],
+        ['1', null],
+      ]);
+      await RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}, false);
+      await new Promise(setImmediate);
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should leave no listeners when the wrapper reports an error', async function () {
+      const client = replyingClient(wrapped, [['2', new Error('Missing target for given targetId')]]);
+      await assert.rejects(RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}), {
+        message: 'Missing target for given targetId',
+      });
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should leave no listeners when the reply reports an error', async function () {
+      const client = replyingClient(wrapped, [['1', new Error('Target closed')]]);
+      await assert.rejects(RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}), {
+        message: /Target closed/,
+      });
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should reject when the wrapper reports an error after an acknowledgement', async function () {
+      const client = replyingClient(wrapped, [
+        ['2', null],
+        ['2', new Error('Missing target for given targetId')],
+      ]);
+      await assert.rejects(RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}), {
+        message: 'Missing target for given targetId',
+      });
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should leave no listeners when the command cannot be sent', async function () {
+      const client = replyingClient(wrapped, [], new Error('socket closed'));
+      await assert.rejects(RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}), {
+        message: 'socket closed',
+      });
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should leave no listeners when a wrapped command that does not wait cannot be sent', async function () {
+      const client = replyingClient(wrapped, [], new Error('socket closed'));
+      await assert.rejects(
+        RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}, false),
+        {message: 'socket closed'},
+      );
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
+
+    it('should keep listening for the acknowledgement of a command that does not wait and has a signal', async function () {
+      const client = replyingClient(wrapped, [
+        ['2', null],
+        ['1', null],
+      ]);
+      const signal = new AbortController().signal;
+      await RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}, false, signal);
+      assert.deepStrictEqual(client.messageHandler.eventNames().sort(), ['1', '2']);
+      await new Promise(setImmediate);
+      assert.deepStrictEqual(client.messageHandler.eventNames(), []);
+    });
   });
 
   describe('.selectApp', function () {
