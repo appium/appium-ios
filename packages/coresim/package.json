@@ -47,19 +47,19 @@
     "test:integration": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=1200000 \"lib/test/integration/**/*.spec.js\""
   },
   "dependencies": {
-    "@appium/support": "^7.2.0",
+    "@appium/support": "^8.0.0-beta.6",
     "asyncbox": "^6.6.0",
     "lru-cache": "^11.5.3",
     "node-addon-api": "^8.5.0",
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
-    "@appium/tsconfig": "^1.2.0",
+    "@appium/tsconfig": "^2.0.0-beta.1",
     "@types/node": "^26.6.5",
     "prebuildify": "^6.0.1"
   },
   "engines": {
-    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "npm": ">=10"
   },
   "gypfile": true
