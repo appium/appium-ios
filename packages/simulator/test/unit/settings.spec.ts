@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {afterEach, beforeEach, describe, it} from 'node:test';
+import {afterEach, beforeEach, describe, it, mock} from 'node:test';
 
-import {fs, plist} from '@appium/support';
+import * as appiumSupport from '@appium/support';
 import sinon from 'sinon';
 
-import {compileSimulatorPreferences, updatePreferences} from '../../lib/extensions/settings.js';
-import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, macOs} from '../../lib/utils/index.js';
+const {fs, plist} = appiumSupport;
+let currentParsePlistFile: (...args: any[]) => any = plist.parsePlistFile;
+
+// `plist` is an ES namespace and can't be stubbed; `default` is not a valid named export
+const {default: _default, ...supportExports} = appiumSupport as Record<string, any>;
+mock.module('@appium/support', {
+  namedExports: {
+    ...supportExports,
+    plist: {...plist, parsePlistFile: (...args: any[]) => currentParsePlistFile(...args)},
+  },
+});
+
+// Load after the module mock is installed.
+const {compileSimulatorPreferences, updatePreferences} = await import('../../lib/extensions/settings.js');
+const {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, macOs} = await import('../../lib/utils/index.js');
 
 describe('DeviceHub preferences', () => {
   let sandbox: sinon.SinonSandbox;
@@ -28,10 +41,14 @@ describe('DeviceHub preferences', () => {
     sandbox.stub(fs, 'stat').resolves({} as any);
     access = sandbox.stub(fs, 'access').resolves();
     sandbox.stub(macOs, 'getMajorVersion').resolves(27);
-    parse = sandbox.stub(plist, 'parsePlistFile').resolves({});
+    parse = sandbox.stub().resolves({});
+    currentParsePlistFile = parse;
     update = sandbox.stub(NSUserDefaults.prototype, 'update').resolves();
   });
-  afterEach(() => sandbox.restore());
+  afterEach(() => {
+    sandbox.restore();
+    currentParsePlistFile = plist.parsePlistFile;
+  });
 
   for (const [mode, enabled] of [
     ['on', true],
