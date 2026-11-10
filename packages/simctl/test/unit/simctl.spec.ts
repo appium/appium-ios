@@ -1,0 +1,452 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {describe, it, beforeEach, afterEach, after} from 'node:test';
+import {fileURLToPath} from 'node:url';
+
+import sinon from 'sinon';
+
+import {SIM_RUNTIME_NAME} from '../../lib/helpers.js';
+import {Simctl} from '../../lib/simctl.js';
+
+const MODULE_NAME = 'node-simctl';
+
+describe('simctl', function () {
+  let execStub: sinon.SinonStub;
+  const devicePayloads = getDevicePayloadsSync();
+
+  function stubSimctl(xcrun: {path?: string | null} = {}) {
+    const simctl = new Simctl({xcrun: {path: xcrun.path ?? null}});
+    execStub = sinon.stub(simctl, 'exec' as any).resolves({stdout: '', stderr: ''});
+    return simctl;
+  }
+
+  describe('getDevices', function () {
+    let simctl: Simctl;
+
+    beforeEach(function () {
+      simctl = stubSimctl({path: 'xcrun'});
+    });
+    afterEach(function () {
+      if (execStub) {
+        execStub.resetHistory();
+      }
+    });
+    after(function () {
+      if (execStub) {
+        execStub.restore();
+      }
+    });
+
+    for (const [devicesPayload, devicesWithUnavailablePayload] of devicePayloads) {
+      describe('no forSdk defined', function () {
+        describe('no platform defined', function () {
+          it('should get all the devices in the JSON', async function () {
+            execStub.returns(devicesPayload);
+
+            const devices = await simctl.getDevices();
+            assert.strictEqual(Object.keys(devices).length, 2);
+
+            assert.strictEqual(devices['12.1'].length, 10);
+            assert.strictEqual(devices['5.1'].length, 6);
+          });
+          it('should ignore unavailable devices', async function () {
+            execStub.returns(devicesWithUnavailablePayload);
+
+            const devices = await simctl.getDevices();
+            assert.strictEqual(Object.keys(devices).length, 4);
+
+            assert.strictEqual(devices['12.1'].length, 10);
+            assert.strictEqual(devices['5.1'].length, 6);
+            assert.strictEqual(devices['12.2'].length, 0);
+            assert.strictEqual(devices['5.2'].length, 0);
+          });
+        });
+        describe('platform defined', function () {
+          it('should get all the devices in the JSON', async function () {
+            execStub.returns(devicesPayload);
+
+            const devices = await simctl.getDevices(null, 'tvOS');
+            assert.strictEqual(Object.keys(devices).length, 1);
+
+            assert.strictEqual(devices['12.1'].length, 3);
+          });
+          it('should ignore unavailable devices', async function () {
+            execStub.returns(devicesWithUnavailablePayload);
+
+            const devices = await simctl.getDevices(null, 'tvOS');
+            assert.strictEqual(Object.keys(devices).length, 2);
+
+            assert.strictEqual(devices['12.1'].length, 3);
+            assert.strictEqual(devices['12.2'].length, 0);
+          });
+        });
+      });
+
+      describe('forSdk defined', function () {
+        describe('no platform defined', function () {
+          it('should get all the devices in the JSON', async function () {
+            execStub.returns(devicesPayload);
+
+            const devices = await simctl.getDevices('12.1');
+            assert.strictEqual(Object.keys(devices).length, 10);
+          });
+          it('should ignore unavailable devices', async function () {
+            execStub.returns(devicesWithUnavailablePayload);
+
+            const devices = await simctl.getDevices('12.1');
+            assert.strictEqual(Object.keys(devices).length, 10);
+          });
+          it('should normalize three-part dash-separated SDK runtime keys', async function () {
+            execStub.returns({
+              stdout: JSON.stringify({
+                devices: {
+                  'com.apple.CoreSimulator.SimRuntime.iOS-17-5-1': [
+                    {
+                      state: 'Shutdown',
+                      isAvailable: true,
+                      name: 'iPhone 15',
+                      udid: '75E34140-18E8-4D1A-9F45-AAC735DF75DF',
+                    },
+                  ],
+                },
+              }),
+            });
+
+            const devices = await simctl.getDevices('17.5.1');
+            assert.strictEqual(devices.length, 1);
+            assert.strictEqual(devices[0].sdk, '17.5.1');
+            assert.strictEqual(devices[0].platform, 'iOS');
+          });
+        });
+        describe('platform defined', function () {
+          it('should get all the devices in the JSON', async function () {
+            execStub.returns(devicesPayload);
+
+            const devices = await simctl.getDevices('5.1', 'watchOS');
+            assert.strictEqual(Object.keys(devices).length, 6);
+          });
+          it('should ignore unavailable devices', async function () {
+            execStub.returns(devicesWithUnavailablePayload);
+
+            const devices = await simctl.getDevices('5.1', 'watchOS');
+            assert.strictEqual(Object.keys(devices).length, 6);
+          });
+        });
+      });
+    }
+  });
+
+  describe('#createDevice', function () {
+    const devicesPayload = devicePayloads[0][0];
+    let simctl: Simctl;
+
+    beforeEach(function () {
+      simctl = stubSimctl({path: 'xcrun'});
+    });
+    afterEach(function () {
+      if (execStub) {
+        execStub.resetHistory();
+      }
+      delete process.env.XCRUN_BINARY;
+    });
+    after(function () {
+      if (execStub) {
+        execStub.restore();
+      }
+    });
+
+    it('should create iOS simulator using xcrun path from env', async function () {
+      process.env.XCRUN_BINARY = 'some/path';
+      simctl = stubSimctl({path: undefined});
+      execStub
+        .onCall(0)
+        .returns({stdout: 'not json'})
+        .onCall(1)
+        .returns({stdout: '12.1.1', stderr: ''})
+        .onCall(2)
+        .returns({stdout: 'EE76EA77-E975-4198-9859-69DFF74252D2', stderr: ''})
+        .onCall(3)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1.1', {
+        timeout: 20000,
+      });
+      assert.strictEqual(execStub.getCall(2).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(2).args[1].args, [
+        'name',
+        'iPhone 6 Plus',
+        'com.apple.CoreSimulator.SimRuntime.iOS-12-1',
+      ]);
+      assert.strictEqual(execStub.getCall(0).args[0], 'list');
+      assert.strictEqual(devices, 'EE76EA77-E975-4198-9859-69DFF74252D2');
+    });
+
+    it('should create iOS simulator using xcrun path from passed opts', async function () {
+      process.env.XCRUN_BINARY = 'some/path';
+      simctl = stubSimctl({path: 'other/path'});
+      execStub
+        .onCall(0)
+        .returns({stdout: 'not json'})
+        .onCall(1)
+        .returns({stdout: '12.1.1', stderr: ''})
+        .onCall(2)
+        .returns({stdout: 'EE76EA77-E975-4198-9859-69DFF74252D2', stderr: ''})
+        .onCall(3)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1.1', {
+        timeout: 20000,
+      });
+      assert.strictEqual(execStub.getCall(2).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(2).args[1].args, [
+        'name',
+        'iPhone 6 Plus',
+        'com.apple.CoreSimulator.SimRuntime.iOS-12-1',
+      ]);
+      assert.strictEqual(execStub.getCall(0).args[0], 'list');
+      assert.strictEqual(devices, 'EE76EA77-E975-4198-9859-69DFF74252D2');
+    });
+
+    it('should create iOS simulator and use xcrun simctl "json" parsing', async function () {
+      const runtimesJson = `{
+        "runtimes" : [
+          {
+            "buildversion" : "15B87",
+            "availability" : "(available)",
+            "name" : "iOS 12.1.1",
+            "identifier" : "com.apple.CoreSimulator.SimRuntime.iOS-12-1-1",
+            "version" : "12.1.1"
+          },
+          {
+            "buildversion" : "15J580",
+            "availability" : "(available)",
+            "name" : "tvOS 11.1",
+            "identifier" : "com.apple.CoreSimulator.SimRuntime.tvOS-11-1",
+            "version" : "11.1"
+          },
+          {
+            "buildversion" : "15R844",
+            "availability" : "(available)",
+            "name" : "watchOS 4.1",
+            "identifier" : "com.apple.CoreSimulator.SimRuntime.watchOS-4-1",
+            "version" : "4.1"
+          }
+        ]
+      }`;
+      execStub
+        .onCall(0)
+        .returns({stdout: runtimesJson})
+        .onCall(1)
+        .returns({stdout: 'FA628127-1D5C-45C3-9918-A47BF7E2AE14', stderr: ''})
+        .onCall(2)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1.1', {
+        timeout: 20000,
+      });
+      assert.strictEqual(execStub.getCall(1).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(1).args[1].args, [
+        'name',
+        'iPhone 6 Plus',
+        'com.apple.CoreSimulator.SimRuntime.iOS-12-1-1',
+      ]);
+      assert.strictEqual(devices, 'FA628127-1D5C-45C3-9918-A47BF7E2AE14');
+    });
+
+    it('should create tvOS simulator', async function () {
+      execStub
+        .onCall(0)
+        .returns({stdout: 'invalid json'})
+        .onCall(1)
+        .returns({stdout: 'com.apple.CoreSimulator.SimRuntime.tvOS-12-1', stderr: ''})
+        .onCall(2)
+        .returns({stdout: 'FA628127-1D5C-45C3-9918-A47BF7E2AE14', stderr: ''})
+        .onCall(3)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'Apple TV', '12.1', {
+        timeout: 20000,
+        platform: 'tvOS',
+      });
+      assert.strictEqual(execStub.getCall(2).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(2).args[1].args, [
+        'name',
+        'Apple TV',
+        'com.apple.CoreSimulator.SimRuntime.tvOS-12-1',
+      ]);
+      assert.strictEqual(devices, 'FA628127-1D5C-45C3-9918-A47BF7E2AE14');
+    });
+
+    it('should create iOS simulator with old runtime format', async function () {
+      execStub
+        .onCall(0)
+        .returns({stdout: 'invalid json'})
+        .onCall(1)
+        .returns({stdout: '12.1', stderr: ''})
+        .onCall(2)
+        .throws('Invalid runtime: com.apple.CoreSimulator.SimRuntime.iOS-12-1')
+        .onCall(3)
+        .returns({stdout: 'EE76EA77-E975-4198-9859-69DFF74252D2', stderr: ''})
+        .onCall(4)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1', {timeout: 20000});
+      assert.strictEqual(execStub.getCall(3).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(3).args[1].args, ['name', 'iPhone 6 Plus', '12.1']);
+      assert.strictEqual(devices, 'EE76EA77-E975-4198-9859-69DFF74252D2');
+    });
+
+    it('should create iOS simulator with old runtime format and three-part platform version', async function () {
+      execStub
+        .onCall(0)
+        .returns({stdout: 'invalid json'})
+        .onCall(1)
+        .returns({stdout: '12.1.1', stderr: ''})
+        .onCall(2)
+        .throws('Invalid runtime: com.apple.CoreSimulator.SimRuntime.iOS-12-1')
+        .onCall(3)
+        .returns({stdout: 'EE76EA77-E975-4198-9859-69DFF74252D2', stderr: ''})
+        .onCall(4)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1', {timeout: 20000});
+      assert.strictEqual(execStub.getCall(3).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(3).args[1].args, ['name', 'iPhone 6 Plus', '12.1']);
+      assert.strictEqual(devices, 'EE76EA77-E975-4198-9859-69DFF74252D2');
+    });
+
+    it('should create iOS simulator with three-part platform version and three-part runtime', async function () {
+      execStub
+        .onCall(0)
+        .returns({stdout: 'invalid json'})
+        .onCall(1)
+        .returns({stdout: '12.1.1', stderr: ''})
+        .onCall(2)
+        .throws('Invalid runtime: com.apple.CoreSimulator.SimRuntime.iOS-12-1')
+        .onCall(3)
+        .returns({stdout: 'EE76EA77-E975-4198-9859-69DFF74252D2', stderr: ''})
+        .onCall(4)
+        .returns(devicesPayload);
+
+      const devices = await simctl.createDevice('name', 'iPhone 6 Plus', '12.1.1', {
+        timeout: 20000,
+      });
+      assert.strictEqual(execStub.getCall(3).args[0], 'create');
+      assert.deepStrictEqual(execStub.getCall(3).args[1].args, [
+        'name',
+        'iPhone 6 Plus',
+        'com.apple.CoreSimulator.SimRuntime.iOS-12-1-1',
+      ]);
+      assert.strictEqual(devices, 'EE76EA77-E975-4198-9859-69DFF74252D2');
+    });
+  });
+
+  describe('#setLocation', function () {
+    it('should reject non-finite coordinates', async function () {
+      const simctl = stubSimctl({path: 'xcrun'});
+      simctl.udid = '75E34140-18E8-4D1A-9F45-AAC735DF75DF';
+      await assert.rejects(() => simctl.setLocation(Infinity, 0), TypeError);
+      await assert.rejects(() => simctl.setLocation(0, 'Infinity'), TypeError);
+    });
+  });
+
+  describe('#bootDevice', function () {
+    let simctl: Simctl;
+
+    beforeEach(function () {
+      simctl = stubSimctl({path: 'xcrun'});
+      simctl.udid = 'EE76EA77-E975-4198-9859-69DFF74252D2';
+    });
+    afterEach(function () {
+      if (execStub) {
+        execStub.restore();
+      }
+    });
+
+    it('should boot the device', async function () {
+      await simctl.bootDevice();
+      assert.strictEqual(execStub.getCall(0).args[0], 'boot');
+      assert.deepStrictEqual(execStub.getCall(0).args[1].args, ['EE76EA77-E975-4198-9859-69DFF74252D2']);
+    });
+    it('should not throw if the device is already booted', async function () {
+      execStub.rejects(new Error('Unable to boot device in current state: Booted'));
+      await assert.doesNotReject(simctl.bootDevice());
+    });
+    it('should rethrow other boot errors', async function () {
+      execStub.rejects(new Error('Invalid device: EE76EA77-E975-4198-9859-69DFF74252D2'));
+      await assert.rejects(simctl.bootDevice(), /Invalid device/);
+    });
+    it('should throw if udid is not set', async function () {
+      simctl.udid = null;
+      await assert.rejects(simctl.bootDevice(), /udid is required/);
+    });
+  });
+
+  describe('#getRuntimeForPlatformVersionViaJson', function () {
+    let simctl: Simctl;
+    const generic = {name: 'iOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}iOS-27-2`};
+    const variant = {name: 'iOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}iOS-27-2-iPhone19-4`};
+    const watch = {name: 'watchOS 27.2', version: '27.2', identifier: `${SIM_RUNTIME_NAME}watchOS-27-2`};
+
+    beforeEach(function () {
+      simctl = stubSimctl({path: 'xcrun'});
+    });
+    afterEach(function () {
+      if (execStub) {
+        execStub.restore();
+      }
+    });
+
+    for (const [title, runtimes] of [
+      ['generic first', [generic, variant]],
+      ['variant first', [variant, generic]],
+    ] as const) {
+      it(`should prefer the generic runtime over a device-specific variant (${title})`, async function () {
+        execStub.resolves({stdout: JSON.stringify({runtimes: [watch, ...runtimes]}), stderr: ''});
+        assert.strictEqual(await simctl.getRuntimeForPlatformVersionViaJson('27.2'), generic.identifier);
+      });
+    }
+    it('should fall back to a device-specific runtime if it is the only match', async function () {
+      execStub.resolves({stdout: JSON.stringify({runtimes: [variant]}), stderr: ''});
+      assert.strictEqual(await simctl.getRuntimeForPlatformVersionViaJson('27.2'), variant.identifier);
+    });
+    it('should throw if no runtime matches', async function () {
+      execStub.resolves({stdout: JSON.stringify({runtimes: [generic]}), stderr: ''});
+      await assert.rejects(simctl.getRuntimeForPlatformVersionViaJson('26.0'), /Could not use --json flag/);
+    });
+  });
+});
+
+function getModuleRootSync(): string {
+  let currentDir = path.dirname(fileURLToPath(import.meta.url));
+  let isAtFsRoot = false;
+  while (!isAtFsRoot) {
+    const manifestPath = path.join(currentDir, 'package.json');
+    try {
+      if (fs.existsSync(manifestPath)) {
+        const {name} = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {name?: string};
+        if (name === MODULE_NAME) {
+          return currentDir;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    currentDir = path.dirname(currentDir);
+    isAtFsRoot = currentDir.length <= path.dirname(currentDir).length;
+  }
+  throw new Error('Module root cannot be found');
+}
+
+function getDevicePayloadsSync(): {stdout: string}[][] {
+  const fixturesRoot = path.join(getModuleRootSync(), 'test', 'unit', 'fixtures');
+  const payloads: string[] = [
+    'devices.json',
+    'devices-with-unavailable.json',
+    'devices-simple.json',
+    'devices-with-unavailable-simple.json',
+  ].map((file) => fs.readFileSync(path.join(fixturesRoot, file), 'utf-8'));
+  const mapper = (payload: string) => ({stdout: payload});
+  return [[payloads[0], payloads[1]].map(mapper), [payloads[2], payloads[3]].map(mapper)];
+}

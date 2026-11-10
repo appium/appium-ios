@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [18.1.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.11...appium-remote-debugger@18.1.0) (2026-11-09)
+
+### Features
+
+* **remote-debugger:** retain grouped Web Inspector overrides ([#150](https://github.com/appium/appium-ios/issues/150)) ([1279a3d](https://github.com/appium/appium-ios/commit/1279a3d64b44d013d7e6883483f2c29d53a50a2b))
+
+
 ## [18.0.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.10...appium-remote-debugger@18.0.11) (2026-11-07)
 
 ### Code Refactoring

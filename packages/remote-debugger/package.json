@@ -1,6 +1,6 @@
 {
   "name": "appium-remote-debugger",
-  "version": "18.0.11",
+  "version": "18.1.0",
   "description": "Appium proxy for Remote Debugger protocol",
   "keywords": [
     "appium"
@@ -26,7 +26,8 @@
     "!scripts/ci/**",
     "atoms",
     "!atoms/src/**",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/web-inspector-settings.md"
   ],
   "type": "module",
   "main": "./build/lib/index.js",
@@ -48,6 +49,7 @@
     "prepare": "npm run build",
     "test": "node --test --enable-source-maps --test-force-exit --test-timeout=60000 \"./build/test/unit/**/*.spec.js\"",
     "test:e2e": "node --enable-source-maps scripts/ci/run-e2e.mjs \"./build/test/functional/safari-e2e.spec.js\"",
+    "test:e2e:web-inspector-settings": "node --enable-source-maps scripts/ci/run-e2e.mjs \"./build/test/functional/web-inspector-settings-e2e.spec.js\"",
     "test:e2e:atoms": "node --enable-source-maps scripts/ci/run-e2e.mjs --tolerate-timeouts \"./build/test/functional/atoms-e2e.spec.js\"",
     "test:e2e:automation": "node --enable-source-maps scripts/ci/run-e2e.mjs \"./build/test/functional/automation-session-api-e2e.spec.js\"",
     "inspect-safari": "node scripts/web_inspector_proxy.mjs",

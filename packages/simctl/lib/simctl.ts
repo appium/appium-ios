@@ -1,0 +1,211 @@
+import {exec as tpExec, SubProcess} from 'teen_process';
+import which from 'which';
+
+import {DEFAULT_EXEC_TIMEOUT, getXcrunBinary} from './helpers.js';
+import {log, LOG_PREFIX} from './logger.js';
+import * as addmediaCommands from './subcommands/addmedia.js';
+import * as appinfoCommands from './subcommands/appinfo.js';
+import * as bootCommands from './subcommands/boot.js';
+import * as bootstatusCommands from './subcommands/bootstatus.js';
+import * as createCommands from './subcommands/create.js';
+import * as deleteCommands from './subcommands/delete.js';
+import * as eraseCommands from './subcommands/erase.js';
+import * as getappcontainerCommands from './subcommands/get_app_container.js';
+import * as envCommands from './subcommands/getenv.js';
+import * as installCommands from './subcommands/install.js';
+import * as ioCommands from './subcommands/io.js';
+import * as keychainCommands from './subcommands/keychain.js';
+import * as launchCommands from './subcommands/launch.js';
+import * as listCommands from './subcommands/list.js';
+import * as locationCommands from './subcommands/location.js';
+import * as openurlCommands from './subcommands/openurl.js';
+import * as pbcopyCommands from './subcommands/pbcopy.js';
+import * as pbpasteCommands from './subcommands/pbpaste.js';
+import * as privacyCommands from './subcommands/privacy.js';
+import * as pushCommands from './subcommands/push.js';
+import * as shutdownCommands from './subcommands/shutdown.js';
+import * as spawnCommands from './subcommands/spawn.js';
+import * as terminateCommands from './subcommands/terminate.js';
+import * as uiCommands from './subcommands/ui.js';
+import * as uninstallCommands from './subcommands/uninstall.js';
+import type {XCRun, ExecOpts, SimctlOpts, ExecResult} from './types.js';
+
+const SIMCTL_ENV_PREFIX = 'SIMCTL_CHILD_';
+
+export class Simctl {
+  // Extension methods
+  addMedia = addmediaCommands.addMedia;
+  appInfo = appinfoCommands.appInfo;
+  bootDevice = bootCommands.bootDevice;
+  startBootMonitor = bootstatusCommands.startBootMonitor;
+  createDevice = createCommands.createDevice;
+  deleteDevice = deleteCommands.deleteDevice;
+  eraseDevice = eraseCommands.eraseDevice;
+  getAppContainer = getappcontainerCommands.getAppContainer;
+  getEnv = envCommands.getEnv;
+  installApp = installCommands.installApp;
+  getScreenshot = ioCommands.getScreenshot;
+  addRootCertificate = keychainCommands.addRootCertificate;
+  addCertificate = keychainCommands.addCertificate;
+  resetKeychain = keychainCommands.resetKeychain;
+  launchApp = launchCommands.launchApp;
+  getDevicesByParsing = listCommands.getDevicesByParsing;
+  getDevices = listCommands.getDevices;
+  getRuntimeForPlatformVersionViaJson = listCommands.getRuntimeForPlatformVersionViaJson;
+  getRuntimeForPlatformVersion = listCommands.getRuntimeForPlatformVersion;
+  getDeviceTypes = listCommands.getDeviceTypes;
+  list = listCommands.list;
+  setLocation = locationCommands.setLocation;
+  clearLocation = locationCommands.clearLocation;
+  openUrl = openurlCommands.openUrl;
+  setPasteboard = pbcopyCommands.setPasteboard;
+  getPasteboard = pbpasteCommands.getPasteboard;
+  grantPermission = privacyCommands.grantPermission;
+  revokePermission = privacyCommands.revokePermission;
+  resetPermission = privacyCommands.resetPermission;
+  pushNotification = pushCommands.pushNotification;
+  shutdownDevice = shutdownCommands.shutdownDevice;
+  spawnProcess = spawnCommands.spawnProcess;
+  spawnSubProcess = spawnCommands.spawnSubProcess;
+  terminateApp = terminateCommands.terminateApp;
+  getAppearance = uiCommands.getAppearance;
+  setAppearance = uiCommands.setAppearance;
+  getIncreaseContrast = uiCommands.getIncreaseContrast;
+  setIncreaseContrast = uiCommands.setIncreaseContrast;
+  getContentSize = uiCommands.getContentSize;
+  setContentSize = uiCommands.setContentSize;
+  removeApp = uninstallCommands.removeApp;
+
+  private xcrun: XCRun;
+  private execTimeout: number;
+  private logErrors: boolean;
+  private _udid: string | null;
+  private _devicesSetPath: string | null;
+
+  constructor(opts: SimctlOpts = {}) {
+    this.xcrun = {...(opts.xcrun ?? {path: null})};
+    this.execTimeout = opts.execTimeout ?? DEFAULT_EXEC_TIMEOUT;
+    this.logErrors = opts.logErrors ?? true;
+    this._udid = opts.udid ?? null;
+    this._devicesSetPath = opts.devicesSetPath ?? null;
+  }
+
+  get udid(): string | null {
+    return this._udid;
+  }
+
+  get devicesSetPath(): string | null {
+    return this._devicesSetPath;
+  }
+
+  set udid(value: string | null) {
+    this._udid = value;
+  }
+
+  set devicesSetPath(value: string | null) {
+    this._devicesSetPath = value;
+  }
+
+  /**
+   * @param commandName - Optional command name for error message
+   * @returns The UDID string
+   * @throws {Error} If UDID is not set
+   */
+  requireUdid(commandName: string | null = null): string {
+    if (!this.udid) {
+      throw new Error(
+        `udid is required to be set for ` + (commandName ? `the '${commandName}' command` : 'this simctl command'),
+      );
+    }
+    return this.udid;
+  }
+
+  /**
+   * @returns Promise resolving to the xcrun binary path
+   */
+  async requireXcrun(): Promise<string> {
+    const xcrunBinary = getXcrunBinary();
+
+    if (!this.xcrun.path) {
+      try {
+        this.xcrun.path = await which(xcrunBinary);
+      } catch {
+        throw new Error(`${xcrunBinary} tool has not been found in PATH. Are Xcode developers tools installed?`);
+      }
+    }
+    if (!this.xcrun.path) {
+      throw new Error(`${xcrunBinary} tool path is not set`);
+    }
+    return this.xcrun.path;
+  }
+
+  /**
+   * Execute the particular simctl command.
+   *
+   * @param subcommand - One of available simctl subcommands.
+   * Execute `xcrun simctl` in Terminal to see the full list  of available subcommands.
+   * @param opts - Execution options
+   * @return Either the result of teen process's `exec` or
+   * `SubProcess` instance depending of `opts.asynchronous` value.
+   * @throws {Error} If the simctl subcommand command returns non-zero return code.
+   */
+  async exec<T extends ExecOpts>(subcommand: string, opts?: T): Promise<ExecResult<T>> {
+    const {
+      args: initialArgs = [],
+      env: initialEnv = {},
+      asynchronous = false,
+      encoding,
+      logErrors = true,
+      architectures,
+      timeout,
+    } = opts ?? ({} as T);
+    // run a particular simctl command
+    const args = ['simctl', ...(this.devicesSetPath ? ['--set', this.devicesSetPath] : []), subcommand, ...initialArgs];
+    // Prefix all passed in environment variables with 'SIMCTL_CHILD_', simctl
+    // will then pass these to the child (spawned) process.
+    const envWithPrefixedKeys = Object.fromEntries(
+      Object.entries(initialEnv).map(([key, value]) => [
+        key.startsWith(SIMCTL_ENV_PREFIX) ? key : `${SIMCTL_ENV_PREFIX}${key}`,
+        value,
+      ]),
+    );
+    const env = {...process.env, ...envWithPrefixedKeys};
+
+    const execOpts: any = {
+      env,
+      encoding,
+    };
+    if (!asynchronous) {
+      execOpts.timeout = timeout || this.execTimeout;
+    }
+    const xcrun = await this.requireXcrun();
+    try {
+      let execArgs: [string, string[], any];
+      if (architectures?.length) {
+        const archArgs = (Array.isArray(architectures) ? architectures : [architectures]).flatMap((arch) => [
+          '-arch',
+          arch,
+        ]);
+        execArgs = ['arch', [...archArgs, xcrun, ...args], execOpts];
+      } else {
+        execArgs = [xcrun, args, execOpts];
+      }
+      // We know what we are doing here - the type system can't handle the dynamic nature
+      return (asynchronous ? new SubProcess(...execArgs) : await tpExec(...execArgs)) as ExecResult<T>;
+    } catch (e: any) {
+      if (!this.logErrors || !logErrors) {
+        // if we don't want to see the errors, just throw and allow the calling
+        // code do what it wants
+      } else if (e.stderr) {
+        const msg = `Error running '${subcommand}': ${e.stderr.trim()}`;
+        log.debug(LOG_PREFIX, msg);
+        e.message = msg;
+      } else {
+        log.debug(LOG_PREFIX, e.message);
+      }
+      throw e;
+    }
+  }
+}
+
+export default Simctl;
