@@ -1,3 +1,15 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## 9.2.0 (2026-11-10)
+
+### Features
+
+* move node-simctl into the monorepo as packages/simctl ([#181](https://github.com/appium/appium-ios/issues/181)) ([67e719e](https://github.com/appium/appium-ios/commit/67e719e91453293a6836339d64191fa6cb719e38))
+
+
 ## [9.1.3](https://github.com/appium/node-simctl/compare/v9.1.2...v9.1.3) (2026-11-06)
 
 ### Bug Fixes
