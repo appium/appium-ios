@@ -1,6 +1,6 @@
 {
   "name": "appium-webdriveragent",
-  "version": "16.18.4",
+  "version": "16.18.5",
   "description": "Package bundling WebDriverAgent",
   "keywords": [
     "Appium",

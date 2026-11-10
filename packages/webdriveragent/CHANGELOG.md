@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [16.18.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.4...appium-webdriveragent@16.18.5) (2026-11-10)
+
+### Bug Fixes
+
+* **webdriveragent:** keep a late MJPEG frame instead of backing off ([#179](https://github.com/appium/appium-ios/issues/179)) ([e57ef10](https://github.com/appium/appium-ios/commit/e57ef1069c155fbf37a3c223bcc96af7788025b3))
+
+
 ## [16.18.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.3...appium-webdriveragent@16.18.4) (2026-11-09)
 
 ### Performance Improvements
