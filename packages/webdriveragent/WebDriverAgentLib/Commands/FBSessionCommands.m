@@ -14,6 +14,7 @@
 
 #import "FBCapabilities.h"
 #import "FBConfiguration.h"
+#import "FBGestureQueue.h"
 #import "FBExceptions.h"
 #import "FBLogger.h"
 #import "FBProtocolHelpers.h"
@@ -166,7 +167,10 @@
 
 + (id<FBResponsePayload>)handleDeleteSession:(FBRouteRequest *)request
 {
+  // Drain before killing the app so queued touches cannot land after the session is gone.
+  [FBGestureQueue drainWithTimeout];
   [request.session kill];
+  [FBGestureQueue resetSessionState];
   return FBResponseWithOK();
 }
 
@@ -223,6 +227,9 @@
           @"ip" : [XCUIDevice sharedDevice].fb_wifiIPAddress ?: [NSNull null]
         },
       @"build" : buildInfo.copy,
+      // Cumulative since this WDA process started; a caller reads pending to see a backlog
+      // and failed/rejected to see events that did not reach the daemon.
+      @"gestures" : [FBGestureQueue stats],
       @"device": deviceKind
     }
   );

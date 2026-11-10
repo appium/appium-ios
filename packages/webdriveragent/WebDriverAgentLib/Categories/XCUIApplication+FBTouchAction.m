@@ -27,6 +27,23 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 
+@implementation XCUIApplication (FBTouchAction)
+
++ (long long)fb_displayIDForCoordinate:(XCUICoordinate *)coordinate
+{
+  XCUIElement *referencedElement = coordinate.referencedElement;
+  return [referencedElement respondsToSelector:@selector(displayID)]
+    ? referencedElement.displayID
+    : 0;
+}
+
++ (nullable XCUIApplication *)fb_applicationForElement:(XCUIElement *)element
+{
+  return [element isKindOfClass:XCUIApplication.class]
+    ? (XCUIApplication *)element
+    : element.application;
+}
+
 /**
  Maps a drag XCUIGestureVelocity to the speed XCTest drags at. XCTest calls the result "pixels per
  second", but divides the distance between the two screen points (which are in points) by it.
@@ -84,7 +101,6 @@ static XCSynthesizedEventRecord *FBMakeEventRecord(NSString *name, long long dis
     : [[XCSynthesizedEventRecord alloc] initWithName:name interfaceOrientation:interfaceOrientation];
 }
 
-@implementation XCUIApplication (FBTouchAction)
 
 + (BOOL)handleEventSynthesWithError:(NSError *)error
 {
@@ -181,10 +197,7 @@ static XCSynthesizedEventRecord *FBMakeEventRecord(NSString *name, long long dis
 
   // Like XCTest, target the display of the element the start coordinate belongs to. displayID
   // only reads the element's last snapshot, which resolving screenPoint above has just refreshed.
-  XCUIElement *referencedElement = startCoordinate.referencedElement;
-  long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
-    ? referencedElement.displayID
-    : 0;
+  long long displayID = [self.class fb_displayIDForCoordinate:startCoordinate];
   return [self.class fb_pressDragEventFromPoint:startPoint
                                     forDuration:pressDuration
                                         toPoint:endPoint
@@ -218,16 +231,16 @@ static XCSynthesizedEventRecord *FBMakeEventRecord(NSString *name, long long dis
   return event;
 }
 
+// A tap lifts almost immediately. 50 ms is long enough not to be coalesced with a following
+// event; it is not a measurement of the hold -[XCUICoordinate tap] produces.
+static const NSTimeInterval FBFastTapHoldInterval = 0.05;
+
 + (XCSynthesizedEventRecord *)fb_tapEventFromPoint:(CGPoint)point
                                          displayID:(long long)displayID
                               interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
-  // XCTest's tap is a touch that lifts almost immediately. The exact hold is not part of the
-  // record's semantics, only of its timing, so keep it short but long enough not to be
-  // coalesced with a following event.
-  static const NSTimeInterval tapHoldInterval = 0.05;
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];
-  [path liftUpAtOffset:tapHoldInterval];
+  [path liftUpAtOffset:FBFastTapHoldInterval];
   XCSynthesizedEventRecord *event = FBMakeEventRecord(@"Tap", displayID, interfaceOrientation);
   [event addPointerEventPath:path];
   return event;
