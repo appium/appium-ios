@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {describe, it, beforeEach, afterEach, mock} from 'node:test';
 
-import {util} from '@appium/support';
+import * as appiumSupport from '@appium/support';
 import sinon from 'sinon';
 
 let commonPrefs: Record<string, any> = {};
@@ -10,6 +10,16 @@ const renames: string[] = [];
 let renameFails: ((name: string) => boolean) | undefined;
 let listed: {udid: string; name: string}[] = [];
 let onRename: ((name: string) => void) | undefined;
+let currentGetLockFileGuard: (...args: any[]) => any = appiumSupport.util.getLockFileGuard;
+
+// `util` is an ES namespace and can't be stubbed; `default` is not a valid named export
+const {default: _default, ...supportExports} = appiumSupport as Record<string, any>;
+mock.module('@appium/support', {
+  namedExports: {
+    ...supportExports,
+    util: {...appiumSupport.util, getLockFileGuard: (...args: any[]) => currentGetLockFileGuard(...args)},
+  },
+});
 
 mock.module('../../lib/extensions/settings.js', {
   namedExports: {
@@ -65,10 +75,11 @@ describe('ui-client DeviceHub preference refresh', function () {
     listed = [{udid: UDID, name: 'iPhone 17'}];
     // Never touch the real UI client lock files, which live Appium processes may be holding
     sandbox = sinon.createSandbox();
-    sandbox.stub(util, 'getLockFileGuard').returns((async (fn: () => Promise<unknown>) => await fn()) as any);
+    currentGetLockFileGuard = () => async (fn: () => Promise<unknown>) => await fn();
   });
   afterEach(function () {
     sandbox.restore();
+    currentGetLockFileGuard = appiumSupport.util.getLockFileGuard;
   });
 
   it('renames the running Simulator temporarily and restores its name', async function () {

@@ -210,11 +210,9 @@ export async function isAppRunning(this: CoreSimulatorWithApps, bundleId: string
  */
 export async function scrubApp(this: CoreSimulatorWithApps, bundleId: string): Promise<void> {
   const appDataRoot = await this.getAppContainer(bundleId, 'data');
-  const appFiles = await fs.glob('**/*', {
-    cwd: appDataRoot,
-    nodir: true,
-    absolute: true,
-  });
+  const appFiles = (await fs.glob('**/*', {cwd: appDataRoot, withFileTypes: true}))
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
   this.log.info(`Found ${appFiles.length} ${bundleId} app ${util.pluralize('file', appFiles.length, false)} to scrub`);
   if (appFiles.length === 0) {
     return;
