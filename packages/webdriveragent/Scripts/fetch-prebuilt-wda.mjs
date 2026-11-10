@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {logger, fs, mkdirp, net} from '@appium/support';
+import {logger, fs, net} from '@appium/support';
 import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,7 +39,7 @@ async function fetchPrebuiltWebDriverAgentAssets() {
   const webdriveragentsDir = path.resolve(__dirname, '..', 'prebuilt-agents');
   log.info(`Creating webdriveragents directory at: ${webdriveragentsDir}`);
   await fs.rimraf(webdriveragentsDir);
-  await mkdirp(webdriveragentsDir);
+  await fs.mkdirp(webdriveragentsDir);
 
   // Define a method that does a streaming download of an asset
   async function downloadAgent(url, targetPath) {
