@@ -41,6 +41,7 @@ const DEFAULT_TARGET_CREATION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 const WAIT_FOR_TARGET_INTERVAL_MS = 100;
 const PAGE_OVERRIDE_TIMEOUT_MS = 10000;
 const PAGE_OVERRIDE_TARGET_CONCURRENCY = 4;
+const SELECT_APP_TIMEOUT_MS = 10000;
 const NO_TARGET_SUPPORTED_ERROR = `'target' domain was not found`;
 const MISSING_TARGET_ERROR_PATTERN = /Missing target/i;
 const NO_TARGET_PRESENT_YET_ERRORS = [`domain was not found`, `some arguments of method`, `missing target`];
@@ -863,23 +864,31 @@ export class RpcClient {
    * Connects to a specific application and returns its page dictionary.
    *
    * @param appIdKey - The application identifier key to connect to.
+   * @param bundleId - The bundle id of that application. A connect with the same bundle id
+   *                   counts as the application relaunching under a new identifier key.
    * @returns A promise that resolves to a tuple containing the connected app ID key
    *          and the page dictionary.
-   * @throws Error if a new application connects during the process or if the page
+   * @throws Error if the application, a proxy for it or a relaunch of it connects during the
+   *               process, if `connectToApp` gets no reply within 10 seconds, or if the page
    *               dictionary is empty.
    */
-  async selectApp(appIdKey: AppIdKey): Promise<[string, StringRecord]> {
+  async selectApp(appIdKey: AppIdKey, bundleId?: string): Promise<[string, StringRecord]> {
     return await new Promise<[string, StringRecord]>((resolve, reject) => {
       // local callback, temporarily added as callback to
       // `_rpc_applicationConnected:` remote debugger response
       // to handle the initial connection
       const onAppChange = (err: Error | null, dict: StringRecord) => {
         if (err) {
-          return reject(err);
+          return fail(err);
         }
         // from the dictionary returned, get the ids
         const oldAppIdKey = dict.WIRHostApplicationIdentifierKey;
         const correctAppIdKey = dict.WIRApplicationIdentifierKey;
+        // other apps keep connecting right after the debugger connects and do not affect this one
+        const relaunched = !!bundleId && dict.WIRApplicationBundleIdentifierKey === bundleId;
+        if (!relaunched && ![oldAppIdKey, correctAppIdKey].includes(String(appIdKey))) {
+          return;
+        }
 
         // if this is a report of a proxy redirect from the remote debugger
         // we want to update our dictionary and get a new app id
@@ -890,14 +899,34 @@ export class RpcClient {
           );
         }
 
-        reject(new Error(NEW_APP_CONNECTED_ERROR));
+        fail(new Error(NEW_APP_CONNECTED_ERROR));
       };
-      this.messageHandler.prependOnceListener('_rpc_applicationConnected:', onAppChange);
+      const connectRequest = new AbortController();
+      const stopListening = () => {
+        clearTimeout(timeoutHandler);
+        this.messageHandler.off('_rpc_applicationConnected:', onAppChange);
+      };
+      // also stops waiting for the outstanding connectToApp reply
+      const fail = (err: Error) => {
+        stopListening();
+        connectRequest.abort(err);
+        reject(err);
+      };
+      this.messageHandler.prependListener('_rpc_applicationConnected:', onAppChange);
+      // a lost connectToApp reply would otherwise leave this pending
+      const timeoutHandler = setTimeout(() => {
+        fail(new Error(`Application '${appIdKey}' did not reply to connectToApp within ${SELECT_APP_TIMEOUT_MS}ms`));
+      }, SELECT_APP_TIMEOUT_MS);
 
       // do the actual connecting to the app
       void (async () => {
         try {
-          const [connectedAppIdKey, pageDict] = await this.send('connectToApp', {appIdKey});
+          const [connectedAppIdKey, pageDict] = await this.send(
+            'connectToApp',
+            {appIdKey},
+            true,
+            connectRequest.signal,
+          );
           // sometimes the connect logic happens, but with an empty dictionary
           // which leads to the remote debugger getting disconnected, and into a loop
           if (util.isEmpty(pageDict)) {
@@ -906,10 +935,12 @@ export class RpcClient {
             resolve([connectedAppIdKey, pageDict]);
           }
         } catch (err: any) {
-          log.warn(`Unable to connect to the app: ${err.message}`);
+          if (err !== connectRequest.signal.reason) {
+            log.warn(`Unable to connect to the app: ${err.message}`);
+          }
           reject(err);
         } finally {
-          this.messageHandler.off('_rpc_applicationConnected:', onAppChange);
+          stopListening();
         }
       })();
     });

@@ -5,7 +5,7 @@ import {describe, it} from 'node:test';
 import {AsyncLock} from 'asyncbox';
 import sinon from 'sinon';
 
-import {RpcClient} from '../../../lib/rpc/rpc-client.js';
+import {NEW_APP_CONNECTED_ERROR, RpcClient} from '../../../lib/rpc/rpc-client.js';
 import {connectedClient, addPage, deferred} from '../helpers/page-settings.js';
 
 describe('rpc-client', function () {
@@ -295,6 +295,128 @@ describe('rpc-client', function () {
       const fullOpts = await sendToDevice.call(mockRpcClient as any, 'setConnectionKey', {} as any, false);
       assert.strictEqual(fullOpts.senderId, 'default-sender-id');
       assert.strictEqual(fullOpts.connId, 'connection-id');
+    });
+  });
+
+  describe('.selectApp', function () {
+    const page = {1: {WIRTitleKey: '', WIRURLKey: 'https://example.test/'}};
+    const unrelated = {WIRApplicationIdentifierKey: 'PID:2'};
+    const reconnect = {WIRApplicationIdentifierKey: 'PID:1'};
+
+    function mockClient(
+      connects: Record<string, string>[],
+      sendResult = async (): Promise<unknown> => ['PID:1', page],
+    ) {
+      const messageHandler = new EventEmitter();
+      const send = sinon.stub().callsFake(async () => {
+        for (const dict of connects) {
+          await new Promise(setImmediate);
+          messageHandler.emit('_rpc_applicationConnected:', null, dict);
+        }
+        return await sendResult();
+      });
+      return {messageHandler, send};
+    }
+
+    it('should keep waiting when an unrelated application connects', async function () {
+      const client = mockClient([
+        unrelated,
+        {WIRApplicationIdentifierKey: 'PID:3', WIRApplicationBundleIdentifierKey: 'com.apple.mobilesafari'},
+      ]);
+      const result = await RpcClient.prototype.selectApp.call(client as any, 'PID:1', 'io.appium.example');
+      assert.deepStrictEqual(result, ['PID:1', page]);
+      assert.deepStrictEqual(client.send.firstCall.args.slice(0, 2), ['connectToApp', {appIdKey: 'PID:1'}]);
+    });
+
+    for (const [kind, connects] of [
+      ['the application reconnects', [reconnect]],
+      [
+        'a proxy for the application connects',
+        [{WIRApplicationIdentifierKey: 'PID:4', WIRHostApplicationIdentifierKey: 'PID:1'}],
+      ],
+      ['the application reconnects after an unrelated one', [unrelated, reconnect]],
+    ] as const) {
+      it(`should reject when ${kind}`, async function () {
+        await assert.rejects(RpcClient.prototype.selectApp.call(mockClient([...connects]) as any, 'PID:1'), {
+          message: NEW_APP_CONNECTED_ERROR,
+        });
+      });
+    }
+
+    it('should reject when the application relaunches under a new identifier key', async function () {
+      const relaunch = {WIRApplicationIdentifierKey: 'PID:5', WIRApplicationBundleIdentifierKey: 'io.appium.example'};
+      await assert.rejects(
+        RpcClient.prototype.selectApp.call(mockClient([relaunch]) as any, 'PID:1', 'io.appium.example'),
+        {message: NEW_APP_CONNECTED_ERROR},
+      );
+    });
+
+    it('should stop listening once the connect request resolves', async function () {
+      const client = mockClient([unrelated]);
+      await RpcClient.prototype.selectApp.call(client as any, 'PID:1');
+      assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+    });
+
+    it('should stop listening once the connect request rejects', async function () {
+      const client = mockClient([unrelated], async () => {
+        throw new Error('socket closed');
+      });
+      await assert.rejects(RpcClient.prototype.selectApp.call(client as any, 'PID:1'), {message: 'socket closed'});
+      assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+    });
+
+    it('should keep listening while the connect request is pending and only unrelated applications connect', async function () {
+      const client = mockClient([unrelated], () => new Promise(() => {}));
+      let settled = false;
+      void RpcClient.prototype.selectApp.call(client as any, 'PID:1').then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      await new Promise(setImmediate);
+      await new Promise(setImmediate);
+      assert.strictEqual(settled, false);
+      assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 1);
+    });
+
+    it('should give up and stop listening when the connect request gets no reply', async function () {
+      const clock = sinon.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      try {
+        const client = mockClient([unrelated], () => new Promise(() => {}));
+        let error: Error | undefined;
+        void RpcClient.prototype.selectApp.call(client as any, 'PID:1').catch((err: Error) => (error = err));
+        await new Promise(setImmediate);
+        await new Promise(setImmediate);
+        await clock.runAllAsync();
+        await new Promise(setImmediate);
+        assert.match(String(error?.message), /PID:1.*connectToApp/);
+        assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+        assert.strictEqual(client.send.firstCall.args[3]?.aborted, true);
+      } finally {
+        clock.restore();
+      }
+    });
+
+    it('should stop listening as soon as the application reconnects while the connect request is pending', async function () {
+      const client = mockClient([reconnect], () => new Promise(() => {}));
+      await assert.rejects(RpcClient.prototype.selectApp.call(client as any, 'PID:1'), {
+        message: NEW_APP_CONNECTED_ERROR,
+      });
+      assert.strictEqual(client.messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+      assert.strictEqual(client.send.firstCall.args[3]?.aborted, true);
+    });
+
+    it('should stop listening as soon as the connect notification fails while the connect request is pending', async function () {
+      const messageHandler = new EventEmitter();
+      const send = sinon.stub().callsFake(async () => {
+        await new Promise(setImmediate);
+        messageHandler.emit('_rpc_applicationConnected:', new Error('bad message'));
+        return await new Promise(() => {});
+      });
+      await assert.rejects(RpcClient.prototype.selectApp.call({messageHandler, send} as any, 'PID:1'), {
+        message: 'bad message',
+      });
+      assert.strictEqual(messageHandler.listenerCount('_rpc_applicationConnected:'), 0);
+      assert.strictEqual(send.firstCall.args[3]?.aborted, true);
     });
   });
 

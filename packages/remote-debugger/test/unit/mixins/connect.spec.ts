@@ -166,6 +166,23 @@ describe('connect', function () {
       isAutomationEnabled: true,
     };
 
+    describe('relaunch detection', function () {
+      const pageDict = {1: {WIRPageIdentifierKey: 1, WIRTitleKey: '', WIRURLKey: 'https://example.test/'}};
+      for (const [kind, bundleId, expected] of [
+        ['an app with its own bundle id', 'com.example.myapp', 'com.example.myapp'],
+        ['a shared WebKit process', 'com.apple.WebKit.WebContent', undefined],
+      ] as const) {
+        it(`should pass the bundle id to the RPC client only for ${kind}`, async function () {
+          (rd as any)._appDict = {'PID:99999': {...realWebviewApp, bundleId}};
+          (rd as any)._bundleId = 'com.example.myapp';
+          const selectApp = sinon.stub().resolves(['PID:99999', pageDict]);
+          (rd as any)._rpcClient = {selectApp};
+          await rd.selectApp();
+          assert.deepStrictEqual(selectApp.firstCall.args, ['PID:99999', expected]);
+        });
+      }
+    });
+
     describe('ignoredBundleIds', function () {
       it('should return [] immediately when all apps match the ignore list', async function () {
         (rd as any)._appDict = {'PID:88535': systemProcessApp};
