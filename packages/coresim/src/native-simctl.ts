@@ -3,6 +3,7 @@ import {createRequire} from 'node:module';
 
 import {util} from '@appium/support';
 
+// oxlint-disable import/no-duplicates -- see the bare imports below
 import {
   appInfo,
   getAppContainer,
@@ -88,6 +89,7 @@ import './commands/ui.js';
 import './commands/video-recording.js';
 import './commands/video-stream.js';
 import './commands/webinspector.js';
+// oxlint-enable import/no-duplicates
 import {getPkgRoot, PACKAGE_NAME, runCatchingAsync} from './utils/index.js';
 
 const require = createRequire(import.meta.url);

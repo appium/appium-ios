@@ -52,8 +52,8 @@ export class BulletinBoardStore {
   async withLock<T>(update: () => Promise<T>): Promise<T> {
     const result = (pendingUpdates.get(this.path) ?? Promise.resolve()).then(update);
     const settled = result.then(
-      () => {},
-      () => {},
+      () => undefined,
+      () => undefined,
     );
     pendingUpdates.set(this.path, settled);
     try {
