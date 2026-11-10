@@ -237,6 +237,13 @@ typedef NS_ENUM(NSInteger, FBConfigurationKeyboardPreference) {
 @property (atomic, assign) NSTimeInterval animationCoolOffTimeout;
 
 /**
+ * Hold duration of the synthetic tap used by the opt-in fast tap path. It is an
+ * implementation choice, not a measurement of the hold XCTest's own tap produces.
+ * The default is 50 ms.
+ */
+@property (atomic, assign) NSTimeInterval fastTapHoldInterval;
+
+/**
  * Maximum time to wait for the frontmost application to confirm its main run loop
  * is responsive before an accessibility snapshot request (element attribute
  * lookups, active app detection, etc). XCTest has no bounded timeout of its own

@@ -53,7 +53,25 @@ NS_ASSUME_NONNULL_BEGIN
          thenHoldForDuration:(NSTimeInterval)holdDuration
                        error:(NSError * _Nullable*)error;
 
+
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+/**
+ Resolves the display a coordinate belongs to, using the element the coordinate was derived
+ from and falling back to the main display (0) when the runtime does not expose displayID.
+
+ @param coordinate The coordinate to resolve
+ @return The display identifier to target
+ */
++ (long long)fb_displayIDForCoordinate:(XCUICoordinate *)coordinate;
+
+/**
+ Resolves the application an element or coordinate belongs to.
+
+ @param element The element to resolve; XCUIApplication is returned as-is
+ @return The owning application, or nil when it cannot be determined
+ */
++ (nullable XCUIApplication *)fb_applicationForElement:(XCUIElement *)element;
+
 /**
  Builds the event record used by
  -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:
@@ -77,9 +95,10 @@ NS_ASSUME_NONNULL_BEGIN
                                                                error:(NSError * _Nullable*)error;
 
 /**
- Builds the event record for a single tap at an already resolved screen point, matching
- the touch path -[XCUICoordinate tap] produces. Exposed so a caller can dispatch the
- event without waiting for XCTest's daemon confirmation.
+ Builds the event record for a single tap at an already resolved screen point. The touch
+ lifts after a fixed short hold (50 ms in the implementation); that value is chosen for the
+ fast path and is not verified to be the hold -[XCUICoordinate tap] uses internally. Exposed
+ so a caller can dispatch the event without waiting for XCTest's daemon confirmation.
 
  @param point The screen point to tap
  @param displayID The display to send the gesture to (0 is the main display)
