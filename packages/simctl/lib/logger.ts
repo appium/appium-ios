@@ -1,5 +1,5 @@
-import {log as appiumLogger} from '@appium/logger';
+import {log as appiumLogger, type Logger} from '@appium/logger';
 
 export const LOG_PREFIX = 'simctl';
 
-export const log = appiumLogger;
+export const log: Logger = appiumLogger;

@@ -46,7 +46,7 @@
     "test:e2e": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=300000 \"./build/test/e2e/**/*.spec.js\""
   },
   "dependencies": {
-    "@appium/logger": "^2.0.0-rc.1",
+    "@appium/logger": "^3.0.0-beta.2",
     "asyncbox": "^6.0.1",
     "rimraf": "^6.0.1",
     "semver": "^7.0.0",
@@ -54,8 +54,8 @@
     "which": "^6.0.0"
   },
   "devDependencies": {
-    "@appium/tsconfig": "^1.2.0",
-    "@appium/types": "^1.0.0-rc.1",
+    "@appium/tsconfig": "^2.0.0-beta.1",
+    "@appium/types": "^2.0.0-beta.5",
     "@types/node": "^26.0.0",
     "@types/semver": "^7.7.1",
     "@types/sinon": "^22.0.0",
@@ -64,7 +64,7 @@
     "sinon": "^22.0.0"
   },
   "engines": {
-    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "npm": ">=10"
   }
 }
