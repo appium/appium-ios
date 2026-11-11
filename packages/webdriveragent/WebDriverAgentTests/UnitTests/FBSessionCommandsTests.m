@@ -174,10 +174,10 @@ static BOOL FBIsBoolean(id value)
   };
 }
 
-// Values that are not bundle identifiers: not a string, empty, or with a character Apple does not allow
+// Values that are not bundle identifiers: not a string, empty, or with a character outside the rule
 - (NSArray *)invalidBundleIds
 {
-  return @[NSNull.null, @42, @[@"com.apple.Preferences"], @"", @"com.example app", @"com.example_app", @"com.exämple.app"];
+  return @[NSNull.null, @42, @[@"com.apple.Preferences"], @"", @"com.example app", @"com.example/app", @"com.exämple.app"];
 }
 
 - (void)testAppCommandsRejectMissingOrInvalidBundleId
@@ -202,7 +202,7 @@ static BOOL FBIsBoolean(id value)
   NSDictionary<NSString *, id> *handlers = self.appHandlers;
   for (NSString *handler in handlers) {
     id expectedValue = handlers[handler];
-    for (NSString *bundleId in @[@"com.apple.Preferences", @"io.appium.Test-App2"]) {
+    for (NSString *bundleId in @[@"com.apple.Preferences", @"io.appium.Test-App2", @"com.example.wda_underscore_test"]) {
       FBAppsSessionDouble *session = [FBAppsSessionDouble new];
       RouteResponse *response = [self responseOf:NSSelectorFromString(handler)
                                        arguments:@{@"bundleId": bundleId}

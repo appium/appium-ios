@@ -32,9 +32,9 @@
 #import "XCUIApplicationProcessDelay.h"
 
 
-// The characters Apple allows in a bundle identifier: https://developer.apple.com/help/glossary/bundle-id
-static NSString *const FBBundleIdCharacters = @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
-static NSString *const FBBundleIdRule = @"a non-empty string of A-Z, a-z, 0-9, '-' and '.'";
+// The characters Apple allows in a bundle identifier (https://developer.apple.com/help/glossary/bundle-id), plus '_'
+static NSString *const FBBundleIdCharacters = @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._";
+static NSString *const FBBundleIdRule = @"a non-empty string of A-Z, a-z, 0-9, '-', '_' and '.'";
 
 /**
  Whether `bundleId` is a bundle identifier, or is absent where it is optional.
