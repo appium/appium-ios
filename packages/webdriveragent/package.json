@@ -1,6 +1,6 @@
 {
   "name": "appium-webdriveragent",
-  "version": "16.18.5",
+  "version": "17.0.0",
   "description": "Package bundling WebDriverAgent",
   "keywords": [
     "Appium",
@@ -9,7 +9,7 @@
     "WebDriverAgent",
     "iOS"
   ],
-  "homepage": "https://github.com/appium/appium-ios/tree/main/packages/webdriveragent",
+  "homepage": "https://appium.io",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
   },
@@ -69,13 +69,13 @@
     "teen_process": "^4.2.0"
   },
   "devDependencies": {
-    "@appium/coresim": "^1.15.1",
+    "@appium/coresim": "^2.0.0",
     "@appium/oxc-config": "^2.0.0-beta.2",
     "@appium/tsconfig": "^2.0.0-beta.1",
     "@appium/types": "^2.0.0-beta.5",
     "@types/node": "^26.0.0",
     "@types/sinon": "^22.0.2",
-    "appium-xcode": "^7.2.5",
+    "appium-xcode": "^8.0.0",
     "semver": "^7.3.7",
     "sinon": "^22.0.0"
   },

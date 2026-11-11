@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.0](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.2...node-devicectl@3.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **devicectl:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **devicectl:** add Appium 4 support ([453f8f2](https://github.com/appium/appium-ios/commit/453f8f2df7b16577def3d6bf4d96a213b815e0f3))
+
+
 ## [2.2.2](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.1...node-devicectl@2.2.2) (2026-10-26)
 
 ### Bug Fixes

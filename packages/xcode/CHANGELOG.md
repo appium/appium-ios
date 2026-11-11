@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [8.0.0](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.5...appium-xcode@8.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **xcode:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **xcode:** add Appium 4 support ([4b980a9](https://github.com/appium/appium-ios/commit/4b980a969b3dd753151f46a230004b9941ff966f))
+
+
 ## [7.2.5](https://github.com/appium/appium-ios/compare/appium-xcode@7.2.4...appium-xcode@7.2.5) (2026-11-07)
 
 ### Code Refactoring

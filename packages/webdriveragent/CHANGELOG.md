@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.5...appium-webdriveragent@17.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **webdriveragent:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **webdriveragent:** add Appium 4 support ([3d6a9e5](https://github.com/appium/appium-ios/commit/3d6a9e5e5a48e993658be16cdeeb8b157dbd5650))
+
+
 ## [16.18.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.4...appium-webdriveragent@16.18.5) (2026-11-10)
 
 ### Bug Fixes

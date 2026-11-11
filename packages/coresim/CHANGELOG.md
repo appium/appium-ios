@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.0](https://github.com/appium/appium-ios/compare/@appium/coresim@1.15.1...@appium/coresim@2.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **coresim:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **coresim:** add Appium 4 support ([4769498](https://github.com/appium/appium-ios/commit/47694981f144038a20fe7e59c708bec0559040dc))
+
+
 ## [1.15.1](https://github.com/appium/appium-ios/compare/@appium/coresim@1.15.0...@appium/coresim@1.15.1) (2026-11-07)
 
 ### Code Refactoring

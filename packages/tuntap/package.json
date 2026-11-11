@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-tuntap",
-  "version": "2.2.7",
+  "version": "3.0.0",
   "description": "Native TUN/TAP interface module for Node.js",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
@@ -60,5 +60,6 @@
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "npm": ">=10"
   },
-  "gypfile": true
+  "gypfile": true,
+  "homepage": "https://appium.io"
 }

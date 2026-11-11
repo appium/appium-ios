@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.0.0](https://github.com/appium/appium-ios/compare/node-simctl@9.2.0...node-simctl@10.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **simctl:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **simctl:** add Appium 4 support ([d1ace87](https://github.com/appium/appium-ios/commit/d1ace87b3cdec980616bfac69bb881b1be823745))
+
+
 ## 9.2.0 (2026-11-10)
 
 ### Features

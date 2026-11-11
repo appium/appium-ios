@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.10...appium-ios-remotexpc@6.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **remotexpc:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **remotexpc:** add Appium 4 support ([7bb7cda](https://github.com/appium/appium-ios/commit/7bb7cdaf0f902b91e0b5181fe9b505fe479372e8))
+
+
 ## [5.28.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.9...appium-ios-remotexpc@5.28.10) (2026-11-11)
 
 **Note:** Version bump only for package appium-ios-remotexpc

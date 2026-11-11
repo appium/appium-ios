@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.7...appium-ios-tuntap@3.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **tuntap:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **tuntap:** add Appium 4 support ([02e0193](https://github.com/appium/appium-ios/commit/02e019329862cefafbf85886a5f8841377464d7f))
+
+
 ## [2.2.7](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.6...appium-ios-tuntap@2.2.7) (2026-11-11)
 
 **Note:** Version bump only for package appium-ios-tuntap

@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.0.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.2...appium-ios-simulator@11.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **simulator:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **simulator:** add Appium 4 support ([8b4d8ec](https://github.com/appium/appium-ios/commit/8b4d8ecca5d4220db1f25f87fed54c9ceaeb56da))
+
+
 ## [10.11.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.1...appium-ios-simulator@10.11.2) (2026-11-07)
 
 ### Code Refactoring

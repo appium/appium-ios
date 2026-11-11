@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.0.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.1...appium-remote-debugger@19.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **remote-debugger:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **remote-debugger:** add Appium 4 support ([4b3d6f4](https://github.com/appium/appium-ios/commit/4b3d6f435599271c6364bd3dd5a88ab48e19dd5b))
+
+
 ## [18.1.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.0...appium-remote-debugger@18.1.1) (2026-11-11)
 
 **Note:** Version bump only for package appium-remote-debugger
