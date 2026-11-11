@@ -25,7 +25,7 @@ constexpr const char* kTunDevicePath = "/dev/net/tun";
 class LinuxTunBackend : public PosixTunBackend {
  public:
   bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) override {
-    struct stat statbuf {};
+    struct stat statbuf{};
     if (stat(kTunDevicePath, &statbuf) != 0) {
       error.sys_errno = errno;
       error.message =
@@ -44,7 +44,7 @@ class LinuxTunBackend : public PosixTunBackend {
       return false;
     }
 
-    struct ifreq ifr {};
+    struct ifreq ifr{};
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 

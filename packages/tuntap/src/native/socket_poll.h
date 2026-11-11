@@ -37,7 +37,7 @@ inline PollResult PollSocket(int fd, short events, std::chrono::steady_clock::ti
   WSAPOLLFD pfd{};
   pfd.fd = static_cast<SOCKET>(fd);
 #else
-  struct pollfd pfd {};
+  struct pollfd pfd{};
   pfd.fd = fd;
 #endif
   pfd.events = events;
