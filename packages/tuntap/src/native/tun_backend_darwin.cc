@@ -31,8 +31,8 @@ class DarwinTunBackend : public PosixTunBackend {
   static constexpr size_t kUtunHeaderSize = 4;
 
   bool OpenDevice(const std::string& requested_name, std::string& out_interface_name, TunError& error) override {
-    struct ctl_info ctl_info {};
-    struct sockaddr_ctl socket_addr {};
+    struct ctl_info ctl_info{};
+    struct sockaddr_ctl socket_addr{};
 
     FileDescriptor temp_fd(socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL));
     if (!temp_fd.is_valid()) {

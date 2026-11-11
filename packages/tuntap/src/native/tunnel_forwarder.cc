@@ -37,7 +37,7 @@ using TimePoint = Clock::time_point;
 // layer instead bridges its socket through a loopback listener and passes
 // that address here. See forwarder.ts bridgeToNative.
 bool ConnectRawTcp(const std::string& host, uint16_t port, int& fd, std::string& error) {
-  struct addrinfo hints {};
+  struct addrinfo hints{};
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = IPPROTO_TCP;
