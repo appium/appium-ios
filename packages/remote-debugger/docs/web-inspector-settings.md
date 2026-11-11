@@ -71,6 +71,12 @@ provide the accepted names and values for callers building their own input UI or
 validation. They describe this package's API, not the capabilities of a specific
 device. No capability-negotiation result is returned by the setter.
 
+The exported `validateWebInspectorPageSettings(settings)` function validates an
+`unknown` value without constructing a debugger, connecting to a device, or
+mutating the input. It returns `void` for valid input, throws `TypeError` for invalid
+input, and narrows the value to `WebInspectorPageSettings` in TypeScript. It uses
+the same validation as the constructor and setter; it does not check device support.
+
 ## When changes take effect
 
 Reload or navigate after changing document/resource-dependent page settings.
