@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [18.1.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.0...appium-remote-debugger@18.1.1) (2026-11-11)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
 ## [18.1.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.11...appium-remote-debugger@18.1.0) (2026-11-09)
 
 ### Features
