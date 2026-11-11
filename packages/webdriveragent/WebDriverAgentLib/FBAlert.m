@@ -72,6 +72,10 @@
 {
   if (!self.hasCachedAlertSnapshot) {
     XCUIElement *alertElement = self.alertElement;
+    // Alert detection may already cache a narrower subtree (e.g. a Safari dialog).
+    if (self.hasCachedAlertSnapshot) {
+      return self.cachedAlertSnapshot;
+    }
     self.cachedAlertSnapshot = nil == alertElement
       ? nil
       : (alertElement.fb_cachedSnapshot ?: [alertElement fb_customSnapshot]);
