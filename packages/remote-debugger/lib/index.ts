@@ -43,7 +43,12 @@ export type {
   LocatorStrategy,
 };
 
-export {PAGE_SETTING_NAMES, USER_PREFERENCE_VALUES, WEB_INSPECTOR_SETTING_KEYS} from './page-overrides.js';
+export {
+  PAGE_SETTING_NAMES,
+  USER_PREFERENCE_VALUES,
+  WEB_INSPECTOR_SETTING_KEYS,
+  validateWebInspectorPageSettings,
+} from './page-overrides.js';
 export type {
   PageSettingName,
   PageSettings,
