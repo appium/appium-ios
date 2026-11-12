@@ -31,7 +31,7 @@
     "ci": "npm ci",
     "clean": "run-s clean:distfiles clean:workspaces",
     "clean:deps": "lerna clean --yes",
-    "clean:distfiles": "npx rimraf --glob \"./packages/*/build\" \"./packages/*/**/.tsconfig.tsbuildinfo\"",
+    "clean:distfiles": "node -e \"for await (const p of fs.promises.glob(['packages/*/build', 'packages/*/**/.tsconfig.tsbuildinfo'])) fs.rmSync(p, {recursive: true, force: true})\"",
     "clean:workspaces": "lerna run clean",
     "format": "oxfmt -c oxfmt.config.mjs .",
     "format:check": "oxfmt -c oxfmt.config.mjs --check .",
@@ -55,7 +55,6 @@
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "lerna": "^10.0.1",
     "npm-run-all2": "^9.0.3",
-    "rimraf": "^6.1.3",
     "sync-monorepo-packages": "^2.0.0",
     "typescript": "^6.0.3"
   },

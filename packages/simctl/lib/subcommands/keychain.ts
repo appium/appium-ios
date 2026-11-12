@@ -3,8 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {rimraf} from 'rimraf';
-
 import type {Simctl} from '../simctl.js';
 import type {CertOptions} from '../types.js';
 
@@ -89,6 +87,6 @@ async function handleRawPayload(
     }
     await onPayloadStored(filePath);
   } finally {
-    await rimraf(filePath);
+    await fs.rm(filePath, {recursive: true, force: true});
   }
 }
