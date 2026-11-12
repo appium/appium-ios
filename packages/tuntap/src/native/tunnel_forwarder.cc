@@ -323,10 +323,11 @@ void TunnelForwarder::Fail(const std::string& reason) {
   }
 }
 
-bool TunnelForwarder::Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem, std::string& error) {
+bool TunnelForwarder::Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem,
+                              const std::string& device_cert_pem, std::string& error) {
   Stop();
   std::scoped_lock op_lock(session_op_mutex_);
-  return ssl_.Connect(tcp_fd, cert_pem, key_pem, kTunnelHandshakeTimeoutMs, error);
+  return ssl_.Connect(tcp_fd, cert_pem, key_pem, device_cert_pem, kTunnelHandshakeTimeoutMs, error);
 }
 
 bool TunnelForwarder::ConnectPsk(int tcp_fd, const uint8_t* psk, size_t psk_len, const std::string& identity,
@@ -881,9 +882,10 @@ class TunnelForwarderWrap : public Napi::ObjectWrap<TunnelForwarderWrap> {
     return deferred.Promise();
   }
 
-  ConnectWorker::Connect LockdownConnect(std::string cert_pem, std::string key_pem) {
-    return [this, cert_pem = std::move(cert_pem), key_pem = std::move(key_pem)](int fd, std::string& error) {
-      return forwarder_.Connect(fd, cert_pem, key_pem, error);
+  ConnectWorker::Connect LockdownConnect(std::string cert_pem, std::string key_pem, std::string device_cert_pem) {
+    return [this, cert_pem = std::move(cert_pem), key_pem = std::move(key_pem),
+            device_cert_pem = std::move(device_cert_pem)](int fd, std::string& error) {
+      return forwarder_.Connect(fd, cert_pem, key_pem, device_cert_pem, error);
     };
   }
 
@@ -896,8 +898,8 @@ class TunnelForwarderWrap : public Napi::ObjectWrap<TunnelForwarderWrap> {
 
   Napi::Value Connect(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    if (info.Length() < 3 || !info[0].IsNumber() || !info[1].IsString() || !info[2].IsString()) {
-      Napi::TypeError::New(env, "Expected (tcpFd, certPem, keyPem)").ThrowAsJavaScriptException();
+    if (info.Length() < 4 || !info[0].IsNumber() || !info[1].IsString() || !info[2].IsString() || !info[3].IsString()) {
+      Napi::TypeError::New(env, "Expected (tcpFd, certPem, keyPem, deviceCertPem)").ThrowAsJavaScriptException();
       return env.Undefined();
     }
 
@@ -907,9 +909,9 @@ class TunnelForwarderWrap : public Napi::ObjectWrap<TunnelForwarderWrap> {
       Napi::Error::New(env, error).ThrowAsJavaScriptException();
       return env.Undefined();
     }
-    return QueueConnect(
-        info, DialOwnedFd(fd),
-        LockdownConnect(info[1].As<Napi::String>().Utf8Value(), info[2].As<Napi::String>().Utf8Value()));
+    return QueueConnect(info, DialOwnedFd(fd),
+                        LockdownConnect(info[1].As<Napi::String>().Utf8Value(), info[2].As<Napi::String>().Utf8Value(),
+                                        info[3].As<Napi::String>().Utf8Value()));
   }
 
   // Only touches `forwarder_` inside the #ifdef _WIN32 branch below, so on
@@ -918,17 +920,18 @@ class TunnelForwarderWrap : public Napi::ObjectWrap<TunnelForwarderWrap> {
   // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
   Napi::Value ConnectHost(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    if (info.Length() < 4 || !info[0].IsString() || !info[1].IsNumber() || !info[2].IsString() || !info[3].IsString()) {
-      Napi::TypeError::New(env, "Expected (host, port, certPem, keyPem)").ThrowAsJavaScriptException();
+    if (info.Length() < 5 || !info[0].IsString() || !info[1].IsNumber() || !info[2].IsString() || !info[3].IsString() ||
+        !info[4].IsString()) {
+      Napi::TypeError::New(env, "Expected (host, port, certPem, keyPem, deviceCertPem)").ThrowAsJavaScriptException();
       return env.Undefined();
     }
 
 #ifdef _WIN32
-    return QueueConnect(
-        info,
-        DialHost(info[0].As<Napi::String>().Utf8Value(),
-                 static_cast<uint16_t>(info[1].As<Napi::Number>().Uint32Value())),
-        LockdownConnect(info[2].As<Napi::String>().Utf8Value(), info[3].As<Napi::String>().Utf8Value()));
+    return QueueConnect(info,
+                        DialHost(info[0].As<Napi::String>().Utf8Value(),
+                                 static_cast<uint16_t>(info[1].As<Napi::Number>().Uint32Value())),
+                        LockdownConnect(info[2].As<Napi::String>().Utf8Value(), info[3].As<Napi::String>().Utf8Value(),
+                                        info[4].As<Napi::String>().Utf8Value()));
 #else
     Napi::Error::New(env, "connectHost is only supported on Windows").ThrowAsJavaScriptException();
     return env.Undefined();

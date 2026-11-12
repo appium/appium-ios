@@ -60,6 +60,34 @@ bool LoadPem(SSL_CTX* ctx, const std::string& pem, bool is_cert, std::string& er
   return true;
 }
 
+/** Parses a PEM certificate the caller then owns; null when `pem` does not hold one. */
+X509* ParseCertificatePem(const std::string& pem) {
+  BIO* bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
+  X509* cert = bio == nullptr ? nullptr : PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+  BIO_free(bio);
+  return cert;
+}
+
+/**
+ * Certificate verification of the lockdown tunnel: accepts the peer only when it presents exactly
+ * the `pinned` device certificate of the pair record. OpenSSL calls it while it processes the
+ * server Certificate message, so a mismatch aborts the handshake before the host certificate is
+ * sent.
+ *
+ * The chain is not validated: lockdown certificates have an empty subject and issuer, so OpenSSL
+ * takes the device certificate for a self-signed one and refuses it even when the pair record's
+ * root certificate is trusted. The handshake proves the peer holds the private key of the
+ * certificate it presents, and the exact match authenticates the device.
+ */
+int VerifyPinnedCertificate(X509_STORE_CTX* store_ctx, void* pinned) {
+  X509* presented = X509_STORE_CTX_get0_cert(store_ctx);
+  if (presented != nullptr && X509_cmp(presented, static_cast<X509*>(pinned)) == 0) {
+    return 1;
+  }
+  X509_STORE_CTX_set_error(store_ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+  return 0;
+}
+
 void SetNonBlockingFd(int fd) {
 #ifdef _WIN32
   u_long mode = 1;
@@ -207,8 +235,8 @@ bool TunnelSslClient::ConnectTls(int timeout_ms, std::string& error) {
   }
 }
 
-bool TunnelSslClient::Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem, int timeout_ms,
-                              std::string& error) {
+bool TunnelSslClient::Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem,
+                              const std::string& device_cert_pem, int timeout_ms, std::string& error) {
   Close();
   if (tcp_fd < 0) {
     error = "Invalid TCP file descriptor";
@@ -225,8 +253,17 @@ bool TunnelSslClient::Connect(int tcp_fd, const std::string& cert_pem, const std
   }
 #endif
 
+  if (!device_cert_pem.empty()) {
+    device_cert_ = ParseCertificatePem(device_cert_pem);
+    if (device_cert_ == nullptr) {
+      error = "Failed to load device certificate PEM";
+      return false;
+    }
+  }
+
   owned_fd_ = AcquireOwnedFd(tcp_fd, error);
   if (owned_fd_ < 0) {
+    Close();
     return false;
   }
   SetNonBlockingFd(owned_fd_);
@@ -240,7 +277,12 @@ bool TunnelSslClient::Connect(int tcp_fd, const std::string& cert_pem, const std
 
   SSL_CTX_set_min_proto_version(ctx_, TLS1_2_VERSION);
   SSL_CTX_set_max_proto_version(ctx_, TLS1_2_VERSION);
-  SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);
+  if (device_cert_ == nullptr) {
+    SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);
+  } else {
+    SSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER, nullptr);
+    SSL_CTX_set_cert_verify_callback(ctx_, &VerifyPinnedCertificate, device_cert_);
+  }
 
   if (!LoadPem(ctx_, cert_pem, true, error) || !LoadPem(ctx_, key_pem, false, error)) {
     Close();
@@ -261,6 +303,9 @@ bool TunnelSslClient::Connect(int tcp_fd, const std::string& cert_pem, const std
 
   SSL_set_fd(ssl_, owned_fd_);
   if (!ConnectTls(timeout_ms, error)) {
+    if (device_cert_ != nullptr && SSL_get_verify_result(ssl_) != X509_V_OK) {
+      error = "The device presented a TLS certificate that does not match the device certificate of its pair record";
+    }
     Close();
     return false;
   }
@@ -342,6 +387,8 @@ void TunnelSslClient::Close() {
     SSL_CTX_free(ctx_);
     ctx_ = nullptr;
   }
+  X509_free(device_cert_);
+  device_cert_ = nullptr;
   if (owned_fd_ >= 0) {
     ReleaseOwnedFd(owned_fd_);
     owned_fd_ = -1;
