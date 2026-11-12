@@ -76,6 +76,19 @@ describe('LockdownService automatic TLS upgrade', function () {
     }
   });
 
+  it('fails when the pair record cannot authenticate the device', async function () {
+    storedPairRecord = {...PAIR_RECORD, DeviceCertificate: null};
+    sinon.stub(LockdownService.prototype, 'startSession').resolves({sessionID: '1', enableSessionSSL: true});
+    const socket = new net.Socket();
+    const lockdown = new LockdownService(socket, UDID);
+
+    try {
+      await assert.rejects(lockdown.waitForTLSUpgrade(), /has no DeviceCertificate/);
+    } finally {
+      socket.destroy();
+    }
+  });
+
   it('stays in plain text only when the device has no pair record', async function () {
     storedPairRecord = null;
     const startSession = sinon.stub(LockdownService.prototype, 'startSession');

@@ -4,7 +4,7 @@ import net from 'node:net';
 import {after, before, describe, it} from 'node:test';
 import tls from 'node:tls';
 
-import {pairRecordTlsOptions, upgradeSocketToTLS} from '../../../src/lib/lockdown/index.js';
+import {LockdownError, pairRecordTlsOptions, upgradeSocketToTLS} from '../../../src/lib/lockdown/index.js';
 import {DEVICE_CERT, DEVICE_KEY, OTHER_CERT, OTHER_KEY, PAIR_RECORD} from '../../helpers/tls-certificates.js';
 
 describe('upgradeSocketToTLS device certificate pinning', function () {
@@ -90,10 +90,10 @@ describe('pairRecordTlsOptions', function () {
     });
   });
 
-  it('pins nothing when the pair record has no device certificate', function () {
-    assert.deepEqual(pairRecordTlsOptions({...PAIR_RECORD, DeviceCertificate: null}), {
-      cert: OTHER_CERT,
-      key: OTHER_KEY,
-    });
+  it('refuses a pair record without a device certificate', function () {
+    assert.throws(
+      () => pairRecordTlsOptions({...PAIR_RECORD, DeviceCertificate: null}),
+      (err: Error) => err instanceof LockdownError && /has no DeviceCertificate/.test(err.message),
+    );
   });
 });

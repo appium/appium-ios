@@ -256,7 +256,7 @@ class DeviceManager {
   }
 
   /**
-   * Reads pair record for a device
+   * Finds the pair record for a device, or null if it is not paired
    * @returns The pair record, or null if the device is not paired with this host
    */
   async findPairRecord(udid: string): Promise<PairRecord | null> {
@@ -709,9 +709,8 @@ export async function createLockdownServiceByUDID(
 
 /**
  * Builds the TLS options of a lockdown connection from a pair record: the host identity to present
- * and, when the record has one, the device certificate to pin. A record without it gives options
- * with no pin and logs a warning.
- * @throws LockdownError if the pair record lacks the host certificate or its key
+ * and the device certificate to pin.
+ * @throws LockdownError if the pair record lacks the host certificate, its key or the device certificate
  */
 export function pairRecordTlsOptions(pairRecord: PairRecord): LockdownTlsOptions {
   const {HostCertificate, HostPrivateKey, DeviceCertificate} = pairRecord;
@@ -719,11 +718,10 @@ export function pairRecordTlsOptions(pairRecord: PairRecord): LockdownTlsOptions
     throw new LockdownError('Pair record missing TLS certificate or key');
   }
   if (!DeviceCertificate) {
-    log.warn(
-      'The pair record has no DeviceCertificate, so the lockdown TLS session does not authenticate the device. ' +
+    throw new LockdownError(
+      'Pair record has no DeviceCertificate, so the device cannot be authenticated. ' +
         'Pair the device again to get a complete record.',
     );
-    return {cert: HostCertificate, key: HostPrivateKey};
   }
   return {cert: HostCertificate, key: HostPrivateKey, deviceCertificate: DeviceCertificate};
 }
