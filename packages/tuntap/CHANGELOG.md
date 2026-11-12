@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.1](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.0...appium-ios-tuntap@3.0.1) (2026-11-12)
+
+**Note:** Version bump only for package appium-ios-tuntap
+
+
+
+
+
 ## [3.0.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.7...appium-ios-tuntap@3.0.0) (2026-11-11)
 
 ### ⚠ BREAKING CHANGES
