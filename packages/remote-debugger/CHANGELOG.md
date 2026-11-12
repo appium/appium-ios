@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.0.0...appium-remote-debugger@19.1.0) (2026-11-12)
+
+### Features
+
+* **remote-debugger:** export Web Inspector settings validator ([#188](https://github.com/appium/appium-ios/issues/188)) ([a159684](https://github.com/appium/appium-ios/commit/a1596846f3d9b8fd102d5fa144681663ea6c735c))
+
+
 ## [19.0.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.1...appium-remote-debugger@19.0.0) (2026-11-11)
 
 ### ⚠ BREAKING CHANGES

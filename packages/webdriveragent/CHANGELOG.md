@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.0...appium-webdriveragent@17.0.1) (2026-11-12)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve detected Safari alert snapshot ([#187](https://github.com/appium/appium-ios/issues/187)) ([a5d3dbb](https://github.com/appium/appium-ios/commit/a5d3dbb9b25fbc5ec5620127e876feae6abed806))
+
+
 ## [17.0.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.5...appium-webdriveragent@17.0.0) (2026-11-11)
 
 ### ⚠ BREAKING CHANGES
