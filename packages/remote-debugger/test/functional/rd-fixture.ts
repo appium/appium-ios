@@ -176,7 +176,7 @@ export function useRemoteDebuggerFixture(options: RemoteDebuggerOptions = {}): R
     // two tests navigating to the exact same `address()` can see the previous test's DOM state
     // leak through (observed: a checkbox left checked by one test starts already-checked in the
     // next, so clicking it toggles it back off). A unique query string per navigation defeats
-    // that reuse; `serve-static` ignores the query when resolving which file to serve.
+    // that reuse; the test server ignores the query when resolving which file to serve.
     freshUrl: () => `${address}?_t=${++navigationCounter}`,
     async selectTestPage(): Promise<void> {
       // Safari's reported app/page dictionary can briefly churn (e.g. right after a previous
