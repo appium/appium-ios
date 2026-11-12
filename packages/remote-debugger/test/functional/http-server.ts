@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {logger, node} from '@appium/support';
+import mimeTypes from 'mime-types';
 
 const FIXTURES_DIR = path.resolve(
   node.getModuleRootSync('appium-remote-debugger', fileURLToPath(import.meta.url))!,
@@ -12,10 +13,6 @@ const FIXTURES_DIR = path.resolve(
 );
 
 const HTML_DIR = path.join(FIXTURES_DIR, 'html');
-const CONTENT_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.svg': 'image/svg+xml',
-};
 
 function sendResponse(res: http.ServerResponse, status: number, body: string | Buffer, type: string): void {
   res.writeHead(status, {'content-type': type});
@@ -31,7 +28,7 @@ async function serveFixture(req: http.IncomingMessage, res: http.ServerResponse)
     return sendResponse(res, 403, http.STATUS_CODES[403]!, 'text/plain; charset=utf-8');
   }
   try {
-    const type = CONTENT_TYPES[path.extname(filePath)] ?? 'application/octet-stream';
+    const type = mimeTypes.contentType(path.extname(filePath)) || 'application/octet-stream';
     sendResponse(res, 200, await fs.readFile(filePath), type);
   } catch {
     sendResponse(res, 404, http.STATUS_CODES[404]!, 'text/plain; charset=utf-8');
