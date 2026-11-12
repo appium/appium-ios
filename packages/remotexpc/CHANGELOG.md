@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.2...appium-ios-remotexpc@6.0.3) (2026-11-12)
+
+### Bug Fixes
+
+* **remotexpc:** pin device certificate in lockdown TLS and fail closed ([#182](https://github.com/appium/appium-ios/issues/182)) ([e85c1a7](https://github.com/appium/appium-ios/commit/e85c1a7e77ab3b144e641f5e9ee50ebacb0ca911))
+
+
 ## [6.0.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.1...appium-ios-remotexpc@6.0.2) (2026-11-12)
 
 ### Bug Fixes
