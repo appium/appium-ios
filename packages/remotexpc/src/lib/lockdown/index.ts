@@ -1,3 +1,4 @@
+import {X509Certificate} from 'node:crypto';
 import type {Socket} from 'node:net';
 import tls, {type ConnectionOptions, type TLSSocket} from 'node:tls';
 
@@ -66,10 +67,14 @@ interface GetValueResponse {
   [key: string]: PlistValue | undefined;
 }
 
-interface TLSConfig {
-  cert: string;
-  key: string;
-}
+/** TLS options for a lockdown connection, with the certificate the device has to present when it is known. */
+export type LockdownTlsOptions = Partial<ConnectionOptions> & {
+  /**
+   * PEM `DeviceCertificate` from the pair record. When set, the upgrade fails unless the device
+   * presents exactly it. Without it the device is not authenticated.
+   */
+  deviceCertificate?: string;
+};
 
 // Error classes for better error handling
 export class LockdownError extends Error {
@@ -124,13 +129,21 @@ class DeviceNotFoundError extends Error {
 // TLS Manager for handling TLS operations
 class TLSManager {
   /**
-   * Upgrades a socket to TLS
+   * Upgrades a socket to TLS and, when `tlsOptions.deviceCertificate` is set, authenticates the device
+   * by that pinned certificate. Chain validation stays off because lockdown certificates have an empty
+   * subject and issuer, so OpenSSL takes the device certificate for a self-signed one and refuses it
+   * even when the pair record's root certificate is trusted. The handshake still proves the peer holds
+   * the private key of the certificate it presents, so an exact match with the pair record's
+   * `DeviceCertificate` is what authenticates the device. The match is checked once the handshake has
+   * finished, because the Node TLS client cannot reject a peer certificate earlier.
+   * @throws TLSUpgradeError if the handshake fails or the device presents a different certificate
    */
   async upgradeSocketToTLS(
     socket: Socket,
-    tlsOptions: Partial<ConnectionOptions> = {},
+    tlsOptions: LockdownTlsOptions,
     timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
   ): Promise<TLSSocket> {
+    const {deviceCertificate, ...connectionOptions} = tlsOptions;
     return new Promise((resolve, reject) => {
       socket.pause();
       tlsManagerLog.debug('Upgrading socket to TLS...');
@@ -138,15 +151,25 @@ class TLSManager {
       let timer: NodeJS.Timeout | undefined;
       let secure: TLSSocket;
       try {
+        const pinnedCertificate = deviceCertificate ? new X509Certificate(deviceCertificate) : undefined;
         secure = tls.connect(
           {
             socket,
             rejectUnauthorized: false,
             minVersion: 'TLSv1.2',
-            ...tlsOptions,
+            ...connectionOptions,
           },
           () => {
             clearTimeout(timer);
+            if (pinnedCertificate && !secure.getPeerX509Certificate()?.raw.equals(pinnedCertificate.raw)) {
+              secure.destroy();
+              reject(
+                new TLSUpgradeError(
+                  'The device presented a TLS certificate that does not match the DeviceCertificate of its pair record',
+                ),
+              );
+              return;
+            }
             tlsManagerLog.info('TLS handshake completed');
             resolve(secure);
           },
@@ -220,19 +243,29 @@ class DeviceManager {
 
   /**
    * Reads pair record for a device
+   * @throws LockdownError if the device has no pair record or it lacks the host certificate or key
    */
   async readPairRecord(udid: string): Promise<PairRecord> {
+    const record = await this.findPairRecord(udid);
+    if (!record?.HostCertificate || !record.HostPrivateKey) {
+      const err = new LockdownError('Pair record missing certificate or key');
+      deviceManagerLog.error(`Error getting pair record: ${err}`);
+      throw err;
+    }
+    return record;
+  }
+
+  /**
+   * Finds the pair record for a device, or null if it is not paired
+   * @returns The pair record, or null if the device is not paired with this host
+   */
+  async findPairRecord(udid: string): Promise<PairRecord | null> {
     deviceManagerLog.debug(`Retrieving pair record for UDID: ${udid}`);
     const usbmux = await createUsbmux();
 
     try {
       const record = await usbmux.readPairRecord(udid);
-
-      if (!record?.HostCertificate || !record.HostPrivateKey) {
-        throw new LockdownError('Pair record missing certificate or key');
-      }
-
-      deviceManagerLog.info('Pair record retrieved successfully');
+      deviceManagerLog.info(record ? 'Pair record retrieved successfully' : 'No pair record found');
       return record;
     } catch (err) {
       deviceManagerLog.error(`Error getting pair record: ${err}`);
@@ -257,6 +290,7 @@ export class LockdownService extends BasePlistService {
   private tlsService?: PlistService;
   private isTLS = false;
   private tlsUpgradePromise?: Promise<void>;
+  private tlsUpgradeError?: Error;
   private _relayService?: RelayService;
   private readonly tlsManager = new TLSManager();
   private readonly deviceManager = new DeviceManager();
@@ -271,8 +305,7 @@ export class LockdownService extends BasePlistService {
         try {
           await this.tryUpgradeToTLS();
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          log.warn(`Auto TLS upgrade failed: ${message}`);
+          this.tlsUpgradeError = err instanceof Error ? err : new Error(String(err));
         }
       })();
     }
@@ -307,8 +340,9 @@ export class LockdownService extends BasePlistService {
   }
 
   /**
-   * Starts a session using the given pair record and upgrades the connection to TLS when the
-   * device asks for it. Unlike the auto-secure constructor path, every failure is thrown.
+   * Starts a session using the given pair record and upgrades the connection to TLS.
+   * @throws LockdownError if the pair record is incomplete or the device does not enable TLS for the
+   * session, so a paired session never continues in plain text
    */
   async startSecureSession(pairRecord: PairRecord): Promise<void> {
     if (!this.validatePairRecord(pairRecord)) {
@@ -317,9 +351,10 @@ export class LockdownService extends BasePlistService {
       );
     }
     const sessionInfo = await this.startSession(pairRecord.HostID as string, pairRecord.SystemBUID as string);
-    if (sessionInfo.enableSessionSSL) {
-      await this.performTLSUpgrade(pairRecord);
+    if (!sessionInfo.enableSessionSSL) {
+      throw new LockdownError(`The device ${this.udid} did not enable TLS for a paired lockdown session`);
     }
+    await this.performTLSUpgrade(pairRecord);
   }
 
   /**
@@ -342,30 +377,17 @@ export class LockdownService extends BasePlistService {
   }
 
   /**
-   * Attempts to upgrade the connection to TLS
+   * Upgrades the connection to TLS when the device is paired. Only a device without a pair record
+   * stays in plain text. With a pair record every failure is thrown.
    */
   async tryUpgradeToTLS(): Promise<void> {
     try {
-      const pairRecord = await this.deviceManager.readPairRecord(this.udid);
-
-      if (!this.validatePairRecord(pairRecord)) {
-        log.warn('Invalid pair record for TLS upgrade');
+      const pairRecord = await this.deviceManager.findPairRecord(this.udid);
+      if (!pairRecord) {
+        log.info(`No pair record for ${this.udid}. Continuing unencrypted.`);
         return;
       }
-      const {HostID, SystemBUID} = pairRecord;
-      if (!HostID || !SystemBUID) {
-        log.warn('Pair record is missing HostID or SystemBUID');
-        return;
-      }
-
-      const sessionInfo = await this.startSession(HostID, SystemBUID);
-
-      if (!sessionInfo.enableSessionSSL) {
-        log.info('Device did not request TLS upgrade. Continuing unencrypted.');
-        return;
-      }
-
-      await this.performTLSUpgrade(pairRecord);
+      await this.startSecureSession(pairRecord);
     } catch (err) {
       log.error(`TLS upgrade failed: ${err}`);
       throw err;
@@ -484,10 +506,12 @@ export class LockdownService extends BasePlistService {
 
   /**
    * Waits for TLS upgrade to complete if in progress
+   * @throws The TLS upgrade failure, if the automatic upgrade of a paired device failed
    */
   public async waitForTLSUpgrade(): Promise<void> {
-    if (this.tlsUpgradePromise) {
-      await this.tlsUpgradePromise;
+    await this.tlsUpgradePromise;
+    if (this.tlsUpgradeError) {
+      throw this.tlsUpgradeError;
     }
   }
 
@@ -550,17 +574,10 @@ export class LockdownService extends BasePlistService {
   }
 
   private async performTLSUpgrade(pairRecord: PairRecord): Promise<void> {
-    const {HostCertificate, HostPrivateKey} = pairRecord;
-    if (!HostCertificate || !HostPrivateKey) {
-      throw new LockdownError('Pair record missing TLS certificate or key');
-    }
-
-    const tlsConfig: TLSConfig = {
-      cert: HostCertificate,
-      key: HostPrivateKey,
-    };
-
-    const tlsSocket = await this.tlsManager.upgradeSocketToTLS(this.getSocket() as Socket, tlsConfig);
+    const tlsSocket = await this.tlsManager.upgradeSocketToTLS(
+      this.getSocket() as Socket,
+      pairRecordTlsOptions(pairRecord),
+    );
 
     this.tlsService = new PlistService(tlsSocket);
     this.isTLS = true;
@@ -582,6 +599,9 @@ export class LockdownServiceFactory {
 
   /**
    * Creates a LockdownService for a specific device UDID
+   * @throws If the device is not found, the relay cannot be reached or the automatic TLS upgrade of a
+   * paired device fails. The lockdown socket is destroyed before the relay is stopped, because the
+   * relay server only finishes closing once its connections are gone.
    */
   async createByUDID(udid: string, port = DEFAULT_LOCKDOWN_PORT, autoSecure = true): Promise<LockdownServiceInfo> {
     log.info(`Creating LockdownService for UDID: ${udid}`);
@@ -594,9 +614,10 @@ export class LockdownServiceFactory {
     await relay.start();
 
     let service: LockdownService | undefined;
+    let socket: Socket | undefined;
     try {
       // Connect through the relay
-      const socket = await relay.connect();
+      socket = await relay.connect();
       log.debug('Socket connected, creating LockdownService');
 
       // Create the lockdown service
@@ -613,6 +634,7 @@ export class LockdownServiceFactory {
     } catch (err) {
       // Clean up relay on error. Route directly through `relay` (not `service`), since
       // `service` is still undefined if relay.connect() itself is what failed.
+      socket?.destroy();
       await relay.stop().catch((stopErr) => {
         log.error(`Error stopping relay after failure: ${stopErr}`);
       });
@@ -686,11 +708,31 @@ export async function createLockdownServiceByUDID(
 }
 
 /**
+ * Builds the TLS options of a lockdown connection from a pair record: the host identity to present
+ * and the device certificate to pin.
+ * @throws LockdownError if the pair record lacks the host certificate, its key or the device certificate
+ */
+export function pairRecordTlsOptions(pairRecord: PairRecord): LockdownTlsOptions {
+  const {HostCertificate, HostPrivateKey, DeviceCertificate} = pairRecord;
+  if (!HostCertificate || !HostPrivateKey) {
+    throw new LockdownError('Pair record missing TLS certificate or key');
+  }
+  if (!DeviceCertificate) {
+    throw new LockdownError(
+      'Pair record has no DeviceCertificate, so the device cannot be authenticated. ' +
+        'Pair the device again to get a complete record.',
+    );
+  }
+  return {cert: HostCertificate, key: HostPrivateKey, deviceCertificate: DeviceCertificate};
+}
+
+/**
  * Upgrade an existing socket connection to TLS using Lockdown-compatible options.
+ * When `tlsOptions.deviceCertificate` is set, the device has to present it.
  */
 export function upgradeSocketToTLS(
   socket: Socket,
-  tlsOptions: Partial<ConnectionOptions> = {},
+  tlsOptions: LockdownTlsOptions,
   timeoutMs = TLS_HANDSHAKE_TIMEOUT_MS,
 ): Promise<TLSSocket> {
   const tlsManager = new TLSManager();

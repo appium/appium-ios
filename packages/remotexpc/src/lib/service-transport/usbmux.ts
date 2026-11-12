@@ -1,7 +1,7 @@
 import type net from 'node:net';
 
 import {ServiceConnection, type ServiceConnectionOptions} from '../../service-connection.js';
-import {openLockdownSession, upgradeSocketToTLS} from '../lockdown/index.js';
+import {openLockdownSession, pairRecordTlsOptions, upgradeSocketToTLS} from '../lockdown/index.js';
 import {getLogger} from '../logger.js';
 import type {PlistDictionary} from '../types.js';
 import {createUsbmux} from '../usbmux/index.js';
@@ -78,10 +78,7 @@ export class UsbmuxServiceTransport {
     }
     try {
       if (started.enableServiceSSL) {
-        socket = await upgradeSocketToTLS(socket, {
-          cert: pairRecord.HostCertificate as string,
-          key: pairRecord.HostPrivateKey as string,
-        });
+        socket = await upgradeSocketToTLS(socket, pairRecordTlsOptions(pairRecord));
       }
     } catch (err) {
       socket.destroy();
