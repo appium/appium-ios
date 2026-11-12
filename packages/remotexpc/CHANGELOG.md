@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.3...appium-ios-remotexpc@6.0.4) (2026-11-12)
+
+### Miscellaneous Chores
+
+* drop rimraf dependency in favor of node:fs ([#192](https://github.com/appium/appium-ios/issues/192)) ([7416dbf](https://github.com/appium/appium-ios/commit/7416dbff1108df8bf8e1e8b5192d05302efa0db8))
+
+
 ## [6.0.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.2...appium-ios-remotexpc@6.0.3) (2026-11-12)
 
 ### Bug Fixes

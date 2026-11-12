@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.0.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.1...appium-ios-simulator@11.0.2) (2026-11-12)
+
+### Miscellaneous Chores
+
+* **simulator:** drop unused pem dependency ([#191](https://github.com/appium/appium-ios/issues/191)) ([e84f40f](https://github.com/appium/appium-ios/commit/e84f40fb8e15c69ac599944d3283dd4a843addc2))
+
+
 ## [11.0.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.0...appium-ios-simulator@11.0.1) (2026-11-12)
 
 **Note:** Version bump only for package appium-ios-simulator

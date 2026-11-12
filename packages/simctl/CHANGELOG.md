@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.0.2](https://github.com/appium/appium-ios/compare/node-simctl@10.0.1...node-simctl@10.0.2) (2026-11-12)
+
+### Miscellaneous Chores
+
+* drop rimraf dependency in favor of node:fs ([#192](https://github.com/appium/appium-ios/issues/192)) ([7416dbf](https://github.com/appium/appium-ios/commit/7416dbff1108df8bf8e1e8b5192d05302efa0db8))
+
+
 ## [10.0.1](https://github.com/appium/appium-ios/compare/node-simctl@10.0.0...node-simctl@10.0.1) (2026-11-12)
 
 **Note:** Version bump only for package node-simctl
