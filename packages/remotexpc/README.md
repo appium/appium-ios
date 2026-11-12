@@ -139,14 +139,14 @@ import {
 const { lockdownService, device } = await createLockdownServiceByUDID(udid);
 
 // Start CoreDeviceProxy (raw TCP; TLS handled in native forwarder)
-const { socket, cert, key } = await startCoreDeviceProxyTcp(
+const { socket, cert, key, deviceCert } = await startCoreDeviceProxyTcp(
   lockdownService,
   device.DeviceID,
   device.Properties.SerialNumber,
 );
 
 // Create tunnel using tuntap
-const tunnel = await TunnelManager.getTunnel(socket, { cert, key });
+const tunnel = await TunnelManager.getTunnel(socket, { cert, key, deviceCert });
 console.log(`Tunnel created at ${tunnel.Address} with RSD port ${tunnel.RsdPort}`);
 
 // Discover RSD services (concurrent calls for the same device are coalesced;

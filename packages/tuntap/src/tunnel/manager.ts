@@ -133,8 +133,9 @@ export class TunnelManager {
 /**
  * End-to-end setup with native OpenSSL forwarding over lockdown client-cert TLS.
  *
- * Pass a **plain TCP** CoreDeviceProxy socket and lockdown host cert/key PEM — do not
- * upgrade to Node `TLSSocket` first.
+ * Pass a **plain TCP** CoreDeviceProxy socket and the lockdown host cert/key and device
+ * certificate PEM — do not upgrade to Node `TLSSocket` first. When `credentials.deviceCert` is
+ * set, the device is authenticated by an exact match of its certificate with it.
  */
 export async function connectToTunnelLockdown(
   tcpSocket: Socket,
