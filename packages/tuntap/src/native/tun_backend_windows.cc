@@ -2,7 +2,11 @@
 
 #include "tun_backend.h"
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <iphlpapi.h>
+#include <netioapi.h>
 
 #include <atomic>
 #include <cerrno>
@@ -27,6 +31,28 @@ std::wstring BuildDefaultAdapterName() {
   std::wostringstream oss;
   oss << L"appium-tun" << ::GetCurrentProcessId() << L"-" << ::GetTickCount();
   return oss.str();
+}
+
+bool ReadStatsForLuid(const NET_LUID& luid, TunInterfaceStats& out, std::string& error) {
+  MIB_IF_ROW2 row{};
+  row.InterfaceLuid = luid;
+
+  DWORD status = ::GetIfEntry2(&row);
+  if (status != NO_ERROR) {
+    error = "GetIfEntry2 failed: " + FormatLastError(status);
+    return false;
+  }
+
+  // Count all packets (unicast + non-unicast) and real packet errors
+  // (`InErrors` / `OutErrors`, rather than non-error discards) to match the
+  // macOS (`ifi_*` via `NET_RT_IFLIST2`) and Linux (`IFLA_STATS64` via netlink `RTM_GETLINK`) backends.
+  out.rx_bytes = row.InOctets;
+  out.rx_packets = row.InUcastPkts + row.InNUcastPkts;
+  out.rx_errors = row.InErrors;
+  out.tx_bytes = row.OutOctets;
+  out.tx_packets = row.OutUcastPkts + row.OutNUcastPkts;
+  out.tx_errors = row.OutErrors;
+  return true;
 }
 
 class WindowsTunBackend : public TunPlatformBackend {
@@ -189,6 +215,17 @@ class WindowsTunBackend : public TunPlatformBackend {
   // event `HANDLE`, not a numeric fd. Always -1.
   [[nodiscard]] int GetNativeFd() const override { return -1; }
 
+  bool GetStats(TunInterfaceStats& out, std::string& error) override {
+    if (session_ == nullptr || adapter_ == nullptr) {
+      error = "Device not open";
+      return false;
+    }
+
+    NET_LUID luid{};
+    WintunApi::Instance().GetAdapterLUID(adapter_, &luid);
+    return ReadStatsForLuid(luid, out, error);
+  }
+
   bool WaitReadable(const std::atomic<bool>& running, std::string& error) override {
     if (read_event_ == nullptr) {
       error = "Device not open";
@@ -259,5 +296,27 @@ class WindowsTunBackend : public TunPlatformBackend {
 }  // namespace
 
 std::unique_ptr<TunPlatformBackend> CreatePlatformBackend() { return std::make_unique<WindowsTunBackend>(); }
+
+bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out, std::string& error) {
+  if (interface_name.empty()) {
+    error = "Interface name must not be empty";
+    return false;
+  }
+
+  std::wstring wide_name = Utf8ToUtf16(interface_name);
+  if (wide_name.empty()) {
+    error = "Failed to encode adapter name as UTF-16";
+    return false;
+  }
+
+  NET_LUID luid{};
+  DWORD luid_status = ::ConvertInterfaceAliasToLuid(wide_name.c_str(), &luid);
+  if (luid_status != NO_ERROR) {
+    error = "Interface not found: " + interface_name + " (" + FormatLastError(luid_status) + ")";
+    return false;
+  }
+
+  return ReadStatsForLuid(luid, out, error);
+}
 
 #endif
