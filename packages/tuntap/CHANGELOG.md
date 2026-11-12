@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.2](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.1...appium-ios-tuntap@3.0.2) (2026-11-12)
+
+### Bug Fixes
+
+* **tuntap:** pin device certificate in the native lockdown tunnel ([#183](https://github.com/appium/appium-ios/issues/183)) ([b2a34fb](https://github.com/appium/appium-ios/commit/b2a34fb9501d2177bb25bf1ffc80276353e98393))
+
+
 ## [3.0.1](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.0...appium-ios-tuntap@3.0.1) (2026-11-12)
 
 **Note:** Version bump only for package appium-ios-tuntap
