@@ -8,9 +8,29 @@ import {
   REMOTE_DEBUGGER_PORT,
   RemoteDebugger,
   RemoteDebuggerRealDevice,
+  validateWebInspectorPageSettings,
 } from '../../lib/index.js';
 
 describe('package public exports', function () {
+  it('validates and narrows settings without constructing a debugger or modifying input', function () {
+    const settings: unknown = Object.freeze({
+      pageSettings: Object.freeze({WebSecurityEnabled: false}),
+      userPreferences: Object.freeze({PrefersColorScheme: 'Dark'}),
+      userAgent: 'Test/1.0',
+    });
+    validateWebInspectorPageSettings(settings);
+    assert.strictEqual(settings.pageSettings?.WebSecurityEnabled, false);
+    assert.strictEqual(settings.userPreferences?.PrefersColorScheme, 'Dark');
+    assert.strictEqual(settings.userAgent, 'Test/1.0');
+    assert.doesNotThrow(() => validateWebInspectorPageSettings({}));
+  });
+
+  it('rejects invalid settings through the public validator with TypeError', function () {
+    for (const settings of [null, {unknown: true}, {pageSettings: {WebSecurityEnabled: 'false'}}]) {
+      assert.throws(() => validateWebInspectorPageSettings(settings), TypeError);
+    }
+  });
+
   it('exports the debugger classes/values used by consumers', function () {
     assert.strictEqual(typeof createRemoteDebugger, 'function');
     assert.strictEqual(RemoteDebugger.name, 'RemoteDebugger');
