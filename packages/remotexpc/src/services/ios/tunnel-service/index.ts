@@ -47,12 +47,6 @@ export async function startCoreDeviceProxyTcp(
     if (!pairRecord || !pairRecord.HostCertificate || !pairRecord.HostPrivateKey) {
       throw new Error('Missing required pair record or certificates for TLS upgrade');
     }
-    if (!pairRecord.DeviceCertificate) {
-      log.warn(
-        `The pair record of ${udid} has no DeviceCertificate, so the tunnel does not authenticate the device. ` +
-          'Pair the device again to get a complete record.',
-      );
-    }
 
     const coreDeviceSocket = await usbmux.connect(Number(deviceID), Number(response.Port));
 
