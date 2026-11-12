@@ -34,7 +34,7 @@
   "scripts": {
     "build:es": "tsc -b",
     "build": "npm run clean:build && npm run build:es",
-    "clean:build": "rimraf ./build",
+    "clean:build": "node -e \"fs.rmSync('build', {recursive: true, force: true})\"",
     "pair-appletv": "sudo node scripts/pair-appletv.mjs",
     "prepare": "npm run build",
     "start-appletv-tunnel": "sudo node scripts/start-appletv-tunnel.mjs",
@@ -108,7 +108,6 @@
     "@appium/tsconfig": "^2.0.0-beta.1",
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.2",
-    "rimraf": "^6.0.1",
     "sinon": "^22.0.0"
   },
   "engines": {

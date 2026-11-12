@@ -3,8 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {rimraf} from 'rimraf';
-
 import type {Simctl} from '../simctl.js';
 
 /**
@@ -26,6 +24,6 @@ export async function getScreenshot(this: Simctl): Promise<string> {
     });
     return (await fs.readFile(pathToScreenshotPng)).toString('base64');
   } finally {
-    await rimraf(pathToScreenshotPng);
+    await fs.rm(pathToScreenshotPng, {recursive: true, force: true});
   }
 }

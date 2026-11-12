@@ -6,7 +6,6 @@ import path from 'node:path';
 import {describe, it, beforeEach, afterEach, after, before} from 'node:test';
 
 import {retryInterval} from 'asyncbox';
-import {rimraf} from 'rimraf';
 
 import {Simctl} from '../../lib/simctl.js';
 
@@ -183,7 +182,7 @@ describe('simctl', function () {
       });
       after(async function () {
         if (picturePath) {
-          await rimraf(picturePath);
+          await fs.rm(picturePath, {recursive: true, force: true});
         }
       });
       it('should add media files', async function () {

@@ -3,8 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import {rimraf} from 'rimraf';
-
 import type {Simctl} from '../simctl.js';
 
 /**
@@ -35,6 +33,6 @@ export async function pushNotification(this: Simctl, payload: Record<string, any
       args: [this.requireUdid('push'), dstPath],
     });
   } finally {
-    await rimraf(dstPath);
+    await fs.rm(dstPath, {recursive: true, force: true});
   }
 }
