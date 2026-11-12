@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.3...appium-remote-debugger@19.1.4) (2026-11-12)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** drop serve-static dev dependency ([ec9a8d7](https://github.com/appium/appium-ios/commit/ec9a8d77b0dd3081105a9b33019d976fb77b7283))
+
+
 ## [19.1.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.2...appium-remote-debugger@19.1.3) (2026-11-12)
 
 **Note:** Version bump only for package appium-remote-debugger
