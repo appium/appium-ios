@@ -143,7 +143,7 @@ export class PairVerificationProtocol {
     return devicePublicKey;
   }
 
-  private parseTlvOrThrow(payload: Buffer, context: string): Record<number, Buffer> {
+  private parseTlvOrThrow(payload: Buffer, context: string): Partial<Record<number, Buffer>> {
     try {
       return decodeTLV8ToDict(payload);
     } catch (error) {

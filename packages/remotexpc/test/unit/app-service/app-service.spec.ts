@@ -177,7 +177,10 @@ describe('AppService', function () {
 
   describe('listProcesses', function () {
     it('returns the processTokens array from the output', async function () {
-      const tokens = [{processIdentifier: 1}, {processIdentifier: 42, executableURL: {relative: '/x'}}];
+      const tokens: XPCDictionary[] = [
+        {processIdentifier: 1},
+        {processIdentifier: 42, executableURL: {relative: '/x'}},
+      ];
       const fake = new FakeTransport(() => reply({processTokens: tokens}));
       const service = new TestAppService(fake);
 

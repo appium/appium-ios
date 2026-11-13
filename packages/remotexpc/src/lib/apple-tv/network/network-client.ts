@@ -75,7 +75,7 @@ export class NetworkClient implements NetworkClientInterface {
         return;
       }
 
-      const onError = (error: Error | undefined) => {
+      const onError = (error?: Error | null) => {
         if (error) {
           log.error('Send packet error:', error);
           reject(new NetworkError('Failed to send packet'));

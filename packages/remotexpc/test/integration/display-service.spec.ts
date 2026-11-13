@@ -238,7 +238,7 @@ describe('DisplayService', {timeout: 120000}, function () {
           true,
           'a stream must open with a keyframe',
         );
-        assert.match(capture.codecString, /^hev1\./, 'the SPS should yield a codec string');
+        assert.match(capture.codecString ?? '', /^hev1\./, 'the SPS should yield a codec string');
         assert.notStrictEqual(capture.parameterSets, undefined, 'VPS/SPS/PPS should all arrive');
         assert.ok(capture.decoderConfigurationRecord instanceof Buffer);
         assert.ok(capture.stats.packetsReceived > 0);
@@ -368,7 +368,7 @@ describe('DisplayService', {timeout: 120000}, function () {
         assert.ok(result.video.framesWritten > 0, 'video should have frames');
         assert.ok(result.audio.accessUnitsWritten > 0, 'audio should have access units');
         assert.ok(result.video.frameRate > 0);
-        assert.match(result.video.codecString, /^hev1\./);
+        assert.match(result.video.codecString ?? '', /^hev1\./);
 
         // Both files must exist with the reported sizes.
         assert.strictEqual((await stat(videoPath)).size, result.video.bytesWritten);
@@ -451,7 +451,7 @@ describe('DisplayService', {timeout: 120000}, function () {
       assert.strictEqual(streamingSupported, true);
       assert.ok(result.framesWritten > 0);
       assert.ok(result.bytesWritten > 0);
-      assert.match(result.codecString, /^hev1\./);
+      assert.match(result.codecString ?? '', /^hev1\./);
 
       const written = await stat(outputPath);
       assert.strictEqual(written.size, result.bytesWritten);

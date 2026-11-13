@@ -7,13 +7,13 @@ export interface PasteboardItem extends XPCDictionary {
   data: XPCDictionary;
 }
 
-export interface PasteboardSnapshot extends XPCDictionary {
+export type PasteboardSnapshot = XPCDictionary & {
   items?: PasteboardItem[];
   metadata?: XPCDictionary;
   sourceMetadata?: XPCDictionary;
-}
+};
 
-export interface PasteboardPullReply extends XPCDictionary {
+export type PasteboardPullReply = XPCDictionary & {
   command?: string;
   pasteboard?: PasteboardSnapshot;
-}
+};

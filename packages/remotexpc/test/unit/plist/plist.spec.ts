@@ -17,7 +17,7 @@ import {
 } from '../../../src/lib/plist/index.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 const FIXTURES_PATH = path.join(PKG_ROOT, 'test', 'unit', 'plist', 'fixtures');
 
 const BPLIST_TRAILER_LENGTH = 32;

@@ -9,7 +9,7 @@ import {fs, node} from '@appium/support';
 
 import {StreamZip} from '../../../src/services/ios/zipconduit/stream-zip.js';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 const FIXTURES = path.join(PKG_ROOT, 'test', 'fixtures', 'stream-zip');
 const OK_DIR = path.join(FIXTURES, 'ok');
 const ERR_DIR = path.join(FIXTURES, 'err');
@@ -43,7 +43,7 @@ function normalizeBufferText(buf: Buffer): string {
 }
 
 function assertBuffersEqual(actual: Buffer, expected: Buffer, label?: string): void {
-  assert.strictEqual(normalizeBufferText(actual), normalizeBufferText(expected), label);
+  assert.strictEqual(normalizeBufferText(actual), normalizeBufferText(expected), label as string);
 }
 
 async function assertFilesEqual(actualPath: string, expectedPath: string): Promise<void> {

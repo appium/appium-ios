@@ -11,7 +11,7 @@ import {Services} from '../../src/index.js';
 import type {MobileImageMounterService} from '../../src/index.js';
 import {requireDeviceUdid} from './helpers/device.js';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 
 const log = logger.getLogger('MobileImageMounterService.test');
 log.level = 'debug';

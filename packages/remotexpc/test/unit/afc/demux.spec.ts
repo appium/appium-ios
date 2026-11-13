@@ -114,7 +114,7 @@ async function createPairedSockets(): Promise<{
   deviceSide: net.Socket;
   getSocket: () => Promise<net.Socket>;
 }> {
-  let deviceSide: net.Socket | null = null;
+  let deviceSide = null as net.Socket | null;
   const server = net.createServer((socket) => {
     deviceSide = socket;
   });

@@ -290,11 +290,15 @@ async function establishOneTunnel(startResult) {
  */
 function buildAppleTvTunnelEntry(result, existing, now) {
   const udid = result.device.identifier;
+  const rsdPort = result.tunnel.RsdPort;
+  if (rsdPort === undefined) {
+    throw new Error(`The tunnel for ${udid} did not report an RSD port`);
+  }
   const entry = {
     udid,
     deviceId: 0,
     address: result.tunnel.Address,
-    rsdPort: result.tunnel.RsdPort,
+    rsdPort,
     services: {},
     connectionType: 'WiFi',
     productId: 0,

@@ -33,6 +33,13 @@ const log = logger.getLogger('TunnelCreation');
 /** @type {import('appium-ios-remotexpc').TunnelRegistryServer | null} */
 let registryServer = null;
 
+function requireRegistry() {
+  if (!registryServer) {
+    throw new Error('The tunnel registry server is not running');
+  }
+  return registryServer.getRegistry();
+}
+
 /** @type {DeviceWatcher | null} */
 let deviceWatcher = null;
 
@@ -151,12 +158,16 @@ function dedupeDevicesByUdid(devices) {
  */
 function buildTunnelEntry(result, existing, now) {
   const udid = result.device.Properties.SerialNumber;
+  const rsdPort = result.tunnel.RsdPort;
+  if (rsdPort === undefined) {
+    throw new Error(`The tunnel for ${udid} did not report an RSD port`);
+  }
   /** @type {import('appium-ios-remotexpc').TunnelRegistryEntry} */
   const entry = {
     udid,
     deviceId: result.device.DeviceID,
     address: result.tunnel.Address,
-    rsdPort: result.tunnel.RsdPort,
+    rsdPort,
     services: {},
     // @ts-expect-error - connectionType is not typed
     connectionType: result.device.Properties.ConnectionType,
@@ -255,7 +266,7 @@ async function runReconnectAttempts({udid, maxRetries, device, watchedUdids, rec
 
     const result = await createTunnelForDevice(device);
     if (result.success) {
-      attachTunnelRegistryLifecycleWatch(registryServer.getRegistry(), [result], {
+      attachTunnelRegistryLifecycleWatch(requireRegistry(), [result], {
         onTunnelDead: async ({udid: droppedUdid}) => {
           await reconnectTunnelByUdid(droppedUdid);
         },
@@ -556,7 +567,7 @@ class DeviceWatcher {
     if (!result.success) {
       return;
     }
-    attachTunnelRegistryLifecycleWatch(registryServer.getRegistry(), [result], {
+    attachTunnelRegistryLifecycleWatch(requireRegistry(), [result], {
       onTunnelDead: async ({udid: droppedUdid}) => {
         await this.reconnectTunnelByUdid(droppedUdid);
       },
@@ -832,7 +843,7 @@ async function main() {
       log.info(`   curl "http://localhost:${registryPort}/remotexpc/tunnels/${firstUdid}?waitMs=15000"`);
     }
 
-    if (options.watchDevices) {
+    if (options.watchDevices && watchedUdids) {
       deviceWatcher = new DeviceWatcher({
         devicesByUdid,
         watchedUdids,
