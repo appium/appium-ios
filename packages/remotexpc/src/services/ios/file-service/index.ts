@@ -7,6 +7,7 @@ import path from 'node:path';
 import {Readable, type Writable} from 'node:stream';
 import {finished, pipeline} from 'node:stream/promises';
 
+import {runInBackground} from '../../../lib/background.js';
 import {getLogger} from '../../../lib/logger.js';
 import {connectToTunnelHost} from '../../../lib/port-forwarding/connectors.js';
 import type {RemoteXpcFramedTransport} from '../../../lib/remote-xpc/remote-xpc-framed-transport.js';
@@ -67,7 +68,6 @@ export type {
   FileServiceSessionOptions,
   FileServiceTransferOptions,
 } from './types.js';
-import {runInBackground} from '../../../lib/background.js';
 
 const log = getLogger('CoreDeviceFileService');
 

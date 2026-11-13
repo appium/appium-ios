@@ -8,6 +8,7 @@ import {
   connectToTunnelPsk,
 } from 'appium-ios-tuntap';
 
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 
 const log = getLogger('TunnelManager');
@@ -187,6 +188,5 @@ export {
   type WatchTunnelRegistryOptions,
   type WatchTunnelRegistryOnDeadOptions,
 } from './tunnel-registry-lifecycle.js';
-import {formatError} from '../format-error.js';
 // Re-export TunnelConnection type from appium-ios-tuntap
 export type {TunnelConnection};
