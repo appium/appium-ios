@@ -24,7 +24,9 @@ async function main() {
   await run(process.execPath, [BUNDLE_SCRIPT], {env: {...process.env, TARGET_ARCH: targetArch(args)}});
 }
 
-main().catch((err) => {
-  process.stderr.write(`${err?.stack ?? err}\n`);
+try {
+  await main();
+} catch (err) {
+  process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
   process.exit(1);
-});
+}
