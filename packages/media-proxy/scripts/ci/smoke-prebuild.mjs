@@ -31,7 +31,9 @@ async function main() {
   console.log(`Loaded ${join(dir, file)}: ${JSON.stringify(caps)}`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`${err?.stack ?? err}\n`);
+try {
+  await main();
+} catch (err) {
+  process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
   process.exit(1);
-});
+}

@@ -113,7 +113,9 @@ async function main() {
   console.log(JSON.stringify(summarize(options, units, stats, elapsed, rssSamples)));
 }
 
-main().catch((err) => {
-  console.error(err?.message ?? err);
+try {
+  await main();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
-});
+}

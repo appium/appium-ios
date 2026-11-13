@@ -22,11 +22,14 @@ const RUNTIME_BY_PLATFORM = {
 const EXPECTED_LIB_COUNT = 3;
 
 /** @param {string} path */
-const exists = (path) =>
-  access(path).then(
-    () => true,
-    () => false,
-  );
+const exists = async (path) => {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /** @param {{dest?: string}} options */
 function resolvePaths({dest}) {
@@ -88,7 +91,9 @@ async function main() {
   console.log(`FFmpeg libs for ${target} in ${dest}`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`${err?.stack ?? err}\n`);
+try {
+  await main();
+} catch (err) {
+  process.stderr.write(`${err instanceof Error ? err.stack : String(err)}\n`);
   process.exit(1);
-});
+}

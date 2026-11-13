@@ -83,7 +83,7 @@ export class WindowsTunTapPlatform implements TunTapPlatform {
 
     const num = (key: string): number => {
       const value = parsed[key];
-      const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+      const n = typeof value === 'number' ? value : typeof value === 'string' ? parseInt(value, 10) : NaN;
       return Number.isFinite(n) ? n : 0;
     };
 

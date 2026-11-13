@@ -211,7 +211,7 @@ export default class RpcMessageHandler extends EventEmitter {
           }
           return error;
         }
-        return new Error(String(dataKey.error || defaultMessage));
+        return new Error(typeof dataKey.error === 'string' ? dataKey.error : defaultMessage);
       }
       return undefined;
     };

@@ -74,6 +74,11 @@ export class NativeSimDisplayResolutionError extends NativeSimOperationError {
   public override name = 'NativeSimDisplayResolutionError';
 }
 
+/** Native error fields are untyped: keep strings and numbers, treat anything else as absent. */
+function str(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
 /**
  * Converts native bridge error names to typed errors; domain/code remain diagnostic metadata.
  * Already-typed errors pass through unchanged.
@@ -86,18 +91,13 @@ export function wrapNativeError(err: unknown): never {
   const message = error?.message ?? String(err);
   switch (error?.name) {
     case 'NativeSimUnavailableError':
-      throw new NativeSimUnavailableError(
-        message,
-        String(error.kind ?? ''),
-        String(error.missing ?? ''),
-        String(error.frameworkVersion ?? ''),
-      );
+      throw new NativeSimUnavailableError(message, str(error.kind), str(error.missing), str(error.frameworkVersion));
     case 'NativeSimDispatchError':
-      throw new NativeSimDispatchError(message, String(error.exceptionName ?? ''), String(error.reason ?? ''));
+      throw new NativeSimDispatchError(message, str(error.exceptionName), str(error.reason));
     case 'NativeSimDisplayResolutionError':
-      throw new NativeSimDisplayResolutionError(message, String(error.domain ?? ''), Number(error.code ?? 0));
+      throw new NativeSimDisplayResolutionError(message, str(error.domain), Number(error.code ?? 0));
     case 'NativeSimOperationError':
-      throw new NativeSimOperationError(message, String(error.domain ?? ''), Number(error.code ?? 0));
+      throw new NativeSimOperationError(message, str(error.domain), Number(error.code ?? 0));
     default:
       throw new NativeSimError(message);
   }

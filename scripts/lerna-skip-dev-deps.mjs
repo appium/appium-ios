@@ -54,10 +54,9 @@ async function main() {
   });
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`${err?.stack ?? err}\n`);
-    process.exit(1);
-  },
-);
+try {
+  process.exit(await main());
+} catch (err) {
+  process.stderr.write(`${err?.stack ?? err}\n`);
+  process.exit(1);
+}

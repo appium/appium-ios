@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.0.5](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.4...appium-ios-simulator@11.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [11.0.4](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.3...appium-ios-simulator@11.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **simulator:** fix lint warnings ([#196](https://github.com/appium/appium-ios/issues/196)) ([9064e74](https://github.com/appium/appium-ios/commit/9064e74f92a7d9991be5b1091a28dc506491c0e5))
+
+
+## [11.0.3](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.2...appium-ios-simulator@11.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
 ## [11.0.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.1...appium-ios-simulator@11.0.2) (2026-11-12)
 
 ### Miscellaneous Chores

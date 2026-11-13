@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.4...appium-webdriveragent@17.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [17.0.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.3...appium-webdriveragent@17.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **webdriveragent:** fix lint warnings ([#198](https://github.com/appium/appium-ios/issues/198)) ([b483c69](https://github.com/appium/appium-ios/commit/b483c6986513754ca0683e9d7a2c00cdd254188e))
+
+
+## [17.0.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.2...appium-webdriveragent@17.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
 ## [17.0.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.1...appium-webdriveragent@17.0.2) (2026-11-12)
 
 **Note:** Version bump only for package appium-webdriveragent

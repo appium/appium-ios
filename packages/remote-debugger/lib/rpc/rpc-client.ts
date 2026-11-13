@@ -1029,7 +1029,7 @@ export class RpcClient {
             if (!signal.aborted) {
               this.initializedPageTargets.get(target)?.pendingRestores.set(key, previous);
             }
-            log.warn(`Cannot restore the previous page override: ${rollbackError}`);
+            log.warn(`Cannot restore the previous page override: ${(rollbackError as Error).message}`);
           }
         }
       });

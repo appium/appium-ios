@@ -3,6 +3,43 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.9...appium-remote-debugger@19.1.10) (2026-11-13)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.8...appium-remote-debugger@19.1.9) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [19.1.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.7...appium-remote-debugger@19.1.8) (2026-11-13)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.6...appium-remote-debugger@19.1.7) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** fix lint warnings ([#203](https://github.com/appium/appium-ios/issues/203)) ([9deb2c2](https://github.com/appium/appium-ios/commit/9deb2c2b0cd9181d842fb34cc1062ac36e0e3926))
+
+
+## [19.1.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.5...appium-remote-debugger@19.1.6) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
 ## [19.1.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.4...appium-remote-debugger@19.1.5) (2026-11-12)
 
 **Note:** Version bump only for package appium-remote-debugger
