@@ -170,6 +170,4 @@ async function buildAtoms() {
   );
 }
 
-(async () => {
-  await buildAtoms();
-})();
+await buildAtoms();

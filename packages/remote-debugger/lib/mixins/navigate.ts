@@ -3,7 +3,7 @@ import {sleep, withTimeout} from 'asyncbox';
 
 import type {RemoteDebugger} from '../remote-debugger.js';
 import type {AppIdKey, PageIdKey} from '../types.js';
-import {DelayCancellation, checkParams, TimeoutError} from '../utils/index.js';
+import {DelayCancellation, checkParams, runInBackground, TimeoutError} from '../utils/index.js';
 import {events} from './events.js';
 import {
   getAppIdKey,
@@ -241,15 +241,16 @@ export async function navToUrl(this: RemoteDebugger, url: string): Promise<void>
     // and the timeout above, so a rejection here (e.g. the RPC connection dropping mid-navigation,
     // which happens routinely around window/tab switches) must not go unhandled - that would
     // crash the whole process instead of just failing this one navigation.
-    rpcClient
-      .send('Runtime.evaluate', {
+    runInBackground(
+      rpcClient.send('Runtime.evaluate', {
         expression: `window.location.href = ${JSON.stringify(url)};`,
         appIdKey,
         pageIdKey,
-      })
-      .catch((err: any) => {
-        this.log.warn(`Failed to set 'window.location.href' to '${url}': ${err.message}`);
-      });
+      }),
+      (e: any) => {
+        this.log.warn(`Failed to set 'window.location.href' to '${url}': ${e.message}`);
+      },
+    );
   });
   const cancellationPromise = (async () => {
     try {

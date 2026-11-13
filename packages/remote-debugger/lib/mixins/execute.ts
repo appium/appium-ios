@@ -61,7 +61,7 @@ export async function executeAtom<R = any>(
   frames: string[] = [],
   options: ExecuteAtomOptions = {},
 ): Promise<R> {
-  this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames}'`);
+  this.log.debug(`Executing atom '${atom}' with 'args=${JSON.stringify(args)}; frames=${frames.join(',')}'`);
   const emulateUserGesture =
     options.emulateUserGesture ?? (getEmulateUserGestureForInteractionAtoms(this) && isGestureInteraction(atom, args));
   const value =
@@ -278,7 +278,7 @@ function isGestureInteraction(atom: AtomName, args: any[]): boolean {
   const text = values.join('');
   // WebDriver's private-use keys include Escape and modifier shortcuts. Permit
   // only Enter/Return; callers can still opt in explicitly for other keys.
-  const hasOnlyTextOrNewlines = [...text].every(
+  const hasOnlyTextOrNewlines = Array.from(text).every(
     (char) => char === '\n' || (char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127),
   );
   return text.length > 0 && hasOnlyTextOrNewlines && !/[\uE000-\uE005\uE008-\uF8FF]/u.test(text);
