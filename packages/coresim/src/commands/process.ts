@@ -45,9 +45,10 @@ export async function listProcesses(this: NativeSimctl, udid: string): Promise<S
     });
     // stdout/stderr are plain net.Sockets over raw fds — an unhandled 'error' on either would
     // crash the whole process, not just reject this promise, so race it in as a real rejection.
-    const streamError = Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]).then(([err]) => {
+    const streamError = (async () => {
+      const [err] = await Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]);
       throw err;
-    });
+    })();
     // 'exit' can fire before the stdout stream has finished delivering its buffered data (see
     // spawnProcess's own integration test) — wait for both before parsing.
     const [[code, signal]] = await Promise.race([

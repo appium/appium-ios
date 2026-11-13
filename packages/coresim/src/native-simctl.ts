@@ -173,12 +173,16 @@ export class NativeSimctl {
    */
   async _serviceContext(): Promise<NativeServiceContextHandle> {
     if (!this.cachedServiceContext) {
-      this.cachedServiceContext = runCatchingAsync(() =>
-        loadNative().sharedServiceContext(this._options.developerDir ?? defaultDeveloperDir()),
-      ).catch((err: unknown) => {
-        this.cachedServiceContext = undefined;
-        throw err;
-      });
+      this.cachedServiceContext = (async () => {
+        try {
+          return await runCatchingAsync(() =>
+            loadNative().sharedServiceContext(this._options.developerDir ?? defaultDeveloperDir()),
+          );
+        } catch (err) {
+          this.cachedServiceContext = undefined;
+          throw err;
+        }
+      })();
     }
     return this.cachedServiceContext;
   }

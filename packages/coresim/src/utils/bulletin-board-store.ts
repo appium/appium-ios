@@ -50,11 +50,18 @@ export class BulletinBoardStore {
    * section. Only the calls made by this process are serialized.
    */
   async withLock<T>(update: () => Promise<T>): Promise<T> {
-    const result = (pendingUpdates.get(this.path) ?? Promise.resolve()).then(update);
-    const settled = result.then(
-      () => undefined,
-      () => undefined,
-    );
+    const previous = pendingUpdates.get(this.path) ?? Promise.resolve();
+    const result = (async () => {
+      await previous;
+      return await update();
+    })();
+    const settled = (async () => {
+      try {
+        await result;
+      } catch {
+        // the failure is reported to the caller of `withLock`, not to later updates
+      }
+    })();
     pendingUpdates.set(this.path, settled);
     try {
       return await result;
