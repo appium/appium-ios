@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.7...appium-ios-remotexpc@6.0.8) (2026-11-13)
+
+### Code Refactoring
+
+* **remotexpc:** use getFreePort from @appium/support for the registry port ([#205](https://github.com/appium/appium-ios/issues/205)) ([f739ffb](https://github.com/appium/appium-ios/commit/f739ffb51b4b1ea58944240d197d53a970e05eef))
+
+
 ## [6.0.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.6...appium-ios-remotexpc@6.0.7) (2026-11-13)
 
 **Note:** Version bump only for package appium-ios-remotexpc

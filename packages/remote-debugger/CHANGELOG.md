@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.9...appium-remote-debugger@19.1.10) (2026-11-13)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
 ## [19.1.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.8...appium-remote-debugger@19.1.9) (2026-11-13)
 
 ### Miscellaneous Chores
