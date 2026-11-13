@@ -99,7 +99,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   process.stderr.write(`${err?.stack ?? err}\n`);
   process.exit(1);
-});
+}
