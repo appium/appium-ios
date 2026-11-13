@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.0.4](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.3...appium-ios-simulator@11.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **simulator:** fix lint warnings ([#196](https://github.com/appium/appium-ios/issues/196)) ([9064e74](https://github.com/appium/appium-ios/commit/9064e74f92a7d9991be5b1091a28dc506491c0e5))
+
+
 ## [11.0.3](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.2...appium-ios-simulator@11.0.3) (2026-11-13)
 
 ### Miscellaneous Chores

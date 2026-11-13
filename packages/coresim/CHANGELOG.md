@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.3](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.2...@appium/coresim@2.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **coresim:** fix lint warnings ([#201](https://github.com/appium/appium-ios/issues/201)) ([32c9a87](https://github.com/appium/appium-ios/commit/32c9a8705f9f2475ca6eb4c76b00300be1bbf3bc))
+
+
 ## [2.0.2](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.1...@appium/coresim@2.0.2) (2026-11-13)
 
 ### Miscellaneous Chores

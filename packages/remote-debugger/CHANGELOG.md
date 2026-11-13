@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.6...appium-remote-debugger@19.1.7) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** fix lint warnings ([#203](https://github.com/appium/appium-ios/issues/203)) ([9deb2c2](https://github.com/appium/appium-ios/commit/9deb2c2b0cd9181d842fb34cc1062ac36e0e3926))
+
+
 ## [19.1.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.5...appium-remote-debugger@19.1.6) (2026-11-13)
 
 ### Miscellaneous Chores

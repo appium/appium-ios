@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.3...appium-webdriveragent@17.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **webdriveragent:** fix lint warnings ([#198](https://github.com/appium/appium-ios/issues/198)) ([b483c69](https://github.com/appium/appium-ios/commit/b483c6986513754ca0683e9d7a2c00cdd254188e))
+
+
 ## [17.0.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.2...appium-webdriveragent@17.0.3) (2026-11-13)
 
 ### Miscellaneous Chores
