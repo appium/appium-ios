@@ -163,7 +163,7 @@ export function createWdaStartupStrategy(ctx: WdaStartupStrategyContext): WdaSta
     case 'real-device-xcodebuild':
       return new RealDeviceXcodebuildStrategy(ctx);
     default:
-      throw new Error(`Unknown WDA startup strategy: ${startupStrategy}`);
+      throw new Error(`Unknown WDA startup strategy: ${String(startupStrategy)}`);
   }
 }
 
