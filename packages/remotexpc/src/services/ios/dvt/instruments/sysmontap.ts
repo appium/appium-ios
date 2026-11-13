@@ -33,7 +33,7 @@ const log = getLogger('Sysmontap');
  * ```
  */
 export class Sysmontap extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.sysmontap';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.sysmontap';
 
   /** Default sampling interval in milliseconds. */
   static readonly DEFAULT_INTERVAL_MS = 500;

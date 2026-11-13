@@ -562,7 +562,7 @@ export class XCTestRunner extends EventEmitter<XCTestRunnerEvents> {
         ...DEFAULT_LAUNCH_ENV,
         XCTestBundlePath: testBundlePath,
         XCTestSessionIdentifier: sessionId.toUpperCase(),
-        ...(this.options.launchEnvironment ?? {}),
+        ...this.options.launchEnvironment,
       };
 
       this.launchedPid = await services.processControl.launch({

@@ -175,7 +175,7 @@ class TestFileService extends CoreDeviceFileService {
     super('test-udid', options);
   }
 
-  protected async createTransport(): Promise<any> {
+  protected override async createTransport(): Promise<any> {
     // Yield once so concurrent callers overlap while a connection is being opened.
     await new Promise((resolve) => setImmediate(resolve));
     if (this.createTransportCalls++ > 0 && this.nextFakes.length > 0) {
@@ -184,7 +184,7 @@ class TestFileService extends CoreDeviceFileService {
     return this.fake;
   }
 
-  protected async resolveServiceAddress(): Promise<[string, number]> {
+  protected override async resolveServiceAddress(): Promise<[string, number]> {
     return ['127.0.0.1', this.dataPort];
   }
 }

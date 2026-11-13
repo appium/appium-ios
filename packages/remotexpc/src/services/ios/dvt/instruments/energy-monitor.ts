@@ -37,7 +37,7 @@ export type EnergyMonitorSample = Record<string, EnergyMetrics>;
  * ```
  */
 export class EnergyMonitor extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.xcode.debug-gauge-data-providers.Energy';
+  static override readonly IDENTIFIER = 'com.apple.xcode.debug-gauge-data-providers.Energy';
 
   private sampling = false;
   private stopRequested = false;

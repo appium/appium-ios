@@ -326,7 +326,7 @@ export class Usbmux extends BaseSocketService {
    *
    * @returns Promise that resolves when the socket is closed.
    */
-  close(): Promise<void> {
+  override close(): Promise<void> {
     // Memoized: a stopping listen() stream also closes the connection, and ending the socket
     // twice would fail the second caller
     this._closePromise ??= this._closeSocket();

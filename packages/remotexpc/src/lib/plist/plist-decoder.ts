@@ -17,7 +17,7 @@ export class PlistServiceDecoder extends Transform {
     super({objectMode: true});
   }
 
-  _transform(data: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
+  override _transform(data: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
     try {
       // Get the plist data without the 4-byte header
       let plistData = data.slice(4);

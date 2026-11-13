@@ -1471,10 +1471,10 @@ export class RpcClient {
    * @returns The pending page target details if there's a match, undefined otherwise.
    */
   private _getPendingPageTargetDetails(appId: AppIdKey, targetInfo: TargetInfo): PendingPageTargetDetails | undefined {
-    const logInfo = (message: string): undefined =>
-      void log.info(
-        `Skipping 'Target.targetCreated' event ${message} for app '${appId}': ${JSON.stringify(targetInfo)}`,
-      );
+    const logInfo = (message: string): undefined => {
+      log.info(`Skipping 'Target.targetCreated' event ${message} for app '${appId}': ${JSON.stringify(targetInfo)}`);
+      return undefined;
+    };
     if (!this._pendingTargetNotification) {
       return logInfo('with no pending request');
     }

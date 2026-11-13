@@ -10,7 +10,7 @@ const log = getLogger('ProcessControl');
  * Allows launching, killing, signaling, and monitoring processes.
  */
 export class ProcessControl extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.processcontrol';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.processcontrol';
 
   /**
    * Send a signal to a process

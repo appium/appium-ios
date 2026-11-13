@@ -131,7 +131,7 @@ export class BotError extends Error {
     this.state = stateForCode(code);
 
     const name = this.state.replace(/(^|\s+)[a-z]/g, (str) => str.toUpperCase().trimStart()).replace(/\s+/g, '');
-    this.name = /Error$/.test(name) ? name : `${name}Error`;
+    this.name = name.endsWith('Error') ? name : `${name}Error`;
 
     const template = new Error(this.message);
     template.name = this.name;
