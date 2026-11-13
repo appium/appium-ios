@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.4](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.3...appium-ios-tuntap@3.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **tuntap:** fix lint warnings ([#197](https://github.com/appium/appium-ios/issues/197)) ([fbd1119](https://github.com/appium/appium-ios/commit/fbd1119ca9e8683255b2c1d603c39b3b4603d69d))
+
+
 ## [3.0.3](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.2...appium-ios-tuntap@3.0.3) (2026-11-13)
 
 ### Miscellaneous Chores
