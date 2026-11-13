@@ -1,3 +1,4 @@
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {RemoteXpcFramedTransport} from './remote-xpc-framed-transport.js';
 import {type Service, type ServicesResponse, servicesFromXpcBody} from './service-catalog.js';
@@ -27,7 +28,7 @@ export interface RsdServiceCatalogClientConnectOptions {
 /** Guards connect() resolve/reject and clears active connect-phase timers. */
 interface ConnectSession {
   settleSuccess(response: ServicesResponse): void;
-  settleFailure(error: Error | unknown): void;
+  settleFailure(error: unknown): void;
   isSettled(): boolean;
 }
 
@@ -77,7 +78,7 @@ class RsdServiceCatalogClient {
         this.registerTransportHandlers(session, transport);
         void this.connectTransport(session, transport, operationTimeoutMs);
       } catch (error) {
-        log.error(`Failed to create RSD catalog client: ${error}`);
+        log.error(`Failed to create RSD catalog client: ${formatError(error)}`);
         session.settleFailure(error);
       }
     });
@@ -155,7 +156,7 @@ class RsdServiceCatalogClient {
       resolve(response);
     };
 
-    const settleFailure = (error: Error | unknown): void => {
+    const settleFailure = (error: unknown): void => {
       if (settled) {
         return;
       }
@@ -230,7 +231,7 @@ class RsdServiceCatalogClient {
       this._isConnected = true;
       this.schedulePostHandshakeServiceTimeout(session);
     } catch (error) {
-      log.error(`Handshake failed: ${error}`);
+      log.error(`Handshake failed: ${formatError(error)}`);
       session.settleFailure(error);
       await this.close();
     }
@@ -255,7 +256,7 @@ class RsdServiceCatalogClient {
     try {
       await this.close();
     } catch (err) {
-      log.error(`Error closing connection: ${err}`);
+      log.error(`Error closing connection: ${formatError(err)}`);
     }
     session.settleFailure(new Error('No services received after handshake'));
   }

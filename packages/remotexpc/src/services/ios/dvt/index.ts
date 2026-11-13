@@ -1,5 +1,7 @@
 import type net from 'node:net';
 
+import {runInBackground} from '../../../lib/background.js';
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
 import type {PlistDictionary, SendMessageOptions} from '../../../lib/types.js';
@@ -535,16 +537,18 @@ export class DVTSecureSocketProxyService extends BaseService {
       return;
     }
     this.isPumpRunning = true;
-    void this.runPump()
-      .catch((err: unknown) => {
-        this.rejectAllWaiters(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
+    runInBackground(
+      this.runPump(),
+      (e) => {
+        this.rejectAllWaiters(e instanceof Error ? e : new Error(formatValue(e)));
+      },
+      () => {
         this.isPumpRunning = false;
         if (this.hasPendingWaiters()) {
           this.ensurePumpRunning();
         }
-      });
+      },
+    );
   }
 
   private async runPump(): Promise<void> {

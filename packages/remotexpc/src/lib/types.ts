@@ -1155,7 +1155,7 @@ export interface DeviceInfoService {
    * // }
    * ```
    */
-  kpepDatabase(): Promise<any | null>;
+  kpepDatabase(): Promise<any>;
 
   /**
    * Get trace code mappings
@@ -2133,7 +2133,7 @@ export interface CrashReportsService {
  */
 export interface SendMessageOptions {
   /** Optional message arguments */
-  args?: any | null;
+  args?: any;
   /** Whether a reply is expected (default: true) */
   expectsReply?: boolean;
 }

@@ -1,3 +1,4 @@
+import {formatValue} from '../format-error.js';
 import type {XPCDictionary} from '../types.js';
 import {decodeMessage, probeXpcFraming} from './xpc-protocol.js';
 
@@ -86,7 +87,7 @@ export function servicesFromXpcBody(body: XPCDictionary | null | undefined): Ser
     const portValue = (info as XPCDictionary).Port;
     services.push({
       serviceName,
-      port: portValue !== undefined && portValue !== null ? String(portValue) : '',
+      port: portValue !== undefined && portValue !== null ? formatValue(portValue) : '',
     });
   }
 

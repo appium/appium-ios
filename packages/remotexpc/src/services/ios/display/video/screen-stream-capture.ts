@@ -1,6 +1,7 @@
 import {once} from 'node:events';
 import {createWriteStream} from 'node:fs';
 
+import {runInBackground} from '../../../../lib/background.js';
 import {getLogger} from '../../../../lib/logger.js';
 import type {DisplayService, MediaStreamAnswer, StartVideoStreamOptions} from '../index.js';
 import {RtcpKeepalive, rtcpIdentityFromStreamConfig} from '../transport/rtcp.js';
@@ -309,7 +310,7 @@ export async function recordScreenToFile(
 
   const deadline = performance.now() + durationMs;
   const timer = setTimeout((): void => {
-    capture.stop().catch((): void => undefined);
+    runInBackground(capture.stop());
   }, durationMs);
   // The recording is bounded by wall time, so a long-lived timer must not hold
   // the event loop open on its own.

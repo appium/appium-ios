@@ -67,6 +67,7 @@ export type {
   FileServiceSessionOptions,
   FileServiceTransferOptions,
 } from './types.js';
+import {runInBackground} from '../../../lib/background.js';
 
 const log = getLogger('CoreDeviceFileService');
 
@@ -667,7 +668,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
   ): Promise<string> {
     if (this.session?.transport !== transport) {
       const session: FileServiceSession = {transport, id: this.createSessionOn(transport, options)};
-      session.id.catch(() => {
+      runInBackground(session.id, () => {
         if (this.session === session) {
           this.session = undefined;
         }

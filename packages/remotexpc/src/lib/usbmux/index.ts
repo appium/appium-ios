@@ -3,6 +3,8 @@ import {type Server, type Socket, createConnection, createServer} from 'node:net
 import {release} from 'node:os';
 
 import {BaseSocketService} from '../../base-socket-service.js';
+import {runInBackground} from '../background.js';
+import {formatError, formatValue} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {type PairRecord, processPlistResponse} from '../pair-record/index.js';
 import {type RawPairRecordResponse} from '../pair-record/pair-record.js';
@@ -159,7 +161,7 @@ export class Usbmux extends BaseSocketService {
           parsePlist(data.payload.PairRecordData as Buffer) as unknown as RawPairRecordResponse,
         );
       } catch (e) {
-        throw new Error(`Failed to parse pair record data: ${e}`, {
+        throw new Error(`Failed to parse pair record data: ${formatError(e)}`, {
           cause: e,
         });
       }
@@ -300,7 +302,7 @@ export class Usbmux extends BaseSocketService {
       } else if (data.payload.Number === USBMUX_RESULT.CONNREFUSED) {
         throw new Error(`Connection was refused to port ${port}`);
       } else {
-        throw new Error(`Connection failed with code ${data.payload.Number}`);
+        throw new Error(`Connection failed with code ${formatValue(data.payload.Number)}`);
       }
     });
 
@@ -389,8 +391,8 @@ export class Usbmux extends BaseSocketService {
    * @private
    */
   private _closeAfterListen(): void {
-    this.close().catch((err: Error) => {
-      log.warn(`Failed to close usbmux connection after listen() stopped: ${err.message}`);
+    runInBackground(this.close(), (e) => {
+      log.warn(`Failed to close usbmux connection after listen() stopped: ${formatError(e)}`);
     });
   }
 
@@ -401,7 +403,7 @@ export class Usbmux extends BaseSocketService {
    * @private
    */
   private _forEachEventStream(fn: (stream: UsbmuxDeviceEventStream) => void): void {
-    for (const stream of [...this._eventStreams]) {
+    for (const stream of Array.from(this._eventStreams)) {
       fn(stream);
     }
   }
@@ -689,7 +691,7 @@ export async function connectAndRelay(deviceID: string | number, port: number, r
       try {
         await relay.stop();
       } catch (err) {
-        log.error(`Error stopping relay: ${err}`);
+        log.error(`Error stopping relay: ${formatError(err)}`);
       }
     }
   }

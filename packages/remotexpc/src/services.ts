@@ -10,7 +10,7 @@ import {
 } from './lib/tunnel/tunnel-service-resolver.js';
 import type {DVTInstruments, SyslogService as SyslogServiceType, XCTestServices} from './lib/types.js';
 import {AccessibilityAuditService} from './services/ios/accessibility-audit/index.js';
-import AfcService from './services/ios/afc/index.js';
+import {AfcService} from './services/ios/afc/index.js';
 import {AmfiService} from './services/ios/amfi/index.js';
 import {AppService} from './services/ios/app-service/index.js';
 import {type Service} from './services/ios/base-service.js';
@@ -40,7 +40,7 @@ import {HouseArrestService} from './services/ios/house-arrest/index.js';
 import {InstallationProxyService} from './services/ios/installation-proxy/index.js';
 import {MisagentService} from './services/ios/misagent/index.js';
 import {MobileConfigService} from './services/ios/mobile-config/index.js';
-import MobileImageMounterService from './services/ios/mobile-image-mounter/index.js';
+import {MobileImageMounterService} from './services/ios/mobile-image-mounter/index.js';
 import {NotificationProxyService} from './services/ios/notification-proxy/index.js';
 import {PasteboardService} from './services/ios/pasteboard/index.js';
 import {PowerAssertionService} from './services/ios/power-assertion/index.js';
@@ -48,7 +48,7 @@ import {SpringBoardService} from './services/ios/springboard-service/index.js';
 import SyslogService from './services/ios/syslog-service/index.js';
 import {DvtTestmanagedProxyService} from './services/ios/testmanagerd/index.js';
 import {WebInspectorService} from './services/ios/webinspector/index.js';
-import ZipConduitService from './services/ios/zipconduit/index.js';
+import {ZipConduitService} from './services/ios/zipconduit/index.js';
 
 export {getAvailableDevices, getTunnelForDevice} from './lib/tunnel/tunnel-availability.js';
 export {getAvailableTransports} from './lib/service-transport/index.js';

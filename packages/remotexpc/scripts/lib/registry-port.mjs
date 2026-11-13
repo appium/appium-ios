@@ -1,3 +1,4 @@
+import {once} from 'node:events';
 import net from 'node:net';
 
 const TUNNEL_REGISTRY_HOST = '127.0.0.1';
@@ -7,19 +8,20 @@ const TUNNEL_REGISTRY_HOST = '127.0.0.1';
  * @param {number} port
  * @returns {Promise<number>}
  */
-function bindFreePort(port) {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
+async function bindFreePort(port) {
+  const probe = net.createServer();
+  await new Promise((resolve, reject) => {
     probe.once('error', reject);
-    probe.listen(port, TUNNEL_REGISTRY_HOST, () => {
-      const address = probe.address();
-      if (!address || typeof address === 'string') {
-        probe.close(() => reject(new Error('Could not resolve a free port')));
-        return;
-      }
-      probe.close((err) => (err ? reject(err) : resolve(address.port)));
-    });
+    probe.listen(port, TUNNEL_REGISTRY_HOST, () => resolve(undefined));
   });
+  const address = probe.address();
+  const closed = once(probe, 'close');
+  probe.close();
+  await closed;
+  if (!address || typeof address === 'string') {
+    throw new Error('Could not resolve a free port');
+  }
+  return address.port;
 }
 
 /**

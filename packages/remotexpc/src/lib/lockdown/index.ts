@@ -4,6 +4,7 @@ import tls, {type ConnectionOptions, type TLSSocket} from 'node:tls';
 
 import {BasePlistService} from '../../base-plist-service.js';
 import {ServiceConnection} from '../../service-connection.js';
+import {formatError, formatValue} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {type PairRecord} from '../pair-record/index.js';
 import {PlistService} from '../plist/plist-service.js';
@@ -268,7 +269,7 @@ class DeviceManager {
       deviceManagerLog.info(record ? 'Pair record retrieved successfully' : 'No pair record found');
       return record;
     } catch (err) {
-      deviceManagerLog.error(`Error getting pair record: ${err}`);
+      deviceManagerLog.error(`Error getting pair record: ${formatError(err)}`);
       throw err;
     } finally {
       await this.closeUsbmux(usbmux);
@@ -279,7 +280,7 @@ class DeviceManager {
     try {
       await usbmux.close();
     } catch (err) {
-      deviceManagerLog.error(`Error closing usbmux: ${err}`);
+      deviceManagerLog.error(`Error closing usbmux: ${formatError(err)}`);
     }
   }
 }
@@ -328,7 +329,7 @@ export class LockdownService extends BasePlistService {
 
     if (response.Request === 'StartSession' && response.SessionID) {
       const sessionInfo: SessionInfo = {
-        sessionID: String(response.SessionID),
+        sessionID: formatValue(response.SessionID),
         enableSessionSSL: Boolean(response.EnableSessionSSL),
       };
 
@@ -367,7 +368,7 @@ export class LockdownService extends BasePlistService {
   async startService(serviceName: string, timeout = DEFAULT_TIMEOUT): Promise<StartedLockdownService> {
     const response = await this.sendAndReceive({Label: LABEL, Request: 'StartService', Service: serviceName}, timeout);
     if (response.Error) {
-      throw new LockdownStartServiceError(serviceName, String(response.Error));
+      throw new LockdownStartServiceError(serviceName, formatValue(response.Error));
     }
     const port = Number(response.Port);
     if (!Number.isInteger(port) || port <= 0) {
@@ -389,7 +390,7 @@ export class LockdownService extends BasePlistService {
       }
       await this.startSecureSession(pairRecord);
     } catch (err) {
-      log.error(`TLS upgrade failed: ${err}`);
+      log.error(`TLS upgrade failed: ${formatError(err)}`);
       throw err;
     }
   }
@@ -488,7 +489,7 @@ export class LockdownService extends BasePlistService {
       this.closeSocket();
       this.stopRelayService();
     } catch (err) {
-      log.error(`Error during close: ${err}`);
+      log.error(`Error during close: ${formatError(err)}`);
       throw err;
     }
   }
@@ -530,7 +531,7 @@ export class LockdownService extends BasePlistService {
           await relay.stop();
           log.info('Relay server stopped successfully');
         } catch (err) {
-          log.error(`Error stopping relay server: ${err}`);
+          log.error(`Error stopping relay server: ${formatError(err)}`);
         }
       })();
     }
@@ -559,7 +560,7 @@ export class LockdownService extends BasePlistService {
     const response = (await this.sendAndReceive(request, timeout)) as GetValueResponse;
 
     if (response.Error) {
-      throw new LockdownError(`Lockdown GetValue failed for key "${key ?? '<all>'}": ${String(response.Error)}`);
+      throw new LockdownError(`Lockdown GetValue failed for key "${key ?? '<all>'}": ${formatValue(response.Error)}`);
     }
     if (!Object.prototype.hasOwnProperty.call(response, 'Value')) {
       throw new LockdownError(`Lockdown GetValue missing Value for key "${key ?? '<all>'}"`);
@@ -674,7 +675,7 @@ export async function openLockdownSession(udid: string): Promise<LockdownSession
     try {
       lockdown.close();
     } catch (closeErr) {
-      log.debug(`Error closing lockdown after a failed session: ${closeErr}`);
+      log.debug(`Error closing lockdown after a failed session: ${formatError(closeErr)}`);
     }
     throw err;
   }
@@ -763,6 +764,6 @@ async function rsdHandshakeLockdownPlistService(conn: ServiceConnection): Promis
   }
   if (second.Error) {
     const desc = second.ErrorDescription ?? 'Unknown error';
-    throw new LockdownError(`RSD remote lockdown service failed: ${String(second.Error)} — ${desc}`);
+    throw new LockdownError(`RSD remote lockdown service failed: ${formatValue(second.Error)} — ${formatValue(desc)}`);
   }
 }

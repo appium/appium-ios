@@ -2,6 +2,7 @@ import type {Socket} from 'node:net';
 
 import {util} from '@appium/support';
 
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {connectViaTunnel} from '../../../lib/port-forwarding/connectors.js';
 import type {
@@ -277,8 +278,8 @@ export class CompanionProxyService extends BaseService implements CompanionProxy
     if (!response?.Error) {
       return response;
     }
-    const code = String(response.Error);
-    const description = response.ErrorDescription ? ` - ${String(response.ErrorDescription)}` : '';
+    const code = formatValue(response.Error);
+    const description = response.ErrorDescription ? ` - ${formatValue(response.ErrorDescription)}` : '';
     throw new CompanionProxyError(`${command} failed: ${code}${description}`, code);
   }
 

@@ -185,7 +185,7 @@ describe('zipconduit/stream-zip', function () {
     const entries = await zip.entries();
     const entry = entries['doc/changelog-foot.html'];
     assert.ok(entry !== null && entry !== undefined);
-    const entryBeforeOpen = {...entry!};
+    const entryBeforeOpen = Object.assign({}, entry);
     const entryAfterOpen = await zip.openEntry(entry!);
     assert.notDeepStrictEqual(entryAfterOpen, entryBeforeOpen);
     await zip.close();

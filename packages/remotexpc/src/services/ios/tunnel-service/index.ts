@@ -1,5 +1,6 @@
 import type {Socket} from 'node:net';
 
+import {formatValue} from '../../../lib/format-error.js';
 import type {LockdownService} from '../../../lib/lockdown/index.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createUsbmux} from '../../../lib/usbmux/index.js';
@@ -39,7 +40,7 @@ export async function startCoreDeviceProxyTcp(
     throw new Error('Service didnt return a port');
   }
 
-  log.debug(`Connecting to CoreDeviceProxy service on port: ${response.Port}`);
+  log.debug(`Connecting to CoreDeviceProxy service on port: ${formatValue(response.Port)}`);
 
   const usbmux = await createUsbmux();
   try {

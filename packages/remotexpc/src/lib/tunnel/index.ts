@@ -105,13 +105,13 @@ class TunnelManagerService {
           await entry.tunnel.closer();
           log.info(`Closed tunnel for address: ${address}`);
         } catch (error) {
-          log.error(`Error closing tunnel for address ${address}: ${error}`);
+          log.error(`Error closing tunnel for address ${address}: ${formatError(error)}`);
         } finally {
           entry.isActive = false;
           log.info(`Marked tunnel for address ${address} as inactive`);
         }
       } catch (error) {
-        log.error(`Error closing tunnel for address ${address}: ${error}`);
+        log.error(`Error closing tunnel for address ${address}: ${formatError(error)}`);
       }
     }
   }
@@ -153,13 +153,13 @@ class TunnelManagerService {
           try {
             await tunnel.closer();
           } catch (error) {
-            log.warn(`Error closing redundant tunnel: ${error}`);
+            log.warn(`Error closing redundant tunnel: ${formatError(error)}`);
           }
           existingTunnel.lastUsed = Date.now();
           return existingTunnel.tunnel;
         }
       } catch (error) {
-        log.warn(`Error checking tunnel functionality: ${error}, creating a new one`);
+        log.warn(`Error checking tunnel functionality: ${formatError(error)}, creating a new one`);
         existingTunnel.isActive = false;
       }
     }
@@ -187,5 +187,6 @@ export {
   type WatchTunnelRegistryOptions,
   type WatchTunnelRegistryOnDeadOptions,
 } from './tunnel-registry-lifecycle.js';
+import {formatError} from '../format-error.js';
 // Re-export TunnelConnection type from appium-ios-tuntap
 export type {TunnelConnection};

@@ -1,5 +1,6 @@
+import {formatError, formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
-import AfcService from '../afc/index.js';
+import {AfcService} from '../afc/index.js';
 import {BaseService} from '../base-service.js';
 
 const log = getLogger('HouseArrestService');
@@ -69,10 +70,10 @@ export class HouseArrestService extends BaseService {
         throw new Error(`App '${bundleId}' may not have iTunes File Sharing enabled. Try vendContainer() instead.`);
       }
       if (error) {
-        throw new Error(`House Arrest vend failed: ${error}`);
+        throw new Error(`House Arrest vend failed: ${formatError(error)}`);
       }
       if (status !== 'Complete') {
-        throw new Error(`House Arrest vend failed with status: ${status}`);
+        throw new Error(`House Arrest vend failed with status: ${formatValue(status)}`);
       }
 
       log.debug(`Successfully vended into ${bundleId}`);

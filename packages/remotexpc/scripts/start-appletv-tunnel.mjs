@@ -19,6 +19,7 @@ import {
 import {Command} from 'commander';
 
 import {DEFAULT_TUNNEL_REGISTRY_PORT, DEFAULT_WIRELESS_APPLETV_DISCOVERY_TIMEOUT_MS} from './lib/constants.mjs';
+import {formatError} from './lib/format-error.mjs';
 import {parseNonNegativeIntegerOption, parsePortOption, parsePositiveIntegerOption} from './lib/options.mjs';
 import {startTimeoutProgressLogger} from './lib/progress.mjs';
 import {resolveAvailableRegistryPort} from './lib/registry-port.mjs';
@@ -204,7 +205,7 @@ function setupCleanupHandlers() {
             await tunnelConnection.closer();
           }
         } catch (err) {
-          log.warn(`Error closing tunnel: ${err}`);
+          log.warn(`Error closing tunnel: ${formatError(err)}`);
         }
       }
       establishedTunnelsByUdid.clear();
@@ -367,7 +368,7 @@ async function runAppleTvReconnectAttempts({
       }
       return;
     } catch (err) {
-      log.warn(`Reconnect attempt failed for ${udid}: ${err}`);
+      log.warn(`Reconnect attempt failed for ${udid}: ${formatError(err)}`);
     }
     await sleep(1000);
   }
@@ -521,7 +522,7 @@ async function main() {
           });
           log.info(`Tunnel established for ${d.identifier}`);
         } catch (err) {
-          log.warn(`Skipping ${d.identifier}: ${err}`);
+          log.warn(`Skipping ${d.identifier}: ${formatError(err)}`);
         }
         if (i < devices.length - 1) {
           await sleep(1000);

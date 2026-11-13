@@ -1,6 +1,7 @@
 import type {Socket} from 'node:net';
 import type {TLSSocket} from 'node:tls';
 
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import type {TunnelRegistry} from '../types.js';
 
@@ -85,13 +86,13 @@ export function watchTunnelRegistrySockets(options: WatchTunnelRegistryOptions):
       try {
         await onRemove?.(udid);
       } catch (err) {
-        log.warn(`onRemove failed for ${udid}: ${err}`);
+        log.warn(`onRemove failed for ${udid}: ${formatError(err)}`);
       }
 
       try {
         await onTunnelDead?.({udid, address});
       } catch (err) {
-        log.warn(`onTunnelDead failed for ${udid}: ${err}`);
+        log.warn(`onTunnelDead failed for ${udid}: ${formatError(err)}`);
       }
     };
 
@@ -157,13 +158,13 @@ export function watchTunnelRegistryOnDead(options: WatchTunnelRegistryOnDeadOpti
       try {
         await onRemove?.(udid);
       } catch (err) {
-        log.warn(`onRemove failed for ${udid}: ${err}`);
+        log.warn(`onRemove failed for ${udid}: ${formatError(err)}`);
       }
 
       try {
         await onTunnelDead?.({udid, address});
       } catch (err) {
-        log.warn(`onTunnelDead failed for ${udid}: ${err}`);
+        log.warn(`onTunnelDead failed for ${udid}: ${formatError(err)}`);
       }
     };
 

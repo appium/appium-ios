@@ -1,6 +1,8 @@
 import {EventEmitter} from 'node:events';
 import net from 'node:net';
 
+import {runInBackground} from '../background.js';
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {Http2Constants} from './constants.js';
 import {DataFrame} from './handshake-frames.js';
@@ -405,8 +407,8 @@ export class RemoteXpcFramedTransport extends EventEmitter {
   private failConnection(reason: string): void {
     this.desynced = true;
     this.connected = false;
-    this.close().catch((error: unknown) => {
-      log.debug(`Failed to close a failed RemoteXPC transport: ${error}`);
+    runInBackground(this.close(), (e) => {
+      log.debug(`Failed to close a failed RemoteXPC transport: ${formatError(e)}`);
     });
     this.emit('error', new Error(reason));
   }
