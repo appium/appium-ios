@@ -28,7 +28,7 @@ class TestHidIndigoService extends HidIndigoService {
     return this.fake.closeCalls;
   }
 
-  protected async createTransport(): Promise<any> {
+  protected override async createTransport(): Promise<any> {
     return this.fake;
   }
 }

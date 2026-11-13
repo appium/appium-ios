@@ -10,7 +10,7 @@ const log = getLogger('ConditionInducer');
  * such as network conditions, thermal states, etc.
  */
 export class ConditionInducer extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.ConditionInducer';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.ConditionInducer';
 
   /**
    * List all available condition inducers and their profiles

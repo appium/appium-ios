@@ -85,7 +85,7 @@ export type NotificationMessage = ApplicationStateNotification | MemoryLevelNoti
  */
 export class Notifications extends BaseInstrument {
   /** DTX service identifier for mobile notifications */
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.mobilenotifications';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.mobilenotifications';
 
   async start(): Promise<void> {
     await this.initialize();

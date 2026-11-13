@@ -697,7 +697,6 @@ export type Simulator = CoreSimulator &
   InteractsWithSafariBrowser &
   InteractsWithApps &
   HasSettings &
-  InteractsWithApps &
   SupportsBiometric &
   SupportsGeolocation &
   InteractsWithKeychain &

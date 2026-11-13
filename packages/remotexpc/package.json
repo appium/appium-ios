@@ -93,7 +93,7 @@
   },
   "dependencies": {
     "@appium/strongbox": "^3.0.0-beta.1",
-    "@appium/support": "^8.0.0-beta.6",
+    "@appium/support": "^8.0.0-beta.7",
     "@xmldom/xmldom": "^0.x",
     "appium-ios-tuntap": "^3.0.2",
     "asyncbox": "^6.6.0",
@@ -104,8 +104,8 @@
     "path-to-regexp": "^8.4.0"
   },
   "devDependencies": {
-    "@appium/oxc-config": "^2.0.0-beta.2",
-    "@appium/tsconfig": "^2.0.0-beta.1",
+    "@appium/oxc-config": "^2.0.0-beta.3",
+    "@appium/tsconfig": "^2.0.0-beta.2",
     "@types/node": "^26.6.5",
     "@types/sinon": "^22.0.2",
     "sinon": "^22.0.0"

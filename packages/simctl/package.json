@@ -54,8 +54,8 @@
     "which": "^6.0.0"
   },
   "devDependencies": {
-    "@appium/tsconfig": "^2.0.0-beta.1",
-    "@appium/types": "^2.0.0-beta.5",
+    "@appium/tsconfig": "^2.0.0-beta.2",
+    "@appium/types": "^2.0.0-beta.6",
     "@types/node": "^26.0.0",
     "@types/semver": "^7.7.1",
     "@types/sinon": "^22.0.0",

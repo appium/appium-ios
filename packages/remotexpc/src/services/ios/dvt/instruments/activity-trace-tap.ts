@@ -68,7 +68,7 @@ interface Table {
  * ```
  */
 export class ActivityTraceTap extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.activitytracetap';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.activitytracetap';
 
   private stack: StackItem[] = [];
   private tables: Map<number, Table> = new Map();

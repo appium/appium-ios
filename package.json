@@ -50,7 +50,7 @@
     "version": "run-s sync-pkgs stage-synced-pkgs"
   },
   "devDependencies": {
-    "@appium/oxc-config": "^2.0.0-beta.2",
+    "@appium/oxc-config": "^2.0.0-beta.3",
     "@tsconfig/node22": "^22.0.6",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "lerna": "^10.0.1",

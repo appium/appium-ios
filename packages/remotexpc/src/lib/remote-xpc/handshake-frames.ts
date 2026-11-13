@@ -202,11 +202,11 @@ export class SettingsFrame extends Frame {
     this.settings = settings || {};
   }
 
-  bodyRepr(): string {
+  override bodyRepr(): string {
     return `settings=${JSON.stringify(this.settings)}`;
   }
 
-  serializeBody(): Buffer {
+  override serializeBody(): Buffer {
     if (this.flags.has('ACK')) {
       return Buffer.alloc(0);
     }
@@ -244,7 +244,7 @@ export class DataFrame extends Frame {
     return Buffer.alloc(0);
   }
 
-  serializeBody(): Buffer {
+  override serializeBody(): Buffer {
     const paddingData = this.serializePaddingData();
     const padding = Buffer.alloc(this.padLength, 0);
     // Ensure data is a Buffer
@@ -296,11 +296,11 @@ export class HeadersFrame extends Frame {
     return STRUCT_LB.pack(this.dependsOn + (this.exclusive ? 0x80000000 : 0), this.streamWeight);
   }
 
-  bodyRepr(): string {
+  override bodyRepr(): string {
     return `exclusive=${this.exclusive}, dependsOn=${this.dependsOn}, streamWeight=${this.streamWeight}, data=${rawDataRepr(this.data)}`;
   }
 
-  serializeBody(): Buffer {
+  override serializeBody(): Buffer {
     const paddingData = this.serializePaddingData();
     const padding = Buffer.alloc(this.padLength, 0);
     let priorityData: Buffer;
@@ -325,11 +325,11 @@ export class WindowUpdateFrame extends Frame {
     this.windowIncrement = windowIncrement;
   }
 
-  bodyRepr(): string {
+  override bodyRepr(): string {
     return `windowIncrement=${this.windowIncrement}`;
   }
 
-  serializeBody(): Buffer {
+  override serializeBody(): Buffer {
     return STRUCT_L.pack(this.windowIncrement & 0x7fffffff);
   }
 }

@@ -404,7 +404,10 @@ export class LockdownService extends BasePlistService {
   /**
    * Sends a message and receives a response
    */
-  public async sendAndReceive(msg: Record<string, PlistValue>, timeout = DEFAULT_TIMEOUT): Promise<PlistMessage> {
+  public override async sendAndReceive(
+    msg: Record<string, PlistValue>,
+    timeout = DEFAULT_TIMEOUT,
+  ): Promise<PlistMessage> {
     const service = this.isTLS && this.tlsService ? this.tlsService : this._plistService;
     return service.sendPlistAndReceive(msg, timeout);
   }
@@ -478,7 +481,7 @@ export class LockdownService extends BasePlistService {
   /**
    * Closes the service and associated resources
    */
-  public close(): void {
+  public override close(): void {
     log.info('Closing LockdownService connections');
 
     try {
