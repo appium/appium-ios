@@ -53,7 +53,62 @@ NS_ASSUME_NONNULL_BEGIN
          thenHoldForDuration:(NSTimeInterval)holdDuration
                        error:(NSError * _Nullable*)error;
 
+
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+/**
+ Resolves the display a coordinate belongs to, using the element the coordinate was derived
+ from and falling back to the main display (0) when the runtime does not expose displayID.
+
+ @param coordinate The coordinate to resolve
+ @return The display identifier to target
+ */
++ (long long)fb_displayIDForCoordinate:(XCUICoordinate *)coordinate;
+
+/**
+ Resolves the application an element or coordinate belongs to.
+
+ @param element The element to resolve; XCUIApplication is returned as-is
+ @return The owning application, or nil when it cannot be determined
+ */
++ (nullable XCUIApplication *)fb_applicationForElement:(XCUIElement *)element;
+
+/**
+ Builds the event record used by
+ -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:
+ without sending it, so a caller can dispatch it itself. The confirmed path and any caller
+ that skips the daemon confirmation therefore produce the same gesture from the same inputs.
+
+ @param startCoordinate The coordinate to press at
+ @param pressDuration How long to hold still at startCoordinate before dragging, in seconds (>= 0)
+ @param endCoordinate The coordinate to drag to
+ @param velocity Drag velocity in points per second, or one of the XCUIGestureVelocity constants
+ @param holdDuration How long to hold still at endCoordinate before lifting, in seconds (>= 0)
+ @param error If there is an error, upon return contains an NSError object that describes the problem
+ @return The event record, ready to be synthesized, or nil if the points cannot be resolved
+ @throws FBInvalidArgumentException if a duration or the velocity is out of range
+ */
+- (nullable XCSynthesizedEventRecord *)fb_pressDragEventFromCoordinate:(XCUICoordinate *)startCoordinate
+                                                          forDuration:(NSTimeInterval)pressDuration
+                                                         toCoordinate:(XCUICoordinate *)endCoordinate
+                                                         withVelocity:(XCUIGestureVelocity)velocity
+                                                 thenHoldForDuration:(NSTimeInterval)holdDuration
+                                                               error:(NSError * _Nullable*)error;
+
+/**
+ Builds the event record for a single tap at an already resolved screen point. The touch
+ lifts after a fixed short hold (50 ms in the implementation); that value is chosen for the
+ fast path and is not verified to be the hold -[XCUICoordinate tap] uses internally. Exposed
+ so a caller can dispatch the event without waiting for XCTest's daemon confirmation.
+
+ @param point The screen point to tap
+ @param displayID The display to send the gesture to (0 is the main display)
+ @param interfaceOrientation The interface orientation the point is expressed in
+ @return The event record, ready to be synthesized
+ */
++ (XCSynthesizedEventRecord *)fb_tapEventFromPoint:(CGPoint)point
+                                         displayID:(long long)displayID
+                              interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation;
+
 /**
  Builds the synthesized event used by
  -fb_pressAtCoordinate:forDuration:thenDragToCoordinate:withVelocity:thenHoldForDuration:error:

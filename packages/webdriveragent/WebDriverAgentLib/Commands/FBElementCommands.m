@@ -7,10 +7,14 @@
  */
 
 #import "FBElementCommands.h"
+#import "FBElementCommands-Private.h"
+
+#import <stdatomic.h>
 
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
+#import "FBLogger.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
 #import "FBRunLoopSpinner.h"
@@ -21,9 +25,11 @@
 #import "FBMacros.h"
 #import "FBMathUtils.h"
 #import "FBRuntimeUtils.h"
+#import "FBXCTestDaemonsProxy.h"
 #import "NSPredicate+FBFormat.h"
 #import "XCTestPrivateSymbols.h"
 #import "XCUIApplication+FBTouchAction.h"
+
 #import "XCUICoordinate.h"
 #import "XCUIDevice.h"
 #import "XCUIElement+FBIsVisible.h"
@@ -42,8 +48,32 @@
 #import "XCUIElementQuery.h"
 #import "FBXCodeCompatibility.h"
 
-@interface FBElementCommands ()
-@end
+// Counters for the opt-in fast gesture queue. File scope so `/status` can read them; all
+// updates use C11 atomics because enqueueing and synthesis run on different threads.
+static atomic_int fbFastGesturesPending;
+static atomic_int fbFastGesturesEnqueued;
+static atomic_int fbFastGesturesFailed;
+static atomic_int fbFastGesturesRejected;
+
+// Bounded recent-result map for optional client-supplied `gestureId` values. The queue is
+// asynchronous, so this is the only way a caller can learn that a specific event failed
+// after its 200 was already sent.
+static NSMutableDictionary<NSString *, NSMutableDictionary *> *fbFastGestureResults;
+static NSMutableArray<NSString *> *fbFastGestureResultOrder;
+static const NSUInteger FBMaxFastGestureResults = 32;
+
+// Sixteen events is enough to absorb a burst from a caller that pipelines taps: at the
+// measured 0.26-0.47 s per synthesis that is several seconds of backlog. Keeping the number
+// small bounds both the event objects and the delay before a rejection is reported.
+static const int32_t FBMaxPendingFastGestures = 16;
+
+// One serial queue for fast gestures. Created lazily through fb_synthesisQueue so both the
+// dispatcher and the drain barrier see the same queue.
+static dispatch_queue_t fbSynthesisQueue;
+static dispatch_once_t fbSynthesisQueueOnce;
+// Marks the synthesis queue so a confirmed gesture invoked from inside it runs inline instead
+// of deadlocking on a nested dispatch_sync.
+static char FBGestureQueueKey;
 
 @implementation FBElementCommands
 
@@ -463,16 +493,60 @@
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
   }
   NSTimeInterval duration = [request.arguments[@"duration"] doubleValue];
+#if TARGET_OS_WATCH
   XCUIApplication *application = [target isKindOfClass:XCUIApplication.class]
     ? (XCUIApplication *)target
     : target.application;
-  if (![application fb_pressAtCoordinate:startCoordinate
-                             forDuration:duration
-                    thenDragToCoordinate:endCoordinate
-                            withVelocity:XCUIGestureVelocityDefault
-                     thenHoldForDuration:0
-                                   error:&error]) {
-    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
+#else
+  XCUIApplication *application = [XCUIApplication fb_applicationForElement:target];
+#endif
+  if ([request.arguments[@"fast"] boolValue]) {
+#if TARGET_OS_TV || TARGET_OS_WATCH
+    // Gesture synthesis is not available on tvOS or watchOS. The handlers are excluded from
+    // tvOS at the compilation level and the category header hides these builders there, but
+    // keeping the guard aligned with the header makes the contract explicit.
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on tvOS or watchOS"
+                                                                           traceback:nil]);
+#else
+    // The same event record the confirmed path builds, dispatched without waiting for the
+    // daemon to confirm it. See handleTap: for the response contract.
+    XCSynthesizedEventRecord *event = [application fb_pressDragEventFromCoordinate:startCoordinate
+                                                                       forDuration:duration
+                                                                      toCoordinate:endCoordinate
+                                                                      withVelocity:XCUIGestureVelocityDefault
+                                                               thenHoldForDuration:0
+                                                                             error:&error];
+    if (nil == event) {
+      // The client-facing message is the readable one; error.description would print the
+      // NSError dump (domain, code, userInfo) into the response.
+      return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription
+                                                                             traceback:nil]);
+    }
+    FBGestureEnqueueResult dragQueueResult = [self fb_dispatchEventInBackground:event
+                                                                           name:@"drag"
+                                                                      gestureId:request.arguments[@"gestureId"]];
+    if (dragQueueResult != FBGestureEnqueueResultQueued) {
+      NSString *message = dragQueueResult == FBGestureEnqueueResultDuplicateGestureId
+        ? [NSString stringWithFormat:@"gestureId '%@' is already in use", request.arguments[@"gestureId"]]
+        : @"Too many fast gestures are already queued. Wait for them to finish or retry without 'fast'";
+      return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:message traceback:nil]);
+    }
+    return FBResponseWithOK();
+#endif
+  }
+  __block BOOL dragSucceeded = NO;
+  __block NSError *dragError = nil;
+  [self fb_performGesture:^{
+    dragSucceeded = [application fb_pressAtCoordinate:startCoordinate
+                                          forDuration:duration
+                                 thenDragToCoordinate:endCoordinate
+                                         withVelocity:XCUIGestureVelocityDefault
+                                  thenHoldForDuration:0
+                                                error:&dragError];
+  } wait:YES];
+  if (!dragSucceeded) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:dragError.localizedDescription
+                                                                           traceback:nil]);
   }
   return FBResponseWithOK();
 }
@@ -507,8 +581,223 @@
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
                                                                        traceback:nil]);
   }
-  [target tap];
+  if (![request.arguments[@"fast"] boolValue]) {
+    [self fb_performGesture:^{
+      [target tap];
+    } wait:YES];
+    return FBResponseWithOK();
+  }
+
+#if TARGET_OS_TV || TARGET_OS_WATCH
+  // Gesture synthesis is not available on tvOS or watchOS. Handlers are excluded from tvOS at
+  // the compilation level; this guard matches the category header on both platforms.
+  return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"Fast mode is not supported on tvOS or watchOS"
+                                                                         traceback:nil]);
+#else
+  // Opt-in fast mode: the event is queued and the reply is sent without waiting for XCTest
+  // to confirm it, so the touch has not landed when the caller reads this response. Callers
+  // that need proof of delivery have to observe the screen instead.
+  XCUICoordinate *coordinate = [target isKindOfClass:XCUICoordinate.class]
+    ? (XCUICoordinate *)target
+    : [(XCUIElement *)target coordinateWithNormalizedOffset:CGVectorMake(0.5, 0.5)];
+  CGPoint point = coordinate.screenPoint;
+  if (!isfinite(point.x) || !isfinite(point.y)) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot resolve the on-screen position of the tap target. Make sure it is visible and idle, then retry"
+                                                                           traceback:nil]);
+  }
+  // `element` is not public on XCUICoordinate; referencedElement is.
+  XCUIElement *anchor = coordinate.referencedElement ?: (XCUIElement *)target;
+#if TARGET_OS_WATCH
+  XCUIApplication *application = [anchor isKindOfClass:XCUIApplication.class]
+    ? (XCUIApplication *)anchor
+    : anchor.application;
+#else
+  XCUIApplication *application = [XCUIApplication fb_applicationForElement:anchor];
+#endif
+  if (nil == application) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:@"Cannot determine the application of the tap target"
+                                                                           traceback:nil]);
+  }
+  // Element targets cannot be tapped in fast mode: the centre would be used without
+  // XCTest's hittability and scroll-into-view resolution.
+  if (![target isKindOfClass:XCUICoordinate.class]
+      && ((XCUIElement *)target).elementType != XCUIElementTypeApplication) {
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:@"fast element taps are not supported; pass x/y or omit 'fast'"
+                                                                           traceback:nil]);
+  }
+  // Like XCTest, send the event to the display the target belongs to.
+  XCUIElement *referencedElement = coordinate.referencedElement;
+  long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
+    ? referencedElement.displayID
+    : 0;
+  XCSynthesizedEventRecord *event = [XCUIApplication fb_tapEventFromPoint:point
+                                                               displayID:displayID
+                                                    interfaceOrientation:application.interfaceOrientation];
+  FBGestureEnqueueResult tapQueueResult = [self fb_dispatchEventInBackground:event
+                                                                         name:@"tap"
+                                                                    gestureId:request.arguments[@"gestureId"]];
+  if (tapQueueResult != FBGestureEnqueueResultQueued) {
+    NSString *message = tapQueueResult == FBGestureEnqueueResultDuplicateGestureId
+      ? [NSString stringWithFormat:@"gestureId '%@' is already in use", request.arguments[@"gestureId"]]
+      : @"Too many fast gestures are already queued. Wait for them to finish or retry without 'fast'";
+    return FBResponseWithStatus([FBCommandStatus unsupportedOperationErrorWithMessage:message traceback:nil]);
+  }
   return FBResponseWithOK();
+#endif
+}
+
+/**
+ Dispatches an already built event record without waiting for the daemon to confirm it.
+ The queue is serial, so consecutive fast gestures reach the daemon in the order they were
+ requested. The pending count is bounded so a burst cannot grow the queue without limit; a
+ caller that finds it full gets an error instead of a silent backlog. Failures are counted
+ for `/status` and logged, because the reply has already been sent.
+ Confirmed gestures that do not synthesize through this queue (notably -[XCUIElement tap])
+ are still not ordered against a fast event; that limitation is deliberate until the
+ confirmed tap path can share the queue.
+
+ @param event The event record to synthesize
+ @param name A short gesture name for the failure log message
+ @return YES when the event was queued, NO when the pending limit is reached
+ */
++ (FBGestureEnqueueResult)fb_dispatchEventInBackground:(XCSynthesizedEventRecord *)event
+                                                  name:(NSString *)name
+                                             gestureId:(NSString *)gestureId
+{
+  if (gestureId.length > 0) {
+    @synchronized([FBElementCommands class]) {
+      NSDictionary *existing = fbFastGestureResults[gestureId];
+      if (nil != existing) {
+        BOOL pending = [existing[@"state"] isEqualToString:@"pending"];
+        NSTimeInterval age = [[NSDate date] timeIntervalSince1970] - [existing[@"updatedAt"] doubleValue];
+        if (pending || age <= 60.0) {
+          atomic_fetch_add_explicit(&fbFastGesturesRejected, 1, memory_order_relaxed);
+          return FBGestureEnqueueResultDuplicateGestureId;
+        }
+        [fbFastGestureResultOrder removeObject:gestureId];
+        [fbFastGestureResults removeObjectForKey:gestureId];
+      }
+    }
+  }
+  if (atomic_fetch_add_explicit(&fbFastGesturesPending, 1, memory_order_relaxed) >= FBMaxPendingFastGestures) {
+    atomic_fetch_sub_explicit(&fbFastGesturesPending, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&fbFastGesturesRejected, 1, memory_order_relaxed);
+    return FBGestureEnqueueResultQueueFull;
+  }
+  atomic_fetch_add_explicit(&fbFastGesturesEnqueued, 1, memory_order_relaxed);
+  [self fb_recordFastGesture:gestureId name:name state:@"pending" error:nil];
+  dispatch_async([self fb_synthesisQueue], ^{
+    NSError *error = nil;
+    BOOL succeeded = [FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:&error];
+    if (!succeeded) {
+      atomic_fetch_add_explicit(&fbFastGesturesFailed, 1, memory_order_relaxed);
+      [FBLogger logFmt:@"Failed to synthesize the %@ event without waiting for confirmation: %@",
+       name, error.localizedDescription ?: @"unknown error"];
+    }
+    [self fb_recordFastGesture:gestureId
+                          name:name
+                         state:succeeded ? @"completed" : @"failed"
+                         error:error];
+    atomic_fetch_sub_explicit(&fbFastGesturesPending, 1, memory_order_relaxed);
+  });
+  return FBGestureEnqueueResultQueued;
+}
+
++ (void)fb_recordFastGesture:(NSString *)gestureId
+                        name:(NSString *)name
+                       state:(NSString *)state
+                       error:(NSError *)error
+{
+  if (gestureId.length == 0) {
+    return;
+  }
+  @synchronized([FBElementCommands class]) {
+    if (nil == fbFastGestureResults) {
+      fbFastGestureResults = [NSMutableDictionary dictionary];
+      fbFastGestureResultOrder = [NSMutableArray array];
+    }
+    NSMutableDictionary *result = [NSMutableDictionary dictionaryWithDictionary:@{
+      @"name": name,
+      @"state": state,
+      @"updatedAt": @([[NSDate date] timeIntervalSince1970]),
+    }];
+    if (nil != error) {
+      result[@"error"] = error.localizedDescription ?: @"unknown error";
+    }
+    if (![fbFastGestureResultOrder containsObject:gestureId]) {
+      [fbFastGestureResultOrder addObject:gestureId];
+    }
+    fbFastGestureResults[gestureId] = result;
+    while (fbFastGestureResultOrder.count > FBMaxFastGestureResults) {
+      NSString *oldest = fbFastGestureResultOrder.firstObject;
+      [fbFastGestureResultOrder removeObjectAtIndex:0];
+      [fbFastGestureResults removeObjectForKey:oldest];
+    }
+  }
+}
+
++ (dispatch_queue_t)fb_synthesisQueue
+{
+  dispatch_once(&fbSynthesisQueueOnce, ^{
+    fbSynthesisQueue = dispatch_queue_create("com.facebook.WebDriverAgent.fast-gesture",
+                                             DISPATCH_QUEUE_SERIAL);
+    dispatch_set_target_queue(fbSynthesisQueue,
+                              dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
+    dispatch_queue_set_specific(fbSynthesisQueue, &FBGestureQueueKey, (void *)1, NULL);
+  });
+  return fbSynthesisQueue;
+}
+
++ (void)fb_drainFastGestures
+{
+  // Wait for the blocks already queued, but do not let a stuck daemon block session
+  // deletion forever. Five seconds covers the 16-event bound at normal synthesis times;
+  // on timeout the events stay queued and are logged instead of holding the request.
+  dispatch_semaphore_t drained = dispatch_semaphore_create(0);
+  dispatch_async([self fb_synthesisQueue], ^{
+    dispatch_semaphore_signal(drained);
+  });
+  if (dispatch_semaphore_wait(drained,
+                              dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC))) != 0) {
+    [FBLogger logFmt:@"Timed out waiting for the fast gesture queue to drain"];
+  }
+}
+
++ (void)fb_performGesture:(dispatch_block_t)block wait:(BOOL)wait
+{
+  if (dispatch_get_specific(&FBGestureQueueKey) != NULL) {
+    block();
+    return;
+  }
+  if (wait) {
+    dispatch_sync([self fb_synthesisQueue], block);
+  } else {
+    dispatch_async([self fb_synthesisQueue], block);
+  }
+}
+
++ (NSDictionary *)fb_fastGestureStats
+{
+  NSDictionary *counters = @{
+    @"pending": @(atomic_load(&fbFastGesturesPending)),
+    @"enqueued": @(atomic_load(&fbFastGesturesEnqueued)),
+    @"failed": @(atomic_load(&fbFastGesturesFailed)),
+    @"rejected": @(atomic_load(&fbFastGesturesRejected)),
+  };
+  @synchronized([FBElementCommands class]) {
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+    for (NSString *gestureId in [fbFastGestureResultOrder copy]) {
+      NSDictionary *result = fbFastGestureResults[gestureId];
+      BOOL pending = [result[@"state"] isEqualToString:@"pending"];
+      if (!pending && now - [result[@"updatedAt"] doubleValue] > 60.0) {
+        [fbFastGestureResultOrder removeObject:gestureId];
+        [fbFastGestureResults removeObjectForKey:gestureId];
+      }
+    }
+    NSMutableDictionary *stats = [counters mutableCopy];
+    stats[@"recent"] = fbFastGestureResults.count > 0 ? [fbFastGestureResults copy] : @{};
+    return [stats copy];
+  }
 }
 
 + (id<FBResponsePayload>)handlePinch:(FBRouteRequest *)request

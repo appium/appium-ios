@@ -14,6 +14,7 @@
 
 #import "FBCapabilities.h"
 #import "FBConfiguration.h"
+#import "FBElementCommands.h"
 #import "FBExceptions.h"
 #import "FBLogger.h"
 #import "FBProtocolHelpers.h"
@@ -167,6 +168,9 @@
 + (id<FBResponsePayload>)handleDeleteSession:(FBRouteRequest *)request
 {
   [request.session kill];
+  // Fast events are queued, so they can outlive the request that created them. Drain them
+  // before the session is gone rather than letting the next session inherit the touches.
+  [FBElementCommands fb_drainFastGestures];
   return FBResponseWithOK();
 }
 
@@ -223,6 +227,9 @@
           @"ip" : [XCUIDevice sharedDevice].fb_wifiIPAddress ?: [NSNull null]
         },
       @"build" : buildInfo.copy,
+      // Cumulative since this WDA process started; a caller reads pending to see a backlog
+      // and failed/rejected to see events that did not reach the daemon.
+      @"gestures" : [FBElementCommands fb_fastGestureStats],
       @"device": deviceKind
     }
   );
