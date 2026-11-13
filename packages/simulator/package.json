@@ -1,6 +1,6 @@
 {
   "name": "appium-ios-simulator",
-  "version": "11.0.4",
+  "version": "11.0.5",
   "description": "iOS Simulator interface for Appium.",
   "keywords": [
     "appium",
@@ -51,7 +51,7 @@
     "@appium/coresim": "^2.0.3",
     "@appium/support": "^8.0.0-beta.7",
     "@xmldom/xmldom": "^0.x",
-    "appium-xcode": "^8.0.2",
+    "appium-xcode": "^8.0.3",
     "asyncbox": "^6.6.0",
     "semver": "^7.8.5",
     "teen_process": "^5.0.0"

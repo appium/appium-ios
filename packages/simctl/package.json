@@ -1,6 +1,6 @@
 {
   "name": "node-simctl",
-  "version": "10.0.3",
+  "version": "10.0.4",
   "description": "Wrapper around Apple's simctl binary",
   "keywords": [
     "apple",
@@ -60,7 +60,7 @@
     "@types/semver": "^7.7.1",
     "@types/sinon": "^22.0.0",
     "@types/which": "^3.0.4",
-    "appium-xcode": "^8.0.2",
+    "appium-xcode": "^8.0.3",
     "sinon": "^22.0.0"
   },
   "engines": {

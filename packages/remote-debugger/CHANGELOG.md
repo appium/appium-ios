@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.8...appium-remote-debugger@19.1.9) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
 ## [19.1.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.7...appium-remote-debugger@19.1.8) (2026-11-13)
 
 **Note:** Version bump only for package appium-remote-debugger

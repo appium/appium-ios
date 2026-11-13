@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.4...appium-webdriveragent@17.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
 ## [17.0.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.3...appium-webdriveragent@17.0.4) (2026-11-13)
 
 ### Miscellaneous Chores

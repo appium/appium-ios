@@ -1,6 +1,6 @@
 {
   "name": "appium-remote-debugger",
-  "version": "19.1.8",
+  "version": "19.1.9",
   "description": "Appium proxy for Remote Debugger protocol",
   "keywords": [
     "appium"
@@ -60,7 +60,7 @@
   "dependencies": {
     "@appium/base-driver": "^11.0.0-beta.7",
     "@appium/support": "^8.0.0-beta.7",
-    "appium-ios-remotexpc": "^6.0.6",
+    "appium-ios-remotexpc": "^6.0.7",
     "asyncbox": "^6.6.0",
     "teen_process": "^5.0.0"
   },
