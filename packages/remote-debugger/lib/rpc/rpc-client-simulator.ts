@@ -4,6 +4,7 @@ import {util} from '@appium/support';
 
 import {log} from '../logger.js';
 import type {RpcClientOptions, RpcClientSimulatorOptions, RemoteCommand} from '../types.js';
+import {runInBackground} from '../utils/index.js';
 import {RpcClient} from './rpc-client.js';
 import {
   WebInspectorFrameDecoder,
@@ -129,7 +130,9 @@ export class RpcClientSimulator extends RpcClient {
         if (this.logAllCommunication) {
           log.debug(`Received message from Web Inspector:\n${util.jsonStringify(message, null)}`);
         }
-        this.receive(message).catch((err: Error) => log.error(`Cannot handle Web Inspector message: ${err.message}`));
+        runInBackground(this.receive(message), (e: Error) =>
+          log.error(`Cannot handle Web Inspector message: ${e.message}`),
+        );
       }
       if (decodeError) {
         log.error(`Cannot decode Web Inspector data: ${decodeError.message}`);
