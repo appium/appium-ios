@@ -42,7 +42,7 @@ export class NSUserDefaults {
    */
   async update(valuesMap: Record<string, any>): Promise<void> {
     if (!util.isPlainObject(valuesMap)) {
-      throw new TypeError(`plist values must be a map. '${valuesMap}' is given instead`);
+      throw new TypeError(`plist values must be a map. '${JSON.stringify(valuesMap)}' is given instead`);
     }
     if (Object.keys(valuesMap).length === 0) {
       return;

@@ -275,7 +275,7 @@ export interface LaunchAppOptions {
 }
 
 /** Which of an app's on-disk containers {@link InteractsWithApps.getAppContainer} should resolve. */
-export type AppContainerType = 'app' | 'data' | 'groups' | string;
+export type AppContainerType = 'app' | 'data' | 'groups' | (string & Record<never, never>);
 
 export interface InteractsWithApps {
   installApp(app: string): Promise<void>;

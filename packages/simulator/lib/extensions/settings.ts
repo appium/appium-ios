@@ -298,7 +298,7 @@ export async function configureLocalization(
     } else {
       this.log.info(
         `Will restart the following services in order to sync UI dialogs translation: ` +
-          `${SERVICES_FOR_TRANSLATION}. This might have unexpected side effects, ` +
+          `${SERVICES_FOR_TRANSLATION.join(', ')}. This might have unexpected side effects, ` +
           `see https://github.com/appium/appium/issues/19440 for more details`,
       );
       await Promise.all(
@@ -550,7 +550,7 @@ export function verifyDevicePreferences(this: CoreSimulatorWithSettings, prefs: 
       !acceptableSimulatorWindowOrientations.includes(prefs.SimulatorWindowOrientation))
   ) {
     throw this.log.errorWithException(
-      `SimulatorWindowOrientation is expected to be one of ${acceptableSimulatorWindowOrientations}. ` +
+      `SimulatorWindowOrientation is expected to be one of ${acceptableSimulatorWindowOrientations.join(', ')}. ` +
         `'${prefs.SimulatorWindowOrientation}' is assigned instead.`,
     );
   }
@@ -558,7 +558,7 @@ export function verifyDevicePreferences(this: CoreSimulatorWithSettings, prefs: 
   if (prefs.SimulatorWindowRotationAngle !== undefined && typeof prefs.SimulatorWindowRotationAngle !== 'number') {
     throw this.log.errorWithException(
       `SimulatorWindowRotationAngle is expected to be a valid number. ` +
-        `'${prefs.SimulatorWindowRotationAngle}' is assigned instead.`,
+        `'${String(prefs.SimulatorWindowRotationAngle)}' is assigned instead.`,
     );
   }
 }
