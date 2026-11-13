@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@appium/logger": "^3.0.0-beta.2",
-    "asyncbox": "^6.0.1",
+    "asyncbox": "^7.0.0",
     "semver": "^7.0.0",
     "teen_process": "^5.0.0",
     "which": "^6.0.0"

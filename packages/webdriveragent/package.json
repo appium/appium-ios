@@ -64,7 +64,7 @@
     "@appium/base-driver": "^11.0.0-beta.7",
     "@appium/strongbox": "^3.0.0-beta.1",
     "@appium/support": "^8.0.0-beta.7",
-    "asyncbox": "^6.6.0",
+    "asyncbox": "^7.0.0",
     "axios": "^1.21.0",
     "teen_process": "^5.0.0"
   },
