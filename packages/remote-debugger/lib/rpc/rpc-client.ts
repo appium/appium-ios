@@ -476,14 +476,14 @@ export class RpcClient {
         let awaitsReply = false;
         if (!waitForResponse) {
           if (hasSocketData) {
-            listen(String(msgId), lateErrorListener(msgId, reject));
+            listen(String(msgId), createLateErrorListener(msgId, reject));
           }
         } else if (this.messageHandler.listenerCount(cmd.__selector)) {
           awaitsReply = true;
-          listen(cmd.__selector, selectorReplyListener(msgId, resolve, reject), 'prependOnceListener');
+          listen(cmd.__selector, createSelectorReplyListener(msgId, resolve, reject), 'prependOnceListener');
         } else if (hasSocketData) {
           awaitsReply = true;
-          listen(String(msgId), dataReplyListener(msgId, resolve, reject));
+          listen(String(msgId), createDataReplyListener(msgId, resolve, reject));
         }
 
         log.debug(
@@ -493,7 +493,9 @@ export class RpcClient {
             (targetId ? `, target '${targetId}'` : '') +
             ` (id: ${msgId}): '${command}'`,
         );
-        this.sendMessage(finalCommand).then(() => awaitsReply || resolve(fullOpts), reject);
+        this.sendMessage(finalCommand)
+          .then(() => awaitsReply || resolve(fullOpts))
+          .catch(reject);
       });
       if (waitForResponse) {
         stopListening();
@@ -1494,10 +1496,13 @@ function toFinalCommand(
 }
 
 type Settle = (value: any) => void;
+type ErrorListener = (err: Error | null) => void;
+type SelectorReplyListener = (err: Error | null, ...args: any[]) => void;
+type DataReplyListener = (err: Error | null, value: any) => void;
 
 /** Logs an error for a command that is not waited for, most likely a protocol change. */
-function lateErrorListener(msgId: number, reject: Settle) {
-  return (err: Error | null) => {
+function createLateErrorListener(msgId: number, reject: Settle): ErrorListener {
+  return (err) => {
     if (err) {
       log.error(
         `Received error from send that is not being waited for (id: ${msgId}): ` +
@@ -1508,8 +1513,8 @@ function lateErrorListener(msgId: number, reject: Settle) {
   };
 }
 
-function selectorReplyListener(msgId: number, resolve: Settle, reject: Settle) {
-  return (err: Error | null, ...args: any[]) => {
+function createSelectorReplyListener(msgId: number, resolve: Settle, reject: Settle): SelectorReplyListener {
+  return (err, ...args) => {
     if (err) {
       return reject(err);
     }
@@ -1520,8 +1525,8 @@ function selectorReplyListener(msgId: number, resolve: Settle, reject: Settle) {
   };
 }
 
-function dataReplyListener(msgId: number, resolve: Settle, reject: Settle) {
-  return (err: Error | null, value: any) => {
+function createDataReplyListener(msgId: number, resolve: Settle, reject: Settle): DataReplyListener {
+  return (err, value) => {
     if (err) {
       return reject(
         Object.assign(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`), {
