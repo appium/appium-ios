@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@appium/support": "^8.0.0-beta.7",
-    "asyncbox": "^6.6.0",
+    "asyncbox": "^7.0.0",
     "lru-cache": "^11.5.3",
     "node-addon-api": "^8.5.0",
     "node-gyp-build": "^4.8.4"
