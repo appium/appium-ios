@@ -41,6 +41,7 @@ const DEFAULT_TARGET_CREATION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 const WAIT_FOR_TARGET_INTERVAL_MS = 100;
 const PAGE_OVERRIDE_TIMEOUT_MS = 10000;
 const PAGE_OVERRIDE_TARGET_CONCURRENCY = 4;
+const SELECT_APP_TIMEOUT_MS = 10000;
 const NO_TARGET_SUPPORTED_ERROR = `'target' domain was not found`;
 const MISSING_TARGET_ERROR_PATTERN = /Missing target/i;
 const NO_TARGET_PRESENT_YET_ERRORS = [`domain was not found`, `some arguments of method`, `missing target`];
@@ -429,140 +430,83 @@ export class RpcClient {
     signal?.throwIfAborted();
     const msgId = this.msgId++;
     const wrapperMsgId = this.msgId++;
+    const {appIdKey, pageIdKey} = opts;
+    const targetId = opts.targetId ?? this.getTarget(appIdKey, pageIdKey);
+    // connId is always pinned to the current connection, but senderId may be
+    // overridden by the caller (e.g. an Automation session uses its own sender id)
+    const fullOpts: RemoteCommandOpts & RemoteCommandId = defaults(
+      {connId: this.connId, targetId, id: msgId.toString()},
+      {senderId: this.senderId, ...opts},
+    );
+    let cmd: RawRemoteCommand;
+    try {
+      cmd = this.remoteMessages.getRemoteCommand(command, fullOpts);
+    } catch (err) {
+      log.error(err);
+      throw err;
+    }
+    const {finalCommand, hasSocketData, wrapped} = toFinalCommand(cmd, wrapperMsgId);
+
+    const listeners: [string, (...args: any[]) => void][] = [];
+    const stopListening = () => {
+      for (const [event, listener] of listeners) {
+        this.messageHandler.removeListener(event, listener);
+      }
+    };
     let onAbort: (() => void) | undefined;
-    let removeSelectorListener: (() => void) | undefined;
-    return await new Promise<any>((resolve, reject) => {
-      if (signal) {
-        onAbort = () => reject(signal.reason);
-        signal.addEventListener('abort', onAbort, {once: true});
-      }
-      void (async () => {
-        // acknowledge wrapper message
-        this.messageHandler.on(wrapperMsgId.toString(), function (err: Error | null) {
-          if (err) {
-            reject(err);
-          }
-        });
-
-        const appIdKey = opts.appIdKey;
-        const pageIdKey = opts.pageIdKey;
-        const targetId = opts.targetId ?? this.getTarget(appIdKey, pageIdKey);
-
-        // retrieve the correct command to send
-        // connId is always pinned to the current connection, but senderId may be
-        // overridden by the caller (e.g. an Automation session uses its own sender id)
-        const fullOpts: RemoteCommandOpts & RemoteCommandId = defaults(
-          {
-            connId: this.connId,
-            targetId,
-            id: msgId.toString(),
-          },
-          {senderId: this.senderId, ...opts},
-        );
-        let cmd: RawRemoteCommand;
-        try {
-          cmd = this.remoteMessages.getRemoteCommand(command, fullOpts);
-        } catch (err: any) {
-          log.error(err);
-          return reject(err);
-        }
-
-        const finalCommandArgs = {...cmd.__argument};
-        delete finalCommandArgs.WIRSocketDataKey;
-        const finalCommand: RemoteCommand = {
-          __argument: finalCommandArgs as any,
-          __selector: cmd.__selector,
+    try {
+      const result = await new Promise<any>((resolve, reject) => {
+        const listen = (
+          event: string,
+          listener: (...args: any[]) => void,
+          method: 'on' | 'once' | 'prependOnceListener' = 'once',
+        ) => {
+          this.messageHandler[method](event, listener);
+          listeners.push([event, listener]);
         };
-
-        const hasSocketData = util.isPlainObject(cmd.__argument?.WIRSocketDataKey);
-        if (hasSocketData) {
-          // make sure the message being sent has all the information that is needed
-          const socketData = cmd.__argument.WIRSocketDataKey as StringRecord;
-          if (!Number.isInteger(socketData.id)) {
-            // ! This must be a number
-            socketData.id = wrapperMsgId;
-          }
-          finalCommand.__argument.WIRSocketDataKey = Buffer.from(JSON.stringify(socketData));
+        if (signal) {
+          onAbort = () => reject(signal.reason);
+          signal.addEventListener('abort', onAbort, {once: true});
+        }
+        if (wrapped) {
+          // an error can follow the ack: awaited commands listen until they settle, no-wait ones stop at the ack
+          listen(String(wrapperMsgId), (err: Error | null) => err && reject(err), waitForResponse ? 'on' : 'once');
         }
 
-        let messageHandled = true;
+        let awaitsReply = false;
         if (!waitForResponse) {
-          // the promise will be resolved as soon as the socket has been sent
-          messageHandled = false;
-          // do not log receipts
-          this.messageHandler.once(msgId.toString(), (err: Error | null) => {
-            if (err) {
-              // we are not waiting for this, and if it errors it is most likely
-              // a protocol change. Log and check during testing
-              log.error(
-                `Received error from send that is not being waited for (id: ${msgId}): ` +
-                  util.truncateString(JSON.stringify(err), DATA_LOG_LENGTH),
-              );
-              // reject, though it is very rare that this will be triggered, since
-              // the promise is resolved directly after send. On the off chance,
-              // though, it will alert of a protocol change.
-              reject(err);
-            }
-          });
+          if (hasSocketData) {
+            listen(String(msgId), lateErrorListener(msgId, reject));
+          }
         } else if (this.messageHandler.listenerCount(cmd.__selector)) {
-          const listener = (err: Error | null, ...args: any[]) => {
-            if (err) {
-              return reject(err);
-            }
-            log.debug(
-              `Received response from send (id: ${msgId}): '${util.truncateString(JSON.stringify(args), DATA_LOG_LENGTH)}'`,
-            );
-            resolve(args);
-          };
-          this.messageHandler.prependOnceListener(cmd.__selector, listener);
-          removeSelectorListener = () => this.messageHandler.removeListener(cmd.__selector, listener);
+          awaitsReply = true;
+          listen(cmd.__selector, selectorReplyListener(msgId, resolve, reject), 'prependOnceListener');
         } else if (hasSocketData) {
-          this.messageHandler.once(msgId.toString(), (err: Error | null, value: any) => {
-            if (err) {
-              return reject(
-                Object.assign(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`), {
-                  code: (err as any).code,
-                }),
-              );
-            }
-            log.debug(
-              `Received data response from send (id: ${msgId}): '${util.truncateString(JSON.stringify(value), DATA_LOG_LENGTH)}'`,
-            );
-            resolve(value);
-          });
-        } else {
-          // nothing else is handling things, so just resolve when the message is sent
-          messageHandled = false;
+          awaitsReply = true;
+          listen(String(msgId), dataReplyListener(msgId, resolve, reject));
         }
 
-        const msg =
+        log.debug(
           `Sending '${cmd.__selector}' message` +
-          (appIdKey ? ` to app '${appIdKey}'` : '') +
-          (pageIdKey ? `, page '${pageIdKey}'` : '') +
-          (targetId ? `, target '${targetId}'` : '') +
-          ` (id: ${msgId}): '${command}'`;
-        log.debug(msg);
-        try {
-          await this.sendMessage(finalCommand);
-          if (!messageHandled) {
-            // There are no handlers waiting for a response before resolving,
-            // and no errors sending the message over the socket, so resolve
-            resolve(fullOpts as any);
-          }
-        } catch (err) {
-          return reject(err);
-        }
-      })().catch(reject);
-    }).finally(() => {
-      if (signal) {
-        if (onAbort) {
-          signal.removeEventListener('abort', onAbort);
-        }
-        this.messageHandler.removeAllListeners(String(msgId));
-        this.messageHandler.removeAllListeners(String(wrapperMsgId));
-        removeSelectorListener?.();
+            (appIdKey ? ` to app '${appIdKey}'` : '') +
+            (pageIdKey ? `, page '${pageIdKey}'` : '') +
+            (targetId ? `, target '${targetId}'` : '') +
+            ` (id: ${msgId}): '${command}'`,
+        );
+        this.sendMessage(finalCommand).then(() => awaitsReply || resolve(fullOpts), reject);
+      });
+      if (waitForResponse) {
+        stopListening();
       }
-    });
+      return result;
+    } catch (err) {
+      stopListening();
+      throw err;
+    } finally {
+      if (onAbort) {
+        signal?.removeEventListener('abort', onAbort);
+      }
+    }
   }
 
   /**
@@ -863,23 +807,31 @@ export class RpcClient {
    * Connects to a specific application and returns its page dictionary.
    *
    * @param appIdKey - The application identifier key to connect to.
+   * @param bundleId - The bundle id of that application. A connect with the same bundle id
+   *                   counts as the application relaunching under a new identifier key.
    * @returns A promise that resolves to a tuple containing the connected app ID key
    *          and the page dictionary.
-   * @throws Error if a new application connects during the process or if the page
+   * @throws Error if the application, a proxy for it or a relaunch of it connects during the
+   *               process, if `connectToApp` gets no reply within 10 seconds, or if the page
    *               dictionary is empty.
    */
-  async selectApp(appIdKey: AppIdKey): Promise<[string, StringRecord]> {
+  async selectApp(appIdKey: AppIdKey, bundleId?: string): Promise<[string, StringRecord]> {
     return await new Promise<[string, StringRecord]>((resolve, reject) => {
       // local callback, temporarily added as callback to
       // `_rpc_applicationConnected:` remote debugger response
       // to handle the initial connection
       const onAppChange = (err: Error | null, dict: StringRecord) => {
         if (err) {
-          return reject(err);
+          return fail(err);
         }
         // from the dictionary returned, get the ids
         const oldAppIdKey = dict.WIRHostApplicationIdentifierKey;
         const correctAppIdKey = dict.WIRApplicationIdentifierKey;
+        // other apps keep connecting right after the debugger connects and do not affect this one
+        const relaunched = !!bundleId && dict.WIRApplicationBundleIdentifierKey === bundleId;
+        if (!relaunched && ![oldAppIdKey, correctAppIdKey].includes(String(appIdKey))) {
+          return;
+        }
 
         // if this is a report of a proxy redirect from the remote debugger
         // we want to update our dictionary and get a new app id
@@ -890,14 +842,34 @@ export class RpcClient {
           );
         }
 
-        reject(new Error(NEW_APP_CONNECTED_ERROR));
+        fail(new Error(NEW_APP_CONNECTED_ERROR));
       };
-      this.messageHandler.prependOnceListener('_rpc_applicationConnected:', onAppChange);
+      const connectRequest = new AbortController();
+      const stopListening = () => {
+        clearTimeout(timeoutHandler);
+        this.messageHandler.off('_rpc_applicationConnected:', onAppChange);
+      };
+      // also stops waiting for the outstanding connectToApp reply
+      const fail = (err: Error) => {
+        stopListening();
+        connectRequest.abort(err);
+        reject(err);
+      };
+      this.messageHandler.prependListener('_rpc_applicationConnected:', onAppChange);
+      // a lost connectToApp reply would otherwise leave this pending
+      const timeoutHandler = setTimeout(() => {
+        fail(new Error(`Application '${appIdKey}' did not reply to connectToApp within ${SELECT_APP_TIMEOUT_MS}ms`));
+      }, SELECT_APP_TIMEOUT_MS);
 
       // do the actual connecting to the app
       void (async () => {
         try {
-          const [connectedAppIdKey, pageDict] = await this.send('connectToApp', {appIdKey});
+          const [connectedAppIdKey, pageDict] = await this.send(
+            'connectToApp',
+            {appIdKey},
+            true,
+            connectRequest.signal,
+          );
           // sometimes the connect logic happens, but with an empty dictionary
           // which leads to the remote debugger getting disconnected, and into a loop
           if (util.isEmpty(pageDict)) {
@@ -906,10 +878,12 @@ export class RpcClient {
             resolve([connectedAppIdKey, pageDict]);
           }
         } catch (err: any) {
-          log.warn(`Unable to connect to the app: ${err.message}`);
+          if (err !== connectRequest.signal.reason) {
+            log.warn(`Unable to connect to the app: ${err.message}`);
+          }
           reject(err);
         } finally {
-          this.messageHandler.off('_rpc_applicationConnected:', onAppChange);
+          stopListening();
         }
       })();
     });
@@ -1490,6 +1464,76 @@ export class RpcClient {
       ? {...this._pendingTargetNotification}
       : logInfo('with different app id');
   }
+}
+
+/**
+ * Converts a raw remote command into the form sent over the wire. Socket data is serialized, and
+ * gets the wrapper message id when it has no id of its own.
+ */
+function toFinalCommand(
+  cmd: RawRemoteCommand,
+  wrapperMsgId: number,
+): {finalCommand: RemoteCommand; hasSocketData: boolean; wrapped: boolean} {
+  const finalCommandArgs = {...cmd.__argument};
+  delete finalCommandArgs.WIRSocketDataKey;
+  const finalCommand: RemoteCommand = {
+    __argument: finalCommandArgs as any,
+    __selector: cmd.__selector,
+  };
+  const socketData = cmd.__argument?.WIRSocketDataKey;
+  if (!util.isPlainObject(socketData)) {
+    return {finalCommand, hasSocketData: false, wrapped: false};
+  }
+  const wrapped = !Number.isInteger((socketData as StringRecord).id);
+  if (wrapped) {
+    // ! This must be a number
+    (socketData as StringRecord).id = wrapperMsgId;
+  }
+  finalCommand.__argument.WIRSocketDataKey = Buffer.from(JSON.stringify(socketData));
+  return {finalCommand, hasSocketData: true, wrapped};
+}
+
+type Settle = (value: any) => void;
+
+/** Logs an error for a command that is not waited for, most likely a protocol change. */
+function lateErrorListener(msgId: number, reject: Settle) {
+  return (err: Error | null) => {
+    if (err) {
+      log.error(
+        `Received error from send that is not being waited for (id: ${msgId}): ` +
+          util.truncateString(JSON.stringify(err), DATA_LOG_LENGTH),
+      );
+      reject(err);
+    }
+  };
+}
+
+function selectorReplyListener(msgId: number, resolve: Settle, reject: Settle) {
+  return (err: Error | null, ...args: any[]) => {
+    if (err) {
+      return reject(err);
+    }
+    log.debug(
+      `Received response from send (id: ${msgId}): '${util.truncateString(JSON.stringify(args), DATA_LOG_LENGTH)}'`,
+    );
+    resolve(args);
+  };
+}
+
+function dataReplyListener(msgId: number, resolve: Settle, reject: Settle) {
+  return (err: Error | null, value: any) => {
+    if (err) {
+      return reject(
+        Object.assign(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`), {
+          code: (err as any).code,
+        }),
+      );
+    }
+    log.debug(
+      `Received data response from send (id: ${msgId}): '${util.truncateString(JSON.stringify(value), DATA_LOG_LENGTH)}'`,
+    );
+    resolve(value);
+  };
 }
 
 /**
