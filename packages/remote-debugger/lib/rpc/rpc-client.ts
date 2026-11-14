@@ -493,7 +493,9 @@ export class RpcClient {
             (targetId ? `, target '${targetId}'` : '') +
             ` (id: ${msgId}): '${command}'`,
         );
-        this.sendMessage(finalCommand).then(() => awaitsReply || resolve(fullOpts), reject);
+        this.sendMessage(finalCommand)
+          .then(() => awaitsReply || resolve(fullOpts))
+          .catch(reject);
       });
       if (waitForResponse) {
         stopListening();

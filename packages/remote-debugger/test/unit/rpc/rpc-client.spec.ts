@@ -415,7 +415,13 @@ describe('rpc-client', function () {
       ]);
       const signal = new AbortController().signal;
       await RpcClient.prototype.sendToDevice.call(client as any, 'command', {appIdKey: 'PID:1'}, false, signal);
-      assert.deepStrictEqual(client.messageHandler.eventNames().sort(), ['1', '2']);
+      assert.deepStrictEqual(
+        client.messageHandler
+          .eventNames()
+          .map(String)
+          .sort((a, b) => a.localeCompare(b)),
+        ['1', '2'],
+      );
       await new Promise(setImmediate);
       assert.deepStrictEqual(client.messageHandler.eventNames(), []);
     });
