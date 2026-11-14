@@ -476,14 +476,14 @@ export class RpcClient {
         let awaitsReply = false;
         if (!waitForResponse) {
           if (hasSocketData) {
-            listen(String(msgId), lateErrorListener(msgId, reject));
+            listen(String(msgId), createLateErrorListener(msgId, reject));
           }
         } else if (this.messageHandler.listenerCount(cmd.__selector)) {
           awaitsReply = true;
-          listen(cmd.__selector, selectorReplyListener(msgId, resolve, reject), 'prependOnceListener');
+          listen(cmd.__selector, createSelectorReplyListener(msgId, resolve, reject), 'prependOnceListener');
         } else if (hasSocketData) {
           awaitsReply = true;
-          listen(String(msgId), dataReplyListener(msgId, resolve, reject));
+          listen(String(msgId), createDataReplyListener(msgId, resolve, reject));
         }
 
         log.debug(
@@ -1496,7 +1496,7 @@ function toFinalCommand(
 type Settle = (value: any) => void;
 
 /** Logs an error for a command that is not waited for, most likely a protocol change. */
-function lateErrorListener(msgId: number, reject: Settle) {
+function createLateErrorListener(msgId: number, reject: Settle): (err: Error | null) => void {
   return (err: Error | null) => {
     if (err) {
       log.error(
@@ -1508,7 +1508,11 @@ function lateErrorListener(msgId: number, reject: Settle) {
   };
 }
 
-function selectorReplyListener(msgId: number, resolve: Settle, reject: Settle) {
+function createSelectorReplyListener(
+  msgId: number,
+  resolve: Settle,
+  reject: Settle,
+): (err: Error | null, ...args: any[]) => void {
   return (err: Error | null, ...args: any[]) => {
     if (err) {
       return reject(err);
@@ -1520,7 +1524,11 @@ function selectorReplyListener(msgId: number, resolve: Settle, reject: Settle) {
   };
 }
 
-function dataReplyListener(msgId: number, resolve: Settle, reject: Settle) {
+function createDataReplyListener(
+  msgId: number,
+  resolve: Settle,
+  reject: Settle,
+): (err: Error | null, value: any) => void {
   return (err: Error | null, value: any) => {
     if (err) {
       return reject(
