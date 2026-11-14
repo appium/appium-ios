@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.13](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.12...appium-remote-debugger@19.1.13) (2026-11-14)
+
+### Code Refactoring
+
+* **remote-debugger:** name reply listener factories with verbs and type their returns ([#206](https://github.com/appium/appium-ios/issues/206)) ([b4addf3](https://github.com/appium/appium-ios/commit/b4addf3cfcd43b120ffa30ad13e6058c80b28b26))
+
+
 ## [19.1.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.11...appium-remote-debugger@19.1.12) (2026-11-14)
 
 ### Bug Fixes
