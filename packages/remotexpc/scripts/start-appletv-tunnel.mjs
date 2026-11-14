@@ -19,6 +19,7 @@ import {
 import {Command} from 'commander';
 
 import {DEFAULT_TUNNEL_REGISTRY_PORT, DEFAULT_WIRELESS_APPLETV_DISCOVERY_TIMEOUT_MS} from './lib/constants.mjs';
+import {formatError} from './lib/format-error.mjs';
 import {parseNonNegativeIntegerOption, parsePortOption, parsePositiveIntegerOption} from './lib/options.mjs';
 import {startTimeoutProgressLogger} from './lib/progress.mjs';
 import {resolveAvailableRegistryPort} from './lib/registry-port.mjs';
@@ -204,7 +205,7 @@ function setupCleanupHandlers() {
             await tunnelConnection.closer();
           }
         } catch (err) {
-          log.warn(`Error closing tunnel: ${err}`);
+          log.warn(`Error closing tunnel: ${formatError(err)}`);
         }
       }
       establishedTunnelsByUdid.clear();
@@ -290,11 +291,15 @@ async function establishOneTunnel(startResult) {
  */
 function buildAppleTvTunnelEntry(result, existing, now) {
   const udid = result.device.identifier;
+  const rsdPort = result.tunnel.RsdPort;
+  if (rsdPort === undefined) {
+    throw new Error(`The tunnel for ${udid} did not report an RSD port`);
+  }
   const entry = {
     udid,
     deviceId: 0,
     address: result.tunnel.Address,
-    rsdPort: result.tunnel.RsdPort,
+    rsdPort,
     services: {},
     connectionType: 'WiFi',
     productId: 0,
@@ -363,7 +368,7 @@ async function runAppleTvReconnectAttempts({
       }
       return;
     } catch (err) {
-      log.warn(`Reconnect attempt failed for ${udid}: ${err}`);
+      log.warn(`Reconnect attempt failed for ${udid}: ${formatError(err)}`);
     }
     await sleep(1000);
   }
@@ -517,7 +522,7 @@ async function main() {
           });
           log.info(`Tunnel established for ${d.identifier}`);
         } catch (err) {
-          log.warn(`Skipping ${d.identifier}: ${err}`);
+          log.warn(`Skipping ${d.identifier}: ${formatError(err)}`);
         }
         if (i < devices.length - 1) {
           await sleep(1000);

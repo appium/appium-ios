@@ -1,6 +1,7 @@
 import type net from 'node:net';
 
 import {ServiceConnection, type ServiceConnectionOptions} from '../../service-connection.js';
+import {formatError} from '../format-error.js';
 import {openLockdownSession, pairRecordTlsOptions, upgradeSocketToTLS} from '../lockdown/index.js';
 import {getLogger} from '../logger.js';
 import type {PlistDictionary} from '../types.js';
@@ -63,7 +64,7 @@ export class UsbmuxServiceTransport {
       try {
         lockdown.close();
       } catch (closeErr) {
-        log.debug(`Error closing lockdown after StartService: ${closeErr}`);
+        log.debug(`Error closing lockdown after StartService: ${formatError(closeErr)}`);
       }
     }
     log.debug(`Started ${lockdownName} on port ${started.port} (ssl=${started.enableServiceSSL})`);

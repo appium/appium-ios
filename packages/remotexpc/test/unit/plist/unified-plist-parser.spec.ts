@@ -10,7 +10,7 @@ import {parsePlist} from '../../../src/lib/plist/unified-plist-parser.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
 
 // Get the directory name
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 const FIXTURES_PATH = path.join(PKG_ROOT, 'test', 'unit', 'plist', 'fixtures');
 
 describe('Unified Plist Parser', function () {

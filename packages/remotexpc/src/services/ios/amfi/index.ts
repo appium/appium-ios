@@ -1,3 +1,4 @@
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {AmfiService as AmfiServiceInterface, PlistDictionary, PlistValue} from '../../../lib/types.js';
 import type {ServiceConnection} from '../../../service-connection.js';
@@ -170,7 +171,7 @@ class AmfiService extends BaseService implements AmfiServiceInterface {
     if (error === undefined || error === null) {
       return;
     }
-    const code = String(error);
+    const code = formatValue(error);
     if (code === DeviceHasPasscodeSetError.CODE) {
       throw new DeviceHasPasscodeSetError();
     }

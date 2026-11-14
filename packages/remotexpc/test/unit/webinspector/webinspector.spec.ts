@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
-import WebInspectorService from '../../../src/services/ios/webinspector/index.js';
+import {WebInspectorService} from '../../../src/services/ios/webinspector/index.js';
 
 describe('WebInspectorService', function () {
   describe('listenMessage', function () {

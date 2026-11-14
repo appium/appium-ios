@@ -1,3 +1,4 @@
+import {formatValue} from '../../../lib/format-error.js';
 import {asDictionary} from '../../../lib/remote-xpc/xpc-value.js';
 import type {XPCDictionary} from '../../../lib/types.js';
 import {type CoreDeviceInvokeOptions, CoreDeviceError, CoreDeviceService} from '../core-device/core-device-service.js';
@@ -121,7 +122,7 @@ export class ConfigurationService extends CoreDeviceService {
     const output = await this.action(ACTION.GET_USER_INTERFACE_STYLE, {}, options);
     const style = output.style;
     if (typeof style !== 'string') {
-      throw new CoreDeviceError(`Missing user-interface style in device response: ${String(style)}`, output);
+      throw new CoreDeviceError(`Missing user-interface style in device response: ${formatValue(style)}`, output);
     }
     return style;
   }

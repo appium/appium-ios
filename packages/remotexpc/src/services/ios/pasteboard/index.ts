@@ -108,7 +108,7 @@ export class PasteboardService extends CoreDeviceService {
     for (const item of items) {
       const dataMap = asDictionary(item.data);
       for (const uti of utis) {
-        const datum = asDictionary(dataMap[uti]);
+        const datum = asDictionary(dataMap?.[uti]);
         const raw = datum?.data;
         if (raw === undefined || raw === null) {
           continue;
@@ -131,7 +131,7 @@ export class PasteboardService extends CoreDeviceService {
     for (const item of items) {
       const dataMap = asDictionary(item.data);
       for (const uti of utis) {
-        const datum = asDictionary(dataMap[uti]);
+        const datum = asDictionary(dataMap?.[uti]);
         const raw = datum?.data;
         if (Buffer.isBuffer(raw) || raw instanceof Uint8Array) {
           return Buffer.from(raw);

@@ -117,7 +117,7 @@ export class DeviceInfo extends BaseInstrument {
    * Get the kernel performance event (kpep) database.
    * @returns Object containing kpep database or null if not available
    */
-  async kpepDatabase(): Promise<any | null> {
+  async kpepDatabase(): Promise<any> {
     const kpepData = await this.requestInformation('kpepDatabase');
 
     if (kpepData === null || kpepData === undefined) {

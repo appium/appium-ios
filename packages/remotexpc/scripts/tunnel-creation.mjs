@@ -19,6 +19,7 @@ import {
 import {Command} from 'commander';
 
 import {DEFAULT_TUNNEL_REGISTRY_PORT} from './lib/constants.mjs';
+import {formatError} from './lib/format-error.mjs';
 import {parseNonNegativeIntegerOption, parsePortOption} from './lib/options.mjs';
 import {assertRoot} from './lib/root.mjs';
 import {sleep} from './lib/timers.mjs';
@@ -32,6 +33,13 @@ const log = logger.getLogger('TunnelCreation');
 
 /** @type {import('appium-ios-remotexpc').TunnelRegistryServer | null} */
 let registryServer = null;
+
+function requireRegistry() {
+  if (!registryServer) {
+    throw new Error('The tunnel registry server is not running');
+  }
+  return registryServer.getRegistry();
+}
 
 /** @type {DeviceWatcher | null} */
 let deviceWatcher = null;
@@ -151,12 +159,16 @@ function dedupeDevicesByUdid(devices) {
  */
 function buildTunnelEntry(result, existing, now) {
   const udid = result.device.Properties.SerialNumber;
+  const rsdPort = result.tunnel.RsdPort;
+  if (rsdPort === undefined) {
+    throw new Error(`The tunnel for ${udid} did not report an RSD port`);
+  }
   /** @type {import('appium-ios-remotexpc').TunnelRegistryEntry} */
   const entry = {
     udid,
     deviceId: result.device.DeviceID,
     address: result.tunnel.Address,
-    rsdPort: result.tunnel.RsdPort,
+    rsdPort,
     services: {},
     // @ts-expect-error - connectionType is not typed
     connectionType: result.device.Properties.ConnectionType,
@@ -255,7 +267,7 @@ async function runReconnectAttempts({udid, maxRetries, device, watchedUdids, rec
 
     const result = await createTunnelForDevice(device);
     if (result.success) {
-      attachTunnelRegistryLifecycleWatch(registryServer.getRegistry(), [result], {
+      attachTunnelRegistryLifecycleWatch(requireRegistry(), [result], {
         onTunnelDead: async ({udid: droppedUdid}) => {
           await reconnectTunnelByUdid(droppedUdid);
         },
@@ -340,7 +352,7 @@ function setupCleanupHandlers() {
           await tunnelConnection.closer();
         }
       } catch (err) {
-        log.warn(`Error closing tunnel: ${err}`);
+        log.warn(`Error closing tunnel: ${formatError(err)}`);
       }
     }
     establishedTunnelsByUdid.clear();
@@ -437,7 +449,7 @@ async function createTunnelForDevice(device) {
     registerEstablishedTunnel(result);
     return result;
   } catch (error) {
-    const errorMessage = `Failed to create tunnel for device ${udid}: ${error}`;
+    const errorMessage = `Failed to create tunnel for device ${udid}: ${formatError(error)}`;
     log.error(`❌ ${errorMessage}`);
     return {
       // @ts-expect-error - device is not typed
@@ -556,7 +568,7 @@ class DeviceWatcher {
     if (!result.success) {
       return;
     }
-    attachTunnelRegistryLifecycleWatch(registryServer.getRegistry(), [result], {
+    attachTunnelRegistryLifecycleWatch(requireRegistry(), [result], {
       onTunnelDead: async ({udid: droppedUdid}) => {
         await this.reconnectTunnelByUdid(droppedUdid);
       },
@@ -565,7 +577,7 @@ class DeviceWatcher {
     try {
       published = await publishDiscoveredTunnelEntry(result);
     } catch (err) {
-      log.warn(`Failed to publish tunnel for ${udid}: ${err}`);
+      log.warn(`Failed to publish tunnel for ${udid}: ${formatError(err)}`);
     }
     if (!published) {
       // Otherwise the live but unpublished tunnel would make every later attach of this UDID a no-op
@@ -614,7 +626,7 @@ class DeviceWatcher {
     } finally {
       await lister.close().catch((err) => log.warn(`Failed to close usbmux listing connection: ${err}`));
     }
-    for (const udid of [...this.watchedUdids]) {
+    for (const udid of Array.from(this.watchedUdids)) {
       if (!listed.has(udid)) {
         log.info(`\n🔌 Device detached while usbmuxd was unavailable: ${udid}`);
         this.forget(udid);
@@ -649,12 +661,12 @@ class DeviceWatcher {
             await this.handleEvent(event);
           } catch (err) {
             // One failed event must not end the subscription
-            log.warn(`Failed to handle usbmux ${event.type} event: ${err}`);
+            log.warn(`Failed to handle usbmux ${event.type} event: ${formatError(err)}`);
           }
         }
       } catch (err) {
         if (!signal.aborted) {
-          log.warn(`Device watch interrupted (${err}); resubscribing in ${backoffMs}ms`);
+          log.warn(`Device watch interrupted (${formatError(err)}); resubscribing in ${backoffMs}ms`);
         }
       } finally {
         await usbmux?.close().catch((err) => log.warn(`Failed to close usbmux watch connection: ${err}`));
@@ -832,7 +844,7 @@ async function main() {
       log.info(`   curl "http://localhost:${registryPort}/remotexpc/tunnels/${firstUdid}?waitMs=15000"`);
     }
 
-    if (options.watchDevices) {
+    if (options.watchDevices && watchedUdids) {
       deviceWatcher = new DeviceWatcher({
         devicesByUdid,
         watchedUdids,
@@ -842,7 +854,7 @@ async function main() {
       await deviceWatcher.run();
     }
   } catch (error) {
-    log.error(`Error during tunnel creation test: ${error}`);
+    log.error(`Error during tunnel creation test: ${formatError(error)}`);
     throw error;
   }
 }

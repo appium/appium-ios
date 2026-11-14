@@ -955,7 +955,7 @@ export interface EnergyMonitorService {
    * {@link startSampling} must be called first — without it the device returns
    * empty metrics.
    */
-  sample(pids: number[]): Promise<Record<string, Record<string, number>>>;
+  sample(pids: number[]): Promise<Record<string, Record<string, number | undefined>>>;
   /**
    * Continuously yield energy snapshots for the given PIDs.
    * Stops and cleans up when the generator is returned or throws.
@@ -967,7 +967,7 @@ export interface EnergyMonitorService {
    * }
    * ```
    */
-  monitor(pids: number[]): AsyncGenerator<Record<string, Record<string, number>>, void, undefined>;
+  monitor(pids: number[]): AsyncGenerator<Record<string, Record<string, number | undefined>>, void, undefined>;
 }
 
 /**
@@ -1155,7 +1155,7 @@ export interface DeviceInfoService {
    * // }
    * ```
    */
-  kpepDatabase(): Promise<any | null>;
+  kpepDatabase(): Promise<any>;
 
   /**
    * Get trace code mappings
@@ -2133,7 +2133,7 @@ export interface CrashReportsService {
  */
 export interface SendMessageOptions {
   /** Optional message arguments */
-  args?: any | null;
+  args?: any;
   /** Whether a reply is expected (default: true) */
   expectsReply?: boolean;
 }

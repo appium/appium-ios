@@ -162,7 +162,8 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
     this.listenerAbortController = new AbortController();
     const {signal} = this.listenerAbortController;
 
-    const listenerPromise: Promise<void> = (async () => {
+    let listenerPromise: Promise<void> | undefined;
+    listenerPromise = (async () => {
       try {
         while (!signal.aborted) {
           try {

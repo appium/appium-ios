@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
 import {SERVICE_NAMES, getLockdownServiceName} from '../../../src/lib/service-transport/index.js';
-import AfcService from '../../../src/services/ios/afc/index.js';
+import {AfcService} from '../../../src/services/ios/afc/index.js';
 import DiagnosticsService from '../../../src/services/ios/diagnostic-service/index.js';
 import {HouseArrestService} from '../../../src/services/ios/house-arrest/index.js';
 import {InstallationProxyService} from '../../../src/services/ios/installation-proxy/index.js';
 import {MobileConfigService} from '../../../src/services/ios/mobile-config/index.js';
 import {NotificationProxyService} from '../../../src/services/ios/notification-proxy/index.js';
 import {WebInspectorService} from '../../../src/services/ios/webinspector/index.js';
-import ZipConduitService from '../../../src/services/ios/zipconduit/index.js';
+import {ZipConduitService} from '../../../src/services/ios/zipconduit/index.js';
 
 describe('SERVICE_NAMES', function () {
   it('matches the RSD names the service classes use', function () {

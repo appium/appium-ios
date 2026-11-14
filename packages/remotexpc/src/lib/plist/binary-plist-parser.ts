@@ -450,7 +450,7 @@ class BinaryPlistParser {
       const seenBit = 1 << (objOffset & 7);
       if (seenOffsets[seenByte] & seenBit) {
         itemsByOffset ??= this._indexParsedObjectsByOffset(i);
-        this._objectTable[i] = itemsByOffset.get(objOffset);
+        this._objectTable[i] = itemsByOffset.get(objOffset) as ObjectTableItem;
         continue;
       }
       seenOffsets[seenByte] |= seenBit;
@@ -646,7 +646,7 @@ class BinaryPlistParser {
     for (let i = 0; i < this._numObjects; i++) {
       const item = this._objectTable[i];
       if (this._isTempObject(item)) {
-        this._objectTable[i] = item.resolved;
+        this._objectTable[i] = item.resolved as ObjectTableItem;
       }
     }
   }
@@ -658,7 +658,7 @@ class BinaryPlistParser {
    */
   private _valueAt(ref: number): PlistValue {
     const item = this._objectTable[ref];
-    return this._isTempObject(item) ? item.resolved : item;
+    return this._isTempObject(item) ? (item.resolved as PlistValue) : item;
   }
 
   /**

@@ -1,6 +1,7 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
+import {formatError} from '../../format-error.js';
 import {getLogger} from '../../logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -67,7 +68,7 @@ export class RemotedController {
       process.kill(pid, 'SIGCONT');
       log.debug(`Resumed remoted (pid ${pid})`);
     } catch (err) {
-      log.warn(`Failed to resume remoted (pid ${pid}): ${err}`);
+      log.warn(`Failed to resume remoted (pid ${pid}): ${formatError(err)}`);
     }
   }
 }
@@ -90,7 +91,7 @@ async function findPidsByName(name: string): Promise<number[]> {
   } catch (err) {
     const code = (err as {code?: unknown})?.code;
     if (code !== PGREP_NO_MATCH_EXIT_CODE) {
-      log.debug(`pgrep failed for "${name}": ${err}`);
+      log.debug(`pgrep failed for "${name}": ${formatError(err)}`);
     }
     return [];
   }
