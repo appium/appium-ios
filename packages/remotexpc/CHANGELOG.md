@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.8...appium-ios-remotexpc@6.0.9) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
 ## [6.0.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.7...appium-ios-remotexpc@6.0.8) (2026-11-13)
 
 ### Code Refactoring

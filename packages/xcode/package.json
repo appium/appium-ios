@@ -1,6 +1,6 @@
 {
   "name": "appium-xcode",
-  "version": "8.0.3",
+  "version": "8.0.4",
   "description": "Interact with Xcode",
   "keywords": [
     "appium",

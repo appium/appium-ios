@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.5...appium-webdriveragent@17.0.6) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
 ## [17.0.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.4...appium-webdriveragent@17.0.5) (2026-11-13)
 
 ### Miscellaneous Chores

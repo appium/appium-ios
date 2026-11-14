@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.10...appium-remote-debugger@19.1.11) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
 ## [19.1.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.9...appium-remote-debugger@19.1.10) (2026-11-13)
 
 **Note:** Version bump only for package appium-remote-debugger

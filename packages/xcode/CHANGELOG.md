@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [8.0.4](https://github.com/appium/appium-ios/compare/appium-xcode@8.0.3...appium-xcode@8.0.4) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
 ## [8.0.3](https://github.com/appium/appium-ios/compare/appium-xcode@8.0.2...appium-xcode@8.0.3) (2026-11-13)
 
 ### Miscellaneous Chores
