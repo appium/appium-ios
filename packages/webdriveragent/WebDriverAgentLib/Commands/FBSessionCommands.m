@@ -32,6 +32,52 @@
 #import "XCUIApplicationProcessDelay.h"
 
 
+// The characters Apple allows in a bundle identifier (https://developer.apple.com/help/glossary/bundle-id), plus '_'
+static NSString *const FBBundleIdCharacters = @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._";
+static NSString *const FBBundleIdRule = @"a non-empty string of A-Z, a-z, 0-9, '-', '_' and '.'";
+
+/**
+ Whether `bundleId` is a bundle identifier, or is absent where it is optional.
+
+ XCTest passes the identifier to testmanagerd over XPC, which only accepts NSString there.
+ A JSON null (NSNull) makes testmanagerd drop the whole test session and turn Automation Mode off.
+ */
+static BOOL FBIsValidBundleId(id bundleId, BOOL isRequired)
+{
+  if (nil == bundleId) {
+    return !isRequired;
+  }
+  if (![bundleId isKindOfClass:NSString.class] || 0 == [(NSString *)bundleId length]) {
+    return NO;
+  }
+  static NSCharacterSet *disallowedCharacters;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    disallowedCharacters = [NSCharacterSet characterSetWithCharactersInString:FBBundleIdCharacters].invertedSet;
+  });
+  return NSNotFound == [(NSString *)bundleId rangeOfCharacterFromSet:disallowedCharacters].location;
+}
+
+static id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequired)
+{
+  if (FBIsValidBundleId(bundleId, isRequired)) {
+    return nil;
+  }
+  NSString *message = [NSString stringWithFormat:@"'bundleId' must be %@", FBBundleIdRule];
+  return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:message traceback:nil]);
+}
+
+/**
+ Runs `action` with the request's `bundleId` and returns its response.
+ If `bundleId` is not a bundle identifier, returns an invalid argument error without running `action`.
+ */
+static id<FBResponsePayload> FBRunWithValidBundleId(FBRouteRequest *request,
+                                                    id<FBResponsePayload> (^action)(NSString *bundleId))
+{
+  id bundleId = request.arguments[@"bundleId"];
+  return FBInvalidBundleIdResponse(bundleId, YES) ?: action(bundleId);
+}
+
 @implementation FBSessionCommands
 
 #pragma mark - <FBCommandHandler>
@@ -70,6 +116,10 @@
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:@"URL is required" traceback:nil]);
   }
   NSString* bundleId = request.arguments[@"bundleId"];
+  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundleId, NO);
+  if (nil != errorResponse) {
+    return errorResponse;
+  }
   NSNumber* idleTimeoutMs = request.arguments[@"idleTimeoutMs"];
   NSError *error;
   if (nil == bundleId) {
@@ -98,10 +148,14 @@
   if (nil != errorResponse) {
     return errorResponse;
   }
+  NSString *bundleID = capabilities[FB_CAP_BUNDLE_ID];
+  if (!FBIsValidBundleId(bundleID, NO)) {
+    NSString *message = [NSString stringWithFormat:@"'bundleId' capability must be %@", FBBundleIdRule];
+    return FBResponseWithStatus([FBCommandStatus sessionNotCreatedError:message traceback:nil]);
+  }
 
   [self applyConfigurationFromCapabilities:capabilities];
 
-  NSString *bundleID = capabilities[FB_CAP_BUNDLE_ID];
   NSString *initialUrl = capabilities[FB_CAP_INITIAL_URL];
   XCUIApplication *app = nil;
   errorResponse = [self prepareApplicationForSessionWithBundleID:bundleID
@@ -128,30 +182,38 @@
 
 + (id<FBResponsePayload>)handleSessionAppLaunch:(FBRouteRequest *)request
 {
-  [request.session launchApplicationWithBundleId:(id)request.arguments[@"bundleId"]
-                         shouldWaitForQuiescence:request.arguments[@"shouldWaitForQuiescence"]
-                                       arguments:request.arguments[@"arguments"]
-                                     environment:request.arguments[@"environment"]
-                          asApplicationUnderTest:[request.arguments[@"asAppUnderTest"] boolValue]];
-  return FBResponseWithOK();
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    [request.session launchApplicationWithBundleId:bundleId
+                           shouldWaitForQuiescence:request.arguments[@"shouldWaitForQuiescence"]
+                                         arguments:request.arguments[@"arguments"]
+                                       environment:request.arguments[@"environment"]
+                            asApplicationUnderTest:[request.arguments[@"asAppUnderTest"] boolValue]];
+    return FBResponseWithOK();
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppActivate:(FBRouteRequest *)request
 {
-  [request.session activateApplicationWithBundleId:(id)request.arguments[@"bundleId"]];
-  return FBResponseWithOK();
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    [request.session activateApplicationWithBundleId:bundleId];
+    return FBResponseWithOK();
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppTerminate:(FBRouteRequest *)request
 {
-  BOOL result = [request.session terminateApplicationWithBundleId:(id)request.arguments[@"bundleId"]];
-  return FBResponseWithObject(@(result));
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    BOOL result = [request.session terminateApplicationWithBundleId:bundleId];
+    return FBResponseWithObject(@(result));
+  });
 }
 
 + (id<FBResponsePayload>)handleSessionAppState:(FBRouteRequest *)request
 {
-  NSUInteger state = [request.session applicationStateWithBundleId:(id)request.arguments[@"bundleId"]];
-  return FBResponseWithObject(@(state));
+  return FBRunWithValidBundleId(request, ^(NSString *bundleId) {
+    NSUInteger state = [request.session applicationStateWithBundleId:bundleId];
+    return FBResponseWithObject(@(state));
+  });
 }
 
 + (id<FBResponsePayload>)handleGetActiveAppsList:(FBRouteRequest *)request
