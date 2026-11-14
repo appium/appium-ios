@@ -27,6 +27,23 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 
+@implementation XCUIApplication (FBTouchAction)
+
++ (long long)fb_displayIDForCoordinate:(XCUICoordinate *)coordinate
+{
+  XCUIElement *referencedElement = coordinate.referencedElement;
+  return [referencedElement respondsToSelector:@selector(displayID)]
+    ? referencedElement.displayID
+    : 0;
+}
+
++ (nullable XCUIApplication *)fb_applicationForElement:(XCUIElement *)element
+{
+  return [element isKindOfClass:XCUIApplication.class]
+    ? (XCUIApplication *)element
+    : element.application;
+}
+
 /**
  Maps a drag XCUIGestureVelocity to the speed XCTest drags at. XCTest calls the result "pixels per
  second", but divides the distance between the two screen points (which are in points) by it.
@@ -70,7 +87,20 @@ static BOOL FBIsFinitePoint(CGPoint point)
   return isfinite(point.x) && isfinite(point.y);
 }
 
-@implementation XCUIApplication (FBTouchAction)
+/**
+ Creates an event record for the given display and orientation, preferring the display-aware
+ initializer when the running XCTest provides it.
+ */
+static XCSynthesizedEventRecord *FBMakeEventRecord(NSString *name, long long displayID,
+                                                   UIInterfaceOrientation interfaceOrientation)
+{
+  return [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]
+    ? [[XCSynthesizedEventRecord alloc] initWithName:name
+                                           displayID:(unsigned long long)displayID
+                                interfaceOrientation:interfaceOrientation]
+    : [[XCSynthesizedEventRecord alloc] initWithName:name interfaceOrientation:interfaceOrientation];
+}
+
 
 + (BOOL)handleEventSynthesWithError:(NSError *)error
 {
@@ -122,6 +152,29 @@ static BOOL FBIsFinitePoint(CGPoint point)
          thenHoldForDuration:(NSTimeInterval)holdDuration
                        error:(NSError **)error
 {
+  XCSynthesizedEventRecord *event = [self fb_pressDragEventFromCoordinate:startCoordinate
+                                                             forDuration:pressDuration
+                                                            toCoordinate:endCoordinate
+                                                            withVelocity:velocity
+                                                    thenHoldForDuration:holdDuration
+                                                                  error:error];
+  if (nil == event) {
+    return NO;
+  }
+  if (![self fb_synthesizeEvent:event error:error]) {
+    return NO;
+  }
+  [self fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
+  return YES;
+}
+
+- (nullable XCSynthesizedEventRecord *)fb_pressDragEventFromCoordinate:(XCUICoordinate *)startCoordinate
+                                                           forDuration:(NSTimeInterval)pressDuration
+                                                          toCoordinate:(XCUICoordinate *)endCoordinate
+                                                          withVelocity:(XCUIGestureVelocity)velocity
+                                                  thenHoldForDuration:(NSTimeInterval)holdDuration
+                                                                error:(NSError **)error
+{
   CGFloat pointsPerSecond = FBPointsPerSecondForDragVelocity(velocity);
   if (!isfinite(pressDuration) || pressDuration < 0 || !isfinite(holdDuration) || holdDuration < 0) {
     NSString *reason = [NSString stringWithFormat:@"Drag press and hold durations must be non-negative numbers of seconds. Got %@ and %@", @(pressDuration), @(holdDuration)];
@@ -133,32 +186,25 @@ static BOOL FBIsFinitePoint(CGPoint point)
   CGPoint startPoint = startCoordinate.screenPoint;
   CGPoint endPoint = endCoordinate.screenPoint;
   if (!FBIsFinitePoint(startPoint) || !FBIsFinitePoint(endPoint)) {
-    return [[[FBErrorBuilder builder]
-             withDescriptionFormat:@"Cannot resolve the on-screen position of the drag gesture (from %@ to %@). "
-             "This usually means '%@' did not deliver a valid accessibility snapshot, e.g. because it is busy "
-             "or still transitioning after an application switch. Make sure it is idle and retry",
-             NSStringFromCGPoint(startPoint), NSStringFromCGPoint(endPoint), self.bundleID]
-            buildError:error];
+    (void)[[[FBErrorBuilder builder]
+            withDescriptionFormat:@"Cannot resolve the on-screen position of the drag gesture (from %@ to %@). "
+            "This usually means '%@' did not deliver a valid accessibility snapshot, e.g. because it is busy "
+            "or still transitioning after an application switch. Make sure it is idle and retry",
+            NSStringFromCGPoint(startPoint), NSStringFromCGPoint(endPoint), self.bundleID]
+           buildError:error];
+    return nil;
   }
 
   // Like XCTest, target the display of the element the start coordinate belongs to. displayID
   // only reads the element's last snapshot, which resolving screenPoint above has just refreshed.
-  XCUIElement *referencedElement = startCoordinate.referencedElement;
-  long long displayID = [referencedElement respondsToSelector:@selector(displayID)]
-    ? referencedElement.displayID
-    : 0;
-  XCSynthesizedEventRecord *event = [self.class fb_pressDragEventFromPoint:startPoint
-                                                               forDuration:pressDuration
-                                                                   toPoint:endPoint
-                                                           pointsPerSecond:pointsPerSecond
-                                                       thenHoldForDuration:holdDuration
-                                                                 displayID:displayID
-                                                      interfaceOrientation:self.interfaceOrientation];
-  if (![self fb_synthesizeEvent:event error:error]) {
-    return NO;
-  }
-  [self fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  return YES;
+  long long displayID = [self.class fb_displayIDForCoordinate:startCoordinate];
+  return [self.class fb_pressDragEventFromPoint:startPoint
+                                    forDuration:pressDuration
+                                        toPoint:endPoint
+                                pointsPerSecond:pointsPerSecond
+                            thenHoldForDuration:holdDuration
+                                      displayID:displayID
+                           interfaceOrientation:self.interfaceOrientation];
 }
 
 + (XCSynthesizedEventRecord *)fb_pressDragEventFromPoint:(CGPoint)startPoint
@@ -180,11 +226,21 @@ static BOOL FBIsFinitePoint(CGPoint point)
   [path liftUpAtOffset:dragEndOffset + holdDuration];
 
   NSString *name = @"Press, drag and hold";
-  XCSynthesizedEventRecord *event = [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]
-    ? [[XCSynthesizedEventRecord alloc] initWithName:name
-                                           displayID:(unsigned long long)displayID
-                                interfaceOrientation:interfaceOrientation]
-    : [[XCSynthesizedEventRecord alloc] initWithName:name interfaceOrientation:interfaceOrientation];
+  XCSynthesizedEventRecord *event = FBMakeEventRecord(name, displayID, interfaceOrientation);
+  [event addPointerEventPath:path];
+  return event;
+}
+
++ (XCSynthesizedEventRecord *)fb_tapEventFromPoint:(CGPoint)point
+                                         displayID:(long long)displayID
+                              interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+  // A tap is a touch that lifts almost immediately. The default 50 ms is long enough not to
+  // be coalesced with a following event; it is configuration, not a measurement of the hold
+  // -[XCUICoordinate tap] produces (that private timing has not been recorded).
+  XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];
+  [path liftUpAtOffset:FBConfiguration.sharedInstance.fastTapHoldInterval];
+  XCSynthesizedEventRecord *event = FBMakeEventRecord(@"Tap", displayID, interfaceOrientation);
   [event addPointerEventPath:path];
   return event;
 }
