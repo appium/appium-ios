@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.9...appium-ios-remotexpc@6.0.10) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **remotexpc:** enable strictNullChecks and fix lint warnings ([#204](https://github.com/appium/appium-ios/issues/204)) ([cef8241](https://github.com/appium/appium-ios/commit/cef824181947941578bf81bd66758d4f36a1ef3f))
+
+
 ## [6.0.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.8...appium-ios-remotexpc@6.0.9) (2026-11-14)
 
 ### Miscellaneous Chores

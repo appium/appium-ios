@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.11...appium-remote-debugger@19.1.12) (2026-11-14)
+
+### Bug Fixes
+
+* **remote-debugger:** ignore unrelated apps connecting during selectApp ([#172](https://github.com/appium/appium-ios/issues/172)) ([e5f93f5](https://github.com/appium/appium-ios/commit/e5f93f5bb0736683e8a332d30bd8d8c339011863))
+
+
 ## [19.1.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.10...appium-remote-debugger@19.1.11) (2026-11-14)
 
 ### Miscellaneous Chores
