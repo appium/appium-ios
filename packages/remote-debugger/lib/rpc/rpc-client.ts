@@ -1494,10 +1494,13 @@ function toFinalCommand(
 }
 
 type Settle = (value: any) => void;
+type ErrorListener = (err: Error | null) => void;
+type SelectorReplyListener = (err: Error | null, ...args: any[]) => void;
+type DataReplyListener = (err: Error | null, value: any) => void;
 
 /** Logs an error for a command that is not waited for, most likely a protocol change. */
-function createLateErrorListener(msgId: number, reject: Settle): (err: Error | null) => void {
-  return (err: Error | null) => {
+function createLateErrorListener(msgId: number, reject: Settle): ErrorListener {
+  return (err) => {
     if (err) {
       log.error(
         `Received error from send that is not being waited for (id: ${msgId}): ` +
@@ -1508,12 +1511,8 @@ function createLateErrorListener(msgId: number, reject: Settle): (err: Error | n
   };
 }
 
-function createSelectorReplyListener(
-  msgId: number,
-  resolve: Settle,
-  reject: Settle,
-): (err: Error | null, ...args: any[]) => void {
-  return (err: Error | null, ...args: any[]) => {
+function createSelectorReplyListener(msgId: number, resolve: Settle, reject: Settle): SelectorReplyListener {
+  return (err, ...args) => {
     if (err) {
       return reject(err);
     }
@@ -1524,12 +1523,8 @@ function createSelectorReplyListener(
   };
 }
 
-function createDataReplyListener(
-  msgId: number,
-  resolve: Settle,
-  reject: Settle,
-): (err: Error | null, value: any) => void {
-  return (err: Error | null, value: any) => {
+function createDataReplyListener(msgId: number, resolve: Settle, reject: Settle): DataReplyListener {
+  return (err, value) => {
     if (err) {
       return reject(
         Object.assign(new Error(`Remote debugger error with code '${(err as any).code}': ${err.message}`), {
