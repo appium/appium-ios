@@ -70,6 +70,8 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 
 @property (nullable, readonly, nonatomic) FBW3CGestureItem *previousItem;
 @property (readonly, nonatomic) CGPoint screenPoint;
+/** Selected screen for window coordinates; nil retains the single-display path. */
+@property (nullable, nonatomic) XCUIScreen *coordinateScreen;
 
 @end
 
@@ -121,6 +123,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                           coordinateScreen:(nullable XCUIScreen *)coordinateScreen
                                      offset:(double)offset
                                       error:(NSError **)error
 {
@@ -130,6 +133,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
     self.application = application;
     self.offset = offset;
     _previousItem = previousItem;
+    _coordinateScreen = coordinateScreen;
     NSNumber *durationObj = FBOptDuration(actionItem, @0, error);
     if (nil == durationObj) {
       return nil;
@@ -166,11 +170,8 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
                                   positionOffset:(nullable NSValue *)positionOffset
                                            error:(NSError **)error
 {
-  NSNumber *hasMultipleScreens = [FBScreen hasMultipleScreensWithError:error];
-  if (nil == hasMultipleScreens) {
-    return nil;
-  }
-  if (hasMultipleScreens.boolValue) {
+  XCUIScreen *screen = self.coordinateScreen;
+  if (nil != screen) {
     if (nil == element || element.elementType == XCUIElementTypeApplication) {
       CGPoint point = positionOffset == nil ? CGPointZero : positionOffset.CGPointValue;
       if (nil != element) {
@@ -183,12 +184,9 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
         point.x += CGRectGetMidX(frame);
         point.y += CGRectGetMidY(frame);
       }
-      return [FBScreen coordinateWithApplication:element ?: self.application
-                                         offset:CGVectorMake(point.x, point.y) error:error];
-    }
-    XCUIScreen *screen = [FBScreen currentScreenWithError:error];
-    if (nil == screen) {
-      return nil;
+      return [FBScreen windowCoordinateWithApplication:element ?: self.application
+                                                 screen:screen
+                                                 offset:CGVectorMake(point.x, point.y) error:error];
     }
     // Resolve display affinity before combining element and viewport origins.
     (void)element.frame;
@@ -227,10 +225,11 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                           coordinateScreen:(nullable XCUIScreen *)coordinateScreen
                                      offset:(double)offset
                                       error:(NSError **)error
 {
-  self = [super initWithActionItem:actionItem application:application previousItem:previousItem offset:offset error:error];
+  self = [super initWithActionItem:actionItem application:application previousItem:previousItem coordinateScreen:coordinateScreen offset:offset error:error];
   if (self) {
     _pressure = [actionItem objectForKey:FB_ACTION_ITEM_KEY_PRESSURE];
   }
@@ -679,9 +678,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 @end
 
 
-@interface FBW3CActionsSynthesizer ()
-@end
-
 @implementation FBW3CActionsSynthesizer
 
 - (NSArray<NSDictionary<NSString *, id> *> *)preprocessedActionItemsWith:(NSArray<NSDictionary<NSString *, id> *> *)actionItems
@@ -798,7 +794,10 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription
+                                                         forActionId:(NSString *)actionId
+                                                    coordinateScreen:(nullable XCUIScreen *)coordinateScreen
+                                                               error:(NSError **)error
 {
   static NSDictionary<NSString *, Class> *gestureItemsMapping;
   static NSArray<NSString *> *supportedActionItemTypes;
@@ -861,7 +860,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
       return nil;
     }
 
-    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] offset:chain.durationOffset error:error];
+    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] coordinateScreen:coordinateScreen offset:chain.durationOffset error:error];
     if (nil == gestureItem) {
       return nil;
     }
@@ -872,7 +871,10 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription
+                                                             forActionId:(NSString *)actionId
+                                                        coordinateScreen:(nullable XCUIScreen *)coordinateScreen
+                                                                   error:(NSError **)error
 {
   id actionType = [actionDescription objectForKey:FB_KEY_TYPE];
   if (![actionType isKindOfClass:NSString.class] ||
@@ -886,7 +888,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
 
   if ([actionType isEqualToString:FB_ACTION_TYPE_POINTER]) {
-    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId error:error];
+    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId coordinateScreen:coordinateScreen error:error];
   }
 
   return [self eventPathsWithKeyAction:actionDescription forActionId:actionId error:error];
@@ -946,21 +948,11 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return NO;
 }
 
-- (nullable XCSynthesizedEventRecord *)eventRecordForActions:(NSArray<NSDictionary<NSString *, id> *> *)actions
-                                                     error:(NSError **)error
+- (nullable XCSynthesizedEventRecord *)eventRecordForScreen:(XCUIScreen *)screen
+                                            useDisplayID:(BOOL)useDisplayID
+                                                   error:(NSError **)error
 {
-  // Keyboard and pause-only sequences have no display coordinates. A display
-  // disappearing must not prevent these input sources from being synthesized.
-  BOOL requiresDisplay = [self actionsRequireDisplay:actions];
-  XCUIScreen *screen = requiresDisplay ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
-  if (nil == screen) {
-    return nil;
-  }
-  NSNumber *hasMultipleScreens = requiresDisplay ? [FBScreen hasMultipleScreensWithError:error] : @NO;
-  if (nil == hasMultipleScreens) {
-    return nil;
-  }
-  if (hasMultipleScreens.boolValue
+  if (useDisplayID
       && [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
     return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
                                                displayID:(unsigned long long)screen.displayID
@@ -983,13 +975,26 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   if (nil == actions) {
     return nil;
   }
-  XCSynthesizedEventRecord *eventRecord = [self eventRecordForActions:actions error:error];
+  // Resolve display routing once per command, before building any pointer items.
+  // Keyboard and pause-only sequences must not depend on the selected display.
+  BOOL requiresDisplay = [self actionsRequireDisplay:actions];
+  XCUIScreen *screen = requiresDisplay ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
+  if (nil == screen) {
+    return nil;
+  }
+  NSNumber *hasMultipleScreens = requiresDisplay ? [FBScreen hasMultipleScreensWithError:error] : @NO;
+  if (nil == hasMultipleScreens) {
+    return nil;
+  }
+  XCUIScreen *coordinateScreen = hasMultipleScreens.boolValue ? screen : nil;
+  XCSynthesizedEventRecord *eventRecord = [self eventRecordForScreen:screen
+                                                     useDisplayID:hasMultipleScreens.boolValue error:error];
   if (nil == eventRecord) {
     return nil;
   }
   for (NSDictionary<NSString *, id> *actionDescription in actions) {
     NSString *actionId = actionDescription[FB_KEY_ID];
-    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId error:error];
+    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId coordinateScreen:coordinateScreen error:error];
     if (nil == eventPaths) {
       return nil;
     }

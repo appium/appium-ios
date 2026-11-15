@@ -10,7 +10,6 @@
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
-#import "FBMathUtils.h"
 #import "FBScreen.h"
 
 #import "XCUIElement.h"

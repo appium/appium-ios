@@ -7,6 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
@@ -28,6 +29,11 @@
 #import "XCUIElement+FBScrolling.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
+
+// The private gesture item is exercised directly to isolate origin resolution.
+@interface FBW3CGestureItem : FBBaseGestureItem
+@property (nullable, nonatomic) XCUIScreen *coordinateScreen;
+@end
 
 @interface FBDisplayGestureTests : FBIntegrationTestCase
 @property (nonatomic) NSNumber *previousDisplayId;
@@ -257,10 +263,12 @@
 - (void)testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp
 {
   XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
-  FBBaseGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
+  FBW3CGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
   // Accessing this app's windows would fail. Only the supplied origin should be used.
   item.application = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.appium.nonexistent-session-app"];
   NSError *error = nil;
+  item.coordinateScreen = [FBScreen currentScreenWithError:&error];
+  XCTAssertNotNil(item.coordinateScreen);
   XCUICoordinate *coordinate = [item hitpointWithElement:self.testedApplication
                                        positionOffset:[NSValue valueWithCGPoint:CGPointZero] error:&error];
   XCTAssertNotNil(coordinate);
@@ -276,7 +284,7 @@
 - (void)testSingleDisplayW3COriginsRetainLegacyCoordinates
 {
   XCTSkipIf([FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires a single display");
-  FBBaseGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
+  FBW3CGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
   item.application = self.testedApplication;
   FBBaseGestureItem *legacy = [FBBaseGestureItem new];
   legacy.application = self.testedApplication;
@@ -298,6 +306,42 @@
     XCTAssertNotNil(appOffset);
     XCTAssertTrue(CGPointEqualToPoint(appOffset.screenPoint, expectedAppOffset.screenPoint));
     XCTAssertNil(error);
+  }
+}
+
+- (void)testMultiDisplayDetectionRunsOncePerCommand
+{
+  SEL selector = @selector(hasMultipleScreensWithError:);
+  Method method = class_getClassMethod(FBScreen.class, selector);
+  IMP original = method_getImplementation(method);
+  __block NSUInteger calls = 0;
+  IMP counting = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
+    calls++;
+    return ((NSNumber *(*)(id, SEL, NSError **))original)(receiver, selector, error);
+  });
+  method_setImplementation(method, counting);
+  @try {
+    NSArray *actions = @[@{
+      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+      @"actions": @[
+        [self moveFrom:@"viewport" x:100 y:100 duration:0],
+        [self moveFrom:self.testedApplication x:0 y:0 duration:100],
+        [self moveFrom:self.canvas x:0 y:0 duration:100],
+        [self moveFrom:@"pointer" x:10 y:10 duration:100],
+      ],
+    }];
+    NSError *error = nil;
+    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
+    // Reusing a synthesizer must still re-read the display configuration for a new command.
+    for (NSUInteger invocation = 1; invocation <= 2; invocation++) {
+      XCTAssertNotNil([synthesizer synthesizeWithError:&error]);
+      XCTAssertNil(error);
+      XCTAssertEqual(calls, invocation);
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(counting);
   }
 }
 

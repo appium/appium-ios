@@ -44,6 +44,12 @@ NS_ASSUME_NONNULL_BEGIN
                                                offset:(CGVector)offset
                                                 error:(NSError **)error;
 
+/** Resolves a window anchor using an already selected screen on a multi-display device. */
++ (nullable XCUICoordinate *)windowCoordinateWithApplication:(XCUIElement *)application
+                                                    screen:(XCUIScreen *)screen
+                                                    offset:(CGVector)offset
+                                                     error:(NSError **)error;
+
 #endif
 
 /**
