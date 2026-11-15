@@ -43,6 +43,10 @@
 #import "XCUIElementQuery.h"
 #import "FBXCodeCompatibility.h"
 
+#if !TARGET_OS_TV
+typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offset, NSError **error);
+#endif
+
 @interface FBElementCommands ()
 @end
 
@@ -705,9 +709,8 @@ static const NSInteger DEFAULT_MAX_PICKER_ATTEMPTS = 25;
   return [self gestureCoordinatesWithOffsets:@[[NSValue valueWithCGVector:offset]] element:element error:error].firstObject;
 }
 
-+ (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets
-                                                            element:(XCUIElement *)element
-                                                              error:(NSError **)error
++ (nullable FBGestureCoordinateResolver)gestureCoordinateResolverForElement:(XCUIElement *)element
+                                                                    error:(NSError **)error
 {
   BOOL isApplication = element.elementType == XCUIElementTypeApplication;
 #if TARGET_OS_WATCH
@@ -716,24 +719,32 @@ static const NSInteger DEFAULT_MAX_PICKER_ATTEMPTS = 25;
     return nil;
   }
 #else
-  FBGestureCoordinateContext *context = nil;
   if (isApplication) {
-    context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:error];
+    FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:error];
     if (nil == context) {
       return nil;
     }
+    return ^XCUICoordinate *(CGVector offset, NSError **coordinateError) {
+      return [context coordinateWithApplication:element offset:offset error:coordinateError];
+    };
   }
 #endif
+  return ^XCUICoordinate *(CGVector offset, NSError **coordinateError) {
+    return FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), offset, coordinateError);
+  };
+}
+
++ (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets
+                                                            element:(XCUIElement *)element
+                                                              error:(NSError **)error
+{
+  FBGestureCoordinateResolver resolveCoordinate = [self gestureCoordinateResolverForElement:element error:error];
+  if (nil == resolveCoordinate) {
+    return nil;
+  }
   NSMutableArray<XCUICoordinate *> *coordinates = [NSMutableArray arrayWithCapacity:offsets.count];
   for (NSValue *value in offsets) {
-    XCUICoordinate *coordinate;
-#if TARGET_OS_WATCH
-    coordinate = FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), value.CGVectorValue, error);
-#else
-    coordinate = nil == context
-      ? FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), value.CGVectorValue, error)
-      : [context coordinateWithApplication:element offset:value.CGVectorValue error:error];
-#endif
+    XCUICoordinate *coordinate = resolveCoordinate(value.CGVectorValue, error);
     if (nil == coordinate) {
       return nil;
     }
