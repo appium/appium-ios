@@ -137,7 +137,7 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
   return [self screenWithDisplayID:displayID.longLongValue error:error];
 }
 
-#if !TARGET_OS_TV
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
 + (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application
                                                offset:(CGVector)offset
                                                 error:(NSError **)error

@@ -37,7 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (nullable XCUIScreen *)currentScreenWithError:(NSError **)error;
 
-#if !TARGET_OS_TV
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
 /** Resolves viewport coordinates through a window on the selected display.
     Window bounds are an anchor, not a hit-test boundary. */
 + (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application

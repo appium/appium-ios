@@ -710,7 +710,15 @@ static const NSInteger DEFAULT_MAX_PICKER_ATTEMPTS = 25;
   if (element.elementType != XCUIElementTypeApplication) {
     return FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), offset, error);
   }
+#if TARGET_OS_WATCH
+  // Preserve watchOS application-root coordinates and selected-display validation.
+  if (nil == [FBScreen currentScreenWithError:error]) {
+    return nil;
+  }
+  return FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), offset, error);
+#else
   return [FBScreen coordinateWithApplication:element offset:offset error:error];
+#endif
 }
 
 /**
