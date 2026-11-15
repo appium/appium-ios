@@ -10,6 +10,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+/** A window and its resolved frame. Reuse only while synthesizing one command. */
+@interface FBScreenCoordinateAnchor : NSObject
+- (XCUICoordinate *)coordinateWithOffset:(CGVector)offset;
+@end
+#endif
+
 @interface FBScreen : NSObject
 
 /**
@@ -45,10 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
                                                 error:(NSError **)error;
 
 /** Resolves a window anchor using an already selected screen on a multi-display device. */
-+ (nullable XCUICoordinate *)windowCoordinateWithApplication:(XCUIElement *)application
-                                                    screen:(XCUIScreen *)screen
-                                                    offset:(CGVector)offset
-                                                     error:(NSError **)error;
++ (nullable FBScreenCoordinateAnchor *)windowAnchorWithApplication:(XCUIElement *)application
+                                                           screen:(XCUIScreen *)screen
+                                                            error:(NSError **)error;
 
 #endif
 

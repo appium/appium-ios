@@ -309,8 +309,9 @@
   }
 }
 
-- (void)testMultiDisplayDetectionRunsOncePerCommand
+- (void)testDisplayAndWindowResolutionRunsOncePerCommand
 {
+  BOOL hasMultipleScreens = [FBScreen hasMultipleScreensWithError:nil].boolValue;
   SEL selector = @selector(hasMultipleScreensWithError:);
   Method method = class_getClassMethod(FBScreen.class, selector);
   IMP original = method_getImplementation(method);
@@ -319,29 +320,90 @@
     calls++;
     return ((NSNumber *(*)(id, SEL, NSError **))original)(receiver, selector, error);
   });
+  SEL anchorSelector = @selector(windowAnchorWithApplication:screen:error:);
+  Method anchorMethod = class_getClassMethod(FBScreen.class, anchorSelector);
+  IMP originalAnchor = method_getImplementation(anchorMethod);
+  __block NSUInteger anchorCalls = 0;
+  IMP countingAnchors = imp_implementationWithBlock(^FBScreenCoordinateAnchor *(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
+    anchorCalls++;
+    return ((FBScreenCoordinateAnchor *(*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))originalAnchor)(receiver, anchorSelector, application, screen, error);
+  });
   method_setImplementation(method, counting);
+  method_setImplementation(anchorMethod, countingAnchors);
   @try {
-    NSArray *actions = @[@{
+    // Exercise serialized origins and sharing between independent pointer sources.
+    self.actionElementCache = [FBElementCache new];
+    NSDictionary *finger = @{
       @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
       @"actions": @[
         [self moveFrom:@"viewport" x:100 y:100 duration:0],
         [self moveFrom:self.testedApplication x:0 y:0 duration:100],
         [self moveFrom:self.canvas x:0 y:0 duration:100],
         [self moveFrom:@"pointer" x:10 y:10 duration:100],
+        [self moveFrom:@"viewport" x:120 y:120 duration:100],
+      ],
+    };
+    NSMutableDictionary *secondFinger = finger.mutableCopy;
+    secondFinger[@"id"] = @"secondFinger";
+    NSError *error = nil;
+    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+      initWithActions:@[finger, secondFinger] forApplication:self.testedApplication elementCache:self.actionElementCache error:&error];
+    // Even the same synthesizer must resolve a fresh anchor for each command.
+    for (NSUInteger invocation = 1; invocation <= 2; invocation++) {
+      XCTAssertNotNil([synthesizer synthesizeWithError:&error]);
+      XCTAssertNil(error);
+      XCTAssertEqual(calls, invocation);
+      XCTAssertEqual(anchorCalls, hasMultipleScreens ? invocation : 0);
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    method_setImplementation(anchorMethod, originalAnchor);
+    imp_removeBlock(counting);
+    imp_removeBlock(countingAnchors);
+  }
+}
+
+- (void)testWindowAnchorCacheDoesNotHideAnotherApplicationsFailure
+{
+  XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
+  XCUIApplication *otherApplication = self.springboard;
+  NSError *expectedError = [NSError errorWithDomain:@"WindowAnchorLookup" code:1 userInfo:nil];
+  SEL selector = @selector(windowAnchorWithApplication:screen:error:);
+  Method method = class_getClassMethod(FBScreen.class, selector);
+  IMP original = method_getImplementation(method);
+  __block NSUInteger sessionAppCalls = 0;
+  __block NSUInteger otherAppCalls = 0;
+  IMP replacement = imp_implementationWithBlock(^FBScreenCoordinateAnchor *(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
+    if (application == otherApplication) {
+      otherAppCalls++;
+      if (NULL != error) {
+        *error = expectedError;
+      }
+      return nil;
+    }
+    sessionAppCalls++;
+    return ((FBScreenCoordinateAnchor *(*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))original)(receiver, selector, application, screen, error);
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    NSArray *actions = @[@{
+      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+      @"actions": @[
+        [self moveFrom:@"viewport" x:100 y:100 duration:0],
+        [self moveFrom:self.testedApplication x:0 y:0 duration:100],
+        [self moveFrom:otherApplication x:0 y:0 duration:100],
       ],
     }];
     NSError *error = nil;
     FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
       initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
-    // Reusing a synthesizer must still re-read the display configuration for a new command.
-    for (NSUInteger invocation = 1; invocation <= 2; invocation++) {
-      XCTAssertNotNil([synthesizer synthesizeWithError:&error]);
-      XCTAssertNil(error);
-      XCTAssertEqual(calls, invocation);
-    }
+    XCTAssertNil([synthesizer synthesizeWithError:&error]);
+    XCTAssertEqualObjects(error, expectedError);
+    XCTAssertEqual(sessionAppCalls, 1);
+    XCTAssertEqual(otherAppCalls, 1);
   } @finally {
     method_setImplementation(method, original);
-    imp_removeBlock(counting);
+    imp_removeBlock(replacement);
   }
 }
 

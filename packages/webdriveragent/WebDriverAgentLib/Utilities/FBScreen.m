@@ -18,6 +18,23 @@
 #import "XCUIScreen.h"
 #import <objc/message.h>
 
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+@interface FBScreenCoordinateAnchor ()
+@property (nonatomic) XCUIElement *window;
+@property (nonatomic) CGRect frame;
+@end
+
+@implementation FBScreenCoordinateAnchor
+- (XCUICoordinate *)coordinateWithOffset:(CGVector)offset
+{
+  // Use the captured frame; FBCoordinateWithAnchorOffset would query it again.
+  return [self.window coordinateWithNormalizedOffset:CGVectorMake(
+    (offset.dx - self.frame.origin.x) / self.frame.size.width,
+    (offset.dy - self.frame.origin.y) / self.frame.size.height)];
+}
+@end
+#endif
+
 static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
 {
   SEL selector = NSSelectorFromString(@"screensOrError:");
@@ -153,13 +170,13 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
   if (!hasMultipleScreens.boolValue) {
     return FBCoordinateWithAnchorOffset(application, CGVectorMake(0, 0), offset, error);
   }
-  return [self windowCoordinateWithApplication:application screen:screen offset:offset error:error];
+  FBScreenCoordinateAnchor *anchor = [self windowAnchorWithApplication:application screen:screen error:error];
+  return [anchor coordinateWithOffset:offset];
 }
 
-+ (nullable XCUICoordinate *)windowCoordinateWithApplication:(XCUIElement *)application
-                                                    screen:(XCUIScreen *)screen
-                                                    offset:(CGVector)offset
-                                                     error:(NSError **)error
++ (nullable FBScreenCoordinateAnchor *)windowAnchorWithApplication:(XCUIElement *)application
+                                                           screen:(XCUIScreen *)screen
+                                                            error:(NSError **)error
 {
   // Application-root coordinates can retain cover-display geometry after main
   // switches to the inner panel. Resolve an anchor on the selected display.
@@ -172,8 +189,10 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
     (void)window.frame;
     CGRect frame = window.wdFrame;
     if (window.screen.displayID == screen.displayID && !CGRectIsEmpty(frame)) {
-      return FBCoordinateWithAnchorOffset(window, CGVectorMake(0, 0),
-        CGVectorMake(offset.dx - frame.origin.x, offset.dy - frame.origin.y), error);
+      FBScreenCoordinateAnchor *anchor = [FBScreenCoordinateAnchor new];
+      anchor.window = window;
+      anchor.frame = frame;
+      return anchor;
     }
   }
   [[[FBErrorBuilder builder] withDescriptionFormat:@"No non-empty application window on display %lld is available as a coordinate anchor", screen.displayID]

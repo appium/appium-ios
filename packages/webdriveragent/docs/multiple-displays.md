@@ -42,7 +42,9 @@ center plus the requested offset as a viewport point on multi-display devices.
 On these devices, viewport and application origins are anchored to a window on the
 selected display, including when that display is currently main. This preserves
 XCTest's display affinity without assuming the application root uses the same
-screen geometry. Do not substitute the window's center when calculating an
+screen geometry. W3C actions reuse each application element instance's window
+and resolved window frame within a command, including across pointer sources.
+Each new command resolves fresh anchors. Do not substitute the window's center when calculating an
 offset for an application-element origin. This is separate from the older-SDK
 compatibility issue below. Single-display devices retain their existing viewport
 and application-origin coordinate handling and the legacy event initializer.
