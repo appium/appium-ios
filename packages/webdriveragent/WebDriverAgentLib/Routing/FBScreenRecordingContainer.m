@@ -9,6 +9,7 @@
 
 #import "FBScreenRecordingContainer.h"
 
+#import "FBLogger.h"
 #import "FBScreenRecordingPromise.h"
 
 @interface FBScreenRecordingContainer ()
@@ -46,43 +47,69 @@
 
 - (void)reset;
 {
+  FBScreenRecordingPromise *promiseToClean = nil;
   @synchronized (self) {
+    promiseToClean = self.screenRecordingPromise;
+    self.screenRecordingPromise = nil;
     self.fps = 0;
     self.codec = 0;
-    if (nil != self.screenRecordingPromise) {
-      [XCTContext runActivityNamed:@"Video Cleanup" block:^(id<XCTActivity> activity){
-        [activity addAttachment:(XCTAttachment *)self.screenRecordingPromise.nativePromise];
-      }];
-      self.screenRecordingPromise = nil;
-    }
     self.startedAt = nil;
+  }
+  if (nil != promiseToClean) {
+    [self cleanUpPromise:promiseToClean];
   }
 }
 
 - (BOOL)resetIfPromiseIs:(FBScreenRecordingPromise *)screenRecordingPromise
 {
-  // @synchronized is recursive, so -reset may take the very same lock again below.
+  if (nil == screenRecordingPromise) {
+    return NO;
+  }
+  FBScreenRecordingPromise *promiseToClean = nil;
   @synchronized (self) {
     if (self.screenRecordingPromise != screenRecordingPromise) {
       return NO;
     }
-    [self reset];
-    return YES;
+    promiseToClean = self.screenRecordingPromise;
+    self.screenRecordingPromise = nil;
+    self.fps = 0;
+    self.codec = 0;
+    self.startedAt = nil;
+  }
+  if (nil != promiseToClean) {
+    [self cleanUpPromise:promiseToClean];
+  }
+  return YES;
+}
+
+- (void)cleanUpPromise:(FBScreenRecordingPromise *)promise
+{
+  if (nil == promise.nativePromise) {
+    return;
+  }
+  @try {
+    [XCTContext runActivityNamed:@"Video Cleanup" block:^(id<XCTActivity> activity){
+      [activity addAttachment:(XCTAttachment *)promise.nativePromise];
+    }];
+  } @catch (NSException *e) {
+    [FBLogger logFmt:@"Failed to clean up video attachment: %@", e];
   }
 }
 
 - (nullable NSDictionary *)toDictionary
 {
-  if (nil == self.screenRecordingPromise) {
-    return nil;
-  }
+  @synchronized (self) {
+    if (nil == self.screenRecordingPromise) {
+      return nil;
+    }
 
-  return @{
-    @"fps": @(self.fps),
-    @"codec": @(self.codec),
-    @"uuid": [self.screenRecordingPromise identifier].UUIDString ?: [NSNull null],
-    @"startedAt": self.startedAt ?: [NSNull null],
-  };
+    return @{
+      @"fps": @(self.fps),
+      @"codec": @(self.codec),
+      @"uuid": [self.screenRecordingPromise identifier].UUIDString ?: [NSNull null],
+      @"startedAt": self.startedAt ?: [NSNull null],
+    };
+  }
 }
 
 @end

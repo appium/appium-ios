@@ -54,6 +54,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)resetIfPromiseIs:(FBScreenRecordingPromise *)screenRecordingPromise;
 
 /**
+ Cleans up the native attachment for the given screen recording promise.
+ Executed outside of the container lock.
+
+ @param promise The screen recording promise whose attachment to clean up
+ */
+- (void)cleanUpPromise:(FBScreenRecordingPromise *)promise;
+
+/**
  Transforms the container content to a dictionary.
 
  @return May return nil if no screen recording is currently running
