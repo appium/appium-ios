@@ -12,6 +12,7 @@
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "FBGestureCoordinateContext.h"
 #import "FBRunLoopSpinner.h"
 #import "FBExceptions.h"
 #import "FBElementCommands.h"
@@ -23,6 +24,11 @@
 
 @interface FBElementCommands (CoordinateTests)
 + (nullable XCUICoordinate *)gestureCoordinateWithOffset:(CGVector)offset element:(XCUIElement *)element error:(NSError **)error;
++ (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets element:(XCUIElement *)element error:(NSError **)error;
+@end
+
+@interface FBGestureCoordinateContext (CoordinateTests)
++ (nullable id)windowAnchorWithApplication:(XCUIElement *)application screen:(XCUIScreen *)screen error:(NSError **)error;
 @end
 
 #import "XCUIApplication+FBTouchAction.h"
@@ -32,7 +38,7 @@
 
 // The private gesture item is exercised directly to isolate origin resolution.
 @interface FBW3CGestureItem : FBBaseGestureItem
-@property (nullable, nonatomic) XCUIScreen *coordinateScreen;
+@property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 @end
 
 @interface FBDisplayGestureTests : FBIntegrationTestCase
@@ -267,14 +273,14 @@
   // Accessing this app's windows would fail. Only the supplied origin should be used.
   item.application = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.appium.nonexistent-session-app"];
   NSError *error = nil;
-  item.coordinateScreen = [FBScreen currentScreenWithError:&error];
-  XCTAssertNotNil(item.coordinateScreen);
+  item.coordinateContext = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:&error];
+  XCTAssertNotNil(item.coordinateContext);
   XCUICoordinate *coordinate = [item hitpointWithElement:self.testedApplication
                                        positionOffset:[NSValue valueWithCGPoint:CGPointZero] error:&error];
   XCTAssertNotNil(coordinate);
   XCTAssertNil(error);
   CGRect frame = self.testedApplication.wdFrame;
-  XCUICoordinate *expected = [FBScreen coordinateWithApplication:self.testedApplication
+  XCUICoordinate *expected = [item.coordinateContext coordinateWithApplication:self.testedApplication
     offset:CGVectorMake(CGRectGetMidX(frame), CGRectGetMidY(frame)) error:&error];
   XCTAssertNotNil(expected);
   XCTAssertEqualWithAccuracy(coordinate.screenPoint.x, expected.screenPoint.x, 1);
@@ -286,6 +292,8 @@
   XCTSkipIf([FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires a single display");
   FBW3CGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
   item.application = self.testedApplication;
+  item.coordinateContext = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:nil];
+  XCTAssertNotNil(item.coordinateContext);
   FBBaseGestureItem *legacy = [FBBaseGestureItem new];
   legacy.application = self.testedApplication;
   for (NSNumber *orientation in @[@(UIDeviceOrientationPortrait), @(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
@@ -321,12 +329,12 @@
     return ((NSNumber *(*)(id, SEL, NSError **))original)(receiver, selector, error);
   });
   SEL anchorSelector = @selector(windowAnchorWithApplication:screen:error:);
-  Method anchorMethod = class_getClassMethod(FBScreen.class, anchorSelector);
+  Method anchorMethod = class_getClassMethod(FBGestureCoordinateContext.class, anchorSelector);
   IMP originalAnchor = method_getImplementation(anchorMethod);
   __block NSUInteger anchorCalls = 0;
-  IMP countingAnchors = imp_implementationWithBlock(^FBScreenCoordinateAnchor *(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
+  IMP countingAnchors = imp_implementationWithBlock(^id(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
     anchorCalls++;
-    return ((FBScreenCoordinateAnchor *(*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))originalAnchor)(receiver, anchorSelector, application, screen, error);
+    return ((id (*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))originalAnchor)(receiver, anchorSelector, application, screen, error);
   });
   method_setImplementation(method, counting);
   method_setImplementation(anchorMethod, countingAnchors);
@@ -355,6 +363,23 @@
       XCTAssertEqual(calls, invocation);
       XCTAssertEqual(anchorCalls, hasMultipleScreens ? invocation : 0);
     }
+    NSArray<NSValue *> *offsets = @[
+      [NSValue valueWithCGVector:CGVectorMake(100, 100)],
+      [NSValue valueWithCGVector:CGVectorMake(120, 120)],
+    ];
+    // A native drag shares one resolution between its endpoints, on iPhone too.
+    for (NSUInteger invocation = 3; invocation <= 4; invocation++) {
+      NSArray<XCUICoordinate *> *coordinates = [FBElementCommands gestureCoordinatesWithOffsets:offsets
+        element:self.testedApplication error:&error];
+      XCTAssertEqual(coordinates.count, 2);
+      XCTAssertNil(error);
+      XCTAssertEqual(calls, invocation);
+      XCTAssertEqual(anchorCalls, hasMultipleScreens ? invocation : 0);
+    }
+    XCTAssertEqual([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.canvas error:&error].count, 2);
+    XCTAssertNil(error);
+    XCTAssertEqual(calls, 4); // Ordinary element gestures do not enumerate displays.
+    XCTAssertEqual(anchorCalls, hasMultipleScreens ? 4 : 0);
   } @finally {
     method_setImplementation(method, original);
     method_setImplementation(anchorMethod, originalAnchor);
@@ -369,11 +394,11 @@
   XCUIApplication *otherApplication = self.springboard;
   NSError *expectedError = [NSError errorWithDomain:@"WindowAnchorLookup" code:1 userInfo:nil];
   SEL selector = @selector(windowAnchorWithApplication:screen:error:);
-  Method method = class_getClassMethod(FBScreen.class, selector);
+  Method method = class_getClassMethod(FBGestureCoordinateContext.class, selector);
   IMP original = method_getImplementation(method);
   __block NSUInteger sessionAppCalls = 0;
   __block NSUInteger otherAppCalls = 0;
-  IMP replacement = imp_implementationWithBlock(^FBScreenCoordinateAnchor *(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
+  IMP replacement = imp_implementationWithBlock(^id(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
     if (application == otherApplication) {
       otherAppCalls++;
       if (NULL != error) {
@@ -382,7 +407,7 @@
       return nil;
     }
     sessionAppCalls++;
-    return ((FBScreenCoordinateAnchor *(*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))original)(receiver, selector, application, screen, error);
+    return ((id (*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))original)(receiver, selector, application, screen, error);
   });
   method_setImplementation(method, replacement);
   @try {
@@ -435,6 +460,67 @@
   XCTSkipIf(!checkedOtherDisplay, @"Requires another display without the fixture");
 }
 
+- (void)testDisplayEnumerationFailureStopsGestureResolution
+{
+  NSError *expectedError = [NSError errorWithDomain:@"DisplayEnumeration" code:1 userInfo:nil];
+  SEL selector = @selector(hasMultipleScreensWithError:);
+  Method method = class_getClassMethod(FBScreen.class, selector);
+  IMP original = method_getImplementation(method);
+  IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
+    if (NULL != error) {
+      *error = expectedError;
+    }
+    return nil;
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    NSError *error = nil;
+    NSArray *offsets = @[[NSValue valueWithCGVector:CGVectorMake(100, 100)],
+                        [NSValue valueWithCGVector:CGVectorMake(120, 120)]];
+    XCTAssertNil([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.testedApplication error:&error]);
+    XCTAssertEqualObjects(error, expectedError);
+    error = nil;
+    NSArray *actions = @[@{
+      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+      @"actions": @[[self moveFrom:@"viewport" x:100 y:100 duration:0]],
+    }];
+    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
+    XCTAssertNil([synthesizer synthesizeWithError:&error]);
+    XCTAssertEqualObjects(error, expectedError);
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
+  }
+}
+
+- (void)verifyNativeDragCoordinates
+{
+  NSDictionary *geometry = [self measurement];
+  NSArray<NSNumber *> *bounds = geometry[@"canvasBounds"];
+  NSArray<NSNumber *> *frame = geometry[@"canvasWindowRect"];
+  CGPoint end = CGPointMake(bounds[0].doubleValue / 2, bounds[1].doubleValue / 2 - 40);
+  CGVector endOffset = CGVectorMake(frame[0].doubleValue + end.x, frame[1].doubleValue + end.y);
+  CGVector startOffset = CGVectorMake(endOffset.dx, endOffset.dy + 40);
+  NSError *error = nil;
+  NSArray<XCUICoordinate *> *coordinates = [FBElementCommands gestureCoordinatesWithOffsets:
+    @[[NSValue valueWithCGVector:startOffset], [NSValue valueWithCGVector:endOffset]]
+    element:self.testedApplication error:&error];
+  XCTAssertEqual(coordinates.count, 2);
+  XCTAssertNil(error);
+  [coordinates[0] pressForDuration:0.1 thenDragToCoordinate:coordinates[1]];
+  NSDictionary *result = [self measurement];
+  XCTAssertEqual([result[@"count"] unsignedIntegerValue], [geometry[@"count"] unsignedIntegerValue] + 1);
+  XCTAssertEqualObjects(result[@"phase"], @"ended");
+  XCTAssertEqualWithAccuracy([result[@"last"][0] doubleValue], end.x, 1);
+  XCTAssertEqualWithAccuracy([result[@"last"][1] doubleValue], end.y, 1);
+}
+
+- (void)testNativeDragCoordinates
+{
+  [self verifyNativeDragCoordinates];
+}
+
 - (void)testNativeCoordinatesAcrossFoldStates
 {
   XCUIDevice *device = XCUIDevice.sharedDevice;
@@ -455,6 +541,7 @@
     [self selectFixtureDisplay];
     [self verifyNativeApplicationCoordinates];
     [self verifyNativeEdgeCoordinates];
+    [self verifyNativeDragCoordinates];
   }
 }
 

@@ -7,9 +7,6 @@
  */
 
 #import "FBScreen.h"
-#import "FBMathUtils.h"
-#import "XCUIElement.h"
-#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBConfiguration.h"
 #import "FBErrorBuilder.h"
 #import "XCUIElement+FBIsVisible.h"
@@ -17,23 +14,6 @@
 #import "XCUIDevice.h"
 #import "XCUIScreen.h"
 #import <objc/message.h>
-
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-@interface FBScreenCoordinateAnchor ()
-@property (nonatomic) XCUIElement *window;
-@property (nonatomic) CGRect frame;
-@end
-
-@implementation FBScreenCoordinateAnchor
-- (XCUICoordinate *)coordinateWithOffset:(CGVector)offset
-{
-  // Use the captured frame; FBCoordinateWithAnchorOffset would query it again.
-  return [self.window coordinateWithNormalizedOffset:CGVectorMake(
-    (offset.dx - self.frame.origin.x) / self.frame.size.width,
-    (offset.dy - self.frame.origin.y) / self.frame.size.height)];
-}
-@end
-#endif
 
 static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
 {
@@ -153,54 +133,6 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
   }
   return [self screenWithDisplayID:displayID.longLongValue error:error];
 }
-
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-+ (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application
-                                               offset:(CGVector)offset
-                                                error:(NSError **)error
-{
-  XCUIScreen *screen = [FBScreen currentScreenWithError:error];
-  if (nil == screen) {
-    return nil;
-  }
-  NSNumber *hasMultipleScreens = [self hasMultipleScreensWithError:error];
-  if (nil == hasMultipleScreens) {
-    return nil;
-  }
-  if (!hasMultipleScreens.boolValue) {
-    return FBCoordinateWithAnchorOffset(application, CGVectorMake(0, 0), offset, error);
-  }
-  FBScreenCoordinateAnchor *anchor = [self windowAnchorWithApplication:application screen:screen error:error];
-  return [anchor coordinateWithOffset:offset];
-}
-
-+ (nullable FBScreenCoordinateAnchor *)windowAnchorWithApplication:(XCUIElement *)application
-                                                           screen:(XCUIScreen *)screen
-                                                            error:(NSError **)error
-{
-  // Application-root coordinates can retain cover-display geometry after main
-  // switches to the inner panel. Resolve an anchor on the selected display.
-  // A window coordinate keeps XCTest's display affinity and rotation intact.
-  // It is only a coordinate anchor, not a hit-test boundary. Preserve edge and
-  // outside offsets just as on the main display; XCTest handles their delivery.
-  for (XCUIElement *window in [application childrenMatchingType:XCUIElementTypeWindow].allElementsBoundByIndex) {
-    // Resolve the window before reading its display affinity: an unresolved
-    // element may report displayID == 0.
-    (void)window.frame;
-    CGRect frame = window.wdFrame;
-    if (window.screen.displayID == screen.displayID && !CGRectIsEmpty(frame)) {
-      FBScreenCoordinateAnchor *anchor = [FBScreenCoordinateAnchor new];
-      anchor.window = window;
-      anchor.frame = frame;
-      return anchor;
-    }
-  }
-  [[[FBErrorBuilder builder] withDescriptionFormat:@"No non-empty application window on display %lld is available as a coordinate anchor", screen.displayID]
-    buildError:error];
-  return nil;
-}
-
-#endif
 
 + (long long)displayID
 {

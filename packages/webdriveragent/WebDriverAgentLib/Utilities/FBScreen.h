@@ -10,13 +10,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-/** A window and its resolved frame. Reuse only while synthesizing one command. */
-@interface FBScreenCoordinateAnchor : NSObject
-- (XCUICoordinate *)coordinateWithOffset:(CGVector)offset;
-@end
-#endif
-
 @interface FBScreen : NSObject
 
 /**
@@ -43,20 +36,6 @@ NS_ASSUME_NONNULL_BEGIN
  @return The selected display or nil
  */
 + (nullable XCUIScreen *)currentScreenWithError:(NSError **)error;
-
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-/** Resolves viewport coordinates through a window on the selected display.
-    Window bounds are an anchor, not a hit-test boundary. */
-+ (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application
-                                               offset:(CGVector)offset
-                                                error:(NSError **)error;
-
-/** Resolves a window anchor using an already selected screen on a multi-display device. */
-+ (nullable FBScreenCoordinateAnchor *)windowAnchorWithApplication:(XCUIElement *)application
-                                                           screen:(XCUIScreen *)screen
-                                                            error:(NSError **)error;
-
-#endif
 
 /**
  The identifier of the main device's display
