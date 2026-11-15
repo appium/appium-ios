@@ -82,6 +82,7 @@ export async function startVideoRecording(
   const startPromise = runCatchingAsync(async () => {
     const device = await this._findDevice(udid);
     const displayId = await resolveDisplayPortId(device, options.displayId);
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks -- native error callback, not a promise API
     return device.startVideoRecording(absoluteOutputFile, {...options, displayId}, (err) => {
       // Only ever invoked on the `audio`/`fps` (own-encoder) path — see its own doc comment above.
       // No live consumer to report to (this call already resolved), so logged instead of lost.
@@ -164,7 +165,7 @@ export async function stopVideoRecording(
     }
     log.warn(
       `Force-releasing video recording bookkeeping for device '${udid}' despite a failed native stop: ` +
-        `${toTypedError(e).stack ?? e}`,
+        `${toTypedError(e).stack ?? toTypedError(e).message}`,
     );
   }
   if (activeRecordings.get(key) === state) {

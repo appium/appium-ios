@@ -72,4 +72,4 @@ async function xcodeVersionUpdate() {
   await fs.promises.writeFile(projectFile, newPayload, 'utf8');
 }
 
-(async () => await xcodeVersionUpdate())();
+await xcodeVersionUpdate();

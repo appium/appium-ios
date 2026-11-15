@@ -1,6 +1,6 @@
 {
   "name": "ios-uicatalog",
-  "version": "4.1.3",
+  "version": "4.1.4",
   "private": true,
   "description": "Apple iOS UIKitCatalog app",
   "keywords": [
@@ -8,7 +8,7 @@
     "ios",
     "uicatalog"
   ],
-  "homepage": "https://github.com/appium/appium-ios/tree/main/packages/uicatalog",
+  "homepage": "https://appium.io",
   "bugs": {
     "url": "https://github.com/appium/appium-ios/issues"
   },

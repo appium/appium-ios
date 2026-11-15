@@ -36,7 +36,7 @@ class Handshake {
         return reject(new Error('Socket is not writable'));
       }
 
-      const onError = (error?: Error) => {
+      const onError = (error?: Error | null) => {
         if (error) {
           reject(error);
         } else {

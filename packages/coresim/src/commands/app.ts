@@ -12,7 +12,11 @@ declare module '../native-simctl.js' {
     isAppInstalled(udid: string, bundleId: string): Promise<boolean>;
     appInfo(udid: string, bundleId: string): Promise<Record<string, unknown>>;
     installedApps(udid: string): Promise<Record<string, unknown>>;
-    getAppContainer(udid: string, bundleId: string, containerType?: AppContainerType | string): Promise<string>;
+    getAppContainer(
+      udid: string,
+      bundleId: string,
+      containerType?: AppContainerType | (string & Record<never, never>),
+    ): Promise<string>;
   }
 }
 
@@ -138,7 +142,7 @@ export async function getAppContainer(
   this: NativeSimctl,
   udid: string,
   bundleId: string,
-  containerType: AppContainerType | string = 'app',
+  containerType: AppContainerType | (string & Record<never, never>) = 'app',
 ): Promise<string> {
   return runCatchingAsync(async () => {
     const info = await this.appInfo(udid, bundleId);

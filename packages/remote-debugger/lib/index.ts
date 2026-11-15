@@ -42,3 +42,17 @@ export type {
   AutomationRect,
   LocatorStrategy,
 };
+
+export {
+  PAGE_SETTING_NAMES,
+  USER_PREFERENCE_VALUES,
+  WEB_INSPECTOR_SETTING_KEYS,
+  validateWebInspectorPageSettings,
+} from './page-overrides.js';
+export type {
+  PageSettingName,
+  PageSettings,
+  UserPreferenceName,
+  PageUserPreferences,
+  WebInspectorPageSettings,
+} from './page-overrides.js';

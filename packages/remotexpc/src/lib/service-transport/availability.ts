@@ -1,3 +1,4 @@
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {getTunnelForDevice} from '../tunnel/tunnel-availability.js';
 import {resolveTunnelService, resolveTunnelServicePorts} from '../tunnel/tunnel-service-resolver.js';
@@ -82,7 +83,7 @@ async function isTunnelAvailable(
     }
     return true;
   } catch (err) {
-    log.debug(`Tunnel not available for ${udid}: ${err}`);
+    log.debug(`Tunnel not available for ${udid}: ${formatError(err)}`);
     return false;
   }
 }

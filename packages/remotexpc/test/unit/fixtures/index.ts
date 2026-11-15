@@ -8,7 +8,7 @@ const log = logger.getLogger('fixtures');
 
 export const UDID = '63c3d055c4f83e960e5980fa68be0fbf7d4ba74c';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 let fixtureContents: Record<string, Buffer> | null = null;
 
 export const fixtures = {

@@ -22,7 +22,7 @@ export class PlistServiceEncoder extends Transform {
     super({objectMode: true});
   }
 
-  _transform(data: PlistDictionary, encoding: BufferEncoding, callback: TransformCallback): void {
+  override _transform(data: PlistDictionary, encoding: BufferEncoding, callback: TransformCallback): void {
     try {
       this.push(framePlist(data));
       callback();

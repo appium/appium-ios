@@ -38,6 +38,19 @@ export default defineConfig({
       // Atom sources run injected into a WebKit page context, never under Node.
       files: ['packages/remote-debugger/atoms/src/**'],
       env: {browser: true, node: false},
+      rules: {
+        // Atoms port the WebDriver atoms: they coerce arbitrary page values and speak callback/thenable protocols.
+        'typescript/restrict-template-expressions': 'off',
+        'typescript/no-base-to-string': 'off',
+        'promise/prefer-await-to-callbacks': 'off',
+        'promise/prefer-await-to-then': 'off',
+        'promise/catch-or-return': 'off',
+      },
+    },
+    {
+      // These tests deliberately exercise thenable handling.
+      files: ['packages/remote-debugger/test/unit/atoms.spec.ts'],
+      rules: {'unicorn/no-thenable': 'off'},
     },
     {
       // These tests reference DOM globals (document, TouchEvent, ...) installed onto globalThis

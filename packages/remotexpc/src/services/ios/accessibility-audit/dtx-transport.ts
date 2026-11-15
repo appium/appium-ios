@@ -1,5 +1,7 @@
 import net from 'node:net';
 
+import {runInBackground} from '../../../lib/background.js';
+import {formatError} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist} from '../../../lib/plist/binary-plist-creator.js';
 import {parseBinaryPlist} from '../../../lib/plist/binary-plist-parser.js';
@@ -345,7 +347,7 @@ export class AxAuditDtxTransport extends BaseService {
     // the read flows this transport supports.
     const selector = typeof object === 'string' ? object : '';
     const listeners = selector ? this.inboundListeners.get(selector) : undefined;
-    for (const listener of [...(listeners ?? [])]) {
+    for (const listener of Array.from(listeners ?? [])) {
       // A throwing listener is the caller's bug, not a transport failure.
       try {
         listener(args);
@@ -579,15 +581,15 @@ function parseAuxiliary(buffer: Buffer): unknown[] {
 async function withDeadline<T>(promise: Promise<T>, timeoutMs: number, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   let deadlineExpired = false;
-  promise.catch((error) => {
+  runInBackground(promise, (e) => {
     if (deadlineExpired) {
-      log.debug(`${what} failed after its deadline: ${error instanceof Error ? error.message : String(error)}`);
+      log.debug(`${what} failed after its deadline: ${formatError(e)}`);
     }
   });
   try {
     return await Promise.race([
       promise,
-      new Promise<never>((_, reject) => {
+      new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           deadlineExpired = true;
           reject(new Error(`Timed out after ${timeoutMs}ms during ${what}`));

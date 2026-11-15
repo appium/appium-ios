@@ -16,7 +16,7 @@ export interface LocationCoordinates {
  * Location simulation service for simulating device GPS location
  */
 export class LocationSimulation extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.LocationSimulation';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.LocationSimulation';
 
   /**
    * Set the simulated GPS location

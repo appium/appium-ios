@@ -1,6 +1,8 @@
+import {NativeSimDisplayResolutionError} from '../errors.js';
 import type {NativeSimctl} from '../native-simctl.js';
 import type {ScreenshotOptions, SimDisplayInfo} from '../types.js';
-import {resolveDisplayPortId, runCatchingAsync, validateDisplayId} from '../utils/index.js';
+import {beginDisplaySelection} from '../utils/display-cache.js';
+import {runCatchingAsync, validateDisplayId} from '../utils/index.js';
 
 declare module '../native-simctl.js' {
   interface NativeSimctl {
@@ -13,7 +15,8 @@ declare module '../native-simctl.js' {
  * Captures a device display as an image — the native equivalent of `simctl io <udid> screenshot`
  * (see native/sim_screenshot.mm for how this reads the framebuffer directly, with no temp file or
  * subprocess). Rejects if the resolved display has no renderable surface yet (e.g. not booted).
- * Display selection follows {@link validateDisplayId} and {@link resolveDisplayPortId}.
+ * Display selection follows {@link validateDisplayId}; numeric IDs resolve to display port UUIDs.
+ * See {@link ScreenshotOptions.cacheDisplayId} for optional boot-scoped numeric-ID caching.
  *
  * @param udid — UDID of the device to capture; must be booted
  * @param options — `format` (defaults to `'png'`), `displayId`,
@@ -32,11 +35,10 @@ export async function getScreenshot(
     throw new RangeError(`quality must be a number between 0 and 100, got ${options.quality}`);
   }
   validateDisplayId(options.displayId);
-  return runCatchingAsync(async () => {
-    const device = await this._findDevice(udid);
-    const displayId = await resolveDisplayPortId(device, options.displayId);
-    return await device.screenshot({...options, displayId});
-  });
+  if (options.cacheDisplayId !== undefined && typeof options.cacheDisplayId !== 'boolean') {
+    throw new TypeError('cacheDisplayId must be a boolean');
+  }
+  return runCatchingAsync(async () => await captureScreenshot(this, udid, options));
 }
 
 /**
@@ -48,4 +50,32 @@ export async function getScreenshot(
  */
 export async function getDisplays(this: NativeSimctl, udid: string): Promise<SimDisplayInfo[]> {
   return runCatchingAsync(async () => (await this._findDevice(udid)).getDisplays());
+}
+
+/** Capture policy stays here; display resolution and cache ownership are operation-independent. */
+async function captureScreenshot(
+  client: NativeSimctl,
+  udid: string,
+  {cacheDisplayId, ...options}: ScreenshotOptions,
+): Promise<Buffer> {
+  const selection = await beginDisplaySelection(client, udid, options.displayId, cacheDisplayId);
+  if (selection.cachedPortId !== undefined) {
+    try {
+      const result = await runCatchingAsync(async () =>
+        selection.device.screenshot({...options, displayId: selection.cachedPortId}),
+      );
+      if (selection.commit(selection.cachedPortId)) {
+        return result;
+      }
+    } catch (err) {
+      if (!(err instanceof NativeSimDisplayResolutionError)) {
+        throw err;
+      }
+    }
+    // Retry a missing cached port or a capture spanning a reboot once, using the same numeric ID.
+  }
+  const displayId = await selection.resolveFresh();
+  const result = await selection.device.screenshot({...options, displayId});
+  selection.commit(displayId);
+  return result;
 }

@@ -307,14 +307,20 @@ interface RuntimeFixture {
  * One (runtime, compatible device type) pair per distinct simulator runtime actually installed —
  * borrowed from an existing device rather than guessed out of supportedDeviceTypes() (which
  * includes watchOS/tvOS/visionOS types that aren't compatible with an iOS runtime), so
- * createDevice is guaranteed to succeed against every entry this returns.
+ * createDevice is guaranteed to succeed against every entry this returns. Duo types are skipped:
+ * their several main displays make the display-less capture APIs ambiguous by design.
  */
 async function availableRuntimeFixtures(sim: NativeSimctl): Promise<RuntimeFixture[]> {
   const [runtimes, devices] = await Promise.all([sim.getSupportedRuntimes(), sim.getDevices()]);
   const runtimeById = new Map(runtimes.map((r) => [r.identifier, r]));
   const deviceTypeByRuntime = new Map<string, string>();
   for (const device of devices) {
-    if (device.runtimeIdentifier && device.deviceTypeIdentifier && !deviceTypeByRuntime.has(device.runtimeIdentifier)) {
+    if (
+      device.runtimeIdentifier &&
+      device.deviceTypeIdentifier &&
+      !/duo/i.test(device.deviceTypeIdentifier) &&
+      !deviceTypeByRuntime.has(device.runtimeIdentifier)
+    ) {
       deviceTypeByRuntime.set(device.runtimeIdentifier, device.deviceTypeIdentifier);
     }
   }
@@ -1492,6 +1498,20 @@ describe('NativeSimctl integration', () => {
 
           await sim.removeApp(device!.udid, UICATALOG_BUNDLE_ID);
           assert.strictEqual(await sim.isAppInstalled(device!.udid, UICATALOG_BUNDLE_ID), false);
+        });
+
+        it('says why an app install failed', async () => {
+          const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coresim-bad-app-'));
+          const bundlePath = path.join(tmpDir, 'NoInfoPlist.app');
+          try {
+            await fs.promises.mkdir(bundlePath);
+            await assert.rejects(
+              sim.installApp(device!.udid, bundlePath),
+              (err: unknown) => err instanceof NativeSimOperationError && /bundle ID/i.test(err.message),
+            );
+          } finally {
+            await fs.promises.rm(tmpDir, {recursive: true, force: true});
+          }
         });
       }
 

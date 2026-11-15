@@ -1,5 +1,7 @@
 import type {StringRecord, AppiumLogger} from '@appium/types';
 
+import type {WebInspectorPageSettings} from './page-overrides.js';
+
 export interface AppInfo {
   id: string;
   isProxy: boolean;
@@ -107,6 +109,8 @@ export interface RemoteDebuggerOptions {
   /** The maximum size in bytes of a single data frame in the device communication protocol */
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
+  /** Initial complete override policy, retained for future targets. Omitted entries use browser defaults. */
+  webInspectorSettings?: WebInspectorPageSettings;
   /**
    * How long to wait until a new target is created for a page.
    * Usually, it happens almost instantly, but on slow CI environments this might take some minutes.
@@ -129,6 +133,8 @@ export interface RpcClientOptions {
   logAllCommunicationHexDump?: boolean;
   webInspectorMaxFrameLength?: number;
   fullPageInitialization?: boolean;
+  /** Initial complete override policy, retained for future targets. Omitted entries use browser defaults. */
+  webInspectorSettings?: WebInspectorPageSettings;
   pageLoadTimeoutMs?: number;
   udid?: string;
   targetCreationTimeoutMs?: number;

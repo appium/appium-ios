@@ -23,7 +23,13 @@ import type {
   RunOptions,
   LocalizationOptions,
 } from '../types.js';
-import {DEVICE_HUB_UI_CLIENT_BUNDLE_ID, NSUserDefaults, generateDefaultsCommandArgs} from '../utils/index.js';
+import {
+  DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
+  NSUserDefaults,
+  assertDeviceHubPreferencesAccess,
+  generateDefaultsCommandArgs,
+  getDeviceHubPreferencesPath,
+} from '../utils/index.js';
 
 declare module '../simulator-xcode-15.js' {
   interface SimulatorXcode15 extends HasSettings {}
@@ -292,7 +298,7 @@ export async function configureLocalization(
     } else {
       this.log.info(
         `Will restart the following services in order to sync UI dialogs translation: ` +
-          `${SERVICES_FOR_TRANSLATION}. This might have unexpected side effects, ` +
+          `${SERVICES_FOR_TRANSLATION.join(', ')}. This might have unexpected side effects, ` +
           `see https://github.com/appium/appium/issues/19440 for more details`,
       );
       await Promise.all(
@@ -410,18 +416,11 @@ async function updateDeviceHubPreferences(
   if (!updatePasteboard && Object.keys(prefsToUpdate).length === 0) {
     return true;
   }
-  const plistPath = path.resolve(
-    homeFolderPath,
-    'Library',
-    'Containers',
-    DEVICE_HUB_UI_CLIENT_BUNDLE_ID,
-    'Data',
-    'Library',
-    'Preferences',
-    `${DEVICE_HUB_UI_CLIENT_BUNDLE_ID}.plist`,
-  );
+  const plistPath = getDeviceHubPreferencesPath(homeFolderPath);
   return await PREFERENCES_PLIST_GUARD.acquire(plistPath, async () => {
     try {
+      // A denied container is reported as a warning with a hint, not a failure of the whole run
+      await assertDeviceHubPreferencesAccess(homeFolderPath);
       if (updatePasteboard) {
         // DeviceHub also stores NSData values, which plutil cannot convert to JSON.
         const currentPrefs = (await plist.parsePlistFile(plistPath, false)) as Record<string, any>;
@@ -551,7 +550,7 @@ export function verifyDevicePreferences(this: CoreSimulatorWithSettings, prefs: 
       !acceptableSimulatorWindowOrientations.includes(prefs.SimulatorWindowOrientation))
   ) {
     throw this.log.errorWithException(
-      `SimulatorWindowOrientation is expected to be one of ${acceptableSimulatorWindowOrientations}. ` +
+      `SimulatorWindowOrientation is expected to be one of ${acceptableSimulatorWindowOrientations.join(', ')}. ` +
         `'${prefs.SimulatorWindowOrientation}' is assigned instead.`,
     );
   }
@@ -559,7 +558,7 @@ export function verifyDevicePreferences(this: CoreSimulatorWithSettings, prefs: 
   if (prefs.SimulatorWindowRotationAngle !== undefined && typeof prefs.SimulatorWindowRotationAngle !== 'number') {
     throw this.log.errorWithException(
       `SimulatorWindowRotationAngle is expected to be a valid number. ` +
-        `'${prefs.SimulatorWindowRotationAngle}' is assigned instead.`,
+        `'${String(prefs.SimulatorWindowRotationAngle)}' is assigned instead.`,
     );
   }
 }

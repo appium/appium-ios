@@ -3,6 +3,118 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.5...appium-webdriveragent@17.0.6) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
+## [17.0.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.4...appium-webdriveragent@17.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [17.0.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.3...appium-webdriveragent@17.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **webdriveragent:** fix lint warnings ([#198](https://github.com/appium/appium-ios/issues/198)) ([b483c69](https://github.com/appium/appium-ios/commit/b483c6986513754ca0683e9d7a2c00cdd254188e))
+
+
+## [17.0.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.2...appium-webdriveragent@17.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [17.0.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.1...appium-webdriveragent@17.0.2) (2026-11-12)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.0.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.0...appium-webdriveragent@17.0.1) (2026-11-12)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve detected Safari alert snapshot ([#187](https://github.com/appium/appium-ios/issues/187)) ([a5d3dbb](https://github.com/appium/appium-ios/commit/a5d3dbb9b25fbc5ec5620127e876feae6abed806))
+
+
+## [17.0.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.5...appium-webdriveragent@17.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **webdriveragent:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **webdriveragent:** add Appium 4 support ([3d6a9e5](https://github.com/appium/appium-ios/commit/3d6a9e5e5a48e993658be16cdeeb8b157dbd5650))
+
+
+## [16.18.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.4...appium-webdriveragent@16.18.5) (2026-11-10)
+
+### Bug Fixes
+
+* **webdriveragent:** keep a late MJPEG frame instead of backing off ([#179](https://github.com/appium/appium-ios/issues/179)) ([e57ef10](https://github.com/appium/appium-ios/commit/e57ef1069c155fbf37a3c223bcc96af7788025b3))
+
+
+## [16.18.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.3...appium-webdriveragent@16.18.4) (2026-11-09)
+
+### Performance Improvements
+
+* **webdriveragent:** stop resolving every match again in findElements ([#177](https://github.com/appium/appium-ios/issues/177)) ([ea8354c](https://github.com/appium/appium-ios/commit/ea8354caf2a842a19a82114b8103d7c9446a4e09))
+
+
+## [16.18.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.2...appium-webdriveragent@16.18.3) (2026-11-08)
+
+### Bug Fixes
+
+* **webdriveragent:** cache the screen lookup in the MJPEG server ([#171](https://github.com/appium/appium-ios/issues/171)) ([e764254](https://github.com/appium/appium-ios/commit/e764254f068127669c1ba16d32394836c97307ac))
+
+
+## [16.18.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.1...appium-webdriveragent@16.18.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [16.18.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.18.0...appium-webdriveragent@16.18.1) (2026-11-07)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.18.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.11...appium-webdriveragent@16.18.0) (2026-11-07)
+
+### Features
+
+* **webdriveragent:** add hasHinge ([#162](https://github.com/appium/appium-ios/issues/162)) ([6bd7f4c](https://github.com/appium/appium-ios/commit/6bd7f4c2a0f16cfa3e13a0c69ac3e16e512cee77))
+
+
+## [16.17.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.10...appium-webdriveragent@16.17.11) (2026-11-06)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [16.17.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.9...appium-webdriveragent@16.17.10) (2026-11-05)
+
+### Bug Fixes
+
+* **webdriveragent:** correct hinge angle undershoot on iOS 27.2 simulator ([#152](https://github.com/appium/appium-ios/issues/152)) ([b3ce495](https://github.com/appium/appium-ios/commit/b3ce495b49566f0eebff5192c5698d010e6c0ab1)), closes [#151](https://github.com/appium/appium-ios/issues/151)
+
+
 ## [16.17.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@16.17.8...appium-webdriveragent@16.17.9) (2026-11-04)
 
 ### Bug Fixes

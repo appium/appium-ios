@@ -3,6 +3,7 @@ import * as http from 'node:http';
 import {BaseItem, strongbox} from '@appium/strongbox';
 
 import {TUNNEL_CONTAINER_NAME} from '../../constants.js';
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import type {TunnelRegistry, TunnelRegistryEntry} from '../types.js';
 import {MAX_TUNNEL_REGISTRY_WAIT_MS, TUNNEL_REGISTRY_API_BASE_PATH, TUNNEL_REGISTRY_HOST} from './constants.js';
@@ -144,7 +145,7 @@ export class TunnelRegistryServer {
         });
       });
     } catch (error) {
-      log.error(`Failed to start server: ${error}`);
+      log.error(`Failed to start server: ${formatError(error)}`);
       throw error;
     }
   }
@@ -170,7 +171,7 @@ export class TunnelRegistryServer {
       });
       log.info('Tunnel Registry Server stopped');
     } catch (error) {
-      log.error(`Error stopping server: ${error}`);
+      log.error(`Error stopping server: ${formatError(error)}`);
       throw error;
     }
   }
@@ -190,7 +191,7 @@ export class TunnelRegistryServer {
         sendJSON(res, 404, {error: 'Not found'});
       }
     } catch (error) {
-      log.error(`Request handling error: ${error}`);
+      log.error(`Request handling error: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Internal server error',
       });
@@ -205,7 +206,7 @@ export class TunnelRegistryServer {
       await this.loadRegistry();
       sendJSON(res, 200, this.fullRegistry);
     } catch (error) {
-      log.error(`Error getting all tunnels: ${error}`);
+      log.error(`Error getting all tunnels: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to get tunnels',
       });
@@ -220,7 +221,7 @@ export class TunnelRegistryServer {
       await this.loadRegistry();
       sendJSON(res, 200, this.metadata);
     } catch (error) {
-      log.error(`Error getting registry metadata: ${error}`);
+      log.error(`Error getting registry metadata: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to get registry metadata',
       });
@@ -259,7 +260,7 @@ export class TunnelRegistryServer {
         sendJSON(res, 408, {status: 'NOT_READY'});
       }
     } catch (error) {
-      log.error(`Error getting tunnel by UDID: ${error}`);
+      log.error(`Error getting tunnel by UDID: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to get tunnel',
       });
@@ -288,7 +289,7 @@ export class TunnelRegistryServer {
       this.upsertReadyEntry(udid, updated);
       sendJSON(res, 200, this.tunnels[udid]);
     } catch (error) {
-      log.error(`Error refreshing services for ${udid}: ${error}`);
+      log.error(`Error refreshing services for ${udid}: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to refresh service catalog',
       });
@@ -318,7 +319,7 @@ export class TunnelRegistryServer {
 
       sendJSON(res, 200, tunnel);
     } catch (error) {
-      log.error(`Error getting tunnel by device ID: ${error}`);
+      log.error(`Error getting tunnel by device ID: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to get tunnel',
       });
@@ -369,7 +370,7 @@ export class TunnelRegistryServer {
         tunnel: this.registry.tunnels[udid],
       });
     } catch (error) {
-      log.error(`Error updating tunnel: ${error}`);
+      log.error(`Error updating tunnel: ${formatError(error)}`);
       sendJSON(res, 500, {
         error: 'Failed to update tunnel',
       });
@@ -386,7 +387,7 @@ export class TunnelRegistryServer {
       }
       // Use the provided registry object or default empty registry
     } catch (error) {
-      log.warn(`Failed to load registry: ${error}`);
+      log.warn(`Failed to load registry: ${formatError(error)}`);
       // If there's an error, use the default empty registry
       this.registry = {
         tunnels: {},

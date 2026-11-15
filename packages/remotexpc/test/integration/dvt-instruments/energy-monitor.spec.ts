@@ -89,7 +89,7 @@ describe('EnergyMonitor Service', {timeout: 60000}, function () {
 
   it('should yield consecutive samples from monitor generator', async function () {
     const pids = [calculatorPid!];
-    const samples: Record<string, Record<string, number>>[] = [];
+    const samples: Record<string, Record<string, number | undefined>>[] = [];
 
     const gen = dvt!.energyMonitor.monitor(pids);
     try {

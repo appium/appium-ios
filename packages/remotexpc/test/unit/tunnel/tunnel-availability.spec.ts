@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as net from 'node:net';
 import {describe, it} from 'node:test';
 import type {TestContext} from 'node:test';
 
@@ -57,7 +58,9 @@ async function loadTunnelAvailability(
         }
       },
     },
+    // Keep the real exports: modules in the import graph (e.g. @appium/support) need more than `connect`
     'node:net': {
+      ...net,
       connect: () => createNetSocketMock(options.netMode ?? 'connect'),
     },
   };

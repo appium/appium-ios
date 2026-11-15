@@ -1,3 +1,4 @@
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {BaseDiscoveryBackend} from './base-discovery-backend.js';
 import {DISCOVERY_DEFAULT_TIMEOUT_MS} from './constants.js';
@@ -90,7 +91,7 @@ async function instanceToDevice(
       metadata,
     };
   } catch (err) {
-    log.warn(`Failed to process mDNS service ${instance.instance}: ${err}`);
+    log.warn(`Failed to process mDNS service ${instance.instance}: ${formatError(err)}`);
     return null;
   }
 }

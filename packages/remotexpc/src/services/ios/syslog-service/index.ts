@@ -1,6 +1,7 @@
 import {EventEmitter} from 'node:events';
 import type net from 'node:net';
 
+import {formatError} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {framePlist} from '../../../lib/plist/index.js';
 import type {SyslogOptions, SyslogService as SyslogServiceInterface} from '../../../lib/types.js';
@@ -211,7 +212,7 @@ class SyslogService extends EventEmitter implements SyslogServiceInterface {
       }
       log.info('Restart request sent');
     } catch (error) {
-      log.error(`Error during restart: ${error}`);
+      log.error(`Error during restart: ${formatError(error)}`);
       throw error;
     }
   }

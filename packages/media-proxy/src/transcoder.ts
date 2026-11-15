@@ -1,3 +1,4 @@
+import {releaseQuietly} from './background.js';
 import {MediaProxyOptionError, wrapNativeError} from './errors.js';
 import {loadNative} from './native.js';
 import {MAX_BUFFERED_UNITS, UnitQueue} from './queue.js';
@@ -144,6 +145,7 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
       this.handle = native.createTranscoder(
         config,
         (unit) => this.onUnit(unit),
+        // oxlint-disable-next-line promise/prefer-await-to-callbacks -- native error callback, not a promise API
         (err) => this.queue.fail(wrapNativeError(err)),
       );
     } catch (err) {
@@ -313,14 +315,14 @@ export async function* pipeThrough(
   const releaseSource = () => {
     if (!exhausted && !returned) {
       returned = true;
-      iterator.return?.()?.catch(() => {});
+      releaseQuietly(iterator);
     }
   };
   let audioDone = false;
   const releaseAudio = () => {
     if (audioIterator && !audioDone) {
       audioDone = true;
-      audioIterator.return?.()?.catch(() => {});
+      releaseQuietly(audioIterator);
     }
   };
   const fail = (err: unknown) => {

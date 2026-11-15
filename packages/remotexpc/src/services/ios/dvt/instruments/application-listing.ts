@@ -46,7 +46,7 @@ export interface iOSApplication {
  * Application Listing service for retrieving installed applications
  */
 export class ApplicationListing extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.device.applictionListing';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.device.applictionListing';
 
   /**
    * Get the list of installed applications from the device

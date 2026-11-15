@@ -34,7 +34,7 @@ export const NetworkMessageType = {
  * - Connection update events (traffic statistics updates)
  */
 export class NetworkMonitor extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.networking';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.networking';
   private receiveAbortController: AbortController | null = null;
   private stopRequested = false;
   private started = false;

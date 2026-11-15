@@ -11,7 +11,7 @@ import {UsbmuxDecoder} from '../../../src/lib/usbmux/usbmux-decoder.js';
 import {prioritizeUsbOverNetworkForDuplicateUdids} from '../../../src/lib/usbmux/utils.js';
 import {UDID, fixtures, getServerWithFixtures} from '../fixtures/index.js';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 
 const DUP_UDID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 

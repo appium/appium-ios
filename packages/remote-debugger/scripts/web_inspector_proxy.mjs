@@ -95,4 +95,4 @@ async function main() {
   await startSoCat(s);
 }
 
-(async () => await main())();
+await main();

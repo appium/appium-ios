@@ -17,7 +17,7 @@ export class UsbmuxEncoder extends Transform {
     super({objectMode: true});
   }
 
-  _transform(data: UsbmuxEncodeData, encoding: BufferEncoding, callback: TransformCallback): void {
+  override _transform(data: UsbmuxEncodeData, encoding: BufferEncoding, callback: TransformCallback): void {
     this._encode(data);
     callback();
   }

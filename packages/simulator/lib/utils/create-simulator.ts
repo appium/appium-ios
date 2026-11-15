@@ -13,7 +13,8 @@ import type {CreateSimulatorOptions} from '../types.js';
  * @param opts.devicesSetPath Custom device set directory to create the device in, instead of the
  * default one.
  * @returns The new device's UDID.
- * @throws {Error} If no matching device type or platform runtime is available.
+ * @throws {Error} If no matching device type or platform runtime is available, or none of the
+ * matching runtimes supports the device type.
  */
 export async function createSimulator(
   name: string,
@@ -34,17 +35,28 @@ export async function createSimulator(
     );
   }
   const platformRuntimes = runtimes.filter((r) => r.identifier.includes(`.SimRuntime.${platform}-`));
-  // Exact match first; some environments ship a patch bump (e.g. '18.4.1') for a runtime named
-  // after its minor version ('18.4'), so fall back to a dotted-prefix match for that case.
-  const runtime =
-    platformRuntimes.find((r) => r.versionString === platformVersion) ??
-    platformRuntimes.find((r) => r.versionString.startsWith(`${platformVersion}.`));
-  if (!runtime) {
+  // Exact matches first; some environments ship a patch bump (e.g. '18.4.1') for a runtime named
+  // after its minor version ('18.4'), so also accept a dotted-prefix match for that case.
+  const candidates = [
+    ...platformRuntimes.filter((r) => r.versionString === platformVersion),
+    ...platformRuntimes.filter((r) => r.versionString.startsWith(`${platformVersion}.`)),
+  ];
+  if (candidates.length === 0) {
     throw new Error(
       `No supported ${platform} runtime with version '${platformVersion}'. ` +
         `Available: ${platformRuntimes.map((r) => r.versionString).join(', ')}`,
     );
   }
-  const device = await nativeSimctl.createDevice(name, deviceType.identifier, runtime.identifier);
-  return device.udid;
+  // A version may have several runtimes (e.g. iOS 27.2 also ships a Duo-only variant) and not
+  // every one supports the device type, so use the first one that accepts it.
+  let lastError: unknown;
+  for (const runtime of candidates) {
+    try {
+      const device = await nativeSimctl.createDevice(name, deviceType.identifier, runtime.identifier);
+      return device.udid;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }

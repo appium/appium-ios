@@ -58,7 +58,7 @@ describe('NotificationProxyService', {timeout: 60000}, function () {
     const notificationName = 'com.apple.springboard.lockstate';
     await notificationProxyService.observe(notificationName);
     const gen = notificationProxyService.expectNotifications();
-    const {value: notification, done: done} = await gen.next();
+    const {value: notification, done} = await gen.next();
     if (done || !notification) {
       throw new Error('No notification received.');
     }

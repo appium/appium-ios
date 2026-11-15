@@ -2,6 +2,7 @@ import http from 'node:http';
 import type {ServerResponse} from 'node:http';
 import type {AddressInfo} from 'node:net';
 
+import {ignoreRejection, releaseQuietly} from '../background.js';
 import type {JpegFrame} from '../types.js';
 import {
   assertValidMjpegBoundary,
@@ -81,7 +82,7 @@ export async function serveMjpeg(
       });
     });
   } catch (err) {
-    iterator.return?.()?.catch(() => {});
+    releaseQuietly(iterator);
     throw err;
   }
 
@@ -109,8 +110,8 @@ export async function serveMjpeg(
   // Either the source settles, or close() was called while it is idle.
   const done = Promise.race([pump, closed]);
   // Surfaced through `done`; these keep an unobserved failure from becoming an unhandled rejection.
-  pump.catch(() => {});
-  done.catch(() => {});
+  ignoreRejection(pump);
+  ignoreRejection(done);
 
   const {port} = server.address() as AddressInfo;
   return {
@@ -126,7 +127,7 @@ export async function serveMjpeg(
       sourceDone = true;
       signalClosed();
       // Ask the source to stop; not awaited, as an idle source may not settle until its next item.
-      iterator.return?.()?.catch(() => {});
+      releaseQuietly(iterator);
       for (const client of clients) {
         client.end();
       }

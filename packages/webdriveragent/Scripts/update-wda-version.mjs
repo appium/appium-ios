@@ -41,4 +41,4 @@ async function updateWdaVersion() {
   );
 }
 
-(async () => await updateWdaVersion())();
+await updateWdaVersion();

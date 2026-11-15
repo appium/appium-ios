@@ -95,7 +95,7 @@ describe('ConfigurationService', {timeout: 60000}, function () {
       'extraExtraExtraLarge',
     ];
     const original = await service!.getDeviceTextSize();
-    assert.ok(sizes.includes(original), 'original text size');
+    assert.ok(original !== undefined && sizes.includes(original), 'original text size');
     try {
       for (const size of sizes) {
         await service!.setDeviceTextSize(size);
