@@ -166,20 +166,39 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
                                   positionOffset:(nullable NSValue *)positionOffset
                                            error:(NSError **)error
 {
-  if (nil == element || element.elementType == XCUIElementTypeApplication) {
-    CGPoint point = positionOffset == nil ? CGPointZero : positionOffset.CGPointValue;
-    if (nil != element) {
-      CGRect frame = element.wdFrame;
-      if (CGRectIsEmpty(frame)) {
-        return [super hitpointWithElement:element positionOffset:positionOffset error:error];
-      }
-      // Client element offsets are relative to the center of the reported rect.
-      point.x += CGRectGetMidX(frame);
-      point.y += CGRectGetMidY(frame);
-    }
-    return [FBScreen coordinateWithApplication:self.application
-                                       offset:CGVectorMake(point.x, point.y) error:error];
+  NSNumber *hasMultipleScreens = [FBScreen hasMultipleScreensWithError:error];
+  if (nil == hasMultipleScreens) {
+    return nil;
   }
+  if (hasMultipleScreens.boolValue) {
+    if (nil == element || element.elementType == XCUIElementTypeApplication) {
+      CGPoint point = positionOffset == nil ? CGPointZero : positionOffset.CGPointValue;
+      if (nil != element) {
+        CGRect frame = element.wdFrame;
+        if (CGRectIsEmpty(frame)) {
+          [[[FBErrorBuilder builder] withDescription:@"The application origin has an empty frame"] buildError:error];
+          return nil;
+        }
+        // Client element offsets are relative to the center of the reported rect.
+        point.x += CGRectGetMidX(frame);
+        point.y += CGRectGetMidY(frame);
+      }
+      return [FBScreen coordinateWithApplication:element ?: self.application
+                                         offset:CGVectorMake(point.x, point.y) error:error];
+    }
+    XCUIScreen *screen = [FBScreen currentScreenWithError:error];
+    if (nil == screen) {
+      return nil;
+    }
+    // Resolve display affinity before combining element and viewport origins.
+    (void)element.frame;
+    if (element.screen.displayID != screen.displayID) {
+      [[[FBErrorBuilder builder] withDescriptionFormat:
+        @"The element origin is not on the selected display %lld", screen.displayID] buildError:error];
+      return nil;
+    }
+  }
+  // Single-display viewport and application origins retain the legacy path.
   if (nil == element || nil == positionOffset) {
     return [super hitpointWithElement:element positionOffset:positionOffset error:error];
   }
@@ -932,11 +951,16 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 {
   // Keyboard and pause-only sequences have no display coordinates. A display
   // disappearing must not prevent these input sources from being synthesized.
-  XCUIScreen *screen = [self actionsRequireDisplay:actions] ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
+  BOOL requiresDisplay = [self actionsRequireDisplay:actions];
+  XCUIScreen *screen = requiresDisplay ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
   if (nil == screen) {
     return nil;
   }
-  if ([self actionsRequireDisplay:actions]
+  NSNumber *hasMultipleScreens = requiresDisplay ? [FBScreen hasMultipleScreensWithError:error] : @NO;
+  if (nil == hasMultipleScreens) {
+    return nil;
+  }
+  if (hasMultipleScreens.boolValue
       && [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
     return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
                                                displayID:(unsigned long long)screen.displayID

@@ -59,6 +59,25 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
   return result.copy;
 }
 
+// Kept separate from sharedDevice so enumeration failures can be tested.
++ (nullable NSNumber *)hasMultipleScreensForDevice:(id)device error:(NSError **)error
+{
+  NSError *enumerationError = nil;
+  NSArray<XCUIScreen *> *screens = FBScreensForDevice(device, &enumerationError);
+  if (nil == screens) {
+    if (NULL != error) {
+      *error = enumerationError ?: [[FBErrorBuilder.builder withDescription:@"Could not enumerate device displays"] build];
+    }
+    return nil;
+  }
+  return @(screens.count > 1);
+}
+
++ (nullable NSNumber *)hasMultipleScreensWithError:(NSError **)error
+{
+  return [self hasMultipleScreensForDevice:XCUIDevice.sharedDevice error:error];
+}
+
 // Kept separate from sharedDevice so legacy lookup behavior can be tested.
 + (nullable XCUIScreen *)screenWithDisplayID:(long long)displayID
                                     device:(XCUIDevice *)device
@@ -127,7 +146,11 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
   if (nil == screen) {
     return nil;
   }
-  if (FBScreensForDevice(XCUIDevice.sharedDevice, nil).count < 2) {
+  NSNumber *hasMultipleScreens = [self hasMultipleScreensWithError:error];
+  if (nil == hasMultipleScreens) {
+    return nil;
+  }
+  if (!hasMultipleScreens.boolValue) {
     return FBCoordinateWithAnchorOffset(application, CGVectorMake(0, 0), offset, error);
   }
   // Application-root coordinates can retain cover-display geometry after main

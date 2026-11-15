@@ -30,6 +30,7 @@
 @end
 
 @interface FBScreen (FBLookupTesting)
++ (nullable NSNumber *)hasMultipleScreensForDevice:(id)device error:(NSError **)error;
 + (nullable XCUIScreen *)screenWithDisplayID:(long long)displayID device:(id)device error:(NSError **)error;
 @end
 
@@ -140,6 +141,32 @@
   NSString *availableDisplays = [NSString stringWithFormat:@"Available display ids: [%@]",
                                 [availableIDs componentsJoinedByString:@", "]];
   XCTAssertTrue([error.localizedDescription containsString:availableDisplays]);
+}
+
+- (void)testDisplayCountDoesNotTreatEnumerationFailureAsSingleDisplay
+{
+  FBScreenDeviceDouble *device = [FBScreenDeviceDouble new];
+  device.enumerationError = [NSError errorWithDomain:@"Enumeration" code:2 userInfo:nil];
+  NSError *error = nil;
+  XCTAssertNil([FBScreen hasMultipleScreensForDevice:device error:&error]);
+  XCTAssertEqualObjects(error, device.enumerationError);
+
+  device.enumerationError = nil;
+  error = nil;
+  XCTAssertNil([FBScreen hasMultipleScreensForDevice:device error:&error]);
+  XCTAssertNotNil(error);
+}
+
+- (void)testDisplayCountDistinguishesSingleAndMultipleDisplays
+{
+  FBScreenDeviceDouble *device = [FBScreenDeviceDouble new];
+  device.screens = @[XCUIScreen.mainScreen];
+  NSError *error = nil;
+  XCTAssertEqualObjects([FBScreen hasMultipleScreensForDevice:device error:&error], @NO);
+  XCTAssertNil(error);
+  device.screens = @[XCUIScreen.mainScreen, XCUIScreen.mainScreen];
+  XCTAssertEqualObjects([FBScreen hasMultipleScreensForDevice:device error:&error], @YES);
+  XCTAssertNil(error);
 }
 
 - (void)testNativeScreenLookupDoesNotEnumerateOnSuccess

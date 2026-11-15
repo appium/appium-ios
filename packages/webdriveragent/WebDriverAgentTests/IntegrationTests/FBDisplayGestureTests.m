@@ -15,6 +15,9 @@
 #import "FBExceptions.h"
 #import "FBElementCommands.h"
 #import "FBElementCache.h"
+#import "FBBaseActionsSynthesizer.h"
+#import "FBW3CActionsSynthesizer.h"
+#import "FBMathUtils.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBElementCommands (CoordinateTests)
@@ -249,6 +252,81 @@
     XCTAssertNotNil(error);
   }
   XCTSkipIf(!checkedSecondaryDisplay, @"Requires an available secondary display without the fixture");
+}
+
+- (void)testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp
+{
+  XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
+  FBBaseGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
+  // Accessing this app's windows would fail. Only the supplied origin should be used.
+  item.application = [[XCUIApplication alloc] initWithBundleIdentifier:@"com.appium.nonexistent-session-app"];
+  NSError *error = nil;
+  XCUICoordinate *coordinate = [item hitpointWithElement:self.testedApplication
+                                       positionOffset:[NSValue valueWithCGPoint:CGPointZero] error:&error];
+  XCTAssertNotNil(coordinate);
+  XCTAssertNil(error);
+  CGRect frame = self.testedApplication.wdFrame;
+  XCUICoordinate *expected = [FBScreen coordinateWithApplication:self.testedApplication
+    offset:CGVectorMake(CGRectGetMidX(frame), CGRectGetMidY(frame)) error:&error];
+  XCTAssertNotNil(expected);
+  XCTAssertEqualWithAccuracy(coordinate.screenPoint.x, expected.screenPoint.x, 1);
+  XCTAssertEqualWithAccuracy(coordinate.screenPoint.y, expected.screenPoint.y, 1);
+}
+
+- (void)testSingleDisplayW3COriginsRetainLegacyCoordinates
+{
+  XCTSkipIf([FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires a single display");
+  FBBaseGestureItem *item = [NSClassFromString(@"FBW3CGestureItem") new];
+  item.application = self.testedApplication;
+  FBBaseGestureItem *legacy = [FBBaseGestureItem new];
+  legacy.application = self.testedApplication;
+  for (NSNumber *orientation in @[@(UIDeviceOrientationPortrait), @(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
+    [XCUIDevice.sharedDevice fb_setDeviceInterfaceOrientation:orientation.integerValue];
+    NSError *error = nil;
+    NSValue *offset = [NSValue valueWithCGPoint:CGPointMake(30, 40)];
+    XCUICoordinate *viewport = [item hitpointWithElement:nil positionOffset:offset error:&error];
+    XCUICoordinate *expectedViewport = [legacy hitpointWithElement:nil positionOffset:offset error:&error];
+    XCTAssertNotNil(viewport);
+    XCTAssertTrue(CGPointEqualToPoint(viewport.screenPoint, expectedViewport.screenPoint));
+    XCUICoordinate *app = [item hitpointWithElement:self.testedApplication positionOffset:nil error:&error];
+    XCUICoordinate *expectedApp = [legacy hitpointWithElement:self.testedApplication positionOffset:nil error:&error];
+    XCTAssertNotNil(app);
+    XCTAssertTrue(CGPointEqualToPoint(app.screenPoint, expectedApp.screenPoint));
+    XCUICoordinate *appOffset = [item hitpointWithElement:self.testedApplication positionOffset:offset error:&error];
+    XCUICoordinate *expectedAppOffset = FBCoordinateWithAnchorOffset(self.testedApplication,
+      CGVectorMake(0.5, 0.5), CGVectorMake(30, 40), &error);
+    XCTAssertNotNil(appOffset);
+    XCTAssertTrue(CGPointEqualToPoint(appOffset.screenPoint, expectedAppOffset.screenPoint));
+    XCTAssertNil(error);
+  }
+}
+
+- (void)testMixedOriginsRejectAnElementOnAnotherDisplay
+{
+  NSNumber *fixtureDisplay = FBConfiguration.sharedInstance.currentDisplayId;
+  BOOL checkedOtherDisplay = NO;
+  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+    if ([screen[@"displayId"] isEqual:fixtureDisplay]) {
+      continue;
+    }
+    checkedOtherDisplay = YES;
+    FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
+    NSArray *actions = @[@{
+      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+      @"actions": @[
+        [self moveFrom:self.canvas x:0 y:0 duration:0],
+        [self moveFrom:@"viewport" x:100 y:100 duration:0],
+        [self moveFrom:@"pointer" x:10 y:10 duration:0],
+      ],
+    }];
+    NSError *error = nil;
+    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
+    XCTAssertNil([synthesizer synthesizeWithError:&error]);
+    XCTAssertNotNil(error);
+    XCTAssertTrue([error.localizedDescription containsString:@"element origin is not on the selected display"]);
+  }
+  XCTSkipIf(!checkedOtherDisplay, @"Requires another display without the fixture");
 }
 
 - (void)testNativeCoordinatesAcrossFoldStates

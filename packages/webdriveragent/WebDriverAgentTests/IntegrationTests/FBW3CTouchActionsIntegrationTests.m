@@ -14,6 +14,7 @@
 #import "FBScreen.h"
 
 #import "XCUIElement.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "XCUIDevice.h"
 #import "XCUIApplication+FBTouchAction.h"
 #import "FBTestMacros.h"
@@ -167,21 +168,32 @@
   if (nil == secondary) {
     XCTSkip(@"The device has no secondary display");
   }
-  XCSynthesizedEventRecord *baseline = [self tapRecordWithError:&error];
   FBConfiguration.sharedInstance.currentDisplayId = @(secondary.displayID);
+  XCUIElement *anchor = nil;
+  for (XCUIElement *window in [self.testedApplication childrenMatchingType:XCUIElementTypeWindow].allElementsBoundByIndex) {
+    (void)window.frame;
+    if (window.screen.displayID == secondary.displayID && !CGRectIsEmpty(window.wdFrame)) {
+      anchor = window;
+      break;
+    }
+  }
   XCSynthesizedEventRecord *selected = [self tapRecordWithError:&error];
+  if (nil == anchor) {
+    XCTAssertNil(selected);
+    XCTAssertNotNil(error);
+    XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"]);
+    return;
+  }
   XCTAssertNotNil(selected);
   XCTAssertNil(error);
   XCTAssertEqual(selected.displayID, (unsigned long long)secondary.displayID);
-  XCUIScreen *main = XCUIScreen.mainScreen;
-  CGVector offset = FBDisplayCoordinateOffset(
-    CGSizeMake(main.bounds.size.width / main.scale, main.bounds.size.height / main.scale),
-    CGSizeMake(secondary.bounds.size.width / secondary.scale, secondary.bounds.size.height / secondary.scale),
-    selected.interfaceOrientation);
-  CGPoint expected = [self pointerEventsOfRecord:baseline].firstObject.coordinate;
+  CGRect frame = anchor.wdFrame;
+  CGPoint expected = [anchor coordinateWithNormalizedOffset:
+    CGVectorMake((100 - frame.origin.x) / frame.size.width,
+                 (100 - frame.origin.y) / frame.size.height)].screenPoint;
   CGPoint actual = [self pointerEventsOfRecord:selected].firstObject.coordinate;
-  XCTAssertEqual(actual.x, expected.x + offset.dx);
-  XCTAssertEqual(actual.y, expected.y + offset.dy);
+  XCTAssertEqualWithAccuracy(actual.x, expected.x, 1);
+  XCTAssertEqualWithAccuracy(actual.y, expected.y, 1);
 }
 
 - (void)testErroneousGestures
