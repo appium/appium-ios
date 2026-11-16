@@ -69,11 +69,11 @@ class TestDisplayService extends DisplayService {
     super('test-udid');
   }
 
-  protected async createTransport(): Promise<any> {
+  protected override async createTransport(): Promise<any> {
     return this.fake;
   }
 
-  protected async resolveServiceAddress(): Promise<[string, number]> {
+  protected override async resolveServiceAddress(): Promise<[string, number]> {
     return ['fd02:1caa:f094::1', 49832];
   }
 }

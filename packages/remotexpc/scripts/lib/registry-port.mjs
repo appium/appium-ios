@@ -1,26 +1,6 @@
-import net from 'node:net';
+import {net} from '@appium/support';
 
 const TUNNEL_REGISTRY_HOST = '127.0.0.1';
-
-/**
- * Binds to `port` (0 = OS-assigned), then releases it and resolves the bound port.
- * @param {number} port
- * @returns {Promise<number>}
- */
-function bindFreePort(port) {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once('error', reject);
-    probe.listen(port, TUNNEL_REGISTRY_HOST, () => {
-      const address = probe.address();
-      if (!address || typeof address === 'string') {
-        probe.close(() => reject(new Error('Could not resolve a free port')));
-        return;
-      }
-      probe.close((err) => (err ? reject(err) : resolve(address.port)));
-    });
-  });
-}
 
 /**
  * Returns `preferredPort` if free, else a free port chosen by the OS.
@@ -30,9 +10,9 @@ function bindFreePort(port) {
  */
 export async function resolveAvailableRegistryPort(preferredPort, log) {
   try {
-    return await bindFreePort(preferredPort);
+    return await net.getFreePort({port: preferredPort, host: TUNNEL_REGISTRY_HOST});
   } catch {
-    const port = await bindFreePort(0);
+    const port = await net.getFreePort({host: TUNNEL_REGISTRY_HOST});
     log.warn(`Tunnel registry port ${preferredPort} is in use; using ${port} instead`);
     return port;
   }

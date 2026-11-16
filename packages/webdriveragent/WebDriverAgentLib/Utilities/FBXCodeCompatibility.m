@@ -14,6 +14,7 @@
 #import "FBLogger.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIElementQuery.h"
+#import "XCUIElementQuery+FBHelpers.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCTCapabilities.h"
 #import "XCTMessagingChannel_RunnerToDaemon-Protocol.h"
@@ -46,8 +47,9 @@
 
 - (NSArray<XCUIElement *> *)fb_allMatches
 {
+  // AX-bound elements get their uids without snapshots, index-bound ones reuse the query snapshots
   return FBConfiguration.sharedInstance.boundElementsByIndex
-    ? self.allElementsBoundByIndex
+    ? [self fb_allMatchesWithSnapshotsBoundByIndex:YES]
     : self.allElementsBoundByAccessibilityElement;
 }
 

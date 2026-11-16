@@ -2,6 +2,7 @@ import {type Socket, createSocket} from 'node:dgram';
 import {networkInterfaces} from 'node:os';
 import {setTimeout} from 'node:timers';
 
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {
   MDNS_MCAST_V4,
@@ -160,7 +161,7 @@ function bindIpv4Socket(): Promise<MdnsSocketHandle> {
       try {
         socket.addMembership(MDNS_MCAST_V4, '0.0.0.0');
       } catch (err) {
-        log.debug(`IPv4 multicast membership skipped: ${err}`);
+        log.debug(`IPv4 multicast membership skipped: ${formatError(err)}`);
       }
       resolve({
         socket,

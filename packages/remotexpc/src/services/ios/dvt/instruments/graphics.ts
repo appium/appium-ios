@@ -5,7 +5,7 @@ import {BaseInstrument} from './base-instrument.js';
 const log = getLogger('Graphics');
 
 export class Graphics extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.graphics.opengl';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.graphics.opengl';
 
   async start(): Promise<void> {
     await this.initialize();

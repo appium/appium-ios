@@ -311,7 +311,7 @@ describe('usbmux listen', function () {
     const iterator = usbmux.listen();
     assert.throws(() => usbmux!.listen(), /already active/);
 
-    await iterator.return();
+    await iterator.return?.();
   });
 
   it('closes the connection once iteration stops', async function () {
@@ -370,7 +370,7 @@ describe('usbmux listen', function () {
     assert.deepStrictEqual((await first).value, {type: 'detach', deviceId: 1});
     assert.deepStrictEqual((await second).value, {type: 'detach', deviceId: 2});
 
-    await iterator.return();
+    await iterator.return?.();
   });
 
   it('throws when listening on an already-closed connection', async function () {

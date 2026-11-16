@@ -87,9 +87,10 @@ export class SpringBoard {
     proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk;
     });
-    const streamError = Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]).then(([err]) => {
+    const streamError = (async () => {
+      const [err] = await Promise.race([once(proc.stdout, 'error'), once(proc.stderr, 'error')]);
       throw err;
-    });
+    })();
     const [[code, signal]] = await Promise.race([
       Promise.all([once(proc, 'exit'), once(proc.stderr, 'end')]),
       streamError,

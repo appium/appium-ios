@@ -1,5 +1,5 @@
 import {TunTapError} from '../errors.js';
-import type {TunTapInterfaceStats, TunTapPlatform} from './types.js';
+import type {TunTapPlatform} from './types.js';
 
 /**
  * Stub backend for unsupported `process.platform` values; every method throws {@link TunTapError}.
@@ -22,11 +22,6 @@ export class UnsupportedTunTapPlatform implements TunTapPlatform {
 
   /** @inheritdoc */
   async removeRoute(): Promise<void> {
-    this.unsupported();
-  }
-
-  /** @inheritdoc */
-  async getStats(): Promise<TunTapInterfaceStats> {
     this.unsupported();
   }
 

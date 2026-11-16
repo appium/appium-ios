@@ -2,6 +2,7 @@ import type {Socket} from 'node:net';
 
 import {util} from '@appium/support';
 
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {connectViaTunnel} from '../../../lib/port-forwarding/connectors.js';
 import type {
@@ -24,21 +25,21 @@ export type CompanionDeviceEventCommand = 'GizmoPaired' | 'GizmoUnpaired' | 'Giz
 /**
  * Event frame streamed by `StartListeningForDevices`.
  */
-export interface CompanionDeviceEvent extends PlistDictionary {
+export type CompanionDeviceEvent = PlistDictionary & {
   Command: CompanionDeviceEventCommand;
   GizmoUDIDKey: string;
   /** Present on `GizmoAttach` for watchOS >= 2 */
   CompanionLockdownProxyPort?: number;
-}
+};
 
 /**
  * Options for `StartForwardingServicePort`; any extra keys are merged verbatim into the request.
  */
-export interface StartForwardingOptions extends PlistDictionary {
+export type StartForwardingOptions = PlistDictionary & {
   serviceName?: string;
   isServiceLowPriority?: boolean;
   preferWifi?: boolean;
-}
+};
 
 interface GetValueFromRegistryRequest extends PlistDictionary {
   Command: 'GetValueFromRegistry';
@@ -46,13 +47,13 @@ interface GetValueFromRegistryRequest extends PlistDictionary {
   GetValueKeyKey: string;
 }
 
-interface StartForwardingServicePortRequest extends PlistDictionary {
+type StartForwardingServicePortRequest = PlistDictionary & {
   Command: 'StartForwardingServicePort';
   GizmoRemotePortNumber: number;
   IsServiceLowPriority: boolean;
   PreferWifi: boolean;
   ForwardedServiceName?: string;
-}
+};
 
 interface StopForwardingServicePortRequest extends PlistDictionary {
   Command: 'StopForwardingServicePort';
@@ -277,8 +278,8 @@ export class CompanionProxyService extends BaseService implements CompanionProxy
     if (!response?.Error) {
       return response;
     }
-    const code = String(response.Error);
-    const description = response.ErrorDescription ? ` - ${String(response.ErrorDescription)}` : '';
+    const code = formatValue(response.Error);
+    const description = response.ErrorDescription ? ` - ${formatValue(response.ErrorDescription)}` : '';
     throw new CompanionProxyError(`${command} failed: ${code}${description}`, code);
   }
 

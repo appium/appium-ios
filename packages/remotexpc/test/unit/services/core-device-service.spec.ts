@@ -27,7 +27,7 @@ class ScriptedCoreDeviceService extends CoreDeviceService {
     return this.invoke(FEATURE, {}, {timeoutMs});
   }
 
-  protected async createTransport(): Promise<RemoteXpcFramedTransport> {
+  protected override async createTransport(): Promise<RemoteXpcFramedTransport> {
     const transport = new RemoteXpcFramedTransport(['::1', 1]);
     const ingest = (
       transport as unknown as {ingestXpcData: (streamId: number, chunk: Buffer) => void}
@@ -49,7 +49,7 @@ class LoopbackCoreDeviceService extends CoreDeviceService {
     return this.createTransport();
   }
 
-  protected async resolveServiceAddress(): Promise<[string, number]> {
+  protected override async resolveServiceAddress(): Promise<[string, number]> {
     return ['::1', this.port];
   }
 }

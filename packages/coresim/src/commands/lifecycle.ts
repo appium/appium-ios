@@ -1,8 +1,8 @@
 import {waitForCondition} from 'asyncbox';
 
 import type {NativeSimctl} from '../native-simctl.js';
-import {SimDeviceState, type NativeDeviceHandle, type SimBootInfo, type SimDeviceInfo} from '../types.js';
-import type {SimDeviceTypeInfo, SimRuntimeInfo} from '../types.js';
+import {SimDeviceState} from '../types.js';
+import type {NativeDeviceHandle, SimBootInfo, SimDeviceInfo, SimDeviceTypeInfo, SimRuntimeInfo} from '../types.js';
 import {runCatchingAsync} from '../utils/index.js';
 
 const DEFAULT_BOOT_TIMEOUT_MS = 240_000;

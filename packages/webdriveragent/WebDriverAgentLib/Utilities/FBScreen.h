@@ -17,6 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (nullable NSArray<NSDictionary<NSString *, id> *> *)screensWithError:(NSError **)error;
 
+/** Whether multiple displays are available, or nil if enumeration fails. */
++ (nullable NSNumber *)hasMultipleScreensWithError:(NSError **)error;
+
 /**
  The display with the given identifier
 
@@ -33,15 +36,6 @@ NS_ASSUME_NONNULL_BEGIN
  @return The selected display or nil
  */
 + (nullable XCUIScreen *)currentScreenWithError:(NSError **)error;
-
-#if !TARGET_OS_TV
-/** Resolves viewport coordinates through a window on the selected display.
-    Window bounds are an anchor, not a hit-test boundary. */
-+ (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application
-                                               offset:(CGVector)offset
-                                                error:(NSError **)error;
-
-#endif
 
 /**
  The identifier of the main device's display

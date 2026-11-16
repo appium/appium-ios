@@ -38,13 +38,17 @@ pause-only sequences do not require the selected display to be available.
 For an application-element origin, compute offsets from its returned element
 rect, just as for any other element. XCTest may report that rect with dimensions
 transposed relative to the application's window. WDA uses the returned rect's
-center plus the requested offset as a viewport point. On devices with multiple
-displays, viewport and application origins are anchored to a window on the
+center plus the requested offset as a viewport point on multi-display devices.
+On these devices, viewport and application origins are anchored to a window on the
 selected display, including when that display is currently main. This preserves
 XCTest's display affinity without assuming the application root uses the same
-screen geometry. Do not substitute the window's center when calculating an
+screen geometry. W3C actions reuse each application element instance's window
+and resolved window frame within a command, including across pointer sources.
+Each new command resolves fresh anchors. Native coordinate drags likewise share
+the selected display and window anchor between their start and end points. Do not substitute the window's center when calculating an
 offset for an application-element origin. This is separate from the older-SDK
-compatibility issue below.
+compatibility issue below. Single-display devices retain their existing viewport
+and application-origin coordinate handling and the legacy event initializer.
 Element scrolling uses the visible area in the same
 coordinate space as the element frame, including on rotated main and secondary displays.
 WDA scrolling rejects an unavailable selected display instead of using an
@@ -57,7 +61,8 @@ On devices with multiple displays, native application-root coordinates require a
 non-empty application window on that display as a coordinate anchor. Edge and
 outside coordinates are preserved, as on the main display; XCTest determines
 how the gesture is delivered. No hit testing or clamping is performed here.
-Requests fail if no such window exists on the selected display.
+If screen enumeration fails or no suitable window is available, WDA returns an
+error instead of falling back to potentially stale application-root geometry.
 
 This gesture support builds on [#1269](https://github.com/appium/WebDriverAgent/pull/1269).
 

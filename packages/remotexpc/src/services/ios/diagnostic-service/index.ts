@@ -1,5 +1,6 @@
 import {util} from '@appium/support';
 
+import {formatError, formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {PlistServiceDecoder} from '../../../lib/plist/plist-decoder.js';
 import type {DiagnosticsService as DiagnosticsServiceInterface, PlistDictionary} from '../../../lib/types.js';
@@ -29,7 +30,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
 
       return await this.sendRequest(request);
     } catch (error) {
-      log.error(`Error restarting device: ${error}`);
+      log.error(`Error restarting device: ${formatError(error)}`);
       throw error;
     }
   }
@@ -46,7 +47,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
 
       return await this.sendRequest(request);
     } catch (error) {
-      log.error(`Error shutting down device: ${error}`);
+      log.error(`Error shutting down device: ${formatError(error)}`);
       throw error;
     }
   }
@@ -63,7 +64,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
 
       return await this.sendRequest(request);
     } catch (error) {
-      log.error(`Error putting device to sleep: ${error}`);
+      log.error(`Error putting device to sleep: ${formatError(error)}`);
       throw error;
     }
   }
@@ -116,7 +117,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
         conn.close();
       }
     } catch (error) {
-      log.error(`Error querying IORegistry: ${error}`);
+      log.error(`Error querying IORegistry: ${formatError(error)}`);
       throw error;
     }
   }
@@ -135,7 +136,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
     try {
       const response = await conn.sendPlistRequest(request, timeout);
 
-      log.debug(`${request.Request} response received`);
+      log.debug(`${formatValue(request.Request)} response received`);
 
       if (!response) {
         return {};

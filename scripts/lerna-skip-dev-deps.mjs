@@ -36,7 +36,7 @@ async function devDepOnlyGlob(dir, ignoreChanges) {
     return null; // no release tag yet
   }
   const subjects = stdout.split('\n').filter(Boolean);
-  return subjects.length && subjects.every((s) => /^chore\(deps-dev\)/.test(s)) ? `${pkgDir}/**` : null;
+  return subjects.length && subjects.every((s) => s.startsWith('chore(deps-dev)')) ? `${pkgDir}/**` : null;
 }
 
 async function main() {
@@ -54,10 +54,9 @@ async function main() {
   });
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`${err?.stack ?? err}\n`);
-    process.exit(1);
-  },
-);
+try {
+  process.exit(await main());
+} catch (err) {
+  process.stderr.write(`${err?.stack ?? err}\n`);
+  process.exit(1);
+}

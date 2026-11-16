@@ -10,6 +10,7 @@
 
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "FBGestureCoordinateContext.h"
 #import "XCUIScreen.h"
 #import "FBRoute.h"
 #import "FBRouteRequest.h"
@@ -41,6 +42,10 @@
 #import "XCUIElement.h"
 #import "XCUIElementQuery.h"
 #import "FBXCodeCompatibility.h"
+
+#if !TARGET_OS_TV
+typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offset, NSError **error);
+#endif
 
 @interface FBElementCommands ()
 @end
@@ -358,20 +363,15 @@
   NSError *error;
   CGVector startOffset = CGVectorMake((CGFloat)[request.arguments[@"fromX"] doubleValue],
                                      (CGFloat)[request.arguments[@"fromY"] doubleValue]);
-  XCUICoordinate *startCoordinate = [self.class gestureCoordinateWithOffset:startOffset
-                                                                    element:application
-                                                                      error:&error];
-  if (nil == startCoordinate) {
+  CGVector endOffset = CGVectorMake([request.arguments[@"toX"] doubleValue],
+                                    [request.arguments[@"toY"] doubleValue]);
+  NSArray<XCUICoordinate *> *coordinates = [self.class gestureCoordinatesWithOffsets:
+    @[[NSValue valueWithCGVector:startOffset], [NSValue valueWithCGVector:endOffset]] element:application error:&error];
+  if (nil == coordinates) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
   }
-  CGVector endOffset = CGVectorMake((CGFloat)[request.arguments[@"toX"] doubleValue],
-                                    (CGFloat)[request.arguments[@"toY"] doubleValue]);
-  XCUICoordinate *endCoordinate = [self.class gestureCoordinateWithOffset:endOffset
-                                                                  element:application
-                                                                    error:&error];
-  if (nil == endCoordinate) {
-    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
-  }
+  XCUICoordinate *startCoordinate = coordinates[0];
+  XCUICoordinate *endCoordinate = coordinates[1];
   if (![application fb_pressAtCoordinate:startCoordinate
                              forDuration:[request.arguments[@"pressDuration"] doubleValue]
                     thenDragToCoordinate:endCoordinate
@@ -452,16 +452,15 @@
   NSError *error;
   CGVector startOffset = CGVectorMake([request.arguments[@"fromX"] doubleValue],
                                       [request.arguments[@"fromY"] doubleValue]);
-  XCUICoordinate *startCoordinate = [self.class gestureCoordinateWithOffset:startOffset element:target error:&error];
-  if (nil == startCoordinate) {
-    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
-  }
   CGVector endOffset = CGVectorMake([request.arguments[@"toX"] doubleValue],
                                     [request.arguments[@"toY"] doubleValue]);
-  XCUICoordinate *endCoordinate = [self.class gestureCoordinateWithOffset:endOffset element:target error:&error];
-  if (nil == endCoordinate) {
+  NSArray<XCUICoordinate *> *coordinates = [self.class gestureCoordinatesWithOffsets:
+    @[[NSValue valueWithCGVector:startOffset], [NSValue valueWithCGVector:endOffset]] element:target error:&error];
+  if (nil == coordinates) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
   }
+  XCUICoordinate *startCoordinate = coordinates[0];
+  XCUICoordinate *endCoordinate = coordinates[1];
   NSTimeInterval duration = [request.arguments[@"duration"] doubleValue];
   XCUIApplication *application = [target isKindOfClass:XCUIApplication.class]
     ? (XCUIApplication *)target
@@ -707,10 +706,51 @@ static const NSInteger DEFAULT_MAX_PICKER_ATTEMPTS = 25;
                                                   element:(XCUIElement *)element
                                                     error:(NSError **)error
 {
-  if (element.elementType != XCUIElementTypeApplication) {
-    return FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), offset, error);
+  return [self gestureCoordinatesWithOffsets:@[[NSValue valueWithCGVector:offset]] element:element error:error].firstObject;
+}
+
++ (nullable FBGestureCoordinateResolver)gestureCoordinateResolverForElement:(XCUIElement *)element
+                                                                    error:(NSError **)error
+{
+  BOOL isApplication = element.elementType == XCUIElementTypeApplication;
+#if TARGET_OS_WATCH
+  // Preserve watchOS application-root coordinates and selected-display validation.
+  if (isApplication && nil == [FBScreen currentScreenWithError:error]) {
+    return nil;
   }
-  return [FBScreen coordinateWithApplication:element offset:offset error:error];
+#else
+  if (isApplication) {
+    FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:error];
+    if (nil == context) {
+      return nil;
+    }
+    return ^XCUICoordinate *(CGVector offset, NSError **coordinateError) {
+      return [context coordinateWithApplication:element offset:offset error:coordinateError];
+    };
+  }
+#endif
+  return ^XCUICoordinate *(CGVector offset, NSError **coordinateError) {
+    return FBCoordinateWithAnchorOffset(element, CGVectorMake(0, 0), offset, coordinateError);
+  };
+}
+
++ (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets
+                                                            element:(XCUIElement *)element
+                                                              error:(NSError **)error
+{
+  FBGestureCoordinateResolver resolveCoordinate = [self gestureCoordinateResolverForElement:element error:error];
+  if (nil == resolveCoordinate) {
+    return nil;
+  }
+  NSMutableArray<XCUICoordinate *> *coordinates = [NSMutableArray arrayWithCapacity:offsets.count];
+  for (NSValue *value in offsets) {
+    XCUICoordinate *coordinate = resolveCoordinate(value.CGVectorValue, error);
+    if (nil == coordinate) {
+      return nil;
+    }
+    [coordinates addObject:coordinate];
+  }
+  return coordinates.copy;
 }
 
 /**

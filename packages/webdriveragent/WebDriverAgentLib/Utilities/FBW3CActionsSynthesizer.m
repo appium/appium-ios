@@ -15,7 +15,7 @@
 #import "FBMacros.h"
 #import "FBMathUtils.h"
 #import "FBProtocolHelpers.h"
-#import "FBScreen.h"
+#import "FBGestureCoordinateContext.h"
 #import "FBW3CActionsHelpers.h"
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
@@ -70,6 +70,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 
 @property (nullable, readonly, nonatomic) FBW3CGestureItem *previousItem;
 @property (readonly, nonatomic) CGPoint screenPoint;
+@property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 
 @end
 
@@ -121,6 +122,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                          coordinateContext:(FBGestureCoordinateContext *)coordinateContext
                                      offset:(double)offset
                                       error:(NSError **)error
 {
@@ -130,6 +132,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
     self.application = application;
     self.offset = offset;
     _previousItem = previousItem;
+    _coordinateContext = coordinateContext;
     NSNumber *durationObj = FBOptDuration(actionItem, @0, error);
     if (nil == durationObj) {
       return nil;
@@ -166,20 +169,25 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
                                   positionOffset:(nullable NSValue *)positionOffset
                                            error:(NSError **)error
 {
-  if (nil == element || element.elementType == XCUIElementTypeApplication) {
-    CGPoint point = positionOffset == nil ? CGPointZero : positionOffset.CGPointValue;
-    if (nil != element) {
-      CGRect frame = element.wdFrame;
-      if (CGRectIsEmpty(frame)) {
-        return [super hitpointWithElement:element positionOffset:positionOffset error:error];
-      }
-      // Client element offsets are relative to the center of the reported rect.
-      point.x += CGRectGetMidX(frame);
-      point.y += CGRectGetMidY(frame);
+  if (self.coordinateContext.usesWindowCoordinates) {
+    CGPoint point = nil == positionOffset ? CGPointZero : positionOffset.CGPointValue;
+    CGVector offset = CGVectorMake(point.x, point.y);
+    if (nil == element) {
+      return [self.coordinateContext coordinateWithApplication:self.application offset:offset error:error];
     }
-    return [FBScreen coordinateWithApplication:self.application
-                                       offset:CGVectorMake(point.x, point.y) error:error];
+    if (element.elementType == XCUIElementTypeApplication) {
+      XCUIElement *application = element;
+      return [self.coordinateContext coordinateWithApplicationOrigin:application offset:offset error:error];
+    }
+    // Resolve display affinity before combining element and viewport origins.
+    (void)element.frame;
+    if (element.screen.displayID != self.coordinateContext.screen.displayID) {
+      [[[FBErrorBuilder builder] withDescriptionFormat:
+        @"The element origin is not on the selected display %lld", self.coordinateContext.screen.displayID] buildError:error];
+      return nil;
+    }
   }
+  // Single-display viewport and application origins retain the legacy path.
   if (nil == element || nil == positionOffset) {
     return [super hitpointWithElement:element positionOffset:positionOffset error:error];
   }
@@ -208,10 +216,11 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                          coordinateContext:(FBGestureCoordinateContext *)coordinateContext
                                      offset:(double)offset
                                       error:(NSError **)error
 {
-  self = [super initWithActionItem:actionItem application:application previousItem:previousItem offset:offset error:error];
+  self = [super initWithActionItem:actionItem application:application previousItem:previousItem coordinateContext:coordinateContext offset:offset error:error];
   if (self) {
     _pressure = [actionItem objectForKey:FB_ACTION_ITEM_KEY_PRESSURE];
   }
@@ -660,9 +669,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 @end
 
 
-@interface FBW3CActionsSynthesizer ()
-@end
-
 @implementation FBW3CActionsSynthesizer
 
 - (NSArray<NSDictionary<NSString *, id> *> *)preprocessedActionItemsWith:(NSArray<NSDictionary<NSString *, id> *> *)actionItems
@@ -779,7 +785,10 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription
+                                                         forActionId:(NSString *)actionId
+                                                   coordinateContext:(FBGestureCoordinateContext *)coordinateContext
+                                                               error:(NSError **)error
 {
   static NSDictionary<NSString *, Class> *gestureItemsMapping;
   static NSArray<NSString *> *supportedActionItemTypes;
@@ -842,7 +851,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
       return nil;
     }
 
-    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] offset:chain.durationOffset error:error];
+    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] coordinateContext:coordinateContext offset:chain.durationOffset error:error];
     if (nil == gestureItem) {
       return nil;
     }
@@ -853,7 +862,10 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription
+                                                             forActionId:(NSString *)actionId
+                                                       coordinateContext:(FBGestureCoordinateContext *)coordinateContext
+                                                                   error:(NSError **)error
 {
   id actionType = [actionDescription objectForKey:FB_KEY_TYPE];
   if (![actionType isKindOfClass:NSString.class] ||
@@ -867,7 +879,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
 
   if ([actionType isEqualToString:FB_ACTION_TYPE_POINTER]) {
-    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId error:error];
+    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId coordinateContext:coordinateContext error:error];
   }
 
   return [self eventPathsWithKeyAction:actionDescription forActionId:actionId error:error];
@@ -927,16 +939,11 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return NO;
 }
 
-- (nullable XCSynthesizedEventRecord *)eventRecordForActions:(NSArray<NSDictionary<NSString *, id> *> *)actions
-                                                     error:(NSError **)error
+- (nullable XCSynthesizedEventRecord *)eventRecordForContext:(FBGestureCoordinateContext *)coordinateContext
+                                                       error:(NSError **)error
 {
-  // Keyboard and pause-only sequences have no display coordinates. A display
-  // disappearing must not prevent these input sources from being synthesized.
-  XCUIScreen *screen = [self actionsRequireDisplay:actions] ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
-  if (nil == screen) {
-    return nil;
-  }
-  if ([self actionsRequireDisplay:actions]
+  XCUIScreen *screen = coordinateContext.screen;
+  if (coordinateContext.usesWindowCoordinates
       && [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
     return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
                                                displayID:(unsigned long long)screen.displayID
@@ -959,13 +966,19 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   if (nil == actions) {
     return nil;
   }
-  XCSynthesizedEventRecord *eventRecord = [self eventRecordForActions:actions error:error];
+  // A fresh context owns routing and anchors for every pointer source in this command.
+  FBGestureCoordinateContext *coordinateContext = [FBGestureCoordinateContext
+    contextWithDisplayRequired:[self actionsRequireDisplay:actions] error:error];
+  if (nil == coordinateContext) {
+    return nil;
+  }
+  XCSynthesizedEventRecord *eventRecord = [self eventRecordForContext:coordinateContext error:error];
   if (nil == eventRecord) {
     return nil;
   }
   for (NSDictionary<NSString *, id> *actionDescription in actions) {
     NSString *actionId = actionDescription[FB_KEY_ID];
-    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId error:error];
+    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId coordinateContext:coordinateContext error:error];
     if (nil == eventPaths) {
       return nil;
     }

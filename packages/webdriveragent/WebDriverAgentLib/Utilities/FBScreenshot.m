@@ -93,36 +93,52 @@ NSString *formatTimeInterval(NSTimeInterval interval) {
                                                         error:error];
 }
 
++ (BOOL)requestInOriginalResolutionWithScreenID:(long long)screenID
+                              compressionQuality:(CGFloat)compressionQuality
+                                             uti:(UTType *)uti
+                                      completion:(void (^)(NSData * _Nullable, NSError * _Nullable))completion
+                                           error:(NSError **)error
+{
+  id screenshotRequest = [self.class screenshotRequestWithScreenID:screenID
+                                                              rect:CGRectNull
+                                                               uti:uti
+                                                compressionQuality:compressionQuality
+                                                             error:error];
+  if (nil == screenshotRequest) {
+    return NO;
+  }
+  id<XCTMessagingChannel_RunnerToDaemon> proxy = [FBXCTestDaemonsProxy testRunnerProxy];
+  [proxy _XCT_requestScreenshot:screenshotRequest
+                      withReply:^(id image, NSError *err) {
+    completion(nil == err ? [image data] : nil, err);
+  }];
+  return YES;
+}
+
 + (NSData *)takeInOriginalResolutionWithScreenID:(long long)screenID
                               compressionQuality:(CGFloat)compressionQuality
                                              uti:(UTType *)uti
                                          timeout:(NSTimeInterval)timeout
                                            error:(NSError **)error
 {
-  id<XCTMessagingChannel_RunnerToDaemon> proxy = [FBXCTestDaemonsProxy testRunnerProxy];
   __block NSData *screenshotData = nil;
   __block NSError *innerError = nil;
   dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-  id screnshotRequest = [self.class screenshotRequestWithScreenID:screenID
-                                                             rect:CGRectNull
-                                                              uti:uti
-                                               compressionQuality:compressionQuality
-                                                            error:error];
-  if (nil == screnshotRequest) {
+  BOOL isRequested = [self.class requestInOriginalResolutionWithScreenID:screenID
+                                                      compressionQuality:compressionQuality
+                                                                     uti:uti
+                                                              completion:^(NSData *data, NSError *err) {
+    screenshotData = data;
+    innerError = err;
+    dispatch_semaphore_signal(sem);
+  }
+                                                                   error:error];
+  if (!isRequested) {
     return nil;
   }
-  [proxy _XCT_requestScreenshot:screnshotRequest
-                      withReply:^(id image, NSError *err) {
-    if (nil != err) {
-      innerError = err;
-    } else {
-      screenshotData = [image data];
-    }
-    dispatch_semaphore_signal(sem);
-  }];
   int64_t timeoutNs = (int64_t)(timeout * NSEC_PER_SEC);
   if (0 != dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, timeoutNs))) {
-    NSString *timeoutMsg = [NSString stringWithFormat:@"Cannot take a screenshot within %@ timeout", formatTimeInterval(SCREENSHOT_TIMEOUT)];
+    NSString *timeoutMsg = [NSString stringWithFormat:@"Cannot take a screenshot within %@ timeout", formatTimeInterval(timeout)];
     if (nil == error) {
       [FBLogger log:timeoutMsg];
     } else if (nil == innerError) {

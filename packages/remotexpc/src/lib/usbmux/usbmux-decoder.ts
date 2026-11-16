@@ -28,7 +28,7 @@ export class UsbmuxDecoder extends Transform {
     return this._buffer;
   }
 
-  _transform(chunk: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
+  override _transform(chunk: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
     // Append the new chunk to the internal buffer
     this._buffer = Buffer.concat([this._buffer, chunk]);
 

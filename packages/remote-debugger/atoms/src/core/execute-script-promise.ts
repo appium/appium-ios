@@ -105,6 +105,7 @@ function awaitScriptResult(thenable: PromiseLike<unknown>, win: Window, timeout?
 
     // Handled at once: no unhandled rejection in the page.
     Promise.resolve(thenable).then(
+      // eslint-disable-next-line promise/always-return -- the handler result is not used
       (value) => {
         let ret: ResponseObject;
         try {

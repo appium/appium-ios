@@ -198,7 +198,7 @@ async function setAccess(
 
   if (grantPermissions.length > 0) {
     this.log.debug(
-      `Granting ${util.pluralize('permission', grantPermissions.length, false)} for ${bundleId}: ${grantPermissions}`,
+      `Granting ${util.pluralize('permission', grantPermissions.length, false)} for ${bundleId}: ${grantPermissions.join(', ')}`,
     );
     for (const service of grantPermissions) {
       permissionPromises.push(execSimctlPrivacy.call(this, 'grant', service, bundleId));
@@ -207,7 +207,7 @@ async function setAccess(
 
   if (revokePermissions.length > 0) {
     this.log.debug(
-      `Revoking ${util.pluralize('permission', revokePermissions.length, false)} for ${bundleId}: ${revokePermissions}`,
+      `Revoking ${util.pluralize('permission', revokePermissions.length, false)} for ${bundleId}: ${revokePermissions.join(', ')}`,
     );
     for (const service of revokePermissions) {
       permissionPromises.push(execSimctlPrivacy.call(this, 'revoke', service, bundleId));
@@ -216,7 +216,7 @@ async function setAccess(
 
   if (resetPermissions.length > 0) {
     this.log.debug(
-      `Resetting ${util.pluralize('permission', resetPermissions.length, false)} for ${bundleId}: ${resetPermissions}`,
+      `Resetting ${util.pluralize('permission', resetPermissions.length, false)} for ${bundleId}: ${resetPermissions.join(', ')}`,
     );
     for (const service of resetPermissions) {
       permissionPromises.push(execSimctlPrivacy.call(this, 'reset', service, bundleId));

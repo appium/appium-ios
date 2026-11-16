@@ -28,6 +28,13 @@ const BLANK_PAGE_URL = 'about:blank';
 const WEB_CONTENT_PROCESS_BUNDLE_ID = 'process-com.apple.WebKit.WebContent';
 const SAFARI_VIEW_PROCESS_BUNDLE_ID = 'process-SafariViewService';
 const SAFARI_VIEW_BUNDLE_ID = 'com.apple.SafariViewService';
+// many processes report these, so one connecting says nothing about the app being selected
+const SHARED_PROCESS_BUNDLE_IDS = [
+  WEB_CONTENT_BUNDLE_ID,
+  WEB_CONTENT_PROCESS_BUNDLE_ID,
+  SAFARI_VIEW_PROCESS_BUNDLE_ID,
+  SAFARI_VIEW_BUNDLE_ID,
+];
 const WILDCARD_BUNDLE_ID = '*';
 
 /**
@@ -230,13 +237,7 @@ export function getPossibleDebuggerAppKeys(this: RemoteDebugger, bundleIds: stri
   }
 
   // go through the possible bundle identifiers
-  const possibleBundleIds = util.uniq([
-    WEB_CONTENT_BUNDLE_ID,
-    WEB_CONTENT_PROCESS_BUNDLE_ID,
-    SAFARI_VIEW_PROCESS_BUNDLE_ID,
-    SAFARI_VIEW_BUNDLE_ID,
-    ...bundleIds,
-  ]);
+  const possibleBundleIds = util.uniq([...SHARED_PROCESS_BUNDLE_IDS, ...bundleIds]);
   this.log.debug(`Checking for apps with matching bundle identifiers: ${possibleBundleIds.join(', ')}`);
   const proxiedAppIds: string[] = [];
   for (const bundleId of possibleBundleIds) {
@@ -314,7 +315,10 @@ async function searchForApp(
 
       this.log.debug(`Attempting app '${attemptedAppIdKey}'`);
       try {
-        const [appIdKey, pageDict] = await this.requireRpcClient().selectApp(attemptedAppIdKey);
+        const [appIdKey, pageDict] = await this.requireRpcClient().selectApp(
+          attemptedAppIdKey,
+          SHARED_PROCESS_BUNDLE_IDS.includes(appInfo.bundleId) ? undefined : appInfo.bundleId,
+        );
 
         // save the page array for this app
         getAppDict(this)[appIdKey].pageArray = pageArrayFromDict(pageDict);

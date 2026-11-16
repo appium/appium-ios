@@ -9,7 +9,13 @@ import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-import {NativeSimctl, NativeSimError, NativeSimUnavailableError, SimDeviceState} from '../../src/index.js';
+import {
+  NativeSimctl,
+  NativeSimDisplayResolutionError,
+  NativeSimError,
+  NativeSimUnavailableError,
+  SimDeviceState,
+} from '../../src/index.js';
 import {getPkgRoot} from '../../src/utils/index.js';
 
 // Built from getPkgRoot() (not a relative "../../" climb from this compiled test file) because
@@ -25,6 +31,22 @@ const INDEX_MODULE_URL = pathToFileURL(path.join(getPkgRoot(), 'lib', 'src', 'in
  * Mutating coverage (boot/shutdown, create/delete) lives under test/integration instead.
  */
 describe('NativeSimctl (read-only)', {timeout: 30000}, () => {
+  it('classifies a missing display through the native bridge', async (t) => {
+    const sim = new NativeSimctl();
+    const device = (await sim.getDevices()).find(({state}) => state === SimDeviceState.Booted);
+    if (!device) {
+      t.skip('Requires an already booted simulator');
+      return;
+    }
+    await assert.rejects(
+      sim.getScreenshot(device.udid, {displayId: '00000000-0000-0000-0000-000000000000'}),
+      (err: unknown) =>
+        err instanceof NativeSimDisplayResolutionError &&
+        err.domain === 'io.appium.coresim.Screenshot' &&
+        err.code === 2,
+    );
+  });
+
   it('reports a real CoreSimulator.framework version', async () => {
     const version = await NativeSimctl.frameworkVersion();
     assert.match(version, /^\d+(\.\d+)*$/);

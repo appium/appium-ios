@@ -99,7 +99,7 @@ export class LengthBasedSplitter extends Transform {
     return data;
   }
 
-  _transform(chunk: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
+  override _transform(chunk: Buffer, encoding: BufferEncoding, callback: TransformCallback): void {
     try {
       // Add the new chunk to our buffer
       this.buffer = Buffer.concat([this.buffer, chunk]);

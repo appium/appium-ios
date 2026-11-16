@@ -187,7 +187,7 @@ export default class RpcMessageHandler extends EventEmitter {
    */
   private async handleDataMessage(plist: StringRecord): Promise<void> {
     const dataKey = this.parseDataKey(plist);
-    let msgId = (dataKey.id || '').toString();
+    let msgId = (dataKey.id ?? '').toString();
     let result = dataKey.result;
 
     let method = dataKey.method;
@@ -211,7 +211,7 @@ export default class RpcMessageHandler extends EventEmitter {
           }
           return error;
         }
-        return new Error(String(dataKey.error || defaultMessage));
+        return new Error(typeof dataKey.error === 'string' ? dataKey.error : defaultMessage);
       }
       return undefined;
     };

@@ -1,4 +1,10 @@
-export {NativeSimError, NativeSimUnavailableError, NativeSimDispatchError, NativeSimOperationError} from './errors.js';
+export {
+  NativeSimError,
+  NativeSimUnavailableError,
+  NativeSimDispatchError,
+  NativeSimOperationError,
+  NativeSimDisplayResolutionError,
+} from './errors.js';
 export {NativeSimctl, type NativeSimctlOptions} from './native-simctl.js';
 export {SpawnedProcess} from './commands/spawn.js';
 export {VideoStream} from './commands/video-stream.js';

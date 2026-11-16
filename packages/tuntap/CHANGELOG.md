@@ -3,6 +3,61 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.1.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.4...appium-ios-tuntap@3.1.0) (2026-11-16)
+
+### Features
+
+* **tuntap:** read interface stats natively on macOS, Linux, and Windows ([#127](https://github.com/appium/appium-ios/issues/127)) ([71352df](https://github.com/appium/appium-ios/commit/71352df930ddf4016fd41fc4832bf1b88480393a))
+
+
+## [3.0.4](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.3...appium-ios-tuntap@3.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **tuntap:** fix lint warnings ([#197](https://github.com/appium/appium-ios/issues/197)) ([fbd1119](https://github.com/appium/appium-ios/commit/fbd1119ca9e8683255b2c1d603c39b3b4603d69d))
+
+
+## [3.0.3](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.2...appium-ios-tuntap@3.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [3.0.2](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.1...appium-ios-tuntap@3.0.2) (2026-11-12)
+
+### Bug Fixes
+
+* **tuntap:** pin device certificate in the native lockdown tunnel ([#183](https://github.com/appium/appium-ios/issues/183)) ([b2a34fb](https://github.com/appium/appium-ios/commit/b2a34fb9501d2177bb25bf1ffc80276353e98393))
+
+
+## [3.0.1](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.0...appium-ios-tuntap@3.0.1) (2026-11-12)
+
+**Note:** Version bump only for package appium-ios-tuntap
+
+
+
+
+
+## [3.0.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.7...appium-ios-tuntap@3.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **tuntap:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **tuntap:** add Appium 4 support ([02e0193](https://github.com/appium/appium-ios/commit/02e019329862cefafbf85886a5f8841377464d7f))
+
+
+## [2.2.7](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.6...appium-ios-tuntap@2.2.7) (2026-11-11)
+
+**Note:** Version bump only for package appium-ios-tuntap
+
+
+
+
+
 ## [2.2.6](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@2.2.5...appium-ios-tuntap@2.2.6) (2026-10-05)
 
 ### Code Refactoring

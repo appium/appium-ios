@@ -27,7 +27,7 @@ const log = getLogger('DeviceInfo');
  * - nameForGid(gid): Get group name for GID
  */
 export class DeviceInfo extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.deviceinfo';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.deviceinfo';
 
   /**
    * List directory contents at the specified path.
@@ -117,7 +117,7 @@ export class DeviceInfo extends BaseInstrument {
    * Get the kernel performance event (kpep) database.
    * @returns Object containing kpep database or null if not available
    */
-  async kpepDatabase(): Promise<any | null> {
+  async kpepDatabase(): Promise<any> {
     const kpepData = await this.requestInformation('kpepDatabase');
 
     if (kpepData === null || kpepData === undefined) {

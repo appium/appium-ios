@@ -233,14 +233,15 @@ export abstract class CoreDeviceService extends BaseService {
     if (this.transport?.isConnected) {
       return this.transport;
     }
-    this.pendingTransport ??= this.newTransport()
-      .then((transport) => {
+    this.pendingTransport ??= (async () => {
+      try {
+        const transport = await this.newTransport();
         this.transport = transport;
         return transport;
-      })
-      .finally(() => {
+      } finally {
         this.pendingTransport = null;
-      });
+      }
+    })();
     return await this.pendingTransport;
   }
 

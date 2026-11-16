@@ -11,7 +11,7 @@ import {BinaryPlistError, createBinaryPlist, parseBinaryPlist} from '../../../sr
 import {PlistUID} from '../../../src/lib/plist/plist-uid.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
 
-const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url));
+const PKG_ROOT = node.getModuleRootSync('appium-ios-remotexpc', fileURLToPath(import.meta.url)) as string;
 const SAMPLE_BINARY_PLIST = path.join(PKG_ROOT, 'test', 'unit', 'plist', 'fixtures', 'sample.binary.plist');
 
 const HEADER = Buffer.from('bplist00', 'ascii');

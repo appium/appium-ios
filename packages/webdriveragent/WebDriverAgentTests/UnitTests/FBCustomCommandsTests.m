@@ -20,6 +20,7 @@
 #if !TARGET_OS_TV && __clang_major__ >= 15
 
 @interface FBCustomCommands (FBWDATestable)
++ (id<FBResponsePayload>)handleGetDeviceInfo:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleKeyboardInput:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleGetSimulatedHingeAngle:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSetSimulatedHingeAngle:(FBRouteRequest *)request;
@@ -91,6 +92,24 @@
   RouteResponse *response = [RouteResponse new];
   [[FBCustomCommands handleSetSimulatedHingeAngle:request] dispatchWithResponse:response];
   return [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
+}
+
+- (void)testDeviceInfoIncludesHasHinge
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/device/info"]
+                                                  parameters:@{}
+                                                   arguments:@{}];
+  RouteResponse *response = [RouteResponse new];
+  [[FBCustomCommands handleGetDeviceInfo:request] dispatchWithResponse:response];
+  NSDictionary *body = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil];
+  id hasHinge = body[@"value"][@"hasHinge"];
+  XCTAssertNotNil(hasHinge);
+  if (nil == hasHinge) {
+    return;
+  }
+  XCTAssertEqual(CFGetTypeID((__bridge CFTypeRef)hasHinge), CFBooleanGetTypeID());
+  XCTAssertEqual([hasHinge boolValue], XCUIDevice.sharedDevice.fb_supportsHingeAngleReading);
+  NSLog(@"Device info hasHinge: %@", [hasHinge boolValue] ? @"true" : @"false");
 }
 
 - (void)testHingeAngleReading

@@ -3,6 +3,120 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.0.12](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.11...appium-ios-remotexpc@6.0.12) (2026-11-16)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [6.0.11](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.10...appium-ios-remotexpc@6.0.11) (2026-11-15)
+
+### Bug Fixes
+
+* **remotexpc:** honor TCP socket options on all platforms and destroy socket on timeout/error ([#116](https://github.com/appium/appium-ios/issues/116)) ([30121af](https://github.com/appium/appium-ios/commit/30121af4b7b7dd2ad465f801c0c48b27c1577d06))
+
+
+## [6.0.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.9...appium-ios-remotexpc@6.0.10) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **remotexpc:** enable strictNullChecks and fix lint warnings ([#204](https://github.com/appium/appium-ios/issues/204)) ([cef8241](https://github.com/appium/appium-ios/commit/cef824181947941578bf81bd66758d4f36a1ef3f))
+
+
+## [6.0.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.8...appium-ios-remotexpc@6.0.9) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
+## [6.0.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.7...appium-ios-remotexpc@6.0.8) (2026-11-13)
+
+### Code Refactoring
+
+* **remotexpc:** use getFreePort from @appium/support for the registry port ([#205](https://github.com/appium/appium-ios/issues/205)) ([f739ffb](https://github.com/appium/appium-ios/commit/f739ffb51b4b1ea58944240d197d53a970e05eef))
+
+
+## [6.0.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.6...appium-ios-remotexpc@6.0.7) (2026-11-13)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [6.0.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.5...appium-ios-remotexpc@6.0.6) (2026-11-13)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [6.0.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.4...appium-ios-remotexpc@6.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [6.0.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.3...appium-ios-remotexpc@6.0.4) (2026-11-12)
+
+### Miscellaneous Chores
+
+* drop rimraf dependency in favor of node:fs ([#192](https://github.com/appium/appium-ios/issues/192)) ([7416dbf](https://github.com/appium/appium-ios/commit/7416dbff1108df8bf8e1e8b5192d05302efa0db8))
+
+
+## [6.0.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.2...appium-ios-remotexpc@6.0.3) (2026-11-12)
+
+### Bug Fixes
+
+* **remotexpc:** pin device certificate in lockdown TLS and fail closed ([#182](https://github.com/appium/appium-ios/issues/182)) ([e85c1a7](https://github.com/appium/appium-ios/commit/e85c1a7e77ab3b144e641f5e9ee50ebacb0ca911))
+
+
+## [6.0.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.1...appium-ios-remotexpc@6.0.2) (2026-11-12)
+
+### Bug Fixes
+
+* **tuntap:** pin device certificate in the native lockdown tunnel ([#183](https://github.com/appium/appium-ios/issues/183)) ([b2a34fb](https://github.com/appium/appium-ios/commit/b2a34fb9501d2177bb25bf1ffc80276353e98393))
+
+
+## [6.0.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.0...appium-ios-remotexpc@6.0.1) (2026-11-12)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [6.0.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.10...appium-ios-remotexpc@6.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **remotexpc:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **remotexpc:** add Appium 4 support ([7bb7cda](https://github.com/appium/appium-ios/commit/7bb7cdaf0f902b91e0b5181fe9b505fe479372e8))
+
+
+## [5.28.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.9...appium-ios-remotexpc@5.28.10) (2026-11-11)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [5.28.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.8...appium-ios-remotexpc@5.28.9) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
 ## [5.28.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@5.28.7...appium-ios-remotexpc@5.28.8) (2026-11-02)
 
 ### Bug Fixes
