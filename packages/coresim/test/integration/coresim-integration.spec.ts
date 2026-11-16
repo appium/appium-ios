@@ -1124,6 +1124,38 @@ describe('NativeSimctl integration', () => {
         }
       });
 
+      it('produces a keyframe on request even when the screen is static', async (t) => {
+        let stream: Awaited<ReturnType<typeof sim.startVideoStream>>;
+        try {
+          stream = await sim.startVideoStream(device!.udid, {fps: 10});
+        } catch (err) {
+          if (err instanceof NativeSimUnavailableError) {
+            return t.skip(`video streaming unavailable on this CoreSimulator: ${err.message}`);
+          }
+          throw err;
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const units: Array<{isKeyFrame: boolean; sequence: number}> = [];
+        try {
+          for await (const unit of stream.accessUnits(controller.signal)) {
+            units.push(unit);
+            if (units.length === 2) {
+              break;
+            }
+            // Nothing repaints the screen from here on, so only the request can yield another unit
+            stream.requestKeyFrame();
+          }
+        } finally {
+          clearTimeout(timeout);
+          await stream.stop();
+        }
+
+        assert.strictEqual(units.length, 2, 'expected a second unit after requesting a keyframe');
+        assert.strictEqual(units[1].isKeyFrame, true, 'the unit after the request must be a keyframe');
+      });
+
       it('keeps streaming past an orientation poll tick without crashing', async (t) => {
         // Rotation content correctness was verified manually — this suite's shared device can't
         // reliably rotate (see "accepts setOrientation" above). Crash-safety only: run past the

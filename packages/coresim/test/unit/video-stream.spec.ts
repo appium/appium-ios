@@ -56,6 +56,19 @@ describe('VideoStream', () => {
     await stream.stop();
   });
 
+  it('forwards requestKeyFrame() to the native handle until the stream is stopped', async () => {
+    const stream = new VideoStream('h264');
+    stream.requestKeyFrame(); // before the handle is attached: must not throw
+    let keyFrameRequests = 0;
+    stream._attachHandle({stop: async () => {}, requestKeyFrame: () => keyFrameRequests++});
+    stream.requestKeyFrame();
+    stream.requestKeyFrame();
+    assert.strictEqual(keyFrameRequests, 2);
+    await stream.stop();
+    stream.requestKeyFrame();
+    assert.strictEqual(keyFrameRequests, 2, 'a stopped stream must not touch the native handle');
+  });
+
   it('returns cleanly from accessUnits() given an already-aborted signal, without yielding units pushed before it', async () => {
     const stream = new VideoStream('h264');
     const controller = new AbortController();

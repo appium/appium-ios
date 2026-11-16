@@ -600,6 +600,11 @@ export interface VideoStream extends EventEmitter {
    * than silently sharing (and corrupting) the first one's single internal waiter slot.
    */
   accessUnits(signal?: AbortSignal): AsyncGenerator<VideoAccessUnit>;
+  /**
+   * Makes the next encoded video frame a keyframe, e.g. for a consumer that joins mid-stream. It is
+   * produced on the next poll even if the screen has not changed. A no-op once the stream is stopped.
+   */
+  requestKeyFrame(): void;
   /** Stops the stream and releases the underlying encoder. Idempotent, including concurrently. */
   stop(): Promise<void>;
 }
