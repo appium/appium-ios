@@ -19,15 +19,24 @@ const IDENTITY: RtcpStreamIdentity = {
 };
 
 /** Captures what a keepalive sends, standing in for a bound socket. */
-function fakeReceiver(): {receiver: UdpMediaReceiver; sent: Array<{data: Buffer; host: string; port: number}>} {
+function fakeReceiver(options: {fail?: () => boolean} = {}): {
+  receiver: UdpMediaReceiver;
+  sent: Array<{data: Buffer; host: string; port: number}>;
+} {
   const sent: Array<{data: Buffer; host: string; port: number}> = [];
   const receiver = {
-    async send(data: Buffer, host: string, port: number): Promise<void> {
+    async send(data: Buffer, host: string, port: number): Promise<boolean> {
+      if (options.fail?.()) {
+        return false;
+      }
       sent.push({data, host, port});
+      return true;
     },
   } as unknown as UdpMediaReceiver;
   return {receiver, sent};
 }
+
+const isPli = (data: Buffer): boolean => data.readUInt8(1) === 0xce;
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -190,7 +199,7 @@ describe('RTCP', function () {
       await flush();
       sent.length = 0;
 
-      await keepalive.requestKeyFrame();
+      assert.strictEqual(await keepalive.requestKeyFrame(), true);
       keepalive.stop();
 
       assert.strictEqual(sent.length, 1);
@@ -206,9 +215,80 @@ describe('RTCP', function () {
       await flush();
       const before = sent.length;
 
-      await keepalive.requestKeyFrame();
-
+      assert.strictEqual(await keepalive.requestKeyFrame(), false);
       assert.strictEqual(sent.length, before);
+    });
+
+    it('coalesces requests that come close together, including concurrent ones', async function (t) {
+      t.mock.timers.enable({apis: ['Date']});
+      const {receiver, sent} = fakeReceiver();
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
+      await flush();
+      sent.length = 0;
+
+      const results = await Promise.all([keepalive.requestKeyFrame(), keepalive.requestKeyFrame()]);
+      assert.deepStrictEqual(results, [true, true], 'both callers are told a keyframe is coming');
+      assert.strictEqual(sent.filter((p) => isPli(p.data)).length, 1);
+
+      t.mock.timers.tick(199);
+      await keepalive.requestKeyFrame();
+      assert.strictEqual(sent.filter((p) => isPli(p.data)).length, 1, 'still within the spacing');
+
+      t.mock.timers.tick(1);
+      await keepalive.requestKeyFrame();
+      assert.strictEqual(sent.filter((p) => isPli(p.data)).length, 2, 'a new request once the spacing has passed');
+      keepalive.stop();
+    });
+
+    it('reports a failed send and lets the next request through', async function (t) {
+      t.mock.timers.enable({apis: ['Date']});
+      let failing = true;
+      const {receiver, sent} = fakeReceiver({fail: () => failing && true});
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
+      await flush();
+
+      assert.strictEqual(await keepalive.requestKeyFrame(), false);
+      failing = false;
+      assert.strictEqual(await keepalive.requestKeyFrame(), true, 'a failure is not coalesced into the next call');
+      assert.strictEqual(sent.filter((p) => isPli(p.data)).length, 1);
+      keepalive.stop();
+    });
+
+    it('asks periodically when keyFrameIntervalMs is set, and no longer after stop()', async function (t) {
+      t.mock.timers.enable({apis: ['setInterval', 'Date']});
+      const {receiver, sent} = fakeReceiver();
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000, keyFrameIntervalMs: 2000});
+      await flush();
+      const plis = (): number => sent.filter((p) => isPli(p.data)).length;
+      assert.strictEqual(plis(), 0, 'nothing until the first interval');
+
+      t.mock.timers.tick(2000);
+      await flush();
+      t.mock.timers.tick(2000);
+      await flush();
+      assert.strictEqual(plis(), 2);
+
+      keepalive.stop();
+      t.mock.timers.tick(10_000);
+      await flush();
+      assert.strictEqual(plis(), 2);
+    });
+
+    it('does not ask periodically by default', async function (t) {
+      t.mock.timers.enable({apis: ['setInterval', 'Date']});
+      const {receiver, sent} = fakeReceiver();
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
+      t.mock.timers.tick(60_000);
+      await flush();
+      keepalive.stop();
+      assert.strictEqual(sent.filter((p) => isPli(p.data)).length, 0);
+    });
+
+    it('rejects a keyFrameIntervalMs that is negative, not finite or above the timer limit', function () {
+      const {receiver} = fakeReceiver();
+      for (const keyFrameIntervalMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31]) {
+        assert.throws(() => RtcpKeepalive.start(receiver, IDENTITY, {keyFrameIntervalMs}), RangeError);
+      }
     });
 
     it('reports the highest observed sequence number', async function () {

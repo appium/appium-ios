@@ -115,7 +115,10 @@ describe('ScreenStreamCapture', function () {
   });
 });
 
-/** A UDP socket on the IPv6 loopback standing in for the device's RTCP port. */
+/**
+ * A UDP socket on the IPv6 loopback standing in for the device's RTCP port. `ScreenStreamCapture.start()`
+ * binds an IPv6 socket itself, so these tests need IPv6 loopback like the capture does.
+ */
 async function bindFakeDevice(): Promise<{socket: Socket; port: number; packets: Buffer[]}> {
   const socket = createSocket('udp6');
   const packets: Buffer[] = [];
@@ -129,7 +132,10 @@ describe('ScreenStreamCapture keyframe requests', function () {
   const DEVICE_SSRC = 0xaabbccdd;
   const PSFB = 0xce;
 
-  function fakeService(devicePort: number): {service: DisplayService; stops: () => number} {
+  function fakeService(
+    devicePort: number,
+    streamConfig?: Record<string, unknown>,
+  ): {service: DisplayService; stops: () => number} {
     let stops = 0;
     const service = {
       getTunnelLocalAddress: async () => '::1',
@@ -137,7 +143,7 @@ describe('ScreenStreamCapture keyframe requests', function () {
       startVideoStream: async () =>
         ({
           clientSessionId: undefined,
-          streamConfig: {RemoteSSRC: SENDER_SSRC, LocalSSRC: DEVICE_SSRC, SourcePort: devicePort},
+          streamConfig: streamConfig ?? {RemoteSSRC: SENDER_SSRC, LocalSSRC: DEVICE_SSRC, SourcePort: devicePort},
           connection: {},
           raw: {},
         }) as unknown as MediaStreamAnswer,
@@ -151,6 +157,13 @@ describe('ScreenStreamCapture keyframe requests', function () {
 
   const feedback = (packets: Buffer[]): Buffer[] => packets.filter((p) => p.readUInt8(1) === PSFB);
   const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+  /** Polls instead of sleeping a fixed time, so a loaded runner only makes the test slower, not flaky. */
+  async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void> {
+    for (let waited = 0; !condition() && waited < timeoutMs; waited += 10) {
+      await wait(10);
+    }
+    assert.ok(condition(), 'timed out waiting for the condition');
+  }
 
   it('asks for a keyframe on demand and addresses it to the device', async function () {
     const device = await bindFakeDevice();
@@ -158,7 +171,7 @@ describe('ScreenStreamCapture keyframe requests', function () {
     const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 0});
     try {
       assert.strictEqual(await capture.requestKeyFrame(), true);
-      await wait(50);
+      await waitFor(() => feedback(device.packets).length > 0);
 
       const [pli, ...rest] = feedback(device.packets);
       assert.strictEqual(rest.length, 0);
@@ -171,28 +184,41 @@ describe('ScreenStreamCapture keyframe requests', function () {
     }
   });
 
-  it('asks periodically by default-style interval and stops asking once stopped', async function () {
+  it('asks every 2000 ms by default, and not before', async function (t) {
+    t.mock.timers.enable({apis: ['setInterval', 'Date']});
     const device = await bindFakeDevice();
-    const {service, stops} = fakeService(device.port);
-    const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 20});
+    const {service} = fakeService(device.port);
+    const capture = await ScreenStreamCapture.start(service);
     try {
-      await wait(150);
-      assert.ok(feedback(device.packets).length >= 3, 'expected repeated requests');
+      t.mock.timers.tick(1999);
+      await wait(50);
+      assert.strictEqual(feedback(device.packets).length, 0, 'not before 2000 ms');
+
+      t.mock.timers.tick(1);
+      await waitFor(() => feedback(device.packets).length === 1);
     } finally {
       await capture.stop();
+      device.socket.close();
     }
-    await wait(30);
-    const afterStop = feedback(device.packets).length;
-    await wait(100);
-    assert.strictEqual(feedback(device.packets).length, afterStop, 'no requests after stop()');
+  });
+
+  it('does not ask periodically when keyFrameIntervalMs is 0, and stops asking after stop()', async function (t) {
+    t.mock.timers.enable({apis: ['setInterval', 'Date']});
+    const device = await bindFakeDevice();
+    const {service, stops} = fakeService(device.port);
+    const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 0});
+    t.mock.timers.tick(10_000);
+    await wait(50);
+    assert.strictEqual(feedback(device.packets).length, 0);
+    await capture.stop();
     assert.strictEqual(stops(), 1);
-    assert.strictEqual(await capture.requestKeyFrame(), false);
+    assert.strictEqual(await capture.requestKeyFrame(), false, 'no requests after stop()');
     device.socket.close();
   });
 
-  it('rejects a negative or non-finite interval before touching the device', async function () {
+  it('rejects an interval that is negative, not finite or above the timer limit, before touching the device', async function () {
     const {service} = fakeService(1);
-    for (const keyFrameIntervalMs of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const keyFrameIntervalMs of [-1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31]) {
       await assert.rejects(ScreenStreamCapture.start(service, {keyFrameIntervalMs}), RangeError);
     }
   });
@@ -201,6 +227,16 @@ describe('ScreenStreamCapture keyframe requests', function () {
     const {capture} = makeCapture({onStop: async () => undefined});
 
     assert.strictEqual(await capture.requestKeyFrame(), false);
+  });
+
+  it('starts without keepalive or keyframe requests when the device omits its RTCP identity', async function () {
+    const {service} = fakeService(1, {});
+    const capture = await ScreenStreamCapture.start(service);
+    try {
+      assert.strictEqual(await capture.requestKeyFrame(), false);
+    } finally {
+      await capture.stop();
+    }
   });
 });
 
