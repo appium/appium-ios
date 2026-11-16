@@ -25,9 +25,6 @@ outputs:
   webdriveragent_release_tag:
     description: '"<pkg_name>@<pkg_version>" if appium-webdriveragent was published this run, empty otherwise'
     value: ${{ steps.run-lerna-publish.outputs.webdriveragent_release_tag }}
-  media_proxy_release_tag:
-    description: '"<pkg_name>@<pkg_version>" if @appium/media-proxy was published this run, empty otherwise'
-    value: ${{ steps.run-lerna-publish.outputs.media_proxy_release_tag }}
 
 runs:
   using: composite
@@ -47,10 +44,8 @@ runs:
         # ios-uicatalog actually gets published - GITHUB_OUTPUT keeps the last write.
         BEFORE_UICATALOG_VERSION="$(jq -r '.version' packages/uicatalog/package.json)"
         BEFORE_WDA_VERSION="$(jq -r '.version' packages/webdriveragent/package.json)"
-        BEFORE_MEDIA_PROXY_VERSION="$(jq -r '.version' packages/media-proxy/package.json)"
         echo "uicatalog_release_tag=" >> "$GITHUB_OUTPUT"
         echo "webdriveragent_release_tag=" >> "$GITHUB_OUTPUT"
-        echo "media_proxy_release_tag=" >> "$GITHUB_OUTPUT"
 
         # Prints "<pkg_name>@<pkg_version>" to stdout for each non-private workspace package
         # whose current package.json version is not yet on npm.
@@ -153,9 +148,6 @@ runs:
             if [ "$pkg_name" = "appium-webdriveragent" ]; then
               echo "webdriveragent_release_tag=${pkg_spec}" >> "$GITHUB_OUTPUT"
             fi
-            if [ "$pkg_name" = "@appium/media-proxy" ]; then
-              echo "media_proxy_release_tag=${pkg_spec}" >> "$GITHUB_OUTPUT"
-            fi
           done
           return $overall_status
         }
@@ -183,7 +175,6 @@ runs:
           # Explicit returns: callers run this inside `if !`, where `set -e` is disabled
           flag_release_without_assets ios-uicatalog uicatalog_release_tag packages/uicatalog || return 1
           flag_release_without_assets appium-webdriveragent webdriveragent_release_tag packages/webdriveragent || return 1
-          flag_release_without_assets @appium/media-proxy media_proxy_release_tag packages/media-proxy || return 1
         }
 
         # Publishes whatever is still missing on npm, then flags releases lacking assets.
@@ -253,10 +244,6 @@ runs:
             after_wda_version="$(jq -r '.version' packages/webdriveragent/package.json)"
             if [ "$after_wda_version" != "$BEFORE_WDA_VERSION" ]; then
               echo "webdriveragent_release_tag=appium-webdriveragent@${after_wda_version}" >> "$GITHUB_OUTPUT"
-            fi
-            after_media_proxy_version="$(jq -r '.version' packages/media-proxy/package.json)"
-            if [ "$after_media_proxy_version" != "$BEFORE_MEDIA_PROXY_VERSION" ]; then
-              echo "media_proxy_release_tag=@appium/media-proxy@${after_media_proxy_version}" >> "$GITHUB_OUTPUT"
             fi
             exit 0
           fi

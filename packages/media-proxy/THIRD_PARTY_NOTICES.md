@@ -7,8 +7,7 @@ Prebuilds ship FFmpeg's libavcodec, libavutil and libswscale as shared libraries
 and licensed under the GNU LGPL v2.1 or later.
 
 - Version: 8.1.3, source https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
-  (sha256 `7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`). The same tarball is attached to each
-  package release on GitHub.
+  (sha256 `7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`).
 - The libraries are built with `--build-suffix=-appium` (e.g. `libavcodec-appium.so.62`) so they can't be
   confused with, or replaced by, another FFmpeg loaded in the same process.
 - The licence text ships beside the libraries as `ffmpeg-LICENSE-LGPL-2.1.txt`.

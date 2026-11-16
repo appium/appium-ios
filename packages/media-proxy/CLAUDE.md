@@ -56,7 +56,5 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 ## Releasing
 
 Released through the repo's lerna flow like `tuntap`/`coresim`: `release.yml` runs `media-proxy-prebuild.yml` when the
-package is being published (`PREBUILT` in `scripts/detect-release-packages.mjs`), merges the artifacts into `prebuilds/`,
-and `release-media-proxy-source` attaches the pinned FFmpeg source tarball to the GitHub release
-(`scripts/ci/upload-ffmpeg-source.sh`, reading the pins from `build-ffmpeg.sh`), per FFmpeg's LGPL checklist.
-Bumping FFmpeg only needs the pins in `build-ffmpeg.sh` and `THIRD_PARTY_NOTICES.md`.
+package is being published (`PREBUILT` in `scripts/detect-release-packages.mjs`) and merges the artifacts into `prebuilds/`.
+Bumping FFmpeg needs the pins in `build-ffmpeg.sh` and `THIRD_PARTY_NOTICES.md` (the source pointer for the LGPL).
