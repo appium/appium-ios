@@ -38,7 +38,7 @@ describe('native addon', () => {
       [
         '--input-type=module',
         '-e',
-        `import {getH264Encoders} from ${JSON.stringify(module)}; console.log(JSON.stringify(getH264Encoders()));`,
+        `import {listH264Encoders} from ${JSON.stringify(module)}; console.log(JSON.stringify(listH264Encoders()));`,
       ],
       {env: {...env, MEDIA_PROXY_H264_ENCODER: 'libopenh264'}, encoding: 'utf8'},
     );

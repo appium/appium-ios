@@ -1,10 +1,10 @@
 import {readFileSync} from 'node:fs';
 
-import {getH264Encoders} from '../../src/capabilities.js';
+import {listH264Encoders} from '../../src/capabilities.js';
 import type {NalAccessUnit} from '../../src/types.js';
 
 /** H.264 encoders this addon offers: the platform one (VideoToolbox, Media Foundation) and OpenH264 once installed. */
-export const H264_ENCODERS = getH264Encoders();
+export const H264_ENCODERS = listH264Encoders();
 export const HAS_H264 = H264_ENCODERS.length > 0;
 
 const RTP_TICKS_PER_FRAME = 400; // 60 fps at the device's 24 kHz video clock

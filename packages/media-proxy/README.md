@@ -131,7 +131,7 @@ one AAC frame (1024 samples, ~21 ms) plus the ELD unit being waited for (≤ 10 
 Without a hardware encoder (Linux, some VMs), H.264 uses Cisco's OpenH264. This package never bundles or
 downloads it: **the client package (e.g. the driver) installs it and points `MEDIA_PROXY_OPENH264_PATH` at it**.
 Without it, `createTranscoder({codec: 'h264'})` throws `MediaProxyEncoderUnavailableError`;
-`getH264Encoders()` tells beforehand (it returns the encoders that can open here, empty if none).
+`listH264Encoders()` tells beforehand (it returns the encoders that can open here, empty if none).
 
 Each end user must fetch Cisco's signed binary from Cisco under
 [Cisco's binary license](https://www.openh264.org/BINARY_LICENSE.txt) (that is what the patent grant covers), so do it on the

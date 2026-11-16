@@ -7,6 +7,6 @@ import type {NativeModule} from './types.js';
  *
  * @throws MediaProxyUnavailableError if the addon can't be loaded
  */
-export function getH264Encoders(native: Pick<NativeModule, 'capabilities'> = loadNative()): string[] {
+export function listH264Encoders(native: Pick<NativeModule, 'capabilities'> = loadNative()): string[] {
   return native.capabilities().encoders.filter((name) => name.startsWith('h264_') || name === 'libopenh264');
 }
