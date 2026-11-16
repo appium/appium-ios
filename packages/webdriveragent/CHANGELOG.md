@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.6...appium-webdriveragent@17.0.7) (2026-11-16)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve gesture display affinity across Duo folding ([#155](https://github.com/appium/appium-ios/issues/155)) ([9481b8b](https://github.com/appium/appium-ios/commit/9481b8b793de734e2e0748c6780460a247c3f515))
+
+
 ## [17.0.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.5...appium-webdriveragent@17.0.6) (2026-11-14)
 
 ### Miscellaneous Chores
