@@ -45,6 +45,10 @@ Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `uni
 (flush, then finish) and `close()` (stop consuming and discard output now; the promise resolves once the
 native side has drained its few queued units and freed the codecs). Always call one of them.
 
+`setRotation(degrees)` turns the picture while streaming (see `rotation` below). It takes effect with the next frame; a
+quarter turn swaps the output's width and height, so the encoder starts a new stream with a keyframe (a new SPS for
+H.264, a differently sized JPEG for MJPEG) and the consumer sees the new size.
+
 `requestKeyFrame()` makes the next H.264 output a keyframe, for a consumer that joins a running stream. It takes
 effect with the next pushed unit, so the source must keep sending, and each call forces another keyframe once
 that unit is in, so coalesce requests when several consumers share one transcoder. It does nothing for MJPEG
@@ -75,12 +79,22 @@ libs it needs (and `ffmpeg-build-info.txt`, the exact `configure` line).
 | `audio` (h264)       | false     | Also transcode the device audio, see [Audio](#audio)  |
 | `audioSpecificConfig` (h264) | 480-sample ELD | `AudioSpecificConfig` of the pushed audio  |
 | `videoClockRate`     | 24,000    | Hz of the RTP timestamps you push, finite and > 0, see below |
+| `crop`               | none      | `{width, height}`, positive even integers: the visible top-left part of the picture |
+| `rotation`           | 0         | Clockwise degrees (0, 90, 180, 270) that make the picture upright; see `setRotation()` |
 
 `videoClockRate` is not a coresim option, since coresim has no RTP input. The device's screen stream advances its
 RTP timestamps by 400 ticks per frame at 60 fps, which is a 24 kHz clock (measured on an iPad, iPadOS 27.0.1;
 other devices are not verified), not the 90 kHz of RFC 7798. A wrong value scales the whole timeline: too high
 makes it run slow, so the `fps` limit drops most frames and every `timestampMicros` is wrong. If you feed HEVC
 from any other source, for example a file you stamped at 90 kHz, set it explicitly.
+
+`crop` and `rotation` are not coresim options either. The device pads its stream to a multiple of 16 with black
+(1632x2176 for a 1620x2160 display) and always streams the display's native portrait buffer, so a landscape UI
+arrives turned by 90 degrees. Take the visible size and the orientation from CoreDevice's `getDisplayInfo()`
+(`displays[].currentMode.size` and `displays[].currentOrientation`: `rot0`, `rot90`, `rot180` or `rot270`, which
+are also the clockwise degrees to pass as `rotation`). The crop is applied first, from the top-left corner and
+without a copy, then the picture is scaled and turned, so `scale` and the output size refer to the cropped,
+turned picture. A crop larger than the picture keeps the whole picture.
 
 Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
 `JpegStreamOptions`. Android-only options (`resolution`, `localPort`, ...) are not supported.

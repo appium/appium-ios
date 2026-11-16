@@ -129,6 +129,13 @@ class Session : public std::enable_shared_from_this<Session> {
 
   void RequestKeyFrame() { keyFrameRequested_.store(true); }
 
+  void SetRotation(const Napi::CallbackInfo& info) {
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+      throw Napi::TypeError::New(info.Env(), "setRotation(degrees: number)");
+    }
+    pipeline_->SetRotation(info[0].As<Napi::Number>().Int32Value());
+  }
+
   Napi::Value Close(const Napi::Env& env) {
     if (!closing_) {
       closing_ = true;
@@ -305,6 +312,12 @@ double ReadNumber(const Napi::Object& config, const char* key) {
   return config.Get(key).As<Napi::Number>().DoubleValue();
 }
 
+// For options the TS layer always sends but a raw caller of the addon may leave out.
+double ReadOptionalNumber(const Napi::Object& config, const char* key, double fallback) {
+  const Napi::Value value = config.Get(key);
+  return value.IsNumber() ? value.As<Napi::Number>().DoubleValue() : fallback;
+}
+
 Napi::Array ToArray(const Napi::Env& env, const std::vector<std::string>& names) {
   Napi::Array out = Napi::Array::New(env, names.size());
   for (size_t i = 0; i < names.size(); ++i) {
@@ -334,6 +347,9 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
   pipelineConfig.bitrate = ReadNumber(config, "bitrate");
   pipelineConfig.quality = ReadNumber(config, "quality");
   pipelineConfig.scale = ReadNumber(config, "scale");
+  pipelineConfig.cropWidth = static_cast<int>(ReadOptionalNumber(config, "cropWidth", 0));
+  pipelineConfig.cropHeight = static_cast<int>(ReadOptionalNumber(config, "cropHeight", 0));
+  pipelineConfig.rotation = static_cast<int>(ReadOptionalNumber(config, "rotation", 0));
 
   std::optional<AudioConfig> audioConfig;
   if (config.Get("audio").ToBoolean().Value()) {
@@ -366,6 +382,8 @@ Napi::Value CreateTranscoder(const Napi::CallbackInfo& info) {
              Napi::Function::New(env, [session](const Napi::CallbackInfo& call) { session->PushAudio(call); }));
   handle.Set("requestKeyFrame",
              Napi::Function::New(env, [session](const Napi::CallbackInfo&) { session->RequestKeyFrame(); }));
+  handle.Set("setRotation",
+             Napi::Function::New(env, [session](const Napi::CallbackInfo& call) { session->SetRotation(call); }));
   handle.Set("close", Napi::Function::New(
                           env, [session](const Napi::CallbackInfo& call) { return session->Close(call.Env()); }));
   return handle;

@@ -35,6 +35,7 @@ export type {
   JpegStreamOptions,
   MjpegOptions,
   NalAccessUnit,
+  Rotation,
   TranscoderOptions,
   VideoAccessUnit,
   VideoStreamOptions,

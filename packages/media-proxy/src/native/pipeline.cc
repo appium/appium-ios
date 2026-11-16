@@ -52,16 +52,83 @@ int JpegQscale(double quality) {
   return kMinJpegQscale + static_cast<int>(std::lround(t * (kMaxJpegQscale - kMinJpegQscale)));
 }
 
+// Copies one plane turned clockwise by `Degrees`. `T` is one sample: 1 byte, or 2 for NV12's interleaved UV. Works in
+// blocks so that both the reads and the writes stay in the cache.
+template <typename T, int Degrees>
+void RotatePlane(const uint8_t* src, int srcStride, int width, int height, uint8_t* dst, int dstStride) {
+  constexpr int kBlock = 32;
+  for (int blockY = 0; blockY < height; blockY += kBlock) {
+    const int endY = std::min(blockY + kBlock, height);
+    for (int blockX = 0; blockX < width; blockX += kBlock) {
+      const int endX = std::min(blockX + kBlock, width);
+      for (int y = blockY; y < endY; ++y) {
+        const T* row = reinterpret_cast<const T*>(src + static_cast<ptrdiff_t>(y) * srcStride);
+        for (int x = blockX; x < endX; ++x) {
+          int dstX = 0;
+          int dstY = 0;
+          if constexpr (Degrees == 90) {
+            dstX = height - 1 - y;
+            dstY = x;
+          } else if constexpr (Degrees == 180) {
+            dstX = width - 1 - x;
+            dstY = height - 1 - y;
+          } else {
+            dstX = y;
+            dstY = width - 1 - x;
+          }
+          reinterpret_cast<T*>(dst + static_cast<ptrdiff_t>(dstY) * dstStride)[dstX] = row[x];
+        }
+      }
+    }
+  }
+}
+
+template <typename T>
+void RotatePlane(const uint8_t* src, int srcStride, int width, int height, uint8_t* dst, int dstStride, int degrees) {
+  switch (degrees) {
+    case 90:
+      RotatePlane<T, 90>(src, srcStride, width, height, dst, dstStride);
+      break;
+    case 180:
+      RotatePlane<T, 180>(src, srcStride, width, height, dst, dstStride);
+      break;
+    default:
+      RotatePlane<T, 270>(src, srcStride, width, height, dst, dstStride);
+      break;
+  }
+}
+
+// Turns `src` clockwise by `degrees` (90, 180 or 270) into `dst`, which must be allocated for the turned size. Only
+// the two formats the encoders take are supported.
+void RotateFrame(const AVFrame& src, AVFrame& dst, int degrees) {
+  const int width = src.width;
+  const int height = src.height;
+  if (src.format == AV_PIX_FMT_NV12) {
+    RotatePlane<uint8_t>(src.data[0], src.linesize[0], width, height, dst.data[0], dst.linesize[0], degrees);
+    // Interleaved UV: one sample is a pair
+    RotatePlane<uint16_t>(src.data[1], src.linesize[1], width / 2, height / 2, dst.data[1], dst.linesize[1], degrees);
+    return;
+  }
+  RotatePlane<uint8_t>(src.data[0], src.linesize[0], width, height, dst.data[0], dst.linesize[0], degrees);
+  for (int plane = 1; plane <= 2; ++plane) {
+    RotatePlane<uint8_t>(src.data[plane], src.linesize[plane], width / 2, height / 2, dst.data[plane],
+                         dst.linesize[plane], degrees);
+  }
+}
+
 }  // namespace
 
 // FFmpeg state; touched only by the worker thread after construction.
 class Pipeline::Impl {
  public:
-  Impl(const PipelineConfig& config, UnitCallback onUnit, std::atomic<bool>& keyFrameRequested, std::atomic<bool>& warm)
+  Impl(const PipelineConfig& config, UnitCallback onUnit, std::atomic<bool>& keyFrameRequested, std::atomic<bool>& warm,
+       std::atomic<int>& rotation)
       : config_(config),
         isH264_(config.outputCodec == "h264"),
         keyFrameRequested_(keyFrameRequested),
         warm_(warm),
+        rotation_(rotation),
+        appliedRotation_(config.rotation),
         onUnit_(std::move(onUnit)),
         intervalMicros_(std::max<int64_t>(1, std::llround(1e6 / std::max(config.fps, 1.0)))),
         toleranceMicros_(intervalMicros_ / kToleranceDivisor) {
@@ -89,6 +156,7 @@ class Pipeline::Impl {
     packet_.reset(av_packet_alloc());
     decoded_.reset(av_frame_alloc());
     converted_.reset(av_frame_alloc());
+    rotated_.reset(av_frame_alloc());
     sws_.reset(sws_alloc_context());
   }
 
@@ -166,11 +234,21 @@ class Pipeline::Impl {
     if (!AcceptFrame(pts)) {
       return;
     }
+    ApplyCrop(decoded);
+    const int rotation = rotation_.load();
+    if (rotation != appliedRotation_) {
+      appliedRotation_ = rotation;
+      // The picture changes shape: pictures coded before this one are of no use to a decoder that joins now
+      keyFrameRequested_.store(true);
+    }
+    const bool turned = rotation == 90 || rotation == 270;
     const int width = ScaledSize(decoded->width);
     const int height = ScaledSize(decoded->height);
-    OpenEncoder(width, height);
+    const int outWidth = turned ? height : width;
+    const int outHeight = turned ? width : height;
+    OpenEncoder(outWidth, outHeight);
 
-    PrepareConverted(width, height);
+    PrepareConverted(converted_.get(), width, height);
     // Untagged input (the device doesn't tag its stream) is taken as the BT.709 the output is labelled with.
     if (isH264_ && decoded->colorspace == AVCOL_SPC_UNSPECIFIED) {
       decoded->colorspace = AVCOL_SPC_BT709;
@@ -178,29 +256,45 @@ class Pipeline::Impl {
     if (const int ret = sws_scale_frame(sws_.get(), converted_.get(), decoded); ret < 0) {
       throw Fatal("Could not convert the decoded frame", ret);
     }
-    converted_->pts = pts;
+    AVFrame* out = converted_.get();
+    if (rotation != 0) {
+      PrepareConverted(rotated_.get(), outWidth, outHeight);
+      RotateFrame(*converted_, *rotated_, rotation);
+      out = rotated_.get();
+    }
+    out->pts = pts;
     if (isH264_) {
-      EncodeH264(width, height);
+      EncodeH264(outWidth, outHeight, *out);
       return;
     }
-    converted_->quality = mjpegCtx_->global_quality;
-    if (const int ret = avcodec_send_frame(mjpegCtx_.get(), converted_.get()); ret < 0) {
+    out->quality = mjpegCtx_->global_quality;
+    if (const int ret = avcodec_send_frame(mjpegCtx_.get(), out); ret < 0) {
       throw Fatal("MJPEG encode failed", ret);
     }
     DrainEncoder();
   }
 
+  // Keeps the top-left part of the picture, without copying: only the size changes, the rows keep their stride.
+  void ApplyCrop(AVFrame* frame) const {
+    if (config_.cropWidth <= 0 || config_.cropHeight <= 0) {
+      return;
+    }
+    frame->crop_right = static_cast<size_t>(std::max(0, frame->width - config_.cropWidth));
+    frame->crop_bottom = static_cast<size_t>(std::max(0, frame->height - config_.cropHeight));
+    av_frame_apply_cropping(frame, AV_FRAME_CROP_UNALIGNED);
+  }
+
   // A hardware session can die mid-stream (media-service reset): reopen once and retry; the new session starts
   // with a key frame. A forced key frame that comes out missing (the encoder dropped it) is requested again.
-  void EncodeH264(int width, int height) {
+  void EncodeH264(int width, int height, const AVFrame& frame) {
     const bool forced = keyFrameRequested_.exchange(false);
     sawKeyFrame_ = false;
     try {
-      h264_->Encode(*converted_, forced);
+      h264_->Encode(frame, forced);
     } catch (const PipelineError&) {
       h264_.reset();
       OpenEncoder(width, height);
-      h264_->Encode(*converted_, true);
+      h264_->Encode(frame, true);
     }
     if (forced && !sawKeyFrame_) {
       keyFrameRequested_.store(true);
@@ -259,20 +353,20 @@ class Pipeline::Impl {
 
   [[nodiscard]] AVPixelFormat EncoderPixelFormat() const { return isH264_ ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUVJ420P; }
 
-  // Reuses the output buffer unless the encoder still holds a reference to it (or the size changed).
-  void PrepareConverted(int width, int height) {
-    if (converted_->buf[0] != nullptr && converted_->width == width && converted_->height == height &&
-        av_frame_is_writable(converted_.get()) != 0) {
+  // Reuses the buffer of `frame` unless the encoder still holds a reference to it (or the size changed).
+  void PrepareConverted(AVFrame* frame, int width, int height) const {
+    if (frame->buf[0] != nullptr && frame->width == width && frame->height == height &&
+        av_frame_is_writable(frame) != 0) {
       return;
     }
-    av_frame_unref(converted_.get());
-    converted_->format = EncoderPixelFormat();
-    converted_->width = width;
-    converted_->height = height;
-    converted_->color_range = isH264_ ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+    av_frame_unref(frame);
+    frame->format = EncoderPixelFormat();
+    frame->width = width;
+    frame->height = height;
+    frame->color_range = isH264_ ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
     // The H.264 output is tagged BT.709; an unspecified target would make swscale convert to BT.601.
-    converted_->colorspace = isH264_ ? AVCOL_SPC_BT709 : AVCOL_SPC_UNSPECIFIED;
-    if (const int ret = av_frame_get_buffer(converted_.get(), 0); ret < 0) {
+    frame->colorspace = isH264_ ? AVCOL_SPC_BT709 : AVCOL_SPC_UNSPECIFIED;
+    if (const int ret = av_frame_get_buffer(frame, 0); ret < 0) {
       throw Fatal("Could not allocate the output frame", ret);
     }
   }
@@ -308,6 +402,8 @@ class Pipeline::Impl {
   bool isH264_;
   std::atomic<bool>& keyFrameRequested_;
   std::atomic<bool>& warm_;
+  std::atomic<int>& rotation_;
+  int appliedRotation_;
   UnitCallback onUnit_;
   int64_t intervalMicros_;
   int64_t toleranceMicros_;
@@ -322,6 +418,7 @@ class Pipeline::Impl {
   Packet packet_;
   Frame decoded_;
   Frame converted_;
+  Frame rotated_;
   Sws sws_;
 };
 
@@ -347,7 +444,9 @@ Capabilities Pipeline::Probe() {
 
 Pipeline::Pipeline(const PipelineConfig& config, UnitCallback onUnit, ErrorCallback onError,
                    std::atomic<bool>& keyFrameRequested)
-    : onError_(std::move(onError)), impl_(std::make_unique<Impl>(config, std::move(onUnit), keyFrameRequested, warm_)) {
+    : rotation_(config.rotation),
+      onError_(std::move(onError)),
+      impl_(std::make_unique<Impl>(config, std::move(onUnit), keyFrameRequested, warm_, rotation_)) {
   worker_ = std::thread([this] { Run(); });
 }
 
