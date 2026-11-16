@@ -1,5 +1,5 @@
 /**
- * Per-interface traffic counters returned by {@link TunTapPlatform.getStats}.
+ * Per-interface traffic counters returned by {@link TunTap.getStats}.
  */
 export interface TunTapInterfaceStats {
   rxBytes: number;
@@ -11,7 +11,7 @@ export interface TunTapInterfaceStats {
 }
 
 /**
- * OS-specific commands for configuring the TUN interface (address, MTU, routes, stats).
+ * OS-specific commands for configuring the TUN interface (address, MTU, routes).
  * Built-in Darwin/Linux implementations require **effective UID 0** (run the process as root) for
  * {@link TunTapPlatform.configure}, {@link TunTapPlatform.addRoute}, and {@link TunTapPlatform.removeRoute}.
  * Add a new implementation (e.g. Windows) by extending this interface and wiring it in `create-platform.ts`.
@@ -41,12 +41,4 @@ export interface TunTapPlatform {
    * @param destination — same form as passed to {@link TunTapPlatform.addRoute}
    */
   removeRoute(interfaceName: string, destination: string): Promise<void>;
-
-  /**
-   * Read RX/TX byte and packet counters for the interface from the OS.
-   *
-   * @param interfaceName — kernel interface name
-   * @returns interface statistics
-   */
-  getStats(interfaceName: string): Promise<TunTapInterfaceStats>;
 }
