@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.12...appium-ios-remotexpc@6.1.0) (2026-11-16)
+
+### Features
+
+* **remotexpc:** request keyframes from the device in ScreenStreamCapture ([#213](https://github.com/appium/appium-ios/issues/213)) ([4a51652](https://github.com/appium/appium-ios/commit/4a516527fddf9f3e9b19ac736c452e177251fdc1))
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t crash on a transport error nobody listens to ([#215](https://github.com/appium/appium-ios/issues/215)) ([1913083](https://github.com/appium/appium-ios/commit/1913083afa89e3730deca98b241a03fdbc25a8a1))
+
+
 ## [6.0.12](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.11...appium-ios-remotexpc@6.0.12) (2026-11-16)
 
 **Note:** Version bump only for package appium-ios-remotexpc
