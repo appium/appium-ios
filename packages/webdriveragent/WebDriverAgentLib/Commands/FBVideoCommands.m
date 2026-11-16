@@ -69,10 +69,10 @@ const NSUInteger DEFAULT_CODEC = 0;
   NSDictionary *response = [FBScreenRecordingContainer.sharedInstance toDictionary];
   NSError *error;
   if (![FBXCTestDaemonsProxy stopScreenRecordingWithUUID:recordingId error:&error]) {
-    [FBScreenRecordingContainer.sharedInstance reset];
+    [FBScreenRecordingContainer.sharedInstance resetIfPromiseIs:activeScreenRecording];
     return FBResponseWithUnknownError(error);
   }
-  [FBScreenRecordingContainer.sharedInstance reset];
+  [FBScreenRecordingContainer.sharedInstance resetIfPromiseIs:activeScreenRecording];
   return FBResponseWithObject(response);
 }
 
