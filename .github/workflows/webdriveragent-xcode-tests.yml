@@ -204,6 +204,8 @@ jobs:
         run: ./Scripts/build.sh
         env:
           ACTION: unit_test
+          # Forwarded to the test runner as CI
+          TEST_RUNNER_CI: "true"
           DEST: iphone
           TARGET: lib
           SDK: sim

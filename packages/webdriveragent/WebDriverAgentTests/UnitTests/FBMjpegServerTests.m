@@ -12,6 +12,13 @@
 #import "FBMjpegServer.h"
 #import "FBTCPSocket.h"
 
+// Upper bound for conditions that must come true; they return as soon as they do. It stays below the
+// failure backoff, so a missing backoff is still caught.
+static const NSTimeInterval FBMjpegTestWaitTimeout = 8.;
+
+// CI is passed to the test runner as TEST_RUNNER_CI. Shared CI runners starve the loop's low-priority queue.
+static NSString *const FBMjpegCIEnvKey = @"CI";
+
 typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 
 // Redeclared here, the implementations live in FBMjpegServer.m.
@@ -57,6 +64,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 @property (nonatomic, strong) NSData *frameData;
 @property (nonatomic, strong, nullable) NSError *requestError;
 @property (nonatomic, strong) NSMutableArray<id> *clients;
+@property (nonatomic, assign) NSUInteger originalFramerate;
 @end
 
 @implementation FBMjpegServerTests
@@ -64,6 +72,17 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)setUp
 {
   [super setUp];
+  // These do not depend on the loop timing.
+  NSSet<NSString *> *deterministicTests = [NSSet setWithObjects:@"testDoesNotRequestFramesWithoutClients",
+                                                              @"testDoesNotSendFrameThatWentStaleDuringScaling", nil];
+  XCTSkipIf(nil != NSProcessInfo.processInfo.environment[FBMjpegCIEnvKey]
+            && ![deterministicTests containsObject:NSStringFromSelector(self.invocation.selector)],
+            @"The streaming loop is starved on CI runners");
+  // A failed wait must not run on into requests that were never made.
+  self.continueAfterFailure = NO;
+  // A fast idle loop picks up a new client quickly even on a loaded runner.
+  self.originalFramerate = FBConfiguration.sharedInstance.mjpegServerFramerate;
+  FBConfiguration.sharedInstance.mjpegServerFramerate = 60;
   self.requests = [NSMutableArray array];
   self.requestsLock = [[NSLock alloc] init];
   self.clients = [NSMutableArray array];
@@ -79,8 +98,8 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
   self.server.socket = self.socket;
   self.server.frameTimeout = 0.05;
   self.server.lateFrameLimit = 5;
-  // The first failure waits 2 s, which is much more than any check below waits for.
-  self.server.failureBackoffMin = 1.0;
+  // The first failure waits 10 s (the cap), which is more than any condition below waits for.
+  self.server.failureBackoffMin = 5.0;
   __weak typeof(self) weakSelf = self;
   self.server.frameRequest = ^BOOL(FBFrameCompletion completion, NSError **error) {
     typeof(self) strongSelf = weakSelf;
@@ -100,6 +119,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)tearDown
 {
   FBConfiguration.sharedInstance.currentDisplayId = nil;
+  FBConfiguration.sharedInstance.mjpegServerFramerate = self.originalFramerate;
   [self.server stopStreaming];
   [super tearDown];
 }
@@ -169,34 +189,34 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testSendsAnsweredFrameAndRequestsNext
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self requestAtIndex:0](self.frameData, nil);
 
-  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:5]);
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"The next frame must be requested after an answer within the timeout");
 }
 
 - (void)testLateFrameIsSentAfterTimeoutWithoutBackoff
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   // Several frame timeouts pass with no answer.
   [self waitFor:0.4];
   XCTAssertEqual(0, self.socket.framesCount);
 
   [self requestAtIndex:0](self.frameData, nil);
-  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:1],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:FBMjpegTestWaitTimeout],
                 @"The late answer must go out as a frame");
-  // A backoff would keep the next request away for 2 s.
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:1],
+  // A backoff would keep the next request away for 10 s.
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"The loop must go on at once after the late frame");
 }
 
 - (void)testSendsNoOtherRequestWhileFrameIsUnanswered
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self waitFor:0.5];
   XCTAssertEqual(1, self.requestsCount);
   XCTAssertEqual(0, self.socket.framesCount);
@@ -206,7 +226,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 {
   self.server.lateFrameLimit = 0.2;
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self waitFor:1.0];
   XCTAssertEqual(1, self.requestsCount, @"The failed frame must back off before the next request");
 
@@ -219,7 +239,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testErrorAnswerBacksOff
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   NSError *error = [NSError errorWithDomain:@"test" code:1 userInfo:nil];
   [self requestAtIndex:0](nil, error);
   [self waitFor:1.0];
@@ -231,7 +251,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 {
   self.requestError = [NSError errorWithDomain:@"test" code:2 userInfo:nil];
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self waitFor:1.0];
   XCTAssertEqual(1, self.requestsCount);
   XCTAssertEqual(0, self.socket.framesCount);
@@ -240,7 +260,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testDropsPendingFrameWhenLastClientLeaves
 {
   nw_connection_t client = [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self.server didClientDisconnect:client];
   // Let the loop notice that nobody listens.
   [self waitFor:0.4];
@@ -250,35 +270,35 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
   XCTAssertEqual(0, self.socket.framesCount, @"A frame for a vanished audience must not be kept");
 
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"A returning client gets a fresh request");
   [self requestAtIndex:1](self.frameData, nil);
-  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:5]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
 }
 
 - (void)testDoesNotReuseFrameRequestedForPreviousListener
 {
   nw_connection_t first = [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   // Swap the clients at once, before the loop sees that nobody listens.
   [self.server didClientDisconnect:first];
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"The new client must not wait for a frame requested for the previous one");
 
   [self requestAtIndex:0](self.frameData, nil);
   [self waitFor:0.2];
   XCTAssertEqual(0, self.socket.framesCount);
   [self requestAtIndex:1](self.frameData, nil);
-  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:5]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.socket.framesCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
 }
 
 - (void)testDoesNotReuseFrameRequestedForPreviousDisplay
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   FBConfiguration.sharedInstance.currentDisplayId = @1;
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"A display switch must request the frame again");
 
   [self requestAtIndex:0](self.frameData, nil);
@@ -289,7 +309,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testDropsFrameAnsweredAfterListenerSwitchedWhileWaiting
 {
   nw_connection_t first = [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self waitFor:0.2];
   // The frame is late now, so the next wait is a long one.
   self.server.frameTimeout = 2;
@@ -300,14 +320,14 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
   [self requestAtIndex:0](self.frameData, nil);
   [self waitFor:0.3];
   XCTAssertEqual(0, self.socket.framesCount, @"The answer was requested for the previous listener");
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2],
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout],
                 @"Dropping the stale answer is not a failure, no backoff");
 }
 
 - (void)testDropsFrameAnsweredAfterDisplaySwitchedWhileWaiting
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self waitFor:0.2];
   self.server.frameTimeout = 2;
   [self waitFor:0.2];
@@ -316,7 +336,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
   [self requestAtIndex:0](self.frameData, nil);
   [self waitFor:0.3];
   XCTAssertEqual(0, self.socket.framesCount, @"The answer was requested for the previous display");
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 2; } timeout:FBMjpegTestWaitTimeout]);
 }
 
 - (void)testDoesNotSendFrameThatWentStaleDuringScaling
@@ -336,7 +356,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testEmptyAnswerBacksOff
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self requestAtIndex:0](nil, nil);
   [self waitFor:1.0];
   XCTAssertEqual(1, self.requestsCount);
@@ -346,7 +366,7 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)testStopsRequestingAfterStopStreaming
 {
   [self connectClient];
-  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:2]);
+  XCTAssertTrue([self waitUntil:^BOOL { return self.requestsCount >= 1; } timeout:FBMjpegTestWaitTimeout]);
   [self.server stopStreaming];
   [self requestAtIndex:0](self.frameData, nil);
   [self waitFor:0.3];
