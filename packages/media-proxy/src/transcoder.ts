@@ -29,7 +29,7 @@ export const DEFAULT_AUDIO_SPECIFIC_CONFIG = Buffer.from([0xf8, 0xe6, 0x50, 0x00
  * 60 fps, not the 90 kHz RFC 7798 suggests, so a wrong value slows the media timeline and starves the fps limiter.
  * `videoClockRate` overrides it for a source that is known to differ.
  */
-export const DEFAULT_VIDEO_CLOCK_RATE = 24_000;
+const DEFAULT_VIDEO_CLOCK_RATE = 24_000;
 const AUDIO_CLOCK_RATE = 48_000;
 
 const MAX_BITRATE = 2 ** 31 - 1;
