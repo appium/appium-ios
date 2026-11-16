@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.1.0](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.4...appium-ios-tuntap@3.1.0) (2026-11-16)
+
+### Features
+
+* **tuntap:** read interface stats natively on macOS, Linux, and Windows ([#127](https://github.com/appium/appium-ios/issues/127)) ([71352df](https://github.com/appium/appium-ios/commit/71352df930ddf4016fd41fc4832bf1b88480393a))
+
+
 ## [3.0.4](https://github.com/appium/appium-ios/compare/appium-ios-tuntap@3.0.3...appium-ios-tuntap@3.0.4) (2026-11-13)
 
 ### Miscellaneous Chores
