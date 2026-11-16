@@ -155,21 +155,24 @@ export class UdpMediaReceiver {
   /**
    * Sends a datagram from this socket.
    *
-   * Used for RTCP receiver reports, which must originate from the same port the
-   * media arrives on so the device associates them with the session. Resolves
-   * even on failure — a dropped keepalive is not worth failing a capture over,
-   * and the socket may already be closing during teardown.
+   * Used for RTCP receiver reports and keyframe requests, which must originate from the same port the
+   * media arrives on so the device associates them with the session. Never rejects — a dropped
+   * keepalive is not worth failing a capture over, and the socket may already be closing during
+   * teardown — so callers that care whether the datagram left read the result.
+   *
+   * @returns Whether the datagram was handed to the network: `false` if the receiver is closed or the
+   * send failed.
    */
-  async send(data: Buffer, host: string, port: number): Promise<void> {
+  async send(data: Buffer, host: string, port: number): Promise<boolean> {
     if (this.closed) {
-      return;
+      return false;
     }
-    await new Promise<void>((resolve) => {
+    return await new Promise<boolean>((resolve) => {
       this.socket.send(data, port, host, (error) => {
         if (error) {
           log.debug(`RTCP send to [${host}]:${port} failed: ${error.message}`);
         }
-        resolve();
+        resolve(!error);
       });
     });
   }
