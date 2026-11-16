@@ -215,6 +215,44 @@ describe('RemoteXpcFramedTransport', function () {
     }
   });
 
+  it('does not throw when the peer resets a connected socket nobody listens to', async function () {
+    let onAccepted: (socket: net.Socket) => void = () => undefined;
+    const acceptedPromise = new Promise<net.Socket>((resolve) => {
+      onAccepted = resolve;
+    });
+    const server = net.createServer((socket): void => {
+      onAccepted(socket);
+    });
+    const port = await listenOnLoopback(server);
+
+    const transport = new RemoteXpcFramedTransport(['::1', port]);
+    let acceptedSocket: net.Socket | undefined;
+    try {
+      await transport.connect({timeoutMs: 2000});
+      acceptedSocket = await acceptedPromise;
+      assert.strictEqual(transport.listenerCount('error'), 0);
+
+      const closed = new Promise<void>((resolve) => transport.once('close', resolve));
+      acceptedSocket.resetAndDestroy();
+      await closed;
+      assert.strictEqual(transport.isConnected, false);
+    } finally {
+      await transport.close();
+      acceptedSocket?.destroy();
+      await closeServer(server);
+    }
+  });
+
+  it('does not throw on a desync when nothing listens for errors', function () {
+    const bare = new RemoteXpcFramedTransport(['::1', 1]);
+    const ingest = (bare as unknown as {ingestXpcData: (streamId: number, chunk: Buffer) => void}).ingestXpcData.bind(
+      bare,
+      Http2Constants.ROOT_CHANNEL,
+    );
+
+    assert.doesNotThrow(() => ingest(Buffer.alloc(32, 0xab)));
+  });
+
   describe('XPC message reassembly', function () {
     it('buffers a message split across chunks and emits it once complete', function () {
       const harness = createIngestHarness();

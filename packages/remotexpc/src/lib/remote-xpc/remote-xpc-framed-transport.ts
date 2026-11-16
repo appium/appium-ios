@@ -251,7 +251,7 @@ export class RemoteXpcFramedTransport extends EventEmitter {
         return;
       }
       log.error(`RemoteXPC transport error: ${error.message}`);
-      this.emit('error', error);
+      this.emitError(error);
     });
     socket.on('close', () => {
       if (superseded()) {
@@ -271,7 +271,7 @@ export class RemoteXpcFramedTransport extends EventEmitter {
     try {
       frames = this.frameParser.append(chunk);
     } catch (error) {
-      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      this.emitError(error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
@@ -410,7 +410,16 @@ export class RemoteXpcFramedTransport extends EventEmitter {
     runInBackground(this.close(), (e) => {
       log.debug(`Failed to close a failed RemoteXPC transport: ${formatError(e)}`);
     });
-    this.emit('error', new Error(reason));
+    this.emitError(new Error(reason));
+  }
+
+  /** Node throws an `'error'` nobody listens to, which would crash the process on a peer reset. */
+  private emitError(error: Error): void {
+    if (this.listenerCount('error') === 0) {
+      log.warn(`Dropping an unhandled RemoteXPC transport error: ${error.message}`);
+      return;
+    }
+    this.emit('error', error);
   }
 
   /**
