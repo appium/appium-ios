@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 
 #include "nserror_bridge.h"
 #include "sim_process.h"
@@ -71,7 +72,14 @@ class AudioTapSession::Impl {
     pollQueue_ = dispatch_queue_create("io.appium.coresim.audioTap.poll", DISPATCH_QUEUE_SERIAL);
   }
 
-  ~Impl() { Stop(); }
+  ~Impl() {
+    Stop();
+    // Blocks queued by a self-initiated stop still capture `this`.
+    dispatch_sync(pollQueue_, ^{
+                  });
+    dispatch_sync(queue_, ^{
+                  });
+  }
 
   void Start() {
     if (@available(macOS 14.2, *)) {
@@ -226,12 +234,17 @@ class AudioTapSession::Impl {
       if (current.empty()) {
         // The device's guest process tree vanished entirely (shut down/erased mid-capture) — a
         // real, reportable failure, not a transient empty tick.
-        if (onError_) {
-          onError_(MakeError(8, [NSString stringWithFormat:@"Device '%@' no longer has any audio-capturable guest "
-                                                           @"processes — was it shut down?",
-                                                           udid_]));
-        }
-        StopFromQueue();
+        NSError* error = MakeError(8, [NSString stringWithFormat:@"Device '%@' no longer has any audio-capturable "
+                                                                 @"guest processes — was it shut down?",
+                                                                 udid_]);
+        dispatch_async(queue_, ^{
+          if (running_) {
+            if (onError_) {
+              onError_(error);
+            }
+            StopFromQueue();
+          }
+        });
         return;
       }
       if (current == lastProcessSet_) {
@@ -246,14 +259,24 @@ class AudioTapSession::Impl {
       // holding that pointer, not be the pointer value cast to an address (which reads the
       // object's own memory as if it were the property buffer).
       void* descriptionPtr = (__bridge void*)description;
-      OSStatus status =
-          AudioObjectSetPropertyData(tapID_, &descAddress, 0, nullptr, sizeof(descriptionPtr), &descriptionPtr);
+      OSStatus status = noErr;
+      {
+        // TearDown() destroys the tap under this lock, possibly while the scan above was running.
+        std::lock_guard<std::mutex> lock(tapMutex_);
+        if (!running_ || tapID_ == kAudioObjectUnknown) {
+          return;
+        }
+        status = AudioObjectSetPropertyData(tapID_, &descAddress, 0, nullptr, sizeof(descriptionPtr), &descriptionPtr);
+      }
       if (status != noErr) {
         // Keep running with the stale set rather than tearing down the whole capture over one
-        // failed refresh — the next poll tick retries.
-        if (onError_) {
-          onError_(MakeStatusError(9, @"Failed to update the audio tap's process list", status));
-        }
+        // failed refresh — the next poll tick retries. Reported from queue_ so it can't land after onEnd.
+        NSError* error = MakeStatusError(9, @"Failed to update the audio tap's process list", status);
+        dispatch_async(queue_, ^{
+          if (running_ && onError_) {
+            onError_(error);
+          }
+        });
         return;
       }
       lastProcessSet_ = std::move(current);
@@ -268,7 +291,7 @@ class AudioTapSession::Impl {
       onBuffer_(data, time);
     } catch (const std::exception& e) {
       // onBuffer_ (e.g. AudioEncoder::EncodePCM) can throw — uncaught, it'd crash the process.
-      // Routed through the same onError_/StopFromQueue() path PollAndRefresh's own errors use.
+      // Same onError_/StopFromQueue() path as PollAndRefresh's errors, which hop onto queue_ to get here.
       if (onError_) {
         onError_(MakeError(10, [NSString stringWithFormat:@"Audio buffer consumer failed: %s", e.what()]));
       }
@@ -277,8 +300,8 @@ class AudioTapSession::Impl {
   }
 
   // Same as Stop() minus the dispatch_sync barrier — only safe from within a callback already
-  // running on `queue_` or `pollQueue_` (HandleBuffer, PollAndRefresh); would deadlock waiting on
-  // itself otherwise.
+  // running on `queue_` (HandleBuffer, or the block PollAndRefresh posts), which also keeps it
+  // serialized with the IO callback; would deadlock waiting on itself otherwise.
   void StopFromQueue() {
     if (!running_.exchange(false)) {
       return;  // idempotent — e.g. an external Stop() already won this race
@@ -297,6 +320,7 @@ class AudioTapSession::Impl {
   // unconditionally without themselves needing an availability guard — the guarded body below is
   // a no-op whenever nothing was actually created (Start() never got past the macOS-version gate).
   void TearDown() {
+    std::lock_guard<std::mutex> lock(tapMutex_);
     if (aggregateID_ == kAudioObjectUnknown && tapID_ == kAudioObjectUnknown) {
       return;
     }
@@ -336,6 +360,7 @@ class AudioTapSession::Impl {
   AudioStreamBasicDescription format_ = {};
   std::vector<AudioObjectID> lastProcessSet_;
   std::atomic<bool> running_{false};
+  std::mutex tapMutex_;  // guards the tap's lifetime between PollAndRefresh and TearDown
 };
 
 AudioTapSession::AudioTapSession(NSString* udid,
