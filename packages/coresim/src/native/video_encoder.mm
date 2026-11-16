@@ -427,7 +427,8 @@ class VideoFrameEncoder::Impl {
         uint32_t seed = IOSurfaceGetSeed(surface);
         // A differently-shaped replacement surface can collide with the old seed value (confirmed
         // empirically), so a just-rebuilt session must submit one frame before this skip applies.
-        if (seed == lastSeed_ && hasEncodedSinceSetup_) {
+        // A pending keyframe request also overrides it, or a static screen would never produce one.
+        if (seed == lastSeed_ && hasEncodedSinceSetup_ && !forceKeyFrame_.load()) {
           return;  // unchanged since the last tick (see CLAUDE.md)
         }
         // Leave lastSeed_/hasEncodedSinceSetup_ stale on a transient EncodeSurface failure so the

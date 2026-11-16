@@ -156,7 +156,9 @@ toolchain (`make` and `xcodebuild`).
   encoder queue to drain any in-flight `Tick()`; `Impl::StopFromQueue()` is the same minus that
   barrier, for when `Tick()` itself triggers teardown (already on that queue — `dispatch_sync`ing
   there would deadlock). `onEnd`, fired once from whichever path wins, is the only safe point to
-  release the N-API `ThreadSafeFunction`s. Independent of `startVideoRecording` — any number of
+  release the N-API `ThreadSafeFunction`s. `requestKeyFrame()` sets an atomic flag that `Tick()`
+  consumes (and that overrides the unchanged-seed skip, so it works on a static screen). Independent
+  of `startVideoRecording` — any number of
   streams and one recording can run concurrently.
 - **JPEG streaming (`startJpegStream`) reuses `startVideoStream`'s IOSurface-poll/GCD-timer/seed-
   check skeleton but drops everything codec-specific.** `sim_jpeg_stream.mm` JPEG-encodes each

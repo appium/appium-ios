@@ -170,7 +170,7 @@ export class VideoStream extends EventEmitter {
   private readonly queue = new AccessUnitQueue<VideoAccessUnit>({
     dropsDuringResync: (unit) => unit.track === 'video' && !unit.isKeyFrame,
     endsResync: (unit) => unit.track === 'video' && unit.isKeyFrame,
-    onOverflow: () => this.handle?.requestKeyFrame(),
+    onOverflow: () => this.requestKeyFrame(),
   });
   private activeConsumers = 0;
 
@@ -229,6 +229,18 @@ export class VideoStream extends EventEmitter {
       }
     } finally {
       this.activeConsumers--;
+    }
+  }
+
+  /**
+   * Makes the next encoded video frame a keyframe, e.g. for a consumer that joins mid-stream and
+   * would otherwise wait for the next periodic one. The keyframe is produced on the next poll
+   * even if the screen has not changed, so it also works on a static screen. A no-op once the
+   * stream is stopped, and the keyframe's parameter sets are inline like those of any other.
+   */
+  requestKeyFrame(): void {
+    if (!this.stopPromise) {
+      this.handle?.requestKeyFrame();
     }
   }
 
