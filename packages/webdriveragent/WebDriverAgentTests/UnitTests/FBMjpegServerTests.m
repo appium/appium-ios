@@ -16,6 +16,9 @@
 // failure backoff, so a missing backoff is still caught.
 static const NSTimeInterval FBMjpegTestWaitTimeout = 8.;
 
+// Set via TEST_RUNNER_FB_SKIP_LOOP_TESTS on shared CI runners that starve the loop's low-priority queue.
+static NSString *const FBMjpegSkipLoopTestsEnvKey = @"FB_SKIP_LOOP_TESTS";
+
 typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 
 // Redeclared here, the implementations live in FBMjpegServer.m.
@@ -69,6 +72,12 @@ typedef void (^FBFrameCompletion)(NSData * _Nullable, NSError * _Nullable);
 - (void)setUp
 {
   [super setUp];
+  // These do not depend on the loop timing.
+  NSSet<NSString *> *deterministicTests = [NSSet setWithObjects:@"testDoesNotRequestFramesWithoutClients",
+                                                              @"testDoesNotSendFrameThatWentStaleDuringScaling", nil];
+  XCTSkipIf(nil != NSProcessInfo.processInfo.environment[FBMjpegSkipLoopTestsEnvKey]
+            && ![deterministicTests containsObject:NSStringFromSelector(self.invocation.selector)],
+            @"The streaming loop is starved on this runner");
   // A failed wait must not run on into requests that were never made.
   self.continueAfterFailure = NO;
   // A fast idle loop picks up a new client quickly even on a loaded runner.

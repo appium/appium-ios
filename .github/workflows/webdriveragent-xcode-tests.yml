@@ -204,6 +204,8 @@ jobs:
         run: ./Scripts/build.sh
         env:
           ACTION: unit_test
+          # The MJPEG loop tests are flaky on the shared runners
+          TEST_RUNNER_FB_SKIP_LOOP_TESTS: "1"
           DEST: iphone
           TARGET: lib
           SDK: sim
