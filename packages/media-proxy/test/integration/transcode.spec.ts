@@ -53,7 +53,7 @@ describe('HEVC -> MJPEG', () => {
   });
 
   it('rebases a non-zero RTP start to zero and survives the 32-bit wrap', async () => {
-    const frames = await run({codec: 'mjpeg'}, 0xffffffff - 10 * 1500);
+    const frames = await run({codec: 'mjpeg'}, 0xffffffff - 10 * 400);
     assert.strictEqual(frames.length, FRAMES);
     assert.strictEqual(frames[0].timestampMicros, 0);
     assert.ok(frames[FRAMES - 1].timestampMicros > frames[FRAMES - 2].timestampMicros);
@@ -82,7 +82,7 @@ describe('HEVC -> MJPEG', () => {
     const at50 = await run({codec: 'mjpeg', fps: 50});
     assert.ok(at50.length >= 22 && at50.length <= 26, `fps 50 on 60 fps input: ${at50.length}`);
     // The same clip restamped as 30 fps (~0.97 s): 25 fps allows about 25 of the 30.
-    const at25 = await run({codec: 'mjpeg', fps: 25}, 0, 3000);
+    const at25 = await run({codec: 'mjpeg', fps: 25}, 0, 800);
     assert.ok(at25.length >= 22 && at25.length <= 26, `fps 25 on 30 fps input: ${at25.length}`);
   });
 

@@ -45,6 +45,11 @@ Lower level: `createTranscoder(opts)` returns a `Transcoder` with `push()`, `uni
 (flush, then finish) and `close()` (stop consuming and discard output now; the promise resolves once the
 native side has drained its few queued units and freed the codecs). Always call one of them.
 
+`requestKeyFrame()` makes the next H.264 output a keyframe, for a consumer that joins a running stream. It takes
+effect with the next pushed unit, so the source must keep sending, and each call forces another keyframe once
+that unit is in, so coalesce requests when several consumers share one transcoder. It does nothing for MJPEG
+(every frame is standalone) or after `end()`/`close()`.
+
 ## Building from source
 
 The addon links a minimal LGPL FFmpeg (HEVC and AAC decoders, MJPEG and AAC encoders, swscale) pinned in
@@ -69,6 +74,13 @@ libs it needs (and `ffmpeg-build-info.txt`, the exact `configure` line).
 | `scale` (mjpeg)      | 100       | Percent of the source resolution, > 0 and <= 100      |
 | `audio` (h264)       | false     | Also transcode the device audio, see [Audio](#audio)  |
 | `audioSpecificConfig` (h264) | 480-sample ELD | `AudioSpecificConfig` of the pushed audio  |
+| `videoClockRate`     | 24,000    | Hz of the RTP timestamps you push, finite and > 0, see below |
+
+`videoClockRate` is not a coresim option, since coresim has no RTP input. The device's screen stream advances its
+RTP timestamps by 400 ticks per frame at 60 fps, which is a 24 kHz clock (measured on an iPad, iPadOS 27.0.1;
+other devices are not verified), not the 90 kHz of RFC 7798. A wrong value scales the whole timeline: too high
+makes it run slow, so the `fps` limit drops most frames and every `timestampMicros` is wrong. If you feed HEVC
+from any other source, for example a file you stamped at 90 kHz, set it explicitly.
 
 Options, defaults and validation (`RangeError`) match coresim's `VideoStreamOptions` and
 `JpegStreamOptions`. Android-only options (`resolution`, `localPort`, ...) are not supported.
@@ -83,7 +95,7 @@ for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', audio:
 ```
 
 With `createTranscoder` call `pushAudio({data, timestamp, receivedAt})` next to `push()`. `sequence` counts per track;
-`timestampMicros` is on one clock. Each track is rebased with its own RTP clock (90 kHz video, 48 kHz audio) and the tracks
+`timestampMicros` is on one clock. Each track is rebased with its own RTP clock (24 kHz video as the device sends it, 48 kHz audio) and the tracks
 are offset by when their first unit arrived (`receivedAt`, the `performance.now()` remotexpc stamps; the push time
 otherwise), since remotexpc exposes no RTCP sender report to map the two clocks. The audio source ends with the video and a
 failing audio source fails the stream. Audio is never dropped by a video resync.

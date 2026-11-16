@@ -5,7 +5,7 @@
 export interface NalAccessUnit {
   nals: Buffer[];
   isKeyFrame: boolean;
-  /** Raw 32-bit RTP media-clock timestamp (90 kHz). */
+  /** Raw 32-bit RTP media-clock timestamp (24 kHz on the device, see `videoClockRate`). */
   timestamp: number;
   /** `performance.now()` when the unit arrived; aligns video with audio. Defaults to the push time. */
   receivedAt?: number;
@@ -44,7 +44,16 @@ export interface JpegStreamOptions {
   scale?: number;
 }
 
-export interface H264Options extends VideoStreamOptions {
+/** Input-side options shared by both outputs (not part of coresim's, which has no RTP input). */
+export interface InputOptions {
+  /**
+   * Clock rate in Hz of the RTP timestamps in the pushed `NalAccessUnit`s. Defaults to 24,000, which is what the
+   * device's screen stream uses (400 ticks per frame at 60 fps).
+   */
+  videoClockRate?: number;
+}
+
+export interface H264Options extends VideoStreamOptions, InputOptions {
   codec: 'h264';
   /**
    * Also transcode the device audio (AAC-ELD, fed through `pushAudio()` or the `audioSource` of
@@ -58,7 +67,7 @@ export interface H264Options extends VideoStreamOptions {
   audioSpecificConfig?: Buffer;
 }
 
-export interface MjpegOptions extends JpegStreamOptions {
+export interface MjpegOptions extends JpegStreamOptions, InputOptions {
   codec: 'mjpeg';
 }
 

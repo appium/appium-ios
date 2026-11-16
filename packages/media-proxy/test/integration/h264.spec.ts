@@ -111,6 +111,34 @@ eachEncoder('HEVC -> H.264', (encoder) => {
     assert.strictEqual(count, FRAMES);
   });
 
+  it('emits a key frame on request', async () => {
+    const aus = readHevcFixture(FIXTURE);
+    // An input unit that is neither a key frame nor follows one directly, so the encoder isn't about to start a GOP.
+    const target = aus.findIndex((au, i) => i > 4 && !au.isKeyFrame && !aus[i - 1].isKeyFrame);
+    const t = createTranscoder({codec: 'h264'});
+    const out: VideoAccessUnit[] = [];
+    const drain = (async () => {
+      for await (const unit of t.units()) {
+        out.push(unit);
+      }
+    })();
+    for (const [i, au] of aus.entries()) {
+      if (i === target) {
+        // On a slow runner the encoder lags the input; let it catch up so the request lands on `target`.
+        for (let wait = 0; out.length < target && wait < 500; wait++) {
+          await sleep(10);
+        }
+        t.requestKeyFrame();
+      }
+      t.push(au);
+      await sleep(PACE_MS);
+    }
+    await t.end();
+    await drain;
+    const keyAt = out.filter((u) => u.isKeyFrame).map((u) => Math.round(u.timestampMicros / FRAME_MICROS));
+    assert.deepStrictEqual(keyAt, [0, target]);
+  });
+
   it('treats fps as an upper bound', async () => {
     const units = await encode({fps: 30});
     assert.strictEqual(units.length, FRAMES / 2);
@@ -219,8 +247,8 @@ eachEncoder('HEVC -> H.264', (encoder) => {
   });
 });
 
-// Drives the addon directly: these paths (key-frame requests, output overflow) have no public API.
-eachEncoder('native H.264 key-frame handling', () => {
+// Drives the addon directly: output overflow has no public API.
+eachEncoder('native H.264 output overflow', () => {
   const config: NativeConfig = resolveOptions({codec: 'h264'});
 
   function open() {
@@ -250,28 +278,6 @@ eachEncoder('native H.264 key-frame handling', () => {
     assert.deepStrictEqual(errors, []);
     assert.strictEqual(units.length, aus.length);
     await handle.close();
-  });
-
-  it('emits a key frame on request', async () => {
-    const aus = readHevcFixture(FIXTURE);
-    // An input unit that is neither a key frame nor follows one directly, so the encoder isn't about to start a GOP.
-    const target = aus.findIndex((au, i) => i > 4 && !au.isKeyFrame && !aus[i - 1].isKeyFrame);
-    const {handle, units, errors} = open();
-    for (const [i, au] of aus.entries()) {
-      if (i === target) {
-        // On a slow runner the encoder lags the input; let it catch up so the request lands on `target`.
-        for (let wait = 0; units.length < target && wait < 500; wait++) {
-          await sleep(10);
-        }
-        handle.requestKeyFrame();
-      }
-      push(handle, au, i);
-      await sleep(PACE_MS);
-    }
-    await handle.close();
-    assert.deepStrictEqual(errors, []);
-    const keyAt = units.filter((u) => u.isKeyFrame).map((u) => Math.round(u.timestampMicros / FRAME_MICROS));
-    assert.deepStrictEqual(keyAt, [0, target]);
   });
 
   it('resumes at a key frame after dropping output the consumer was too slow to take', async () => {

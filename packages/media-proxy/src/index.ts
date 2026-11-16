@@ -30,6 +30,7 @@ export type {MjpegServer, MjpegServerOptions} from './framing/mjpeg-http.js';
 export type {
   AudioAccessUnit,
   H264Options,
+  InputOptions,
   JpegFrame,
   JpegStreamOptions,
   MjpegOptions,
