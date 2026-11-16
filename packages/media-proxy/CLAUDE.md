@@ -53,11 +53,10 @@ an LGPL-only FFmpeg build; TS wrapper under `src/`.
 - Input is a live stream: never add unbounded buffering or blocking pushes; tests pace their input.
 - No dependency on remotexpc or coresim; inputs are structural types.
 
-## Not released yet
+## Releasing
 
-The package is `"private": true` and listed in `lerna.json` `ignoreChanges`, so lerna (and the
-`detect-release-packages.mjs` gate built on it) never treats it as changed: merging changes here
-triggers no release run, version bump, tag, or prebuild. To start releasing it: drop `"private"`,
-remove the `ignoreChanges` entry, add it to `PREBUILT` in `scripts/detect-release-packages.mjs`,
-and add a gated `prebuild-media-proxy` job plus artifact merge to `release.yml` (as for tuntap). Also host
-the FFmpeg source tarball (see `THIRD_PARTY_NOTICES.md`) next to the release, per FFmpeg's legal checklist.
+Released through the repo's lerna flow like `tuntap`/`coresim`: `release.yml` runs `media-proxy-prebuild.yml` when the
+package is being published (`PREBUILT` in `scripts/detect-release-packages.mjs`), merges the artifacts into `prebuilds/`,
+and `release-media-proxy-source` attaches the pinned FFmpeg source tarball to the GitHub release
+(`scripts/ci/upload-ffmpeg-source.sh`, reading the pins from `build-ffmpeg.sh`), per FFmpeg's LGPL checklist.
+Bumping FFmpeg only needs the pins in `build-ffmpeg.sh` and `THIRD_PARTY_NOTICES.md`.

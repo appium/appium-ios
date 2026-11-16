@@ -12,9 +12,9 @@ import {appendFile, readFile, readdir} from 'node:fs/promises';
 import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const PREBUILT = {tuntap: 'appium-ios-tuntap', coresim: '@appium/coresim'};
+const PREBUILT = {tuntap: 'appium-ios-tuntap', coresim: '@appium/coresim', 'media-proxy': '@appium/media-proxy'};
 // Packages whose GitHub release gets assets attached (see the lerna-release action)
-const RELEASE_ASSET_PACKAGES = ['ios-uicatalog', 'appium-webdriveragent'];
+const RELEASE_ASSET_PACKAGES = ['ios-uicatalog', 'appium-webdriveragent', '@appium/media-proxy'];
 
 async function listPackages() {
   const dirs = await readdir('packages');

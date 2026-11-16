@@ -41,6 +41,7 @@ jobs:
       any: ${{ steps.detect.outputs.any }}
       tuntap: ${{ steps.detect.outputs.tuntap }}
       coresim: ${{ steps.detect.outputs.coresim }}
+      media-proxy: ${{ steps.detect.outputs.media-proxy }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -80,6 +81,14 @@ jobs:
     with:
       upload-artifacts: true
 
+  # Same for media-proxy's native addon (with its bundled FFmpeg libs).
+  prebuild-media-proxy:
+    needs: detect-packages
+    if: ${{ needs.detect-packages.outputs.media-proxy == 'true' }}
+    uses: ./.github/workflows/media-proxy-prebuild.yml
+    with:
+      upload-artifacts: true
+
   # Prebuilds can take long enough for main to move on. `lerna publish` then fails with EBEHIND,
   # so a push-triggered run that is no longer at the head of main bows out; the queued run for
   # the newer commit re-detects and releases everything this one would have.
@@ -88,6 +97,7 @@ jobs:
       - detect-packages
       - prebuild-tuntap
       - prebuild-coresim
+      - prebuild-media-proxy
     if: ${{ !cancelled() && !failure() && needs.detect-packages.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     outputs:
@@ -121,6 +131,8 @@ jobs:
       uicatalog_release_tag: ${{ steps.run-lerna-publish.outputs.uicatalog_release_tag }}
       # Same for appium-webdriveragent, whose prebuilt runner archives get attached to its release.
       webdriveragent_release_tag: ${{ steps.run-lerna-publish.outputs.webdriveragent_release_tag }}
+      # Same for @appium/media-proxy, whose release carries the FFmpeg source it bundles (LGPL).
+      media_proxy_release_tag: ${{ steps.run-lerna-publish.outputs.media_proxy_release_tag }}
 
     steps:
       - name: Checkout repository
@@ -155,6 +167,22 @@ jobs:
         with:
           name: coresim-prebuild-darwin-arm64
           path: packages/coresim/prebuilds
+
+      - name: Download media-proxy prebuild artifacts
+        if: ${{ needs.detect-packages.outputs.media-proxy == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: media-proxy-prebuild-*
+          path: media-proxy-prebuild-staging
+
+      - name: Merge media-proxy prebuilds
+        if: ${{ needs.detect-packages.outputs.media-proxy == 'true' }}
+        run: |
+          mkdir -p packages/media-proxy/prebuilds
+          for dir in media-proxy-prebuild-staging/media-proxy-prebuild-*/; do
+            cp -R "${dir}"* packages/media-proxy/prebuilds/
+          done
+          find packages/media-proxy/prebuilds -type f | sort
 
       - name: Setup Node and install deps (LTS)
         uses: ./.github/actions/setup-build
@@ -196,3 +224,23 @@ jobs:
     with:
       release_tag: ${{ needs.release.outputs.webdriveragent_release_tag }}
       checkout_ref: ${{ needs.release.outputs.webdriveragent_release_tag }}
+
+  release-media-proxy-source:
+    name: Attach the FFmpeg source to the media-proxy release
+    needs: release
+    # Native prebuilds may be skipped upstream; override the implicit success() check.
+    if: ${{ !cancelled() && !failure() && needs.release.result == 'success' && needs.release.outputs.media_proxy_release_tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.media_proxy_release_tag }}
+
+      - name: Upload the FFmpeg source tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.media_proxy_release_tag }}
+        run: bash packages/media-proxy/scripts/ci/upload-ffmpeg-source.sh "$RELEASE_TAG"

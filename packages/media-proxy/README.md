@@ -15,7 +15,7 @@ The primary input is the HEVC stream of `appium-ios-remotexpc`'s `ScreenStreamCa
 > **Status:** HEVC → MJPEG works on every platform (bundled LGPL FFmpeg, software decode). H.264 output works on
 > macOS (VideoToolbox) and Windows (Media Foundation); everywhere else (and when those fail to open) it falls back to
 > Cisco's OpenH264 once [installed by the client](#software-h264-openh264), and throws `MediaProxyEncoderUnavailableError` if it
-> is not installed. Hardware encoders for Linux are still to come. The package is not released.
+> is not installed. Hardware encoders for Linux are still to come.
 
 The input is treated as a **live stream**: the native side buffers at most 8 access units and, when
 it falls behind, drops to the next keyframe instead of adding latency. Feeding a file faster than
