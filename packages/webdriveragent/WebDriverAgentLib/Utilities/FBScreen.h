@@ -17,6 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (nullable NSArray<NSDictionary<NSString *, id> *> *)screensWithError:(NSError **)error;
 
+/** Whether multiple displays are available, or nil if enumeration fails. */
++ (nullable NSNumber *)hasMultipleScreensWithError:(NSError **)error;
+
 /**
  The display with the given identifier
 

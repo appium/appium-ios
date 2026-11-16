@@ -15,7 +15,7 @@
 #import "FBMacros.h"
 #import "FBMathUtils.h"
 #import "FBProtocolHelpers.h"
-#import "FBScreen.h"
+#import "FBGestureCoordinateContext.h"
 #import "FBW3CActionsHelpers.h"
 #import "FBXCodeCompatibility.h"
 #import "FBXCTestDaemonsProxy.h"
@@ -69,9 +69,8 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 @interface FBW3CGestureItem : FBBaseGestureItem
 
 @property (nullable, readonly, nonatomic) FBW3CGestureItem *previousItem;
-@property (nonatomic) CGVector displayCorrection;
-@property (nonatomic) BOOL usesDisplayCorrection;
 @property (readonly, nonatomic) CGPoint screenPoint;
+@property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 
 @end
 
@@ -123,6 +122,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                          coordinateContext:(FBGestureCoordinateContext *)coordinateContext
                                      offset:(double)offset
                                       error:(NSError **)error
 {
@@ -132,7 +132,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
     self.application = application;
     self.offset = offset;
     _previousItem = previousItem;
-    _usesDisplayCorrection = previousItem.usesDisplayCorrection;
+    _coordinateContext = coordinateContext;
     NSNumber *durationObj = FBOptDuration(actionItem, @0, error);
     if (nil == durationObj) {
       return nil;
@@ -150,10 +150,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 
 - (CGPoint)screenPoint
 {
-  CGPoint point = self.atPosition.screenPoint;
-  return self.usesDisplayCorrection
-    ? CGPointMake(point.x + self.displayCorrection.dx, point.y + self.displayCorrection.dy)
-    : point;
+  return self.atPosition.screenPoint;
 }
 
 - (nullable XCUICoordinate *)positionWithError:(NSError **)error
@@ -172,27 +169,25 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
                                   positionOffset:(nullable NSValue *)positionOffset
                                            error:(NSError **)error
 {
-  XCUIScreen *screen = nil;
-  if (element.elementType == XCUIElementTypeApplication) {
-    screen = [FBScreen currentScreenWithError:error];
-    if (nil == screen) {
+  if (self.coordinateContext.usesWindowCoordinates) {
+    CGPoint point = nil == positionOffset ? CGPointZero : positionOffset.CGPointValue;
+    CGVector offset = CGVectorMake(point.x, point.y);
+    if (nil == element) {
+      return [self.coordinateContext coordinateWithApplication:self.application offset:offset error:error];
+    }
+    if (element.elementType == XCUIElementTypeApplication) {
+      XCUIElement *application = element;
+      return [self.coordinateContext coordinateWithApplicationOrigin:application offset:offset error:error];
+    }
+    // Resolve display affinity before combining element and viewport origins.
+    (void)element.frame;
+    if (element.screen.displayID != self.coordinateContext.screen.displayID) {
+      [[[FBErrorBuilder builder] withDescriptionFormat:
+        @"The element origin is not on the selected display %lld", self.coordinateContext.screen.displayID] buildError:error];
       return nil;
     }
   }
-  if (nil != screen && screen.displayID != XCUIScreen.mainScreen.displayID) {
-    // Unlike ordinary elements, application-root coordinates rotate using the
-    // main display. Resolve the client-visible rect's center into viewport
-    // coordinates, then let screenPoint apply the selected-display correction.
-    // Do not use a normalized app center: XCTest may report a portrait app rect
-    // for a landscape window, so its normalized center uses a different space.
-    CGRect frame = element.wdFrame;
-    if (CGRectIsEmpty(frame)) {
-      return [super hitpointWithElement:element positionOffset:positionOffset error:error];
-    }
-    CGPoint offset = nil == positionOffset ? CGPointZero : positionOffset.CGPointValue;
-    CGPoint point = CGPointMake(CGRectGetMidX(frame) + offset.x, CGRectGetMidY(frame) + offset.y);
-    return [super hitpointWithElement:nil positionOffset:[NSValue valueWithCGPoint:point] error:error];
-  }
+  // Single-display viewport and application origins retain the legacy path.
   if (nil == element || nil == positionOffset) {
     return [super hitpointWithElement:element positionOffset:positionOffset error:error];
   }
@@ -221,10 +216,11 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 - (nullable instancetype)initWithActionItem:(NSDictionary<NSString *, id> *)actionItem
                                 application:(XCUIApplication *)application
                                previousItem:(nullable FBW3CGestureItem *)previousItem
+                          coordinateContext:(FBGestureCoordinateContext *)coordinateContext
                                      offset:(double)offset
                                       error:(NSError **)error
 {
-  self = [super initWithActionItem:actionItem application:application previousItem:previousItem offset:offset error:error];
+  self = [super initWithActionItem:actionItem application:application previousItem:previousItem coordinateContext:coordinateContext offset:offset error:error];
   if (self) {
     _pressure = [actionItem objectForKey:FB_ACTION_ITEM_KEY_PRESSURE];
   }
@@ -315,10 +311,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
   
   if (nil != element) {
-    // Application origins need viewport display correction; other elements use their own display.
-    // This correction does not fix XCTest's legacy-SDK compatibility issue:
-    // see docs/multiple-displays.md#legacy-sdk-compatibility-windows.
-    self.usesDisplayCorrection = element.elementType == XCUIElementTypeApplication;
     if (nil == x && nil == y) {
       return [self hitpointWithElement:element positionOffset:nil error:error];
     }
@@ -326,7 +318,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
   
   if ([origin isKindOfClass:NSString.class] && [origin isEqualToString:FB_ORIGIN_TYPE_VIEWPORT]) {
-    self.usesDisplayCorrection = YES;
     return [self hitpointWithElement:nil positionOffset:[NSValue valueWithCGPoint:CGPointMake(x.floatValue, y.floatValue)] error:error];
   }
   
@@ -678,10 +669,6 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
 @end
 
 
-@interface FBW3CActionsSynthesizer ()
-@property (nonatomic) CGVector displayCorrection;
-@end
-
 @implementation FBW3CActionsSynthesizer
 
 - (NSArray<NSDictionary<NSString *, id> *> *)preprocessedActionItemsWith:(NSArray<NSDictionary<NSString *, id> *> *)actionItems
@@ -798,7 +785,10 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithGestureAction:(NSDictionary<NSString *, id> *)actionDescription
+                                                         forActionId:(NSString *)actionId
+                                                   coordinateContext:(FBGestureCoordinateContext *)coordinateContext
+                                                               error:(NSError **)error
 {
   static NSDictionary<NSString *, Class> *gestureItemsMapping;
   static NSArray<NSString *> *supportedActionItemTypes;
@@ -861,19 +851,21 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
       return nil;
     }
 
-    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] offset:chain.durationOffset error:error];
+    FBW3CGestureItem *gestureItem = [[gestureItemClass alloc] initWithActionItem:actionItem application:self.application previousItem:[chain.items lastObject] coordinateContext:coordinateContext offset:chain.durationOffset error:error];
     if (nil == gestureItem) {
       return nil;
     }
 
-    gestureItem.displayCorrection = self.displayCorrection;
     [chain addItem:gestureItem];
   }
 
   return [chain asEventPathsWithError:error];
 }
 
-- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription forActionId:(NSString *)actionId error:(NSError **)error
+- (nullable NSArray<XCPointerEventPath *> *)eventPathsWithActionDescription:(NSDictionary<NSString *, id> *)actionDescription
+                                                             forActionId:(NSString *)actionId
+                                                       coordinateContext:(FBGestureCoordinateContext *)coordinateContext
+                                                                   error:(NSError **)error
 {
   id actionType = [actionDescription objectForKey:FB_KEY_TYPE];
   if (![actionType isKindOfClass:NSString.class] ||
@@ -887,7 +879,7 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   }
 
   if ([actionType isEqualToString:FB_ACTION_TYPE_POINTER]) {
-    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId error:error];
+    return [self eventPathsWithGestureAction:actionDescription forActionId:actionId coordinateContext:coordinateContext error:error];
   }
 
   return [self eventPathsWithKeyAction:actionDescription forActionId:actionId error:error];
@@ -947,41 +939,25 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   return NO;
 }
 
-- (nullable XCSynthesizedEventRecord *)eventRecordForActions:(NSArray<NSDictionary<NSString *, id> *> *)actions
-                                                     error:(NSError **)error
+- (nullable XCSynthesizedEventRecord *)eventRecordForContext:(FBGestureCoordinateContext *)coordinateContext
+                                                       error:(NSError **)error
 {
-  // Keyboard and pause-only sequences have no display coordinates. A display
-  // disappearing must not prevent these input sources from being synthesized.
-  XCUIScreen *screen = [self actionsRequireDisplay:actions] ? [FBScreen currentScreenWithError:error] : XCUIScreen.mainScreen;
-  if (nil == screen) {
+  XCUIScreen *screen = coordinateContext.screen;
+  if (coordinateContext.usesWindowCoordinates
+      && [XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
+    return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                               displayID:(unsigned long long)screen.displayID
+                                    interfaceOrientation:self.application.interfaceOrientation];
+  }
+  if (screen.displayID != XCUIScreen.mainScreen.displayID) {
+    if (error) {
+      *error = [[FBErrorBuilder.builder
+                 withDescription:@"Actions on a display other than the main one are not supported by this XCTest version"] build];
+    }
     return nil;
   }
-  XCSynthesizedEventRecord *eventRecord;
-  self.displayCorrection = CGVectorMake(0, 0);
-  if (screen.displayID == XCUIScreen.mainScreen.displayID) {
-    eventRecord = [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
-                                            interfaceOrientation:self.application.interfaceOrientation];
-  } else {
-    if (![XCSynthesizedEventRecord instancesRespondToSelector:@selector(initWithName:displayID:interfaceOrientation:)]) {
-      if (error) {
-        *error = [[FBErrorBuilder.builder
-                   withDescription:@"Actions on a display other than the main one are not supported by this XCTest version"] build];
-      }
-      return nil;
-    }
-    eventRecord = [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
-                                                       displayID:(unsigned long long)screen.displayID
-                                            interfaceOrientation:self.application.interfaceOrientation];
-    // Viewport coordinates use the main display's size when rotating screenPoint.
-    // Element coordinates already use their own display. Apply this correction
-    // per gesture item so mixed origins and pointer-relative moves stay aligned.
-    XCUIScreen *mainScreen = XCUIScreen.mainScreen;
-    self.displayCorrection = FBDisplayCoordinateOffset(
-      CGSizeMake(mainScreen.bounds.size.width / mainScreen.scale, mainScreen.bounds.size.height / mainScreen.scale),
-      CGSizeMake(screen.bounds.size.width / screen.scale, screen.bounds.size.height / screen.scale),
-      eventRecord.interfaceOrientation);
-  }
-  return eventRecord;
+  return [[XCSynthesizedEventRecord alloc] initWithName:@"W3C Touch Action"
+                                interfaceOrientation:self.application.interfaceOrientation];
 }
 
 - (nullable XCSynthesizedEventRecord *)synthesizeWithError:(NSError **)error
@@ -990,13 +966,19 @@ static NSString *const FB_KEY_ACTIONS = @"actions";
   if (nil == actions) {
     return nil;
   }
-  XCSynthesizedEventRecord *eventRecord = [self eventRecordForActions:actions error:error];
+  // A fresh context owns routing and anchors for every pointer source in this command.
+  FBGestureCoordinateContext *coordinateContext = [FBGestureCoordinateContext
+    contextWithDisplayRequired:[self actionsRequireDisplay:actions] error:error];
+  if (nil == coordinateContext) {
+    return nil;
+  }
+  XCSynthesizedEventRecord *eventRecord = [self eventRecordForContext:coordinateContext error:error];
   if (nil == eventRecord) {
     return nil;
   }
   for (NSDictionary<NSString *, id> *actionDescription in actions) {
     NSString *actionId = actionDescription[FB_KEY_ID];
-    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId error:error];
+    NSArray<XCPointerEventPath *> *eventPaths = [self eventPathsWithActionDescription:actionDescription forActionId:actionId coordinateContext:coordinateContext error:error];
     if (nil == eventPaths) {
       return nil;
     }
