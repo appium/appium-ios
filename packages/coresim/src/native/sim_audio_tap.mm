@@ -67,6 +67,8 @@ class AudioTapSession::Impl {
        std::function<void(NSError*)> onError, std::function<void()> onEnd)
       : udid_(udid), onBuffer_(std::move(onBuffer)), onError_(std::move(onError)), onEnd_(std::move(onEnd)) {
     queue_ = dispatch_queue_create("io.appium.coresim.audioTap", DISPATCH_QUEUE_SERIAL);
+    // Separate from queue_: scanning the host's processes is slow and would stall the IO callback.
+    pollQueue_ = dispatch_queue_create("io.appium.coresim.audioTap.poll", DISPATCH_QUEUE_SERIAL);
   }
 
   ~Impl() { Stop(); }
@@ -80,7 +82,7 @@ class AudioTapSession::Impl {
     }
   }
 
-  // Callable from any thread except `queue_` itself (would deadlock on the dispatch_sync below).
+  // Callable from any thread except `pollQueue_` itself (would deadlock on the dispatch_sync below).
   void Stop() {
     if (!running_.exchange(false)) {
       return;  // idempotent
@@ -88,7 +90,7 @@ class AudioTapSession::Impl {
     if (pollTimer_ != nullptr) {
       dispatch_source_cancel(pollTimer_);
       // Blocks until any in-flight poll tick finishes — by then running_ is already false.
-      dispatch_sync(queue_, ^{
+      dispatch_sync(pollQueue_, ^{
                     });
       pollTimer_ = nullptr;
     }
@@ -197,7 +199,7 @@ class AudioTapSession::Impl {
 
   API_AVAILABLE(macos(14.2))
   void StartPolling() {
-    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue_);
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, pollQueue_);
     dispatch_source_set_timer(
         timer, dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(kPollIntervalSeconds * NSEC_PER_SEC)),
         static_cast<uint64_t>(kPollIntervalSeconds * NSEC_PER_SEC),
@@ -275,7 +277,8 @@ class AudioTapSession::Impl {
   }
 
   // Same as Stop() minus the dispatch_sync barrier — only safe from within a callback already
-  // serialized on `queue_` (PollAndRefresh); would deadlock waiting on itself otherwise.
+  // running on `queue_` or `pollQueue_` (HandleBuffer, PollAndRefresh); would deadlock waiting on
+  // itself otherwise.
   void StopFromQueue() {
     if (!running_.exchange(false)) {
       return;  // idempotent — e.g. an external Stop() already won this race
@@ -324,6 +327,7 @@ class AudioTapSession::Impl {
   std::function<void()> onEnd_;
 
   dispatch_queue_t queue_ = nullptr;
+  dispatch_queue_t pollQueue_ = nullptr;
   dispatch_source_t pollTimer_ = nullptr;
   AudioObjectID tapID_ = kAudioObjectUnknown;
   AudioObjectID aggregateID_ = kAudioObjectUnknown;

@@ -201,6 +201,9 @@ toolchain (`make` and `xcodebuild`).
   **process tap** (`CATapDescription`/`AudioHardwareCreateProcessTap`, macOS 14.2+) scoped to that
   device's guest PIDs, wrapped in a private aggregate device; `audio_encoder.mm` encodes to AAC-LC;
   `av_recording.mm`/`av_stream.mm` mux/interleave it with `video_encoder.mm`'s VideoToolbox output.
+  The tap's 1 s process-list poll runs on its own queue (`pollQueue_`): the host-wide process scan
+  is slow enough that, sharing the IO callback's queue, it dropped audio every tick (an audible
+  click, ~1 s of audio missing per 12 s).
   **Needs the host's "System Audio Recording Only" TCC permission** (`kTCCServiceAudioCapture`) —
   keyed to the *host* process's code identity (not the guest's TCC.db), has no query API, and a
   denial isn't a catchable error — it's silent all-zero PCM. The host's own TCC.db can't be read to
