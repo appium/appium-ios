@@ -25,6 +25,12 @@ struct PipelineConfig {
   double bitrate = 0;
   double quality = 80;
   double scale = 100;
+  // The visible part of the decoded picture, taken from its top-left corner; 0 keeps the whole picture. The device
+  // pads its stream to a multiple of 16 with black.
+  int cropWidth = 0;
+  int cropHeight = 0;
+  // Clockwise degrees (0, 90, 180 or 270) that make the decoded picture upright; changeable with SetRotation().
+  int rotation = 0;
 };
 
 struct EncodedUnit {
@@ -62,6 +68,10 @@ class Pipeline {
   Pipeline(const Pipeline&) = delete;
   Pipeline& operator=(const Pipeline&) = delete;
 
+  // Changes the rotation (see PipelineConfig) from any thread; takes effect with the next frame and, as the picture
+  // changes shape, makes the encoder start a new stream with a key frame.
+  void SetRotation(int degrees) { rotation_.store(degrees); }
+
   // One access unit with 4-byte start codes. Non-blocking; overflow drops to the next key frame.
   void Push(std::vector<uint8_t> accessUnit, int64_t timestampMicros, bool isKeyFrame);
   // Drains queued input, flushes the codecs, then calls `onDone` from the worker thread (once).
@@ -88,6 +98,7 @@ class Pipeline {
   bool finishing_ = false;
   bool aborting_ = false;
   std::atomic<bool> warm_{false};  // false while an encoder opens and the backlog behind it drains
+  std::atomic<int> rotation_;
   DoneCallback onDone_;
   ErrorCallback onError_;
   std::unique_ptr<Impl> impl_;

@@ -12,6 +12,7 @@ import type {
   NativeModule,
   NativeTranscoderHandle,
   NativeUnit,
+  Rotation,
   TranscoderOptions,
   VideoAccessUnit,
 } from './types.js';
@@ -74,6 +75,19 @@ export function resolveOptions(opts: TranscoderOptions): NativeConfig {
       throw new RangeError(`scale must be a number greater than 0 and no greater than 100, got ${scale}`);
     }
   }
+  const {crop} = opts;
+  if (crop !== undefined) {
+    for (const [side, value] of [
+      ['width', crop.width],
+      ['height', crop.height],
+    ] as const) {
+      if (!Number.isInteger(value) || value <= 0 || value % 2 !== 0) {
+        throw new RangeError(`crop.${side} must be a positive even integer, got ${value}`);
+      }
+    }
+  }
+  const rotation = opts.rotation ?? 0;
+  assertRotation(rotation);
   return {
     outputCodec: opts.codec,
     fps,
@@ -83,7 +97,16 @@ export function resolveOptions(opts: TranscoderOptions): NativeConfig {
     audio,
     audioSpecificConfig,
     audioBitratePerChannel: AUDIO_BITRATE_PER_CHANNEL,
+    cropWidth: crop?.width ?? 0,
+    cropHeight: crop?.height ?? 0,
+    rotation,
   };
+}
+
+function assertRotation(degrees: unknown): asserts degrees is Rotation {
+  if (degrees !== 0 && degrees !== 90 && degrees !== 180 && degrees !== 270) {
+    throw new RangeError(`rotation must be 0, 90, 180 or 270, got ${String(degrees)}`);
+  }
 }
 
 /** Converts 32-bit RTP timestamps to microseconds since the first unit, unwrapping the counter. */
@@ -206,6 +229,24 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
     }
     try {
       this.handle.requestKeyFrame();
+    } catch (err) {
+      throw wrapNativeError(err);
+    }
+  }
+
+  /**
+   * Changes the clockwise rotation that makes the picture upright, while streaming. The next frame is turned
+   * and, since the output changes shape, starts with a keyframe: a quarter turn swaps the output's width and
+   * height, so a new SPS (H.264) or a differently sized JPEG tells the consumer. A no-op after
+   * {@link end}/{@link close}.
+   */
+  setRotation(degrees: Rotation): void {
+    assertRotation(degrees);
+    if (this.closePromise) {
+      return;
+    }
+    try {
+      this.handle.setRotation(degrees);
     } catch (err) {
       throw wrapNativeError(err);
     }

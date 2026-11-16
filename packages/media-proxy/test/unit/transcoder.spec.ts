@@ -29,6 +29,7 @@ interface FakeBackend extends NativeModule {
   emit(unit: Partial<NativeUnit> & {data: Buffer}): void;
   fail(err: Error): void;
   keyFrameRequests: number;
+  rotations: number[];
   closed: boolean;
 }
 
@@ -42,6 +43,7 @@ function fakeBackend(
     pushes: [],
     audioPushes: [],
     keyFrameRequests: 0,
+    rotations: [],
     closed: false,
     capabilities: () => ({decoders: [], encoders: []}),
     createTranscoder(config, unitCb, errorCb) {
@@ -60,6 +62,7 @@ function fakeBackend(
         },
         pushAudio: (data, ts) => void backend.audioPushes.push({data, ts}),
         requestKeyFrame: () => void backend.keyFrameRequests++,
+        setRotation: (degrees) => void backend.rotations.push(degrees),
         close: async () => {
           backend.closed = true;
           if (opts.failClose) {
@@ -92,6 +95,9 @@ describe('resolveOptions', () => {
       audio: false,
       audioSpecificConfig: DEFAULT_AUDIO_SPECIFIC_CONFIG,
       audioBitratePerChannel: 64_000,
+      cropWidth: 0,
+      cropHeight: 0,
+      rotation: 0,
     });
     assert.strictEqual(resolveOptions(mjpeg).quality, 80);
   });
@@ -334,6 +340,71 @@ describe('Transcoder.requestKeyFrame()', () => {
     const backend = fakeBackend();
     new Transcoder(mjpeg, backend).requestKeyFrame();
     assert.strictEqual(backend.keyFrameRequests, 0);
+  });
+});
+
+describe('crop and rotation options', () => {
+  it('hand the visible size and the initial rotation to the native side', () => {
+    const backend = fakeBackend();
+    new Transcoder({...mjpeg, crop: {width: 1620, height: 2160}, rotation: 270}, backend);
+    assert.deepStrictEqual(
+      [backend.config?.cropWidth, backend.config?.cropHeight, backend.config?.rotation],
+      [1620, 2160, 270],
+    );
+  });
+
+  for (const [name, crop] of Object.entries({
+    'a zero side': {width: 0, height: 100},
+    'a negative side': {width: 100, height: -2},
+    'an odd side': {width: 101, height: 100},
+    'a fractional side': {width: 100.5, height: 100},
+    'a non-finite side': {width: Infinity, height: 100},
+  })) {
+    it(`rejects a crop with ${name}`, () => {
+      assert.throws(() => resolveOptions({...h264, crop}), RangeError);
+    });
+  }
+
+  it('rejects a rotation that is not a quarter turn', () => {
+    for (const rotation of [45, 360, -90, 1.5, Number.NaN, '90']) {
+      assert.throws(() => resolveOptions({...mjpeg, rotation: rotation as never}), RangeError);
+    }
+  });
+});
+
+describe('Transcoder.setRotation()', () => {
+  it('forwards each quarter turn to the native handle', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    for (const degrees of [90, 180, 270, 0] as const) {
+      t.setRotation(degrees);
+    }
+    assert.deepStrictEqual(backend.rotations, [90, 180, 270, 0]);
+  });
+
+  it('works for mjpeg too', () => {
+    const backend = fakeBackend();
+    new Transcoder(mjpeg, backend).setRotation(90);
+    assert.deepStrictEqual(backend.rotations, [90]);
+  });
+
+  it('rejects anything else, without reaching the native side', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    assert.throws(() => t.setRotation(45 as never), RangeError);
+    assert.deepStrictEqual(backend.rotations, []);
+  });
+
+  it('is a no-op after close() and after end()', async () => {
+    const closed = fakeBackend();
+    const a = new Transcoder(h264, closed);
+    await a.close();
+    a.setRotation(90);
+    const ended = fakeBackend();
+    const b = new Transcoder(h264, ended);
+    await b.end();
+    b.setRotation(90);
+    assert.deepStrictEqual([closed.rotations, ended.rotations], [[], []]);
   });
 });
 

@@ -51,7 +51,22 @@ export interface InputOptions {
    * device's screen stream uses (400 ticks per frame at 60 fps).
    */
   videoClockRate?: number;
+  /**
+   * The visible part of the decoded picture, in pixels, taken from its top-left corner; the whole picture by
+   * default. The device pads its stream to a multiple of 16 with black (1632x2176 for a 1620x2160 display), so
+   * pass the display's size from CoreDevice's `getDisplayInfo()`. Both sides must be positive even integers.
+   */
+  crop?: {width: number; height: number};
+  /**
+   * Clockwise degrees (0, 90, 180 or 270) that make the decoded picture upright, 0 by default. The device
+   * always streams the display's native orientation, so a landscape UI arrives turned. Change it while
+   * streaming with `Transcoder.setRotation()`.
+   */
+  rotation?: Rotation;
 }
+
+/** Clockwise degrees that make a picture upright. */
+export type Rotation = 0 | 90 | 180 | 270;
 
 export interface H264Options extends VideoStreamOptions, InputOptions {
   codec: 'h264';
@@ -113,6 +128,10 @@ export interface NativeConfig {
   audio: boolean;
   audioSpecificConfig: Buffer;
   audioBitratePerChannel: number;
+  /** 0 keeps the whole picture. */
+  cropWidth: number;
+  cropHeight: number;
+  rotation: Rotation;
 }
 
 export interface NativeTranscoderHandle {
@@ -122,6 +141,8 @@ export interface NativeTranscoderHandle {
   pushAudio(data: Buffer, timestampMicros: number): void;
   /** Forces the next H.264 output to be an IDR frame (used to resync after an overflow). */
   requestKeyFrame(): void;
+  /** Changes the clockwise rotation that makes the picture upright. */
+  setRotation(degrees: Rotation): void;
   /** Flushes pending frames through `onUnit`, releases resources, then resolves (no callbacks after). */
   close(): Promise<void>;
 }
