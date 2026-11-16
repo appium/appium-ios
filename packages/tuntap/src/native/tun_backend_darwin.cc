@@ -237,13 +237,13 @@ bool GetInterfaceStats(const std::string& interface_name, TunInterfaceStats& out
 
   size_t offset = 0;
   while (offset + sizeof(struct if_msghdr) <= len) {
-    struct if_msghdr hdr {};
+    struct if_msghdr hdr{};
     memcpy(&hdr, buf.data() + offset, sizeof(hdr));
     if (hdr.ifm_msglen == 0 || offset + hdr.ifm_msglen > len) {
       break;
     }
     if (hdr.ifm_type == RTM_IFINFO2 && hdr.ifm_msglen >= sizeof(struct if_msghdr2)) {
-      struct if_msghdr2 ifm2 {};
+      struct if_msghdr2 ifm2{};
       memcpy(&ifm2, buf.data() + offset, sizeof(ifm2));
       if (ifm2.ifm_index == ifindex) {
         out.rx_packets = ifm2.ifm_data.ifi_ipackets;

@@ -31,8 +31,8 @@ namespace {
 constexpr const char* kTunDevicePath = "/dev/net/tun";
 
 struct NetlinkGetLinkRequest {
-  struct nlmsghdr nlh {};
-  struct ifinfomsg ifi {};
+  struct nlmsghdr nlh{};
+  struct ifinfomsg ifi{};
 };
 
 constexpr size_t AlignNetlink(size_t len) {
@@ -166,7 +166,7 @@ bool OpenNetlinkRouteSocket(FileDescriptor& out_fd, std::string& error) {
     return false;
   }
 
-  struct timeval rcv_timeout {};
+  struct timeval rcv_timeout{};
   rcv_timeout.tv_sec = 2;
   rcv_timeout.tv_usec = 0;
   if (setsockopt(nl_fd.get(), SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout)) < 0) {
@@ -236,7 +236,7 @@ bool ExtractStatsFromNewLinkAttrs(const uint8_t* attr_data, size_t attrs_len, Tu
   TunInterfaceStats fallback_stats{};
 
   while (attr_offset + sizeof(struct rtattr) <= attrs_len) {
-    struct rtattr rta {};
+    struct rtattr rta{};
     memcpy(&rta, attr_data + attr_offset, sizeof(rta));
     if (rta.rta_len < sizeof(struct rtattr) || attr_offset + rta.rta_len > attrs_len) {
       break;
@@ -246,14 +246,14 @@ bool ExtractStatsFromNewLinkAttrs(const uint8_t* attr_data, size_t attrs_len, Tu
     const size_t payload_len = rta.rta_len >= kRtaHdrLen ? rta.rta_len - kRtaHdrLen : 0U;
 
     if (rta.rta_type == IFLA_STATS64 && payload_len >= sizeof(struct rtnl_link_stats64)) {
-      struct rtnl_link_stats64 stats64 {};
+      struct rtnl_link_stats64 stats64{};
       memcpy(&stats64, attr_data + payload_offset, sizeof(stats64));
       CopyLinkStats(stats64, out);
       return true;
     }
 
     if (rta.rta_type == IFLA_STATS && payload_len >= sizeof(struct rtnl_link_stats)) {
-      struct rtnl_link_stats stats32 {};
+      struct rtnl_link_stats stats32{};
       memcpy(&stats32, attr_data + payload_offset, sizeof(stats32));
       CopyLinkStats(stats32, fallback_stats);
       has_stats32 = true;
@@ -277,7 +277,7 @@ bool ParseNetlinkLinkStats(const std::vector<uint8_t>& buf, const std::string& i
 
   size_t offset = 0;
   while (offset + sizeof(struct nlmsghdr) <= buf.size()) {
-    struct nlmsghdr nlh {};
+    struct nlmsghdr nlh{};
     memcpy(&nlh, buf.data() + offset, sizeof(nlh));
     if (nlh.nlmsg_len < sizeof(struct nlmsghdr) || offset + nlh.nlmsg_len > buf.size()) {
       break;
@@ -285,7 +285,7 @@ bool ParseNetlinkLinkStats(const std::vector<uint8_t>& buf, const std::string& i
 
     if (nlh.nlmsg_type == NLMSG_ERROR) {
       if (nlh.nlmsg_len >= kNlhHdrLen + sizeof(struct nlmsgerr)) {
-        struct nlmsgerr nlerr {};
+        struct nlmsgerr nlerr{};
         memcpy(&nlerr, buf.data() + offset + kNlhHdrLen, sizeof(nlerr));
         const int err_code = nlerr.error < 0 ? -nlerr.error : nlerr.error;
         error = std::string("RTM_GETLINK failed for ") + interface_name + ": " + strerror(err_code);
