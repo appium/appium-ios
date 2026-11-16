@@ -222,7 +222,7 @@ export class RtcpKeepalive {
     if (this.stopped) {
       return false;
     }
-    const now = Date.now();
+    const now = performance.now();
     if (now - this.lastKeyFrameRequestAt < MIN_KEYFRAME_REQUEST_SPACING_MS) {
       return true;
     }

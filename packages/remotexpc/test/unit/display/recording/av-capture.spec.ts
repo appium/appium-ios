@@ -66,6 +66,20 @@ describe('recordScreenAndAudioToFiles', function () {
     assert.strictEqual(stopCalls(), 2, 'both captures must be stopped before the error propagates');
   });
 
+  it('forwards keyFrameIntervalMs to the video capture', async function () {
+    const {service} = makeStubService();
+
+    await assert.rejects(
+      () =>
+        recordScreenAndAudioToFiles(service, {
+          videoPath: join(directory, 'screen.h265'),
+          audioPath: join(directory, 'audio.m4a'),
+          keyFrameIntervalMs: -1,
+        }),
+      /keyFrameIntervalMs must be between/,
+    );
+  });
+
   it('closes the video writer even when closing the audio writer throws', async function (t: TestContext) {
     // M4aFileWriter finalizes by reopening the finished file to patch mdat's
     // length, so it can fail on a full disk after every frame is already on

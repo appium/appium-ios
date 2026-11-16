@@ -221,6 +221,7 @@ describe('RTCP', function () {
 
     it('coalesces requests that come close together, including concurrent ones', async function (t) {
       t.mock.timers.enable({apis: ['Date']});
+      t.mock.method(performance, 'now', () => Date.now());
       const {receiver, sent} = fakeReceiver();
       const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
       await flush();
@@ -242,6 +243,7 @@ describe('RTCP', function () {
 
     it('reports a failed send and lets the next request through', async function (t) {
       t.mock.timers.enable({apis: ['Date']});
+      t.mock.method(performance, 'now', () => Date.now());
       let failing = true;
       const {receiver, sent} = fakeReceiver({fail: () => failing && true});
       const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
@@ -256,6 +258,7 @@ describe('RTCP', function () {
 
     it('asks periodically when keyFrameIntervalMs is set, and no longer after stop()', async function (t) {
       t.mock.timers.enable({apis: ['setInterval', 'Date']});
+      t.mock.method(performance, 'now', () => Date.now());
       const {receiver, sent} = fakeReceiver();
       const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000, keyFrameIntervalMs: 2000});
       await flush();
@@ -276,6 +279,7 @@ describe('RTCP', function () {
 
     it('does not ask periodically by default', async function (t) {
       t.mock.timers.enable({apis: ['setInterval', 'Date']});
+      t.mock.method(performance, 'now', () => Date.now());
       const {receiver, sent} = fakeReceiver();
       const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
       t.mock.timers.tick(60_000);

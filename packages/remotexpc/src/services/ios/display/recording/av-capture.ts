@@ -3,15 +3,20 @@ import {XPCUUID} from '../../../../lib/remote-xpc/xpc-uuid.js';
 import {type AacEldFormat, aacEldDurationMs} from '../audio/aac-eld.js';
 import {AudioStreamCapture, type AudioStreamStats} from '../audio/audio-stream-capture.js';
 import {M4aFileWriter} from '../audio/m4a-writer.js';
-import {type DisplayService, type StartVideoStreamOptions} from '../index.js';
+import {type DisplayService} from '../index.js';
 import {toAnnexB} from '../video/hevc.js';
-import {AnnexBFileWriter, ScreenStreamCapture, type ScreenStreamStats} from '../video/screen-stream-capture.js';
+import {
+  AnnexBFileWriter,
+  ScreenStreamCapture,
+  type ScreenStreamCaptureOptions,
+  type ScreenStreamStats,
+} from '../video/screen-stream-capture.js';
 import {type MuxCommand, ffmpegMuxCommandBuilder} from './mux-command.js';
 
 const log = getLogger('AvCapture');
 
 /** Options for {@link recordScreenAndAudioToFiles}. */
-export interface RecordScreenAndAudioOptions extends StartVideoStreamOptions {
+export interface RecordScreenAndAudioOptions extends ScreenStreamCaptureOptions {
   /** Where to write the Annex-B HEVC video. */
   videoPath: string;
   /** Where to write the AAC-ELD audio as `.m4a`. */

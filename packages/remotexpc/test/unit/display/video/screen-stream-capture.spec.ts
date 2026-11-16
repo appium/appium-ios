@@ -186,6 +186,7 @@ describe('ScreenStreamCapture keyframe requests', function () {
 
   it('asks every 2000 ms by default, and not before', async function (t) {
     t.mock.timers.enable({apis: ['setInterval', 'Date']});
+    t.mock.method(performance, 'now', () => Date.now());
     const device = await bindFakeDevice();
     const {service} = fakeService(device.port);
     const capture = await ScreenStreamCapture.start(service);
@@ -204,6 +205,7 @@ describe('ScreenStreamCapture keyframe requests', function () {
 
   it('does not ask periodically when keyFrameIntervalMs is 0, and stops asking after stop()', async function (t) {
     t.mock.timers.enable({apis: ['setInterval', 'Date']});
+    t.mock.method(performance, 'now', () => Date.now());
     const device = await bindFakeDevice();
     const {service, stops} = fakeService(device.port);
     const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 0});
