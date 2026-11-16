@@ -254,7 +254,7 @@ export class WebInspectorService extends BaseService {
       WIRSessionIdentifierKey: sessionId,
       WIRSessionCapabilitiesKey: {
         ...defaultCapabilities,
-        ...(capabilities ?? {}),
+        ...capabilities,
       },
     });
   }

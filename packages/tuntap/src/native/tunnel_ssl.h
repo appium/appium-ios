@@ -25,7 +25,13 @@ class TunnelSslClient {
   TunnelSslClient(const TunnelSslClient&) = delete;
   TunnelSslClient& operator=(const TunnelSslClient&) = delete;
 
-  bool Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem, int timeout_ms, std::string& error);
+  /**
+   * With a `device_cert_pem`, fails unless the peer presents exactly it. The match is enforced
+   * inside the handshake, so a peer with another certificate never receives the host certificate.
+   * With an empty `device_cert_pem` the peer is not authenticated.
+   */
+  bool Connect(int tcp_fd, const std::string& cert_pem, const std::string& key_pem, const std::string& device_cert_pem,
+               int timeout_ms, std::string& error);
 
   bool ConnectPsk(int tcp_fd, const uint8_t* psk, size_t psk_len, const std::string& identity, int timeout_ms,
                   std::string& error);
@@ -42,6 +48,8 @@ class TunnelSslClient {
 
   SSL_CTX* ctx_ = nullptr;
   SSL* ssl_ = nullptr;
+  /** Pinned device certificate, kept for the session because a renegotiation verifies the peer again. */
+  X509* device_cert_ = nullptr;
   int owned_fd_ = -1;
   std::vector<uint8_t> psk_key_;
   std::string psk_identity_;

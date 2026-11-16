@@ -3,6 +3,39 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.3](https://github.com/appium/appium-ios/compare/node-devicectl@3.0.2...node-devicectl@3.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [3.0.2](https://github.com/appium/appium-ios/compare/node-devicectl@3.0.1...node-devicectl@3.0.2) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [3.0.1](https://github.com/appium/appium-ios/compare/node-devicectl@3.0.0...node-devicectl@3.0.1) (2026-11-12)
+
+**Note:** Version bump only for package node-devicectl
+
+
+
+
+
+## [3.0.0](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.2...node-devicectl@3.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **devicectl:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **devicectl:** add Appium 4 support ([453f8f2](https://github.com/appium/appium-ios/commit/453f8f2df7b16577def3d6bf4d96a213b815e0f3))
+
+
 ## [2.2.2](https://github.com/appium/appium-ios/compare/node-devicectl@2.2.1...node-devicectl@2.2.2) (2026-10-26)
 
 ### Bug Fixes

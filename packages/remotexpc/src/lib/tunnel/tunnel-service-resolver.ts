@@ -75,7 +75,8 @@ export async function resolveTunnelServicePorts(
     );
   }
 
-  const missing = serviceNames.filter((name) => !getCatalogPort(entry, name));
+  const currentEntry = entry;
+  const missing = serviceNames.filter((name) => !getCatalogPort(currentEntry, name));
   if (missing.length > 0) {
     entry = await client.refreshServiceCatalog(udid);
     if (!entry) {

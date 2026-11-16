@@ -14,6 +14,7 @@ import * as messageHandlerMixins from './mixins/message-handlers.js';
 import * as miscellaneousMixins from './mixins/misc.js';
 import * as navigationMixins from './mixins/navigate.js';
 import * as screenshotMixins from './mixins/screenshot.js';
+import {validateWebInspectorPageSettings, type WebInspectorPageSettings} from './page-overrides.js';
 import {RpcClientSimulator, type AutomationSession} from './rpc/index.js';
 import type {RpcClient} from './rpc/rpc-client.js';
 import type {RemoteDebuggerOptions, AppDict, EventListener, PageIdKey, AppIdKey} from './types.js';
@@ -105,6 +106,7 @@ export class RemoteDebugger extends EventEmitter {
   protected readonly _logAllCommunicationHexDump: boolean;
   protected readonly _webInspectorMaxFrameLength?: number;
   protected readonly _fullPageInitialization?: boolean;
+  protected _webInspectorSettings: WebInspectorPageSettings;
   protected readonly _targetCreationTimeoutMs?: number;
 
   constructor(opts: RemoteDebuggerOptions = {}) {
@@ -164,12 +166,29 @@ export class RemoteDebugger extends EventEmitter {
     }
 
     this._fullPageInitialization = fullPageInitialization;
+    const webInspectorSettings = opts.webInspectorSettings === undefined ? {} : opts.webInspectorSettings;
+    validateWebInspectorPageSettings(webInspectorSettings);
+    this._webInspectorSettings = structuredClone(webInspectorSettings);
     this._targetCreationTimeoutMs = targetCreationTimeoutMs;
 
     this._pageLoadStrategy = pageLoadStrategy;
     this._skippedApps = [];
 
     this.setup();
+  }
+
+  /**
+   * Replaces the complete retained policy; this does not merge with previous settings.
+   * Omitted entries reset to defaults; {} clears policy-managed overrides, not legacy page-scoped UA values.
+   * Validates before changing state. Device rejection rejects an explicit update with best-effort rollback;
+   * applying the retained policy during target initialization is best-effort and warns on unsupported keys.
+   * Does not reload pages. See docs/web-inspector-settings.md for timing and recovery behavior.
+   */
+  async setWebInspectorPageSettings(settings: WebInspectorPageSettings): Promise<void> {
+    validateWebInspectorPageSettings(settings);
+    const next = structuredClone(settings);
+    await this._rpcClient?.setWebInspectorPageSettings(next);
+    this._webInspectorSettings = next;
   }
 
   get log(): AppiumLogger {
@@ -274,6 +293,7 @@ export class RemoteDebugger extends EventEmitter {
       logAllCommunication: this._logAllCommunication,
       logAllCommunicationHexDump: this._logAllCommunicationHexDump,
       fullPageInitialization: this._fullPageInitialization,
+      webInspectorSettings: this._webInspectorSettings,
       webInspectorMaxFrameLength: this._webInspectorMaxFrameLength,
       pageLoadTimeoutMs: this._pageLoadMs,
       targetCreationTimeoutMs: this._targetCreationTimeoutMs,

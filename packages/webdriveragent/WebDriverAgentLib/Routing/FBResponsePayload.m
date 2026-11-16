@@ -16,6 +16,7 @@
 #import "FBMacros.h"
 #import "FBProtocolHelpers.h"
 #import "XCUIElementQuery.h"
+#import "XCUIElement+FBCaching.h"
 #import "XCUIElement+FBResolve.h"
 #import "XCUIElement+FBUID.h"
 #import "XCUIElement+FBUtilities.h"
@@ -61,13 +62,60 @@ id<FBResponsePayload> FBResponseWithCachedElement(XCUIElement *element, FBElemen
   return FBResponseWithStatus([FBCommandStatus okWithValue:response]);
 }
 
+// Resolves snapshots of all the given elements with a single app snapshot instead of one per element
+static void FBAttachSnapshots(NSArray<XCUIElement *> *elements)
+{
+  NSMutableDictionary<NSString *, NSMutableArray<XCUIElement *> *> *pending = [NSMutableDictionary dictionary];
+  for (XCUIElement *element in elements) {
+    if (nil != element.lastSnapshot || nil == element.fb_boundAccessibilityElement) {
+      continue;
+    }
+    NSString *uid = element.fb_cacheId;
+    if (nil != uid) {
+      NSMutableArray<XCUIElement *> *group = pending[uid];
+      if (nil == group) {
+        group = [NSMutableArray array];
+        pending[uid] = group;
+      }
+      [group addObject:element];
+    }
+  }
+  if (0 == pending.count) {
+    return;
+  }
+  @autoreleasepool {
+    XCUIApplication *application = elements.firstObject.application;
+    id<FBXCElementSnapshot> root = [application fb_standardSnapshot];
+    // The app is long-lived, so don't let it keep the whole tree after this call
+    application.lastSnapshot = nil;
+    NSMutableArray *snapshots = [NSMutableArray arrayWithObject:root];
+    [snapshots addObjectsFromArray:[(id)root _allDescendants]];
+    for (id<FBXCElementSnapshot> snapshot in snapshots) {
+      NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
+      for (XCUIElement *element in (nil == uid ? nil : pending[uid])) {
+        element.lastSnapshot = snapshot;
+      }
+    }
+  }
+}
+
 id<FBResponsePayload> FBResponseWithCachedElements(NSArray<XCUIElement *> *elements, FBElementCache *elementCache, BOOL compact)
 {
+  if (!compact) {
+    FBAttachSnapshots(elements);
+  }
   NSMutableArray *elementsResponse = [NSMutableArray array];
-  for (XCUIElement *element in elements) {
-    [elementCache storeElement:maybeStable(element)];
-    [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
-    element.lastSnapshot = nil;
+  @try {
+    for (XCUIElement *element in elements) {
+      [elementCache storeElement:maybeStable(element)];
+      [elementsResponse addObject:FBDictionaryResponseWithElement(element, compact)];
+      element.lastSnapshot = nil;
+    }
+  } @finally {
+    // Cached elements must not keep the attached snapshots if building a response throws
+    for (XCUIElement *element in elements) {
+      element.lastSnapshot = nil;
+    }
   }
   return FBResponseWithStatus([FBCommandStatus okWithValue:elementsResponse]);
 }
@@ -109,10 +157,15 @@ inline NSDictionary *FBDictionaryResponseWithElement(XCUIElement *element, BOOL 
 {
   __block NSDictionary *elementResponse = nil;
   @autoreleasepool {
+    NSString *boundUid = element.fb_boundAccessibilityElement ? element.fb_cacheId : nil;
+    if (compact && nil != boundUid) {
+      elementResponse = FBToElementDict(boundUid);
+      return elementResponse;
+    }
     id<FBXCElementSnapshot> snapshot = element.lastSnapshot
       ?: element.fb_cachedSnapshot
       ?: [element fb_customSnapshot];
-    NSDictionary *compactResult = FBToElementDict((NSString *)[FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot]);
+    NSDictionary *compactResult = FBToElementDict(boundUid ?: (NSString *)[FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot]);
     if (compact) {
       elementResponse = compactResult;
       return elementResponse;

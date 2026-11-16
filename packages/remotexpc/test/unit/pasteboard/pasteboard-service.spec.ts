@@ -37,7 +37,7 @@ class TestPasteboardService extends PasteboardService {
     super('test-udid');
   }
 
-  protected async createTransport(): Promise<any> {
+  protected override async createTransport(): Promise<any> {
     return this.fake;
   }
 }

@@ -2,6 +2,7 @@ import {createRequire} from 'node:module';
 import {createServer} from 'node:net';
 import type {Server, Socket} from 'node:net';
 
+import {log} from '../logger.js';
 import {getPkgRoot} from '../pkg-root.js';
 import type {TunTap} from '../TunTap.js';
 import type {TunnelInfo} from './types.js';
@@ -9,10 +10,15 @@ import type {TunnelInfo} from './types.js';
 const require = createRequire(import.meta.url);
 const nativeTuntap = require('node-gyp-build')(getPkgRoot()) as NativeTuntapModule;
 
-/** PEM host certificate + private key from the usbmux pair record (lockdown TLS). */
+/** PEM host certificate + private key and device certificate from the usbmux pair record (lockdown TLS). */
 export interface TunnelLockdownTlsCredentials {
   cert: string;
   key: string;
+  /**
+   * When set, the connection fails unless the device presents exactly this certificate.
+   * Without it the device is not authenticated.
+   */
+  deviceCert?: string;
 }
 
 /** Pre-shared key from Apple TV Remote Pairing pair-verify (X25519 shared secret). */
@@ -23,8 +29,8 @@ export interface TunnelPskTlsCredentials {
 }
 
 interface NativeTunnelForwarder {
-  connect(tcpFd: number, certPem: string, keyPem: string): Promise<void>;
-  connectHost(host: string, port: number, certPem: string, keyPem: string): Promise<void>;
+  connect(tcpFd: number, certPem: string, keyPem: string, deviceCertPem: string): Promise<void>;
+  connectHost(host: string, port: number, certPem: string, keyPem: string, deviceCertPem: string): Promise<void>;
   connectPsk(tcpFd: number, psk: Buffer, identity?: string): Promise<void>;
   connectPskHost(host: string, port: number, psk: Buffer, identity?: string): Promise<void>;
   handshake(requestedMtu: number): Promise<TunnelInfo>;
@@ -44,15 +50,28 @@ export class TunnelForwarder {
   private retainedSocket: Socket | null = null;
   private loopbackBridge: Server | null = null;
 
+  /**
+   * Opens the lockdown TLS session over `tcpSocket`. The device is authenticated only when
+   * `credentials.deviceCert` is set.
+   *
+   * @throws If the device presents a certificate other than `credentials.deviceCert`
+   */
   async connect(tcpSocket: Socket, credentials: TunnelLockdownTlsCredentials): Promise<void> {
+    const deviceCert = credentials.deviceCert ?? '';
+    if (deviceCert === '') {
+      log.warn(
+        'Lockdown tunnel credentials have no deviceCert, so the device is not authenticated. ' +
+          'Pass the DeviceCertificate of the pair record to verify it.',
+      );
+    }
     const forwarder = new nativeTuntap.TunnelForwarder();
     this.forwarder = forwarder;
 
     if (process.platform === 'win32') {
       const {host, port} = await this.bridgeToNative(tcpSocket);
-      await this.forwarder.connectHost(host, port, credentials.cert, credentials.key);
+      await this.forwarder.connectHost(host, port, credentials.cert, credentials.key, deviceCert);
     } else {
-      await handOffSocket(tcpSocket, (fd) => forwarder.connect(fd, credentials.cert, credentials.key));
+      await handOffSocket(tcpSocket, (fd) => forwarder.connect(fd, credentials.cert, credentials.key, deviceCert));
     }
   }
 

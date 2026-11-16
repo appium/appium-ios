@@ -4,6 +4,7 @@ import type {AppiumLogger, StringRecord} from '@appium/types';
 import {TimeoutError as AsyncboxTimeoutError, withTimeout} from 'asyncbox';
 
 import type {AppIdKey, PageIdKey} from '../../types.js';
+import {runInBackground} from '../../utils/index.js';
 import type {RpcClient} from '../rpc-client.js';
 import * as actionsMixins from './actions.js';
 import {
@@ -198,7 +199,7 @@ export class AutomationSession {
     // Marks the promise as handled so a later rejection (e.g. its own timeout firing) doesn't
     // surface as an unhandled rejection if one of the sends below throws first - we still await
     // the same promise instance for its real value/error below.
-    targetPageIdKeyPromise.catch(() => {});
+    runInBackground(targetPageIdKeyPromise);
     await this.rpcClient.send('forwardAutomationSessionRequest', {appIdKey, sessionId}, false);
     await this.rpcClient.send('connectToApp', {appIdKey}, false);
     const automationPageIdKey = (await targetPageIdKeyPromise).WIRPageIdentifierKey as PageIdKey;
@@ -214,7 +215,7 @@ export class AutomationSession {
         entry.WIRConnectionIdentifierKey !== undefined,
       `Timed out after ${timeoutMs}ms waiting for the automation session '${sessionId}' connection id`,
     );
-    connectionIdPromise.catch(() => {});
+    runInBackground(connectionIdPromise);
     await this.rpcClient.send('connectToApp', {appIdKey}, false);
     await connectionIdPromise;
 

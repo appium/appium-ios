@@ -1,3 +1,4 @@
+import {formatError, formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
@@ -121,7 +122,7 @@ export class InstallationProxyService extends BaseService {
    * Lookup application information by bundle IDs
    */
   async lookup(bundleIds?: string[], options: Partial<LookupOptions> = {}): Promise<Record<string, AppInfo>> {
-    const clientOptions: Record<string, string | string[] | ApplicationType> = {
+    const clientOptions: Record<string, string | string[]> = {
       ...options,
     };
 
@@ -255,7 +256,7 @@ export class InstallationProxyService extends BaseService {
         appInfo,
       };
     } catch (error) {
-      log.error(`Error checking if app is installed: ${error}`);
+      log.error(`Error checking if app is installed: ${formatError(error)}`);
       // If lookup fails, assume app is not installed
       return {isInstalled: false};
     }
@@ -298,7 +299,7 @@ export class InstallationProxyService extends BaseService {
 
     if (startServiceResponse.Error) {
       const errorDesc = startServiceResponse.ErrorDescription ?? 'Unknown error';
-      throw new Error(`Service start failed: ${startServiceResponse.Error} - ${errorDesc}`);
+      throw new Error(`Service start failed: ${formatValue(startServiceResponse.Error)} - ${formatValue(errorDesc)}`);
     }
 
     return this.connection;

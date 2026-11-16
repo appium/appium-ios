@@ -11,7 +11,10 @@
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBElementUtils.h"
+#import "FBElementCache.h"
+#import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
+#import "FBResponsePayload.h"
 #import "FBTestMacros.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBFind.h"
@@ -39,6 +42,71 @@
   });
   self.testedView = self.testedApplication.otherElements[@"MainView"];
   FBAssertWaitTillBecomesTrue(self.testedView.exists);
+}
+
+// Based on the lookup snapshot reuse checks from https://github.com/appium/appium-ios/pull/175
+- (void)assertLookupSnapshotsWithIndexBinding:(BOOL)boundByIndex
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = boundByIndex;
+    NSArray<NSArray<XCUIElement *> *> *lookups = @[
+      [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingPredicate:[NSPredicate predicateWithFormat:@"type == 'XCUIElementTypeButton'"]
+                         shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingIdentifier:@"Alerts" shouldReturnAfterFirstMatch:NO],
+      [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton" shouldReturnAfterFirstMatch:NO],
+    ];
+    for (NSArray<XCUIElement *> *elements in lookups) {
+      XCTAssertGreaterThan(elements.count, 1u);
+      FBElementCache *cache = [FBElementCache new];
+      NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+      for (XCUIElement *element in elements) {
+        id<FBXCElementSnapshot> snapshot = element.lastSnapshot;
+        if (boundByIndex) {
+          // Index-bound matches reuse the snapshots of the query that found them
+          XCTAssertNotNil(snapshot);
+        } else {
+          XCTAssertNil(snapshot);
+          XCTAssertNotNil(element.fb_boundAccessibilityElement);
+        }
+        NSString *uid = element.fb_cacheId;
+        XCTAssertEqualObjects([cache storeElement:element], uid);
+        // Cache registration and the compact response must not resolve the element again
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        XCTAssertEqualObjects(FBDictionaryResponseWithElement(element, YES)[@"element-6066-11e4-a52e-4f735466cecf"], uid);
+        XCTAssertEqual(element.lastSnapshot, snapshot);
+        [identifiers addObject:uid];
+        // Resolve the element independently to catch order/identity errors
+        id<FBXCElementSnapshot> resolved = [element fb_standardSnapshot];
+        XCTAssertEqualObjects([FBXCElementSnapshotWrapper wdUIDWithSnapshot:resolved], uid);
+        if (nil != snapshot) {
+          XCTAssertEqualObjects(snapshot.label, resolved.label);
+          XCTAssertEqual(snapshot.elementType, resolved.elementType);
+        }
+        element.lastSnapshot = snapshot;
+      }
+      XCTAssertEqual(identifiers.count, elements.count);
+      FBResponseWithCachedElements(elements, cache, YES);
+      for (XCUIElement *element in elements) {
+        XCTAssertNil(element.lastSnapshot);
+        XCTAssertEqual([cache elementForUUID:element.fb_cacheId], element);
+      }
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testLookupSnapshotsWithAccessibilityBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:NO];
+}
+
+- (void)testLookupSnapshotsWithIndexBinding
+{
+  [self assertLookupSnapshotsWithIndexBinding:YES];
 }
 
 - (void)testDescendantsWithClassName
@@ -401,6 +469,100 @@
                                NSException, FBUnknownAttributeException);;
 }
 
+
+- (void)testUidsOfAccessibilityBoundElementsDoNotNeedSnapshots
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+    for (XCUIElement *match in matches) {
+      XCTAssertNotNil(match.fb_boundAccessibilityElement);
+      match.lastSnapshot = nil;
+      NSString *uid = match.fb_uid;
+      XCTAssertNil(match.lastSnapshot, @"Getting the uid must not resolve the element");
+      XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testElementResponsesMatchSnapshotUids
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+    NSMutableArray<NSString *> *expectedUids = [NSMutableArray array];
+    NSMutableArray<NSString *> *expectedLabels = [NSMutableArray array];
+    for (XCUIElement *match in matches) {
+      id<FBXCElementSnapshot> snapshot = [match fb_standardSnapshot];
+      [expectedUids addObject:(NSString *)[FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot]];
+      [expectedLabels addObject:snapshot.label];
+      match.lastSnapshot = nil;
+    }
+    XCTAssertEqual([NSSet setWithArray:expectedUids].count, expectedUids.count);
+
+    FBElementCache *cache = [FBElementCache new];
+    NSArray *payloads = @[@(YES), @(NO)];
+    for (NSNumber *compact in payloads) {
+      id<FBResponsePayload> payload = FBResponseWithCachedElements(matches, cache, compact.boolValue);
+      XCTAssertNotNil(payload);
+      for (NSUInteger i = 0; i < matches.count; i++) {
+        NSDictionary *response = FBDictionaryResponseWithElement(matches[i], compact.boolValue);
+        XCTAssertEqualObjects(response[@"ELEMENT"], expectedUids[i]);
+        if (!compact.boolValue) {
+          XCTAssertEqualObjects(response[@"label"], expectedLabels[i]);
+        }
+        XCTAssertTrue([cache hasElementWithUUID:expectedUids[i]]);
+      }
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testXPathMatchesAreBoundWithoutResolvingEachElement
+{
+  NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton"
+                                                          shouldReturnAfterFirstMatch:NO];
+  XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+  NSMutableSet<NSString *> *uids = [NSMutableSet set];
+  for (XCUIElement *match in matches) {
+    XCTAssertNotNil(match.fb_boundAccessibilityElement);
+    XCTAssertNil(match.lastSnapshot, @"Matches must not retain the snapshots they were found with");
+    NSString *uid = match.fb_uid;
+    XCTAssertNil(match.lastSnapshot, @"Getting the uid must not resolve the element");
+    XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);
+    XCTAssertEqual(match.elementType, XCUIElementTypeButton);
+    [uids addObject:uid];
+  }
+  XCTAssertEqual(uids.count, matches.count);
+  XCTAssertEqualObjects([matches valueForKey:@"label"], FBMainViewButtonLabels);
+}
+
+- (void)testXPathMatchesAreIndexBoundWhenRequested
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = YES;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(matches.count, FBMainViewButtonLabels.count);
+    for (XCUIElement *match in matches) {
+      XCTAssertNil(match.fb_boundAccessibilityElement);
+    }
+    XCTAssertEqualObjects([matches valueForKey:@"label"], FBMainViewButtonLabels);
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
 @end
 
 @interface XCUIElementFBFindTests_AttributesPage : FBIntegrationTestCase
@@ -542,6 +704,21 @@
 @interface XCUIElementFBFindTests_StaleAppSnapshot : FBIntegrationTestCase
 @end
 @implementation XCUIElementFBFindTests_StaleAppSnapshot
+
+- (void)testCachedLookupStillChecksStalenessAfterNavigation
+{
+  [self launchApplication];
+  XCUIElement *element = [self.testedApplication fb_descendantsMatchingClassChain:
+    @"**/XCUIElementTypeButton[`label == 'Alerts'`]" shouldReturnAfterFirstMatch:NO].firstObject;
+  NSString *uid = element.fb_cacheId;
+  FBElementCache *cache = [FBElementCache new];
+  FBResponseWithCachedElement(element, cache, YES);
+  XCTAssertNil(element.lastSnapshot);
+
+  [self goToAttributesPage];
+  XCTAssertThrowsSpecificNamed([cache elementForUUID:uid checkStaleness:YES], NSException, FBStaleElementException);
+  XCTAssertFalse([cache hasElementWithUUID:uid]);
+}
 
 // Regression test for https://github.com/appium/appium/issues/22672.
 - (void)testClassChainWithIntermediatePositionAfterStaleAppSnapshot

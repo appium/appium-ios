@@ -60,6 +60,11 @@ export type DisplayId = string | number;
 
 /** Options for {@link SupportsScreenshot.getScreenshot}. */
 export interface ScreenshotOptions {
+  /**
+   * Opt in to CoreSim's boot-scoped numeric display-ID cache. Defaults to `false`.
+   * See [CoreSim screenshot options](../../coresim/src/types.ts) for retry and topology-change semantics.
+   */
+  cacheDisplayId?: boolean;
   /** Image encoding — defaults to `'png'`. */
   format?: 'png' | 'jpeg';
   /**
@@ -270,7 +275,7 @@ export interface LaunchAppOptions {
 }
 
 /** Which of an app's on-disk containers {@link InteractsWithApps.getAppContainer} should resolve. */
-export type AppContainerType = 'app' | 'data' | 'groups' | string;
+export type AppContainerType = 'app' | 'data' | 'groups' | (string & Record<never, never>);
 
 export interface InteractsWithApps {
   installApp(app: string): Promise<void>;
@@ -692,7 +697,6 @@ export type Simulator = CoreSimulator &
   InteractsWithSafariBrowser &
   InteractsWithApps &
   HasSettings &
-  InteractsWithApps &
   SupportsBiometric &
   SupportsGeolocation &
   InteractsWithKeychain &

@@ -1,5 +1,6 @@
 import {posix as path} from 'node:path';
 
+import {formatError} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {LENGTH_FIELD_4_BYTES, LENGTH_FIELD_8_BYTES} from '../../../lib/plist/constants.js';
 import {parsePlist} from '../../../lib/plist/index.js';
@@ -366,7 +367,7 @@ export class SyslogProtocolParser {
         const entry = parseSyslogEntry(entryData);
         this.onEntry(entry);
       } catch (error) {
-        log.debug(`Failed to parse syslog entry: ${error}`);
+        log.debug(`Failed to parse syslog entry: ${formatError(error)}`);
         this.onError(error instanceof Error ? error : new Error(String(error)));
       }
     }

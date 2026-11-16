@@ -3,6 +3,214 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.14](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.13...appium-remote-debugger@19.1.14) (2026-11-15)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.13](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.12...appium-remote-debugger@19.1.13) (2026-11-14)
+
+### Code Refactoring
+
+* **remote-debugger:** name reply listener factories with verbs and type their returns ([#206](https://github.com/appium/appium-ios/issues/206)) ([b4addf3](https://github.com/appium/appium-ios/commit/b4addf3cfcd43b120ffa30ad13e6058c80b28b26))
+
+
+## [19.1.12](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.11...appium-remote-debugger@19.1.12) (2026-11-14)
+
+### Bug Fixes
+
+* **remote-debugger:** ignore unrelated apps connecting during selectApp ([#172](https://github.com/appium/appium-ios/issues/172)) ([e5f93f5](https://github.com/appium/appium-ios/commit/e5f93f5bb0736683e8a332d30bd8d8c339011863))
+
+
+## [19.1.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.10...appium-remote-debugger@19.1.11) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
+## [19.1.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.9...appium-remote-debugger@19.1.10) (2026-11-13)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.8...appium-remote-debugger@19.1.9) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [19.1.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.7...appium-remote-debugger@19.1.8) (2026-11-13)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.6...appium-remote-debugger@19.1.7) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** fix lint warnings ([#203](https://github.com/appium/appium-ios/issues/203)) ([9deb2c2](https://github.com/appium/appium-ios/commit/9deb2c2b0cd9181d842fb34cc1062ac36e0e3926))
+
+
+## [19.1.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.5...appium-remote-debugger@19.1.6) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [19.1.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.4...appium-remote-debugger@19.1.5) (2026-11-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.3...appium-remote-debugger@19.1.4) (2026-11-12)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** drop serve-static dev dependency ([ec9a8d7](https://github.com/appium/appium-ios/commit/ec9a8d77b0dd3081105a9b33019d976fb77b7283))
+
+
+## [19.1.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.2...appium-remote-debugger@19.1.3) (2026-11-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.1...appium-remote-debugger@19.1.2) (2026-11-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.0...appium-remote-debugger@19.1.1) (2026-11-12)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.0.0...appium-remote-debugger@19.1.0) (2026-11-12)
+
+### Features
+
+* **remote-debugger:** export Web Inspector settings validator ([#188](https://github.com/appium/appium-ios/issues/188)) ([a159684](https://github.com/appium/appium-ios/commit/a1596846f3d9b8fd102d5fa144681663ea6c735c))
+
+
+## [19.0.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.1...appium-remote-debugger@19.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **remote-debugger:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **remote-debugger:** add Appium 4 support ([4b3d6f4](https://github.com/appium/appium-ios/commit/4b3d6f435599271c6364bd3dd5a88ab48e19dd5b))
+
+
+## [18.1.1](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.1.0...appium-remote-debugger@18.1.1) (2026-11-11)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.1.0](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.11...appium-remote-debugger@18.1.0) (2026-11-09)
+
+### Features
+
+* **remote-debugger:** retain grouped Web Inspector overrides ([#150](https://github.com/appium/appium-ios/issues/150)) ([1279a3d](https://github.com/appium/appium-ios/commit/1279a3d64b44d013d7e6883483f2c29d53a50a2b))
+
+
+## [18.0.11](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.10...appium-remote-debugger@18.0.11) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [18.0.10](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.9...appium-remote-debugger@18.0.10) (2026-11-07)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.9](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.8...appium-remote-debugger@18.0.9) (2026-11-06)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.8](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.7...appium-remote-debugger@18.0.8) (2026-11-02)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.7](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.6...appium-remote-debugger@18.0.7) (2026-11-01)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.6](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.5...appium-remote-debugger@18.0.6) (2026-10-31)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.5](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.4...appium-remote-debugger@18.0.5) (2026-10-30)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.4](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.3...appium-remote-debugger@18.0.4) (2026-10-30)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [18.0.3](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.2...appium-remote-debugger@18.0.3) (2026-10-28)
+
+### Bug Fixes
+
+* **remote-debugger:** remove timeline listener on stopTimeline ([#126](https://github.com/appium/appium-ios/issues/126)) ([4ac7445](https://github.com/appium/appium-ios/commit/4ac7445cbb729671cc614a744e3c0e63a8f5cac1))
+
+
 ## [18.0.2](https://github.com/appium/appium-ios/compare/appium-remote-debugger@18.0.1...appium-remote-debugger@18.0.2) (2026-10-27)
 
 **Note:** Version bump only for package appium-remote-debugger

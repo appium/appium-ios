@@ -6,6 +6,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 import {util} from '@appium/support';
 
+import {formatError} from '../../../lib/format-error.js';
 import {createLockdownServiceForTunnel} from '../../../lib/lockdown/index.js';
 import {getLogger} from '../../../lib/logger.js';
 import {DEFAULT_TUNNEL_SERVICE_WAIT_MS, resolveTunnelService} from '../../../lib/tunnel/tunnel-service-resolver.js';
@@ -448,7 +449,7 @@ export class CrashReportsService {
         lockdown.close();
       }
     } catch (error) {
-      log.warn(`Could not read the device clock, assuming it matches the local clock: ${error}`);
+      log.warn(`Could not read the device clock, assuming it matches the local clock: ${formatError(error)}`);
       return 0;
     }
   }

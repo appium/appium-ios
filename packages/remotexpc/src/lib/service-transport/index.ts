@@ -1,3 +1,4 @@
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 import {TunnelAvailabilityError} from '../tunnel/errors.js';
 import {
@@ -107,7 +108,7 @@ export async function resolveServiceTransportWithPort(
       await assertUsbmuxReady(udid);
     } catch (usbmuxErr) {
       // Keep the tunnel error so callers asking the user to start a tunnel still recognise it
-      log.debug(`Tunnel unavailable for ${udid} (${err.message}) and usbmux is not usable: ${usbmuxErr}`);
+      log.debug(`Tunnel unavailable for ${udid} (${err.message}) and usbmux is not usable: ${formatError(usbmuxErr)}`);
       throw err;
     }
     log.debug(`Tunnel unavailable for ${udid} (${err.message}); using lockdown over usbmux`);

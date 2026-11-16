@@ -50,11 +50,7 @@ const NON_LISTABLE_ENTRIES = ['', '.', '..'];
  * The `isDirectory` parameter allows callback consumers to distinguish between files
  * and directories.
  */
-export type PullRecursiveCallback = (
-  remotePath: string,
-  localPath: string,
-  isDirectory: boolean,
-) => unknown | Promise<unknown>;
+export type PullRecursiveCallback = (remotePath: string, localPath: string, isDirectory: boolean) => unknown;
 
 /** Options for the pull method. */
 export interface PullOptions {

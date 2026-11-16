@@ -140,3 +140,28 @@ function uint32(value: number): Buffer {
   buf.writeUInt32BE(value, 0);
   return buf;
 }
+
+describe('mDNS TXT record keys', function () {
+  it('should keep a __proto__ TXT key as an own property', function () {
+    const header = Buffer.alloc(12);
+    header.writeUInt16BE(1, 6);
+    const segments = ['__proto__=x', 'a=b'].map((text) => {
+      const segment = Buffer.from(text);
+      return Buffer.concat([Buffer.from([segment.length]), segment]);
+    });
+    const txtPayload = Buffer.concat(segments);
+    const txtRR = Buffer.concat([
+      encodeName('Bedroom._remotepairing._tcp.local.'),
+      uint16(QTYPE_TXT),
+      uint16(1),
+      uint32(120),
+      uint16(txtPayload.length),
+      txtPayload,
+    ]);
+    const [record] = parseMdnsMessage(Buffer.concat([header, txtRR]));
+    const txt = record?.txt as Record<string, string>;
+    assert.strictEqual(Object.getPrototypeOf(txt), Object.prototype);
+    assert.deepStrictEqual(Object.keys(txt), ['__proto__', 'a']);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(txt, '__proto__')?.value, 'x');
+  });
+});

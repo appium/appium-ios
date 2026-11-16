@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, it} from 'node:test';
 
+import sinon from 'sinon';
+
 import {RpcClientSimulator} from '../../../lib/rpc/rpc-client-simulator.js';
 import {WebInspectorFrameDecoder, encodeWebInspectorFrame} from '../../../lib/rpc/web-inspector-framing.js';
 
@@ -138,6 +140,57 @@ describe('RpcClientSimulator', function () {
     await client.disconnect();
     assert.strictEqual(client.isConnected, false);
     await waitFor(() => serverSocket?.destroyed === true || serverSocket?.readableEnded === true);
+  });
+
+  it('ignores old socket events after reconnect without losing target settings', async function () {
+    client = new RpcClientSimulator({socketPath, udid: 'sim'});
+    await client.connect();
+    const oldSocket = client.socket;
+    await client.disconnect();
+    await client.connect();
+    const newSocket = client.socket;
+    sinon.stub(client, 'send').resolves();
+    const overrides = sinon.stub(client, 'sendToDevice').resolves();
+    client._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+    await client.addTarget(undefined, 'app', {
+      targetId: 'new',
+      type: 'page',
+      isProvisional: false,
+      isPaused: true,
+    });
+    // Reproduce delayed callbacks from the old generation after the new one is ready.
+    oldSocket.emit('end');
+    oldSocket.emit('error', new Error('Late old socket error'));
+    oldSocket.emit('data', Buffer.from([0x7f, 0xff, 0xff, 0xff]));
+    oldSocket.emit('close');
+    assert.equal(client.isConnected, true);
+    assert.equal(client.socket, newSocket);
+    assert.equal(client.getTarget('app', '1'), 'new');
+    await client.setWebInspectorPageSettings({userAgent: 'AfterReconnect/1'});
+    sinon.assert.calledOnceWithMatch(overrides, 'Page.overrideUserAgent', {
+      targetId: 'new',
+      value: 'AfterReconnect/1',
+    });
+  });
+
+  it('cancels pending settings on intentional disconnect and detaches the socket', async function () {
+    client = new RpcClientSimulator({socketPath, udid: 'sim'});
+    await client.connect();
+    sinon.stub(client, 'send').resolves();
+    client._pendingTargetNotification = {appIdKey: 'app', pageIdKey: '1'};
+    await client.addTarget(undefined, 'app', {
+      targetId: 'old',
+      type: 'page',
+      isProvisional: false,
+      isPaused: true,
+    });
+    const rejected = assert.rejects(client.setWebInspectorPageSettings({userAgent: 'Pending/1'}), /disconnected/);
+    await waitFor(() => received.length > 0);
+    await client.disconnect();
+    await rejected;
+    assert.equal(client.socket, null);
+    assert.equal(client.isConnected, false);
+    assert.equal(client.getTarget('app', '1'), undefined);
   });
 
   it('forwards the real socket path to the message proxy', async function () {

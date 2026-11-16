@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../../../../lib/dictionary.js';
 import {getLogger} from '../../../../lib/logger.js';
 import {parseBinaryPlist} from '../../../../lib/plist/index.js';
 import type {ProcessInfo} from '../../../../lib/types.js';
@@ -26,7 +27,7 @@ const log = getLogger('DeviceInfo');
  * - nameForGid(gid): Get group name for GID
  */
 export class DeviceInfo extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.deviceinfo';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.deviceinfo';
 
   /**
    * List directory contents at the specified path.
@@ -116,7 +117,7 @@ export class DeviceInfo extends BaseInstrument {
    * Get the kernel performance event (kpep) database.
    * @returns Object containing kpep database or null if not available
    */
-  async kpepDatabase(): Promise<any | null> {
+  async kpepDatabase(): Promise<any> {
     const kpepData = await this.requestInformation('kpepDatabase');
 
     if (kpepData === null || kpepData === undefined) {
@@ -152,7 +153,7 @@ export class DeviceInfo extends BaseInstrument {
       const match = line.trim().match(/^(\S+)\s+(.+)$/);
       if (match) {
         const [, hex, description] = match;
-        codes[hex] = description;
+        setDictionaryEntry(codes, hex, description);
       }
     }
 

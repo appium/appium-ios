@@ -7,6 +7,7 @@ import path from 'node:path';
 import {Readable, type Writable} from 'node:stream';
 import {finished, pipeline} from 'node:stream/promises';
 
+import {runInBackground} from '../../../lib/background.js';
 import {getLogger} from '../../../lib/logger.js';
 import {connectToTunnelHost} from '../../../lib/port-forwarding/connectors.js';
 import type {RemoteXpcFramedTransport} from '../../../lib/remote-xpc/remote-xpc-framed-transport.js';
@@ -667,7 +668,7 @@ export class CoreDeviceFileService extends CoreDeviceService {
   ): Promise<string> {
     if (this.session?.transport !== transport) {
       const session: FileServiceSession = {transport, id: this.createSessionOn(transport, options)};
-      session.id.catch(() => {
+      runInBackground(session.id, () => {
         if (this.session === session) {
           this.session = undefined;
         }

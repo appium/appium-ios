@@ -3,7 +3,7 @@ import type {StringRecord} from '@appium/types';
 
 import type {RemoteDebugger} from '../remote-debugger.js';
 import type {AppDict} from '../types.js';
-import {deepEqual, defaults, pageArrayFromDict, appInfoFromDict} from '../utils/index.js';
+import {deepEqual, defaults, pageArrayFromDict, appInfoFromDict, runInBackground} from '../utils/index.js';
 import {events} from './events.js';
 import {
   setAppIdKey,
@@ -106,7 +106,7 @@ export function onAppDisconnect(this: RemoteDebugger, err: Error | null | undefi
   // tear it down - webinspectord will otherwise consider it still active
   const automationSession = getAutomationSession(this);
   if (automationSession && automationSession.trackedAppIdKey === appIdKey) {
-    void automationSession.stop().catch((stopErr: any) => {
+    runInBackground(automationSession.stop(), (stopErr: any) => {
       this.log.debug(`Failed to stop the automation session on app disconnect: ${stopErr?.message ?? stopErr}`);
     });
     setAutomationSession(this, undefined);

@@ -5,6 +5,17 @@ devices, rather than restricting access to a particular device model or to
 Simulator builds. Reading an angle and injecting a simulated angle have separate
 requirements.
 
+`GET /wda/device/info` and `GET /session/:sessionId/wda/device/info` include
+`hasHinge`, a JSON boolean using the existing `fb_supportsHingeAngleReading`
+check: a hinge and the CoreMotion angle-reading APIs must be available. This
+works with older XCTest versions, including Xcode 27.2. It does not read the
+angle, subscribe to sensor updates, or send events. It returns `false` on tvOS
+and watchOS.
+
+`hasHinge` does not identify a particular model, current fold state, active
+display, or support for injecting angles. Clients using older WDA builds must
+account for this field being absent.
+
 `POST /session/:sessionId/wda/device/hingeAngle` with `{"angle": 90}` sends an
 event requesting a simulated hinge angle of 90 degrees. The angle
 must be a finite number from `0` (closed) to `180` (fully open); fractional values
@@ -14,6 +25,14 @@ establish that the device accepts this vendor payload. Physical devices may atte
 injection when those prerequisites exist, but event acceptance and the resulting
 angle/layout changes on a physical Duo remain unverified. Devices without these
 prerequisites, tvOS, and watchOS return `unsupported operation`.
+
+On iOS 27.2 the simulator stops the first move of an intermediate angle about 5%
+short of the target (for example 85.4° instead of 90°). After dispatching, POST therefore
+waits for the angle to settle and, if the reading differs from the target by more than
+0.05°, re-sends the angle nudged by up to 0.002° (at most twice). Intermediate angles
+take about one second to return; the final reading is within that nudge of the target.
+Values above 170° snap to 180° on the simulator. The correction is best effort and
+never fails the request.
 
 The response confirms event dispatch, not that the device applied the angle.
 Wait for the expected app layout before continuing, since folding completes

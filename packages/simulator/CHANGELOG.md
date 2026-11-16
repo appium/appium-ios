@@ -3,6 +3,97 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.0.6](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.5...appium-ios-simulator@11.0.6) (2026-11-14)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency asyncbox to v7 ([#194](https://github.com/appium/appium-ios/issues/194)) ([8cee6af](https://github.com/appium/appium-ios/commit/8cee6afd5ea6e8998bbe7849e31ce326d613214b))
+
+
+## [11.0.5](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.4...appium-ios-simulator@11.0.5) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **xcode:** update dependency teen_process to v5 ([#195](https://github.com/appium/appium-ios/issues/195)) ([35aa451](https://github.com/appium/appium-ios/commit/35aa45124a7ced8a0bf6e7cb8ba7358a816adc20))
+
+
+## [11.0.4](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.3...appium-ios-simulator@11.0.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **simulator:** fix lint warnings ([#196](https://github.com/appium/appium-ios/issues/196)) ([9064e74](https://github.com/appium/appium-ios/commit/9064e74f92a7d9991be5b1091a28dc506491c0e5))
+
+
+## [11.0.3](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.2...appium-ios-simulator@11.0.3) (2026-11-13)
+
+### Miscellaneous Chores
+
+* **deps:** bump @appium/* packages to latest 4.0 betas ([#193](https://github.com/appium/appium-ios/issues/193)) ([de20629](https://github.com/appium/appium-ios/commit/de20629ed0e7b9ec22953f25ba30825541be3ca4))
+
+
+## [11.0.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.1...appium-ios-simulator@11.0.2) (2026-11-12)
+
+### Miscellaneous Chores
+
+* **simulator:** drop unused pem dependency ([#191](https://github.com/appium/appium-ios/issues/191)) ([e84f40f](https://github.com/appium/appium-ios/commit/e84f40fb8e15c69ac599944d3283dd4a843addc2))
+
+
+## [11.0.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.0...appium-ios-simulator@11.0.1) (2026-11-12)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
+## [11.0.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.2...appium-ios-simulator@11.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* **simulator:** the package requires the Appium 4 versions of the @appium/* dependencies and Node.js 22.22.2+, 24.15.0+ or 26+.
+
+### Features
+
+* **simulator:** add Appium 4 support ([8b4d8ec](https://github.com/appium/appium-ios/commit/8b4d8ecca5d4220db1f25f87fed54c9ceaeb56da))
+
+
+## [10.11.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.1...appium-ios-simulator@10.11.2) (2026-11-07)
+
+### Code Refactoring
+
+* use ConditionUnmetError instead of message matching ([#169](https://github.com/appium/appium-ios/issues/169)) ([ccaac20](https://github.com/appium/appium-ios/commit/ccaac207cd2e449a821f75dd0881ffc3dfc595e2))
+
+
+## [10.11.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.11.0...appium-ios-simulator@10.11.1) (2026-11-07)
+
+### Bug Fixes
+
+* **simulator:** hint at Full Disk Access when DeviceHub preferences are denied ([#161](https://github.com/appium/appium-ios/issues/161)) ([ff8eed9](https://github.com/appium/appium-ios/commit/ff8eed96742db2c24cd5fdd98ba37ea713fc2591))
+
+
+## [10.11.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.2...appium-ios-simulator@10.11.0) (2026-11-07)
+
+### Features
+
+* add opt-in boot-scoped screenshot display cache ([#51](https://github.com/appium/appium-ios/issues/51)) ([692a1f7](https://github.com/appium/appium-ios/commit/692a1f77bfbc64a18184a83282a8d2695ffe8d0a))
+
+
+## [10.10.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.1...appium-ios-simulator@10.10.2) (2026-11-06)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
+## [10.10.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.10.0...appium-ios-simulator@10.10.1) (2026-11-06)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
 ## [10.10.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@10.9.2...appium-ios-simulator@10.10.0) (2026-10-24)
 
 ### Features

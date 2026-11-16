@@ -31,4 +31,4 @@ async function main() {
   console.log(socket);
 }
 
-(async () => await main())();
+await main();

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import {fs, mkdirp, tempDir, util} from '@appium/support';
+import {fs, tempDir, util} from '@appium/support';
 import {exec} from 'teen_process';
 
 import {LAUNCHCTL_PATH, spawnAndWait} from '../native/spawn.js';
@@ -89,7 +89,7 @@ export async function restoreKeychains(
   }
   try {
     await fs.rimraf(this.keychainPath);
-    await mkdirp(this.keychainPath);
+    await fs.mkdirp(this.keychainPath);
     const backupPath = this._keychainsBackupPath;
     if (!backupPath) {
       throw new Error('Backup path is not set');
@@ -130,7 +130,7 @@ export async function clearKeychains(this: CoreSimulatorWithKeychain): Promise<v
   try {
     if (await fs.exists(this.keychainPath)) {
       await fs.rimraf(this.keychainPath);
-      await mkdirp(this.keychainPath);
+      await fs.mkdirp(this.keychainPath);
     }
   } finally {
     await spawnAndWait(this._native, this.udid, LAUNCHCTL_PATH, ['load', plistPath]);

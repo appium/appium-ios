@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.1.4](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.3...ios-uicatalog@4.1.4) (2026-11-13)
+
+### Miscellaneous Chores
+
+* publish ([9c72898](https://github.com/appium/appium-ios/commit/9c72898744045b9ac9f691af75f50976c59eb208))
+* **uicatalog:** fix lint warnings ([#199](https://github.com/appium/appium-ios/issues/199)) ([05c9ef1](https://github.com/appium/appium-ios/commit/05c9ef10638f20b61924fd7932f0b31a2ee60cab))
+
+
 ## [4.1.3](https://github.com/appium/appium-ios/compare/ios-uicatalog@4.1.2...ios-uicatalog@4.1.3) (2026-10-26)
 
 ### Bug Fixes

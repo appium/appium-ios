@@ -126,8 +126,16 @@ eachEncoder('HEVC -> H.264', (encoder) => {
         const file = join(dir, 'out.h264');
         writeFileSync(file, Buffer.concat(units.map((u) => u.data)));
         const probe = spawnSync('ffprobe', [
-          ...['-v', 'error', '-count_frames', '-select_streams', 'v:0'],
-          ...['-show_entries', 'stream=codec_name,width,height,nb_read_frames', '-of', 'csv=p=0', file],
+          '-v',
+          'error',
+          '-count_frames',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=codec_name,width,height,nb_read_frames',
+          '-of',
+          'csv=p=0',
+          file,
         ]);
         assert.strictEqual(probe.stdout.toString().trim(), `h264,360,640,${FRAMES}`, probe.stderr.toString());
       } finally {
@@ -149,7 +157,7 @@ eachEncoder('HEVC -> H.264', (encoder) => {
         writeFileSync(file, Buffer.concat(units.map((u) => u.data)));
         const raw = spawnSync(
           'ffmpeg',
-          [...['-v', 'error', '-i', file, '-frames:v', '1', '-pix_fmt', 'yuv420p', '-f', 'rawvideo', '-']],
+          ['-v', 'error', '-i', file, '-frames:v', '1', '-pix_fmt', 'yuv420p', '-f', 'rawvideo', '-'],
           {maxBuffer: 1 << 24},
         ).stdout;
         const chroma = (size / 2) ** 2;
@@ -178,8 +186,15 @@ eachEncoder('HEVC -> H.264', (encoder) => {
         const file = join(dir, 'out.h264');
         writeFileSync(file, Buffer.concat(units.map((u) => u.data)));
         const probe = spawnSync('ffprobe', [
-          ...['-v', 'error', '-select_streams', 'v:0', '-of', 'json'],
-          ...['-show_entries', 'stream=color_range,color_space,color_transfer,color_primaries', file],
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-of',
+          'json',
+          '-show_entries',
+          'stream=color_range,color_space,color_transfer,color_primaries',
+          file,
         ]);
         const [stream] = JSON.parse(probe.stdout.toString()).streams;
         assert.deepStrictEqual(

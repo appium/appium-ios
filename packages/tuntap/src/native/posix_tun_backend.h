@@ -85,7 +85,7 @@ class PosixTunBackend : public TunPlatformBackend {
         return false;
       }
 
-      struct pollfd pfd {};
+      struct pollfd pfd{};
       pfd.fd = fd_.get();
       pfd.events = events;
 

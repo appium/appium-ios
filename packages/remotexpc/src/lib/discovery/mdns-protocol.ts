@@ -4,6 +4,7 @@
  * No third-party mDNS library and no RFC 6335 service-name length checks, so
  * Apple's long DNS-SD types work.
  */
+import {setDictionaryEntry} from '../dictionary.js';
 
 export const MDNS_PORT = 5353;
 export const MDNS_MCAST_V4 = '224.0.0.251';
@@ -254,9 +255,9 @@ function parseResourceRecord(data: Buffer, offset: number): {rr: ParsedResourceR
       }
       const eq = segment.indexOf('='.charCodeAt(0));
       if (eq >= 0) {
-        kv[segment.subarray(0, eq).toString()] = segment.subarray(eq + 1).toString();
+        setDictionaryEntry(kv, segment.subarray(0, eq).toString(), segment.subarray(eq + 1).toString());
       } else {
-        kv[segment.toString()] = '';
+        setDictionaryEntry(kv, segment.toString(), '');
       }
     }
     rr.txt = kv;

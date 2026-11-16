@@ -41,6 +41,50 @@
 #import "XCUIScreen.h"
 #import "XCUIElement+FBResolve.h"
 
+// Binds every snapshot to its AX element directly, without a query over the whole tree.
+// Returns nil if that is not possible, so the caller can fall back to FBQueryElementsWithUids.
+static NSArray<XCUIElement *> *FBBindSnapshotsToElements(XCUIElementQuery *scopeQuery,
+                                                         NSArray<id<FBXCElementSnapshot>> *snapshots,
+                                                         NSArray<NSString *> *uids,
+                                                         NSString *excludedUid)
+{
+  XCUIElementQuery *anyQuery = [scopeQuery descendantsMatchingType:XCUIElementTypeAny];
+  if (FBConfiguration.sharedInstance.boundElementsByIndex
+      || ![anyQuery respondsToSelector:@selector(_elementMatchingAccessibilityElementOfSnapshot:)]) {
+    return nil;
+  }
+  NSMutableArray<XCUIElement *> *result = [NSMutableArray array];
+  for (NSUInteger i = 0; i < snapshots.count; ++i) {
+    if ([uids[i] isEqualToString:excludedUid]) {
+      continue;
+    }
+    XCUIElement *el = [anyQuery _elementMatchingAccessibilityElementOfSnapshot:snapshots[i]];
+    if (nil == el.fb_boundAccessibilityElement) {
+      return nil;
+    }
+    [result addObject:el];
+  }
+  return result.copy;
+}
+
+// Resolves the elements by their uids with a query over the scope's tree
+static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQuery,
+                                                       NSArray<id<FBXCElementSnapshot>> *snapshots,
+                                                       NSArray<NSString *> *uids,
+                                                       BOOL onlyChildren)
+{
+  XCUIElementType type = XCUIElementTypeAny;
+  NSArray<NSNumber *> *uniqueTypes = [snapshots valueForKeyPath:[NSString stringWithFormat:@"@distinctUnionOfObjects.%@", FBStringify(XCUIElement, elementType)]];
+  if (uniqueTypes && [uniqueTypes count] == 1) {
+    type = (XCUIElementType)[uniqueTypes.firstObject intValue];
+  }
+  XCUIElementQuery *query = onlyChildren
+    ? [scopeQuery childrenMatchingType:type]
+    : [scopeQuery descendantsMatchingType:type];
+  NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K IN %@", FBStringify(FBXCElementSnapshotWrapper, fb_uid), uids];
+  return [[query matchingPredicate:predicate] fb_allMatchesWithSnapshotsBoundByIndex:YES];
+}
+
 @implementation XCUIElement (FBUtilities)
 
 - (id<FBXCElementSnapshot>)fb_takeSnapshot:(BOOL)isCustom
@@ -87,47 +131,42 @@
 - (NSArray<XCUIElement *> *)fb_filterDescendantsWithSnapshots:(NSArray<id<FBXCElementSnapshot>> *)snapshots
                                                  onlyChildren:(BOOL)onlyChildren
 {
-  if (0 == snapshots.count) {
-    return @[];
-  }
-  NSMutableArray<NSString *> *matchedIds = [NSMutableArray new];
+  NSMutableArray<id<FBXCElementSnapshot>> *matchedSnapshots = [NSMutableArray array];
+  NSMutableArray<NSString *> *matchedIds = [NSMutableArray array];
   for (id<FBXCElementSnapshot> snapshot in snapshots) {
     @autoreleasepool {
       NSString *uid = [FBXCElementSnapshotWrapper wdUIDWithSnapshot:snapshot];
       if (nil != uid) {
+        [matchedSnapshots addObject:snapshot];
         [matchedIds addObject:uid];
       }
     }
   }
-  NSMutableArray<XCUIElement *> *matchedElements = [NSMutableArray array];
+  if (0 == matchedIds.count) {
+    return @[];
+  }
+
+  NSMutableArray<XCUIElement *> *result = [NSMutableArray array];
   // self.lastSnapshot may be stale leftover from an unrelated earlier command.
   id<FBXCElementSnapshot> selfSnapshot = self.fb_cachedSnapshot;
-  NSString *uid = nil == selfSnapshot
+  NSString *selfUid = nil == selfSnapshot
     ? self.fb_uid
     : [FBXCElementSnapshotWrapper wdUIDWithSnapshot:selfSnapshot];
-  if (nil != uid && [matchedIds containsObject:uid]) {
-    XCUIElement *stableSelf = [self fb_stableInstanceWithUid:uid];
-    if (1 == snapshots.count) {
+  if (nil != selfUid && [matchedIds containsObject:selfUid]) {
+    XCUIElement *stableSelf = [self fb_stableInstanceWithUid:selfUid];
+    if (1 == matchedIds.count) {
       return @[stableSelf];
     }
-    [matchedElements addObject:stableSelf];
+    [result addObject:stableSelf];
   }
-  XCUIElementType type = XCUIElementTypeAny;
-  NSArray<NSNumber *> *uniqueTypes = [snapshots valueForKeyPath:[NSString stringWithFormat:@"@distinctUnionOfObjects.%@", FBStringify(XCUIElement, elementType)]];
-  if (uniqueTypes && [uniqueTypes count] == 1) {
-    type = (XCUIElementType)[uniqueTypes.firstObject intValue];
-  }
-  XCUIElementQuery *query = onlyChildren
-    ? [self.fb_query childrenMatchingType:type]
-    : [self.fb_query descendantsMatchingType:type];
-  
-  NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K IN %@",FBStringify(FBXCElementSnapshotWrapper, fb_uid), matchedIds];
-  [matchedElements addObjectsFromArray:[query matchingPredicate:predicate].allElementsBoundByIndex];
 
-  for (XCUIElement *el in matchedElements) {
+  NSArray<XCUIElement *> *descendants = FBBindSnapshotsToElements(self.fb_query, matchedSnapshots, matchedIds, selfUid)
+    ?: FBQueryElementsWithUids(self.fb_query, matchedSnapshots, matchedIds, onlyChildren);
+  [result addObjectsFromArray:descendants];
+  for (XCUIElement *el in result) {
     el.fb_isResolvedNatively = @NO;
   }
-  return matchedElements.copy;
+  return result.copy;
 }
 
 - (void)fb_waitUntilStable

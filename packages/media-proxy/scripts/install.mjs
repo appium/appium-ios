@@ -22,4 +22,8 @@ async function main() {
 }
 
 // Informational only: installing must never fail.
-main().catch(() => {});
+try {
+  await main();
+} catch {
+  // ignored
+}

@@ -1,5 +1,6 @@
 import type {Socket} from 'node:net';
 
+import {formatValue} from '../../../lib/format-error.js';
 import type {LockdownService} from '../../../lib/lockdown/index.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createUsbmux} from '../../../lib/usbmux/index.js';
@@ -11,6 +12,8 @@ export interface CoreDeviceProxyTcpSession {
   socket: Socket;
   cert: string;
   key: string;
+  /** PEM device certificate of the pair record when it has one, pinned by the native TLS client. */
+  deviceCert?: string;
 }
 
 /**
@@ -37,7 +40,7 @@ export async function startCoreDeviceProxyTcp(
     throw new Error('Service didnt return a port');
   }
 
-  log.debug(`Connecting to CoreDeviceProxy service on port: ${response.Port}`);
+  log.debug(`Connecting to CoreDeviceProxy service on port: ${formatValue(response.Port)}`);
 
   const usbmux = await createUsbmux();
   try {
@@ -54,6 +57,7 @@ export async function startCoreDeviceProxyTcp(
       socket: coreDeviceSocket,
       cert: pairRecord.HostCertificate,
       key: pairRecord.HostPrivateKey,
+      deviceCert: pairRecord.DeviceCertificate ?? undefined,
     };
   } catch (err) {
     await usbmux.close().catch((closeErr) => log.error(`Error closing usbmux: ${closeErr}`));

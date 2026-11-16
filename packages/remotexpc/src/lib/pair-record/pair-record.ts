@@ -1,6 +1,7 @@
 import {BaseItem, strongbox} from '@appium/strongbox';
 
 import {PAIR_RECORD_ITEM_PREFIX, STRONGBOX_CONTAINER_NAME} from '../../constants.js';
+import {formatError} from '../format-error.js';
 import {getLogger} from '../logger.js';
 
 const log = getLogger('PairRecord');
@@ -68,7 +69,7 @@ export async function savePairRecord(udid: string, pairRecord: PairRecord): Prom
     await item.write(JSON.stringify(pairRecord, null, 2));
     log.info(`Pair record saved: ${item.id}`);
   } catch (error) {
-    log.error(`Failed to save pair record for ${udid}: ${error}`);
+    log.error(`Failed to save pair record for ${udid}: ${formatError(error)}`);
     throw error;
   }
 }
@@ -85,7 +86,7 @@ export async function getPairRecord(udid: string): Promise<PairRecord | null> {
     const data = await item.read();
     return data ? (JSON.parse(data as string) as PairRecord) : null;
   } catch (error) {
-    log.error(`Failed to read pair record for ${udid}: ${error}`);
+    log.error(`Failed to read pair record for ${udid}: ${formatError(error)}`);
     throw error;
   }
 }

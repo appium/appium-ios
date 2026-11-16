@@ -38,7 +38,10 @@
 
 - (id<FBXCElementSnapshot>)fb_cachedSnapshotWithQuery:(XCUIElementQuery *)query
 {
-  return [self isKindOfClass:XCUIApplication.class] ? query.rootElementSnapshot : self.fb_cachedSnapshot;
+  // Elements found without snapshots (see fb_boundAccessibilityElement) are resolved lazily here
+  return [self isKindOfClass:XCUIApplication.class]
+    ? query.rootElementSnapshot
+    : (self.fb_cachedSnapshot ?: [self fb_standardSnapshot]);
 }
 
 #pragma mark - Search by ClassName

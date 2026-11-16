@@ -1,0 +1,70 @@
+{
+  "name": "node-simctl",
+  "version": "10.0.5",
+  "description": "Wrapper around Apple's simctl binary",
+  "keywords": [
+    "apple",
+    "ios",
+    "simctl"
+  ],
+  "homepage": "https://appium.io",
+  "bugs": {
+    "url": "https://github.com/appium/appium-ios/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Appium Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/appium/appium-ios.git",
+    "directory": "packages/simctl"
+  },
+  "bin": {},
+  "directories": {
+    "lib": "./lib"
+  },
+  "files": [
+    "lib",
+    "build/lib",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "main": "./build/lib/index.js",
+  "types": "./build/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/lib/index.d.ts",
+      "import": "./build/lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "npm run build -- --clean",
+    "rebuild": "npm run clean; npm run build",
+    "dev": "npm run build -- --watch",
+    "prepare": "npm run build",
+    "test": "node --enable-source-maps --test --test-timeout=60000 \"./build/test/unit/**/*.spec.js\"",
+    "test:e2e": "node --enable-source-maps --test --test-force-exit --test-concurrency=1 --test-timeout=300000 \"./build/test/e2e/**/*.spec.js\""
+  },
+  "dependencies": {
+    "@appium/logger": "^3.0.0-beta.2",
+    "asyncbox": "^7.0.0",
+    "semver": "^7.0.0",
+    "teen_process": "^5.0.0",
+    "which": "^6.0.0"
+  },
+  "devDependencies": {
+    "@appium/tsconfig": "^2.0.0-beta.2",
+    "@appium/types": "^2.0.0-beta.6",
+    "@types/node": "^26.0.0",
+    "@types/semver": "^7.7.1",
+    "@types/sinon": "^22.0.0",
+    "@types/which": "^3.0.4",
+    "appium-xcode": "^8.0.4",
+    "sinon": "^22.0.0"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
+    "npm": ">=10"
+  }
+}

@@ -1,7 +1,8 @@
 import type net from 'node:net';
 
 import {ServiceConnection, type ServiceConnectionOptions} from '../../service-connection.js';
-import {openLockdownSession, upgradeSocketToTLS} from '../lockdown/index.js';
+import {formatError} from '../format-error.js';
+import {openLockdownSession, pairRecordTlsOptions, upgradeSocketToTLS} from '../lockdown/index.js';
 import {getLogger} from '../logger.js';
 import type {PlistDictionary} from '../types.js';
 import {createUsbmux} from '../usbmux/index.js';
@@ -63,7 +64,7 @@ export class UsbmuxServiceTransport {
       try {
         lockdown.close();
       } catch (closeErr) {
-        log.debug(`Error closing lockdown after StartService: ${closeErr}`);
+        log.debug(`Error closing lockdown after StartService: ${formatError(closeErr)}`);
       }
     }
     log.debug(`Started ${lockdownName} on port ${started.port} (ssl=${started.enableServiceSSL})`);
@@ -78,10 +79,7 @@ export class UsbmuxServiceTransport {
     }
     try {
       if (started.enableServiceSSL) {
-        socket = await upgradeSocketToTLS(socket, {
-          cert: pairRecord.HostCertificate as string,
-          key: pairRecord.HostPrivateKey as string,
-        });
+        socket = await upgradeSocketToTLS(socket, pairRecordTlsOptions(pairRecord));
       }
     } catch (err) {
       socket.destroy();

@@ -258,3 +258,15 @@ describe('Apple TV Encryption - Opack2', function () {
     });
   });
 });
+
+describe('Apple TV Encryption - Opack2 dictionary keys', function () {
+  it('should decode a __proto__ key as an own property instead of changing the prototype', function () {
+    const dict: Record<string, unknown> = {};
+    Object.defineProperty(dict, '__proto__', {value: {x: true}, enumerable: true, writable: true, configurable: true});
+    const decoded = Opack2.loads(Opack2.dumps(dict as never)) as Record<string, unknown>;
+    assert.strictEqual(Object.getPrototypeOf(decoded), Object.prototype);
+    assert.deepStrictEqual(Object.keys(decoded), ['__proto__']);
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(decoded, '__proto__')?.value, {x: true});
+    assert.strictEqual(decoded.x, undefined);
+  });
+});

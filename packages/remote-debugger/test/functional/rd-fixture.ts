@@ -6,6 +6,7 @@ import {retry, retryInterval} from 'asyncbox';
 
 import {createRemoteDebugger} from '../../lib/index.js';
 import type {RemoteDebugger} from '../../lib/remote-debugger.js';
+import type {RemoteDebuggerOptions} from '../../lib/types.js';
 import {startHttpServer, stopHttpServer} from './http-server.js';
 
 export const PAGE_TITLE = 'Remote debugger test page';
@@ -23,14 +24,15 @@ function matchesPlatformVersion(versionString: string, platformVersion: string):
   return platformVersion.split('.').every((part, i) => actual[i] === part);
 }
 
-async function getRuntimeIdentifier(platformVersion: string): Promise<string> {
-  const runtime = (await nativeSimctl.getSupportedRuntimes()).find((r) =>
+// A version can map to several runtimes (e.g. iOS 27.2 also ships a Duo-only variant), so return all.
+async function getRuntimeIdentifiers(platformVersion: string): Promise<string[]> {
+  const runtimes = (await nativeSimctl.getSupportedRuntimes()).filter((r) =>
     matchesPlatformVersion(r.versionString, platformVersion),
   );
-  if (!runtime) {
+  if (runtimes.length === 0) {
     throw new Error(`No supported runtime found for platform version '${platformVersion}'`);
   }
-  return runtime.identifier;
+  return runtimes.map((r) => r.identifier);
 }
 
 async function getDeviceTypeIdentifier(deviceName: string): Promise<string> {
@@ -42,9 +44,26 @@ async function getDeviceTypeIdentifier(deviceName: string): Promise<string> {
 }
 
 async function getExistingDevice(deviceName: string, platformVersion: string): Promise<SimDeviceInfo | null> {
-  const runtimeIdentifier = await getRuntimeIdentifier(platformVersion);
+  const runtimeIdentifiers = await getRuntimeIdentifiers(platformVersion);
   const devices = await nativeSimctl.getDevices();
-  return devices.find((device) => device.name === deviceName && device.runtimeIdentifier === runtimeIdentifier) ?? null;
+  return (
+    devices.find(
+      (device) => device.name === deviceName && runtimeIdentifiers.includes(device.runtimeIdentifier ?? ''),
+    ) ?? null
+  );
+}
+
+// Not every runtime of a version supports the device type, so use the first one that accepts it.
+async function createDeviceOnAnyRuntime(deviceTypeIdentifier: string, runtimeIdentifiers: string[]): Promise<string> {
+  let lastError: unknown;
+  for (const runtimeIdentifier of runtimeIdentifiers) {
+    try {
+      return (await nativeSimctl.createDevice(SIM_NAME, deviceTypeIdentifier, runtimeIdentifier)).udid;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 async function deleteDeviceWithRetry(udid: string): Promise<void> {
@@ -65,7 +84,7 @@ export interface RdFixture {
  * serve the test fixture page over HTTP, and connect a RemoteDebugger to Safari before each
  * test. Call once per describe block.
  */
-export function useRemoteDebuggerFixture(): RdFixture {
+export function useRemoteDebuggerFixture(options: RemoteDebuggerOptions = {}): RdFixture {
   let udid: string;
   let simCreated = false;
   let address: string;
@@ -79,11 +98,11 @@ export function useRemoteDebuggerFixture(): RdFixture {
     if (existing) {
       udid = existing.udid;
     } else {
-      const [deviceTypeIdentifier, runtimeIdentifier] = await Promise.all([
+      const [deviceTypeIdentifier, runtimeIdentifiers] = await Promise.all([
         getDeviceTypeIdentifier(DEVICE_NAME),
-        getRuntimeIdentifier(PLATFORM_VERSION),
+        getRuntimeIdentifiers(PLATFORM_VERSION),
       ]);
-      udid = (await nativeSimctl.createDevice(SIM_NAME, deviceTypeIdentifier, runtimeIdentifier)).udid;
+      udid = await createDeviceOnAnyRuntime(deviceTypeIdentifier, runtimeIdentifiers);
       simCreated = true;
     }
 
@@ -121,6 +140,7 @@ export function useRemoteDebuggerFixture(): RdFixture {
         logAllCommunicationHexDump: false,
         pageReadyTimeout: 30000,
         targetCreationTimeoutMs: process.env.CI ? 10 * 1000 * 60 : 60000,
+        ...options,
       },
       false,
     );
@@ -156,7 +176,7 @@ export function useRemoteDebuggerFixture(): RdFixture {
     // two tests navigating to the exact same `address()` can see the previous test's DOM state
     // leak through (observed: a checkbox left checked by one test starts already-checked in the
     // next, so clicking it toggles it back off). A unique query string per navigation defeats
-    // that reuse; `serve-static` ignores the query when resolving which file to serve.
+    // that reuse; the test server ignores the query when resolving which file to serve.
     freshUrl: () => `${address}?_t=${++navigationCounter}`,
     async selectTestPage(): Promise<void> {
       // Safari's reported app/page dictionary can briefly churn (e.g. right after a previous

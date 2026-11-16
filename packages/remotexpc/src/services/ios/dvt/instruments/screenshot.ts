@@ -4,7 +4,7 @@ import {BaseInstrument} from './base-instrument.js';
  * Screenshot service for capturing device screenshots
  */
 export class Screenshot extends BaseInstrument {
-  static readonly IDENTIFIER = 'com.apple.instruments.server.services.screenshot';
+  static override readonly IDENTIFIER = 'com.apple.instruments.server.services.screenshot';
 
   /**
    * Capture a screenshot from the device

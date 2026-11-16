@@ -7,8 +7,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {pipeline} from 'node:stream/promises';
 import {after, before, describe, it} from 'node:test';
+import {setTimeout as sleep} from 'node:timers/promises';
 
 import {getLogger} from '../../src/lib/logger.js';
+import type {TransportMode} from '../../src/lib/service-transport/index.js';
 import * as Services from '../../src/services.js';
 import {AfcFileMode} from '../../src/services/ios/afc/enums.js';
 import type AfcService from '../../src/services/ios/afc/index.js';
@@ -20,6 +22,8 @@ const iterations = parsePositiveInt(process.env.AFC_STABILITY_ITERATIONS, 5);
 const maxRoundMs = parsePositiveInt(process.env.AFC_STABILITY_MAX_MS, 120_000);
 const fileSizeBytes = parsePositiveInt(process.env.AFC_STABILITY_FILE_SIZE_BYTES, 10 * MIB);
 const writeChunkBytes = parsePositiveInt(process.env.AFC_STABILITY_WRITE_CHUNK_BYTES, 128 * 1024);
+const idleMs = process.env.AFC_STABILITY_IDLE_MS ? parsePositiveInt(process.env.AFC_STABILITY_IDLE_MS, 0) : 0;
+const transport = (process.env.AFC_STABILITY_TRANSPORT ?? 'tunnel') as TransportMode;
 
 /**
  * Integration tunnel stability check: upload and download the same AFC file many times
@@ -35,11 +39,14 @@ const writeChunkBytes = parsePositiveInt(process.env.AFC_STABILITY_WRITE_CHUNK_B
  * - AFC_STABILITY_MAX_MS — per-round budget for push+pull (default: 120000)
  * - AFC_STABILITY_HEARTBEAT_MS — pipeline progress log interval (default: 5000)
  * - AFC_STABILITY_WRITE_CHUNK_BYTES — AFC WRITE chunk size (default: 128 KiB)
+ * - AFC_STABILITY_IDLE_MS — idle pause on the open session before each round after the first (default: 0)
+ * - AFC_STABILITY_TRANSPORT — `tunnel`, `usbmux` or `auto` (default: tunnel)
  *
  * Example:
  *   UDID=... npm run test:afc-tunnel-stability
+ *   UDID=... AFC_STABILITY_IDLE_MS=35000 npm run test:afc-tunnel-stability
  */
-describe('AFC tunnel stability', {timeout: iterations * (maxRoundMs + 30_000) + 120_000}, function () {
+describe('AFC tunnel stability', {timeout: iterations * (maxRoundMs + idleMs + 30_000) + 120_000}, function () {
   let udid: string;
 
   let afc: AfcService;
@@ -61,7 +68,7 @@ describe('AFC tunnel stability', {timeout: iterations * (maxRoundMs + 30_000) + 
     sourceSha256 = await sha256File(localSourcePath);
     await fsp.mkdir(localPullDir, {recursive: true});
 
-    afc = await Services.startAfcService(udid);
+    afc = await Services.startAfcService(udid, {transport});
     attachAfcSocketDiagnostics(afc, log);
   });
 
@@ -106,6 +113,9 @@ describe('AFC tunnel stability', {timeout: iterations * (maxRoundMs + 30_000) + 
 
     for (let round = 1; round <= iterations; round++) {
       const pullPath = path.join(localPullDir, `round_${round}.bin`);
+      if (round > 1 && idleMs > 0) {
+        await logStep(round, `idle ${idleMs}ms`, () => sleep(idleMs));
+      }
       const roundStart = performance.now();
 
       log.info(`round ${round}/${iterations} begin`);

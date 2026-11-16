@@ -1,3 +1,4 @@
+import {setDictionaryEntry} from '../../../lib/dictionary.js';
 import {PlistUID} from '../../../lib/plist/plist-uid.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 
@@ -96,7 +97,7 @@ export function extractNSDictionary(dictObj: any, objects: any[]): PlistDictiona
     }
     const key = objects[keyIndex];
     if (typeof key === 'string') {
-      result[key] = objects[valueIndex];
+      setDictionaryEntry(result, key, objects[valueIndex]);
     }
   }
 
@@ -113,7 +114,7 @@ export function extractCapabilityStrings(objects: any[]): PlistDictionary {
   for (let i = 1; i < objects.length; i++) {
     const obj = objects[i];
     if (typeof obj === 'string' && obj !== '$null') {
-      result[obj] = true;
+      setDictionaryEntry(result, obj, true);
     }
   }
 

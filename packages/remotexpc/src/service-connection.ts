@@ -82,7 +82,7 @@ export class ServiceConnection extends BasePlistService {
   /**
    * Closes the connection
    */
-  close(): void {
+  override close(): void {
     super.close();
   }
 }

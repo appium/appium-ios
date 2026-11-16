@@ -5,6 +5,7 @@ export {
   UnexpectedAlertOpenError,
   UnsupportedAlertTargetError,
 } from './errors.js';
+export {runInBackground} from './background.js';
 export {defaults, deepEqual, checkParams} from './object.js';
 
 export {
