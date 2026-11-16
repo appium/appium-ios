@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.1.0](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.5...@appium/coresim@2.1.0) (2026-11-16)
+
+### Features
+
+* **coresim:** add VideoStream.requestKeyFrame() ([#211](https://github.com/appium/appium-ios/issues/211)) ([82b7d76](https://github.com/appium/appium-ios/commit/82b7d76ad6817aefb4057ab0eeb3ccd8d420917c))
+
+
 ## [2.0.5](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.4...@appium/coresim@2.0.5) (2026-11-16)
 
 ### Bug Fixes

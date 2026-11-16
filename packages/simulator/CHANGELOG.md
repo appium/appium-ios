@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.1.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.7...appium-ios-simulator@11.1.0) (2026-11-16)
+
+### Features
+
+* **coresim:** add VideoStream.requestKeyFrame() ([#211](https://github.com/appium/appium-ios/issues/211)) ([82b7d76](https://github.com/appium/appium-ios/commit/82b7d76ad6817aefb4057ab0eeb3ccd8d420917c))
+
+
 ## [11.0.7](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.6...appium-ios-simulator@11.0.7) (2026-11-16)
 
 **Note:** Version bump only for package appium-ios-simulator
