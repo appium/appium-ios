@@ -9,7 +9,7 @@ export const H264_ENCODERS = loadNative()
   .encoders.filter((name) => name.startsWith('h264_') || name === 'libopenh264');
 export const HAS_H264 = H264_ENCODERS.length > 0;
 
-const RTP_TICKS_PER_FRAME = 1500; // 60 fps at 90 kHz
+const RTP_TICKS_PER_FRAME = 400; // 60 fps at the device's 24 kHz video clock
 
 function splitNals(stream: Buffer): Buffer[] {
   const starts: {at: number; length: number}[] = [];

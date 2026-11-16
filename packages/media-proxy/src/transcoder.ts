@@ -92,7 +92,11 @@ export class TimestampConverter {
   private last = 0;
   private ticks = 0;
 
-  constructor(private readonly clockRate: number = DEFAULT_VIDEO_CLOCK_RATE) {}
+  constructor(private readonly clockRate: number = DEFAULT_VIDEO_CLOCK_RATE) {
+    if (!Number.isFinite(clockRate) || clockRate <= 0) {
+      throw new RangeError(`videoClockRate must be a positive finite number, got ${clockRate}`);
+    }
+  }
 
   toMicros(timestamp: number): number {
     if (this.base === undefined) {
@@ -130,11 +134,7 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
   constructor(opts: TranscoderOptions, backend?: NativeModule) {
     // Validate before touching the addon, so bad options are reported even where it's unavailable.
     const config = resolveOptions(opts);
-    const videoClockRate = opts.videoClockRate ?? DEFAULT_VIDEO_CLOCK_RATE;
-    if (!Number.isFinite(videoClockRate) || videoClockRate <= 0) {
-      throw new RangeError(`videoClockRate must be a positive finite number, got ${videoClockRate}`);
-    }
-    this.clock = new TimestampConverter(videoClockRate);
+    this.clock = new TimestampConverter(opts.videoClockRate ?? DEFAULT_VIDEO_CLOCK_RATE);
     const native = backend ?? loadNative();
     this.isVideo = config.outputCodec === 'h264';
     this.hasAudio = config.audio;
@@ -195,12 +195,19 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
 
   /**
    * Makes the next H.264 output a keyframe, e.g. for a consumer that joined a running stream. Takes
-   * effect with the next input unit, so it needs the source to keep sending. A no-op for MJPEG (every
-   * frame is standalone) and after {@link end}/{@link close}.
+   * effect with the next input unit, so it needs the source to keep sending. Requests made before that unit
+   * are one request (the native side only sets a flag), but each later one forces another keyframe, so
+   * callers that serve several consumers should coalesce them. A no-op for MJPEG (every frame is standalone)
+   * and after {@link end}/{@link close}.
    */
   requestKeyFrame(): void {
-    if (this.isVideo && !this.closePromise) {
+    if (!this.isVideo || this.closePromise) {
+      return;
+    }
+    try {
       this.handle.requestKeyFrame();
+    } catch (err) {
+      throw wrapNativeError(err);
     }
   }
 

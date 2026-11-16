@@ -153,6 +153,12 @@ describe('TimestampConverter', () => {
     assert.strictEqual(c.toMicros(1_000_000 + 1500), Math.round((1500 * 1e6) / 90_000));
   });
 
+  it('rejects a clock rate that is not a positive finite number', () => {
+    for (const rate of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.throws(() => new TimestampConverter(rate), RangeError);
+    }
+  });
+
   it("defaults to the device's 24 kHz clock: 400 ticks are one frame at 60 fps", () => {
     const c = new TimestampConverter();
     c.toMicros(5000);
@@ -300,19 +306,34 @@ const settlesWithin = (promise: Promise<unknown>, ms = 1000) =>
   Promise.race([promise.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
 
 describe('Transcoder.requestKeyFrame()', () => {
-  it('forwards to the native handle for h264, not after close, and ignores mjpeg', async () => {
-    const h264Backend = fakeBackend();
-    const transcoder = new Transcoder(h264, h264Backend);
-    transcoder.requestKeyFrame();
-    transcoder.requestKeyFrame();
-    assert.strictEqual(h264Backend.keyFrameRequests, 2);
-    await transcoder.close();
-    transcoder.requestKeyFrame();
-    assert.strictEqual(h264Backend.keyFrameRequests, 2);
+  it('forwards to the native handle for h264', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    t.requestKeyFrame();
+    t.requestKeyFrame();
+    assert.strictEqual(backend.keyFrameRequests, 2);
+  });
 
-    const mjpegBackend = fakeBackend();
-    new Transcoder(mjpeg, mjpegBackend).requestKeyFrame();
-    assert.strictEqual(mjpegBackend.keyFrameRequests, 0, 'every JPEG frame is standalone');
+  it('is a no-op after close()', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    await t.close();
+    t.requestKeyFrame();
+    assert.strictEqual(backend.keyFrameRequests, 0);
+  });
+
+  it('is a no-op after end()', async () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    await t.end();
+    t.requestKeyFrame();
+    assert.strictEqual(backend.keyFrameRequests, 0);
+  });
+
+  it('is a no-op for mjpeg, where every frame is standalone', () => {
+    const backend = fakeBackend();
+    new Transcoder(mjpeg, backend).requestKeyFrame();
+    assert.strictEqual(backend.keyFrameRequests, 0);
   });
 });
 
