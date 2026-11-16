@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.5](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.4...@appium/coresim@2.0.5) (2026-11-16)
+
+### Bug Fixes
+
+* **coresim:** poll the audio tap&#x27;s process list off the IO queue ([#216](https://github.com/appium/appium-ios/issues/216)) ([e0e08af](https://github.com/appium/appium-ios/commit/e0e08af87f01f1186beb6f7cfb2d7f1a9d97998a))
+
+
 ## [2.0.4](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.3...@appium/coresim@2.0.4) (2026-11-14)
 
 ### Miscellaneous Chores
