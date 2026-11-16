@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
+import {getH264Encoders} from '../../src/capabilities.js';
 import {loadNative} from '../../src/native.js';
 
 describe('native addon', () => {
@@ -26,6 +27,18 @@ describe('native addon', () => {
       assert.ok(loadNative().capabilities().encoders.includes(name));
     },
   );
+
+  it('reports no H.264 encoder when the only one allowed is OpenH264 and none is installed', () => {
+    const keys = ['MEDIA_PROXY_H264_ENCODER', 'MEDIA_PROXY_OPENH264_PATH'] as const;
+    const saved = keys.map((key) => process.env[key]);
+    process.env.MEDIA_PROXY_H264_ENCODER = 'libopenh264';
+    delete process.env.MEDIA_PROXY_OPENH264_PATH;
+    try {
+      assert.deepStrictEqual(getH264Encoders(), []);
+    } finally {
+      keys.forEach((key, i) => (saved[i] === undefined ? delete process.env[key] : (process.env[key] = saved[i])));
+    }
+  });
 
   it('rejects an unknown output codec', () => {
     const config = {outputCodec: 'h265', fps: 60, bitrate: 1, quality: 80, scale: 100};
