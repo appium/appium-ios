@@ -24,8 +24,12 @@ export const DEFAULT_SCALE = 100;
 const AUDIO_BITRATE_PER_CHANNEL = 64_000;
 /** AAC-ELD, 48 kHz stereo, 480-sample frames: the device's stream as it really is (remotexpc `aac-eld.ts`). */
 export const DEFAULT_AUDIO_SPECIFIC_CONFIG = Buffer.from([0xf8, 0xe6, 0x50, 0x00]);
-/** RTP video clock; remotexpc doesn't define it, so this is an assumption to confirm on a device. */
-const CLOCK_RATE = 90_000;
+/**
+ * RTP video clock of the device's screen stream. Measured on an iPad (iPadOS 27.0.1): 400 ticks per frame at
+ * 60 fps, not the 90 kHz RFC 7798 suggests, so a wrong value slows the media timeline and starves the fps limiter.
+ * `videoClockRate` overrides it for a source that is known to differ.
+ */
+export const DEFAULT_VIDEO_CLOCK_RATE = 24_000;
 const AUDIO_CLOCK_RATE = 48_000;
 
 const MAX_BITRATE = 2 ** 31 - 1;
@@ -88,7 +92,7 @@ export class TimestampConverter {
   private last = 0;
   private ticks = 0;
 
-  constructor(private readonly clockRate: number = CLOCK_RATE) {}
+  constructor(private readonly clockRate: number = DEFAULT_VIDEO_CLOCK_RATE) {}
 
   toMicros(timestamp: number): number {
     if (this.base === undefined) {
@@ -108,7 +112,7 @@ type OutputUnit = VideoAccessUnit | JpegFrame;
 export class Transcoder<U extends OutputUnit = OutputUnit> {
   private readonly handle: NativeTranscoderHandle;
   private readonly queue: UnitQueue<U>;
-  private readonly clock = new TimestampConverter();
+  private readonly clock: TimestampConverter;
   private readonly audioClock = new TimestampConverter(AUDIO_CLOCK_RATE);
   private readonly isVideo: boolean;
   private readonly hasAudio: boolean;
@@ -126,6 +130,11 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
   constructor(opts: TranscoderOptions, backend?: NativeModule) {
     // Validate before touching the addon, so bad options are reported even where it's unavailable.
     const config = resolveOptions(opts);
+    const videoClockRate = opts.videoClockRate ?? DEFAULT_VIDEO_CLOCK_RATE;
+    if (!Number.isFinite(videoClockRate) || videoClockRate <= 0) {
+      throw new RangeError(`videoClockRate must be a positive finite number, got ${videoClockRate}`);
+    }
+    this.clock = new TimestampConverter(videoClockRate);
     const native = backend ?? loadNative();
     this.isVideo = config.outputCodec === 'h264';
     this.hasAudio = config.audio;
@@ -181,6 +190,17 @@ export class Transcoder<U extends OutputUnit = OutputUnit> {
       this.handle.pushAudio(au.data, micros + this.audioOffset);
     } catch (err) {
       throw wrapNativeError(err);
+    }
+  }
+
+  /**
+   * Makes the next H.264 output a keyframe, e.g. for a consumer that joined a running stream. Takes
+   * effect with the next input unit, so it needs the source to keep sending. A no-op for MJPEG (every
+   * frame is standalone) and after {@link end}/{@link close}.
+   */
+  requestKeyFrame(): void {
+    if (this.isVideo && !this.closePromise) {
+      this.handle.requestKeyFrame();
     }
   }
 

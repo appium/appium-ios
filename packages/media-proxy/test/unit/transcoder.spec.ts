@@ -147,14 +147,20 @@ describe('resolveOptions audio', () => {
 });
 
 describe('TimestampConverter', () => {
-  it('rebases to the first unit and scales 90 kHz ticks to microseconds', () => {
-    const c = new TimestampConverter();
+  it('rebases to the first unit and scales ticks to microseconds at the given rate', () => {
+    const c = new TimestampConverter(90_000);
     assert.strictEqual(c.toMicros(1_000_000), 0);
     assert.strictEqual(c.toMicros(1_000_000 + 1500), Math.round((1500 * 1e6) / 90_000));
   });
 
-  it('unwraps the 32-bit RTP counter', () => {
+  it("defaults to the device's 24 kHz clock: 400 ticks are one frame at 60 fps", () => {
     const c = new TimestampConverter();
+    c.toMicros(5000);
+    assert.strictEqual(c.toMicros(5400), Math.round(1e6 / 60));
+  });
+
+  it('unwraps the 32-bit RTP counter', () => {
+    const c = new TimestampConverter(90_000);
     c.toMicros(0xffff_fff0);
     assert.strictEqual(c.toMicros(0x0000_0010), Math.round((0x20 * 1e6) / 90_000));
   });
@@ -163,7 +169,7 @@ describe('TimestampConverter', () => {
 describe('Transcoder', () => {
   it('forwards NAL lists with rebased timestamps', () => {
     const backend = fakeBackend();
-    const t = new Transcoder(h264, backend);
+    const t = new Transcoder({...h264, videoClockRate: 90_000}, backend);
     const nals = [Buffer.from([0x40, 1]), Buffer.from([0x26, 1])];
     t.push({nals, isKeyFrame: true, timestamp: 90_000});
     t.push({nals: [Buffer.from([2, 1])], isKeyFrame: false, timestamp: 90_000 + 3000});
@@ -174,6 +180,20 @@ describe('Transcoder', () => {
         [1, 33_333, false],
       ],
     );
+  });
+
+  it('rebases at 24 kHz by default and rejects a bad videoClockRate', () => {
+    const backend = fakeBackend();
+    const t = new Transcoder(h264, backend);
+    t.push({nals: [Buffer.from([1])], isKeyFrame: true, timestamp: 1000});
+    t.push({nals: [Buffer.from([2])], isKeyFrame: false, timestamp: 1400});
+    assert.deepStrictEqual(
+      backend.pushes.map((p) => p.ts),
+      [0, 16_667],
+    );
+    for (const videoClockRate of [0, -1, NaN, Infinity]) {
+      assert.throws(() => new Transcoder({...h264, videoClockRate}, fakeBackend()), RangeError);
+    }
   });
 
   it('assigns monotonically increasing sequence numbers to h264 units', async () => {
@@ -278,6 +298,23 @@ function idleSource(items: NalAccessUnit[], opts: {returnUnblocks?: boolean} = {
 
 const settlesWithin = (promise: Promise<unknown>, ms = 1000) =>
   Promise.race([promise.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
+
+describe('Transcoder.requestKeyFrame()', () => {
+  it('forwards to the native handle for h264, not after close, and ignores mjpeg', async () => {
+    const h264Backend = fakeBackend();
+    const transcoder = new Transcoder(h264, h264Backend);
+    transcoder.requestKeyFrame();
+    transcoder.requestKeyFrame();
+    assert.strictEqual(h264Backend.keyFrameRequests, 2);
+    await transcoder.close();
+    transcoder.requestKeyFrame();
+    assert.strictEqual(h264Backend.keyFrameRequests, 2);
+
+    const mjpegBackend = fakeBackend();
+    new Transcoder(mjpeg, mjpegBackend).requestKeyFrame();
+    assert.strictEqual(mjpegBackend.keyFrameRequests, 0, 'every JPEG frame is standalone');
+  });
+});
 
 describe('Transcoder.end() / close()', () => {
   it('end() delivers units flushed by the pipeline, close() discards them', async () => {
@@ -500,7 +537,7 @@ describe('Transcoder audio', () => {
 
   it('offsets each track by when it first arrived relative to the first unit overall', () => {
     const backend = fakeBackend();
-    const t = new Transcoder(withAudio, backend);
+    const t = new Transcoder({...withAudio, videoClockRate: 90_000}, backend);
     t.pushAudio(audioAu(0, 1000));
     t.push({...au(90_000, true), receivedAt: 1040});
     t.push({...au(90_000 + 3000), receivedAt: 1073});

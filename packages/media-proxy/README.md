@@ -83,7 +83,7 @@ for await (const unit of transcode(capture.accessUnits(), {codec: 'h264', audio:
 ```
 
 With `createTranscoder` call `pushAudio({data, timestamp, receivedAt})` next to `push()`. `sequence` counts per track;
-`timestampMicros` is on one clock. Each track is rebased with its own RTP clock (90 kHz video, 48 kHz audio) and the tracks
+`timestampMicros` is on one clock. Each track is rebased with its own RTP clock (24 kHz video as the device sends it, 48 kHz audio) and the tracks
 are offset by when their first unit arrived (`receivedAt`, the `performance.now()` remotexpc stamps; the push time
 otherwise), since remotexpc exposes no RTCP sender report to map the two clocks. The audio source ends with the video and a
 failing audio source fails the stream. Audio is never dropped by a video resync.

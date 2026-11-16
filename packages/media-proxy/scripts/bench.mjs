@@ -104,6 +104,7 @@ async function main() {
     fps: options.fps,
     scale: options.scale,
     quality: options.quality,
+    videoClockRate: RTP_CLOCK_HZ,
   });
   const sentAt = new Float64Array(options.frames);
   const {stats, done} = collect(transcoder, sentAt, options.fps);
