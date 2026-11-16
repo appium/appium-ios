@@ -9,18 +9,15 @@
 
 #import "FBScreenRecordingContainer.h"
 
+#import "FBLogger.h"
 #import "FBScreenRecordingPromise.h"
 
-@interface FBScreenRecordingContainer ()
-
-@property (readwrite) NSUInteger fps;
-@property (readwrite) long long codec;
-@property (readwrite) FBScreenRecordingPromise* screenRecordingPromise;
-@property (readwrite) NSNumber *startedAt;
-
-@end
-
 @implementation FBScreenRecordingContainer
+
+@synthesize fps = _fps;
+@synthesize codec = _codec;
+@synthesize screenRecordingPromise = _screenRecordingPromise;
+@synthesize startedAt = _startedAt;
 
 + (instancetype)sharedInstance
 {
@@ -32,57 +29,105 @@
   return instance;
 }
 
+- (NSUInteger)fps
+{
+  @synchronized (self) {
+    return _fps;
+  }
+}
+
+- (long long)codec
+{
+  @synchronized (self) {
+    return _codec;
+  }
+}
+
+- (nullable FBScreenRecordingPromise *)screenRecordingPromise
+{
+  @synchronized (self) {
+    return _screenRecordingPromise;
+  }
+}
+
+- (nullable NSNumber *)startedAt
+{
+  @synchronized (self) {
+    return _startedAt;
+  }
+}
+
 - (void)storeScreenRecordingPromise:(FBScreenRecordingPromise *)screenRecordingPromise
                                 fps:(NSUInteger)fps
                               codec:(long long)codec;
 {
   @synchronized (self) {
-    self.fps = fps;
-    self.codec = codec;
-    self.screenRecordingPromise = screenRecordingPromise;
-    self.startedAt = @([NSDate.date timeIntervalSince1970]);
+    _fps = fps;
+    _codec = codec;
+    _screenRecordingPromise = screenRecordingPromise;
+    _startedAt = @([NSDate.date timeIntervalSince1970]);
+  }
+}
+
+- (nullable FBScreenRecordingPromise *)detachScreenRecordingPromise
+{
+  @synchronized (self) {
+    FBScreenRecordingPromise *detachedPromise = _screenRecordingPromise;
+    _fps = 0;
+    _codec = 0;
+    _screenRecordingPromise = nil;
+    _startedAt = nil;
+    return detachedPromise;
+  }
+}
+
+- (void)cleanupDetachedPromise:(nullable FBScreenRecordingPromise *)promise
+{
+  if (nil == promise) {
+    return;
+  }
+  @try {
+    [XCTContext runActivityNamed:@"Video Cleanup" block:^(id<XCTActivity> activity){
+      [activity addAttachment:(XCTAttachment *)promise.nativePromise];
+    }];
+  } @catch (NSException *exception) {
+    [FBLogger logFmt:@"Failed to clean up screen recording attachment: %@", exception.reason];
   }
 }
 
 - (void)reset;
 {
-  @synchronized (self) {
-    self.fps = 0;
-    self.codec = 0;
-    if (nil != self.screenRecordingPromise) {
-      [XCTContext runActivityNamed:@"Video Cleanup" block:^(id<XCTActivity> activity){
-        [activity addAttachment:(XCTAttachment *)self.screenRecordingPromise.nativePromise];
-      }];
-      self.screenRecordingPromise = nil;
-    }
-    self.startedAt = nil;
-  }
+  FBScreenRecordingPromise *detachedPromise = [self detachScreenRecordingPromise];
+  [self cleanupDetachedPromise:detachedPromise];
 }
 
 - (BOOL)resetIfPromiseIs:(FBScreenRecordingPromise *)screenRecordingPromise
 {
-  // @synchronized is recursive, so -reset may take the very same lock again below.
+  FBScreenRecordingPromise *detachedPromise = nil;
   @synchronized (self) {
-    if (self.screenRecordingPromise != screenRecordingPromise) {
+    if (_screenRecordingPromise != screenRecordingPromise) {
       return NO;
     }
-    [self reset];
-    return YES;
+    detachedPromise = [self detachScreenRecordingPromise];
   }
+  [self cleanupDetachedPromise:detachedPromise];
+  return YES;
 }
 
 - (nullable NSDictionary *)toDictionary
 {
-  if (nil == self.screenRecordingPromise) {
-    return nil;
-  }
+  @synchronized (self) {
+    if (nil == _screenRecordingPromise) {
+      return nil;
+    }
 
-  return @{
-    @"fps": @(self.fps),
-    @"codec": @(self.codec),
-    @"uuid": [self.screenRecordingPromise identifier].UUIDString ?: [NSNull null],
-    @"startedAt": self.startedAt ?: [NSNull null],
-  };
+    return @{
+      @"fps": @(_fps),
+      @"codec": @(_codec),
+      @"uuid": [_screenRecordingPromise identifier].UUIDString ?: [NSNull null],
+      @"startedAt": _startedAt ?: [NSNull null],
+    };
+  }
 }
 
 @end
