@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.7...appium-webdriveragent@17.0.8) (2026-11-16)
+
+### Bug Fixes
+
+* **webdriveragent:** clear screen recording state before attachment cleanup ([#115](https://github.com/appium/appium-ios/issues/115)) ([9caef7e](https://github.com/appium/appium-ios/commit/9caef7ee9a77541a785a5248576fd3266afae4a2))
+
+
 ## [17.0.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.6...appium-webdriveragent@17.0.7) (2026-11-16)
 
 ### Bug Fixes
