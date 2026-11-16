@@ -22,7 +22,18 @@ const log = getLogger('ScreenStreamCapture');
 export interface ScreenStreamCaptureOptions extends StartVideoStreamOptions {
   /** Local UDP port to receive on; `0` (default) lets the OS choose. */
   receiverPort?: number;
+  /**
+   * How often to ask the device for a keyframe, in milliseconds; `0` disables it. Defaults to 2000.
+   *
+   * The device sends a single IDR when the stream starts and none afterwards. A large screen change (an app
+   * launch, a rotation) can leave the picture damaged, and since every later frame builds on it, the damage
+   * never goes away without a new keyframe. Keyframes also bound how long a consumer that joins late has to
+   * wait before it can decode. Use {@link ScreenStreamCapture.requestKeyFrame} for one on demand.
+   */
+  keyFrameIntervalMs?: number;
 }
+
+const DEFAULT_KEYFRAME_INTERVAL_MS = 2000;
 
 /**
  * Receives and reassembles the device's HEVC screen stream.
@@ -62,6 +73,7 @@ export class ScreenStreamCapture {
   private readonly abortController = new AbortController();
   /** Holds the device's video session open past its 20 s RTCP timeout. */
   private keepalive: RtcpKeepalive | undefined;
+  private keyFrameTimer: NodeJS.Timeout | undefined;
 
   /**
    * The in-flight teardown, cached so concurrent {@link stop} callers all await
@@ -89,7 +101,10 @@ export class ScreenStreamCapture {
    * @param options Receiver port plus everything `startVideoStream` accepts.
    */
   static async start(service: DisplayService, options: ScreenStreamCaptureOptions = {}): Promise<ScreenStreamCapture> {
-    const {receiverPort, ...streamOptions} = options;
+    const {receiverPort, keyFrameIntervalMs = DEFAULT_KEYFRAME_INTERVAL_MS, ...streamOptions} = options;
+    if (!Number.isFinite(keyFrameIntervalMs) || keyFrameIntervalMs < 0) {
+      throw new RangeError(`keyFrameIntervalMs must be a non-negative number, got ${keyFrameIntervalMs}`);
+    }
     const receiver = await UdpMediaReceiver.bind({port: receiverPort});
     try {
       const [receiverIp, senderIp] = await Promise.all([service.getTunnelLocalAddress(), service.getDeviceAddress()]);
@@ -101,6 +116,10 @@ export class ScreenStreamCapture {
       const identity = rtcpIdentityFromStreamConfig(answer.streamConfig, senderIp);
       if (identity) {
         capture.keepalive = RtcpKeepalive.start(receiver, identity, {label: 'video'});
+        if (keyFrameIntervalMs > 0) {
+          capture.keyFrameTimer = setInterval(() => void capture.requestKeyFrame(), keyFrameIntervalMs);
+          capture.keyFrameTimer.unref?.();
+        }
       } else {
         log.warn('Video streamConfig lacked SSRCs or a source port; the session will end after ~20s');
       }
@@ -109,6 +128,21 @@ export class ScreenStreamCapture {
       receiver.close();
       throw error;
     }
+  }
+
+  /**
+   * Asks the device for a keyframe, which arrives as the next access unit with `isKeyFrame` set, usually within
+   * a few tens of milliseconds. Use it when a consumer joins late or after dropping access units.
+   *
+   * @returns Whether the request was sent: `false` if the device did not report its RTCP identity (see the
+   * warning logged at start) or the capture has been stopped.
+   */
+  async requestKeyFrame(): Promise<boolean> {
+    if (!this.keepalive || this.stopPromise) {
+      return false;
+    }
+    await this.keepalive.requestKeyFrame();
+    return true;
   }
 
   /** Parameter sets seen so far; complete once VPS, SPS and PPS have arrived. */
@@ -171,6 +205,7 @@ export class ScreenStreamCapture {
   }
 
   private async tearDown(): Promise<void> {
+    clearInterval(this.keyFrameTimer);
     this.keepalive?.stop();
     this.abortController.abort();
     this.receiver.close();

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createSocket, type Socket} from 'node:dgram';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -111,6 +112,95 @@ describe('ScreenStreamCapture', function () {
         assert.strictEqual((caught as Error | undefined)?.message, 'device refused the stop');
       }
     });
+  });
+});
+
+/** A UDP socket on the IPv6 loopback standing in for the device's RTCP port. */
+async function bindFakeDevice(): Promise<{socket: Socket; port: number; packets: Buffer[]}> {
+  const socket = createSocket('udp6');
+  const packets: Buffer[] = [];
+  socket.on('message', (data) => packets.push(data));
+  await new Promise<void>((resolve) => socket.bind(0, '::1', resolve));
+  return {socket, port: socket.address().port, packets};
+}
+
+describe('ScreenStreamCapture keyframe requests', function () {
+  const SENDER_SSRC = 0x11223344;
+  const DEVICE_SSRC = 0xaabbccdd;
+  const PSFB = 0xce;
+
+  function fakeService(devicePort: number): {service: DisplayService; stops: () => number} {
+    let stops = 0;
+    const service = {
+      getTunnelLocalAddress: async () => '::1',
+      getDeviceAddress: async () => '::1',
+      startVideoStream: async () =>
+        ({
+          clientSessionId: undefined,
+          streamConfig: {RemoteSSRC: SENDER_SSRC, LocalSSRC: DEVICE_SSRC, SourcePort: devicePort},
+          connection: {},
+          raw: {},
+        }) as unknown as MediaStreamAnswer,
+      stopAllMediaStreams: async () => {
+        stops += 1;
+        return [];
+      },
+    } as unknown as DisplayService;
+    return {service, stops: () => stops};
+  }
+
+  const feedback = (packets: Buffer[]): Buffer[] => packets.filter((p) => p.readUInt8(1) === PSFB);
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('asks for a keyframe on demand and addresses it to the device', async function () {
+    const device = await bindFakeDevice();
+    const {service} = fakeService(device.port);
+    const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 0});
+    try {
+      assert.strictEqual(await capture.requestKeyFrame(), true);
+      await wait(50);
+
+      const [pli, ...rest] = feedback(device.packets);
+      assert.strictEqual(rest.length, 0);
+      assert.strictEqual(pli.readUInt8(0), 0x81);
+      assert.strictEqual(pli.readUInt32BE(4), SENDER_SSRC);
+      assert.strictEqual(pli.readUInt32BE(8), DEVICE_SSRC);
+    } finally {
+      await capture.stop();
+      device.socket.close();
+    }
+  });
+
+  it('asks periodically by default-style interval and stops asking once stopped', async function () {
+    const device = await bindFakeDevice();
+    const {service, stops} = fakeService(device.port);
+    const capture = await ScreenStreamCapture.start(service, {keyFrameIntervalMs: 20});
+    try {
+      await wait(150);
+      assert.ok(feedback(device.packets).length >= 3, 'expected repeated requests');
+    } finally {
+      await capture.stop();
+    }
+    await wait(30);
+    const afterStop = feedback(device.packets).length;
+    await wait(100);
+    assert.strictEqual(feedback(device.packets).length, afterStop, 'no requests after stop()');
+    assert.strictEqual(stops(), 1);
+    assert.strictEqual(await capture.requestKeyFrame(), false);
+    device.socket.close();
+  });
+
+  it('rejects a negative or non-finite interval before touching the device', async function () {
+    const {service} = fakeService(1);
+    for (const keyFrameIntervalMs of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await assert.rejects(ScreenStreamCapture.start(service, {keyFrameIntervalMs}), RangeError);
+    }
+  });
+
+  it('reports that no request was sent when the device gave no RTCP identity', async function () {
+    const {capture} = makeCapture({onStop: async () => undefined});
+
+    assert.strictEqual(await capture.requestKeyFrame(), false);
   });
 });
 

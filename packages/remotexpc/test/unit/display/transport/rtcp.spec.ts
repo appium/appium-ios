@@ -5,6 +5,7 @@ import type {XPCDictionary} from '../../../../src/lib/types.js';
 import {
   RtcpKeepalive,
   type RtcpStreamIdentity,
+  buildPictureLossIndication,
   buildReceiverReport,
   rtcpIdentityFromStreamConfig,
 } from '../../../../src/services/ios/display/transport/rtcp.js';
@@ -85,6 +86,31 @@ describe('RTCP', function () {
     });
   });
 
+  describe('buildPictureLossIndication', function () {
+    it('builds the 12-byte payload-specific feedback packet of RFC 4585 §6.3.1', function () {
+      const packet = buildPictureLossIndication(IDENTITY);
+
+      assert.strictEqual(packet.length, 12);
+      assert.strictEqual(packet.readUInt8(0), 0x81); // version 2, FMT 1 (PLI)
+      assert.strictEqual(packet.readUInt8(1), 0xce); // PT 206 = PSFB
+      assert.strictEqual(packet.readUInt16BE(2), 2); // (2 + 1) * 4 = 12 bytes
+    });
+
+    it('names us as the sender and the device as the media source', function () {
+      const packet = buildPictureLossIndication(IDENTITY);
+
+      assert.strictEqual(packet.readUInt32BE(4), IDENTITY.localSsrc);
+      assert.strictEqual(packet.readUInt32BE(8), IDENTITY.remoteSsrc);
+    });
+
+    it('handles SSRCs with the high bit set', function () {
+      const packet = buildPictureLossIndication({...IDENTITY, localSsrc: 0xf0000001, remoteSsrc: 0x80000000});
+
+      assert.strictEqual(packet.readUInt32BE(4), 0xf0000001);
+      assert.strictEqual(packet.readUInt32BE(8), 0x80000000);
+    });
+  });
+
   describe('rtcpIdentityFromStreamConfig', function () {
     it('maps the device-perspective SSRC names onto ours', function () {
       // streamConfig is written from the device's point of view: its "Remote"
@@ -156,6 +182,33 @@ describe('RTCP', function () {
 
       keepalive.stop();
       keepalive.stop();
+    });
+
+    it('sends a picture loss indication to the device on request', async function () {
+      const {receiver, sent} = fakeReceiver();
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
+      await flush();
+      sent.length = 0;
+
+      await keepalive.requestKeyFrame();
+      keepalive.stop();
+
+      assert.strictEqual(sent.length, 1);
+      assert.deepStrictEqual(sent[0].data, buildPictureLossIndication(IDENTITY));
+      assert.strictEqual(sent[0].host, IDENTITY.host);
+      assert.strictEqual(sent[0].port, IDENTITY.port);
+    });
+
+    it('does not request a keyframe once stopped', async function () {
+      const {receiver, sent} = fakeReceiver();
+      const keepalive = RtcpKeepalive.start(receiver, IDENTITY, {intervalMs: 60_000});
+      keepalive.stop();
+      await flush();
+      const before = sent.length;
+
+      await keepalive.requestKeyFrame();
+
+      assert.strictEqual(sent.length, before);
     });
 
     it('reports the highest observed sequence number', async function () {

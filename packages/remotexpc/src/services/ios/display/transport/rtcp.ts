@@ -23,6 +23,8 @@ const DEFAULT_INTERVAL_MS = 1000;
 const RTCP_VERSION_AND_COUNT = 0x81; // version 2, one report block
 const RTCP_PACKET_TYPE_RR = 0xc9; // 201
 const RTCP_PACKET_TYPE_SDES = 0xca; // 202
+const RTCP_PACKET_TYPE_PSFB = 0xce; // 206, payload-specific feedback
+const RTCP_FMT_PLI = 1; // RFC 4585 §6.3.1
 
 /** Where to send receiver reports, and the SSRCs identifying the session. */
 export interface RtcpStreamIdentity {
@@ -93,6 +95,23 @@ export function buildReceiverReport(identity: RtcpStreamIdentity, extendedHighes
   // 9..11 stay zero: null terminator plus padding to a 32-bit boundary.
 
   return Buffer.concat([rr, sdes]);
+}
+
+/**
+ * Builds a Picture Loss Indication (RFC 4585 §6.3.1), which asks the device for a keyframe.
+ *
+ * The device answers with a full IDR (VPS, SPS, PPS and the picture) within about 50 ms. It sends only one IDR
+ * on its own, at the start of the stream, so this is the only way to recover from a damaged picture or to
+ * give a late consumer a point to start decoding from.
+ */
+export function buildPictureLossIndication(identity: RtcpStreamIdentity): Buffer {
+  const pli = Buffer.alloc(12);
+  pli.writeUInt8(0x80 | RTCP_FMT_PLI, 0); // version 2, no padding, FMT 1
+  pli.writeUInt8(RTCP_PACKET_TYPE_PSFB, 1);
+  pli.writeUInt16BE(2, 2); // length in 32-bit words, minus one
+  pli.writeUInt32BE(identity.localSsrc >>> 0, 4); // sender of the request: us
+  pli.writeUInt32BE(identity.remoteSsrc >>> 0, 8); // the media source the picture is lost from
+  return pli;
 }
 
 /** Options for {@link RtcpKeepalive.start}. */
@@ -166,6 +185,17 @@ export class RtcpKeepalive {
     if (candidate > this.extendedHighestSequence) {
       this.extendedHighestSequence = candidate;
     }
+  }
+
+  /**
+   * Asks the device for a keyframe with a Picture Loss Indication. Does nothing once stopped.
+   */
+  async requestKeyFrame(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
+    log.debug(`Requesting a ${this.label} keyframe from [${this.identity.host}]:${this.identity.port}`);
+    await this.receiver.send(buildPictureLossIndication(this.identity), this.identity.host, this.identity.port);
   }
 
   /** Stops sending reports. Safe to call more than once. */
