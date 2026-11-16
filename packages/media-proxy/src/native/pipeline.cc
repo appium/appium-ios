@@ -62,7 +62,7 @@ void RotatePlane(const uint8_t* src, int srcStride, int width, int height, uint8
     for (int blockX = 0; blockX < width; blockX += kBlock) {
       const int endX = std::min(blockX + kBlock, width);
       for (int y = blockY; y < endY; ++y) {
-        const T* row = reinterpret_cast<const T*>(src + static_cast<ptrdiff_t>(y) * srcStride);
+        const T* row = reinterpret_cast<const T*>(src + (static_cast<ptrdiff_t>(y) * srcStride));
         for (int x = blockX; x < endX; ++x) {
           int dstX = 0;
           int dstY = 0;
@@ -76,7 +76,7 @@ void RotatePlane(const uint8_t* src, int srcStride, int width, int height, uint8
             dstX = y;
             dstY = width - 1 - x;
           }
-          reinterpret_cast<T*>(dst + static_cast<ptrdiff_t>(dstY) * dstStride)[dstX] = row[x];
+          reinterpret_cast<T*>(dst + (static_cast<ptrdiff_t>(dstY) * dstStride))[dstX] = row[x];
         }
       }
     }
