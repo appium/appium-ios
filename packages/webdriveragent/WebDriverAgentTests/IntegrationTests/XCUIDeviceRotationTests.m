@@ -8,6 +8,9 @@
 
 #import <XCTest/XCTest.h>
 #import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+#import <limits.h>
+#import "FBHIDOperations.h"
 #import "FBIntegrationTestCase.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
@@ -16,6 +19,24 @@
 #import "XCUIElement.h"
 #import "XCUIScreen.h"
 #import "FBSession.h"
+
+@interface FBHIDOperations (FBPanelResolutionTesting)
++ (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen displays:(nullable NSArray *)displays;
+@end
+
+@interface FBRotationDisplayDouble : NSObject
+@property (nonatomic) unsigned int displayId;
+@property (nonatomic, copy) NSString *deviceName;
+@end
+@implementation FBRotationDisplayDouble
+@end
+
+@interface FBRotationScreenDouble : NSObject
+@property (nonatomic) long long displayID;
+@property (nonatomic) BOOL isMainScreen;
+@end
+@implementation FBRotationScreenDouble
+@end
 
 @interface XCUIDeviceRotationTests : FBIntegrationTestCase
 @property (nonatomic, strong) FBSession *session;
@@ -109,6 +130,98 @@
   ];
   XCTAssertFalse(success, @"Device should not support tilt");
   XCTAssertEqual(currentRotation, [XCUIDevice sharedDevice].orientation, @"Device doesnt support tilt, should be at previous orientation");
+}
+
+- (void)assertRotationRejectedWithoutOrientationChange
+{
+  Method method = class_getInstanceMethod(XCUIDevice.class, @selector(setOrientation:));
+  IMP original = method_getImplementation(method);
+  __block NSUInteger orientationChanges = 0;
+  IMP replacement = imp_implementationWithBlock(^(id receiver, UIDeviceOrientation orientation) {
+    orientationChanges++;
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    XCTAssertFalse([FBHIDOperations rotateToOrientation:UIDeviceOrientationLandscapeLeft
+                                 interfaceOrientation:UIInterfaceOrientationLandscapeRight]);
+    XCTAssertEqual(orientationChanges, 0UL, @"Unresolved display identity must fail before changing device orientation");
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
+  }
+}
+
+- (void)testInvalidDisplayDoesNotChangeDeviceOrientation
+{
+  NSNumber *originalDisplay = FBConfiguration.sharedInstance.currentDisplayId;
+  @try {
+    FBConfiguration.sharedInstance.currentDisplayId = @(LLONG_MAX);
+    [self assertRotationRejectedWithoutOrientationChange];
+  } @finally {
+    FBConfiguration.sharedInstance.currentDisplayId = originalDisplay;
+  }
+}
+
+- (void)testUnknownPanelDoesNotChangeDeviceOrientation
+{
+  Method method = class_getClassMethod(FBHIDOperations.class, @selector(isInnerDuoDisplay:displays:));
+  IMP original = method_getImplementation(method);
+  __block NSUInteger resolutions = 0;
+  IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, XCUIScreen *screen, NSArray *displays) {
+    resolutions++;
+    return nil;
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    [self assertRotationRejectedWithoutOrientationChange];
+    XCTAssertEqual(resolutions, 1UL);
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
+  }
+}
+
+- (void)testPhysicalPanelIdentityDoesNotFollowMainScreen
+{
+  FBRotationDisplayDouble *cover = [FBRotationDisplayDouble new];
+  cover.displayId = 42;
+  cover.deviceName = @"primary";
+  FBRotationDisplayDouble *inner = [FBRotationDisplayDouble new];
+  inner.displayId = 73;
+  inner.deviceName = @"primary-1";
+  FBRotationScreenDouble *screen = [FBRotationScreenDouble new];
+  for (NSNumber *isMain in @[@YES, @NO]) {
+    screen.isMainScreen = isMain.boolValue;
+    screen.displayID = cover.displayId;
+    XCTAssertEqualObjects(([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[inner, cover]]), @NO);
+    screen.displayID = inner.displayId;
+    XCTAssertEqualObjects(([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[cover, inner]]), @YES);
+  }
+}
+
+- (void)testUnrecognizedPhysicalPanelIsNotGuessed
+{
+  FBRotationScreenDouble *screen = [FBRotationScreenDouble new];
+  screen.displayID = 42;
+  FBRotationDisplayDouble *display = [FBRotationDisplayDouble new];
+  display.displayId = 73;
+  display.deviceName = @"primary";
+  for (NSNumber *isMain in @[@YES, @NO]) {
+    screen.isMainScreen = isMain.boolValue;
+    XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:nil]);
+    XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[]]);
+    XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[[NSObject new]]]);
+    display.displayId = 73;
+    display.deviceName = @"primary";
+    XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[display]]);
+    display.displayId = 42;
+    display.deviceName = @"unrecognized-panel";
+    XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[display]]);
+  }
+  // Do not truncate XCTest's wider ID to a Core Animation display ID.
+  screen.displayID = (1LL << 32) + 42;
+  display.deviceName = @"primary";
+  XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[display]]);
 }
 
 - (void)testRotationOnSelectedDuoDisplay

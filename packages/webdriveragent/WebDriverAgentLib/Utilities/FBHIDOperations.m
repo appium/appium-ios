@@ -134,43 +134,35 @@ static BOOL FBPressHIDButton(uint32_t usage, NSError **error)
 + (NSArray<id<FBDuoPhysicalDisplay>> *)displays;
 @end
 
-static BOOL FBIsInnerDuoDisplay(XCUIScreen *screen)
-{
-  // CADisplay keeps the physical panel names while XCTest's main display can
-  // switch after folding (27.3). Resolve the selected ID rather than hardcoding
-  // simulator display IDs or treating the current main display as the cover.
-  Class<FBDuoDisplayProvider> displayClass = (Class)NSClassFromString(@"CADisplay");
-  if ([displayClass respondsToSelector:@selector(displays)]) {
-    for (id<FBDuoPhysicalDisplay> display in [displayClass displays]) {
-      if (![display respondsToSelector:@selector(displayId)]
-          || ![display respondsToSelector:@selector(deviceName)]
-          || display.displayId != screen.displayID) {
-        continue;
-      }
-      if ([display.deviceName isEqualToString:FBDuoInnerDisplayDeviceName]) {
-        return YES;
-      }
-      if ([display.deviceName isEqualToString:FBDuoCoverDisplayDeviceName]) {
-        return NO;
-      }
-    }
-  }
-  // Preserve the legacy mapping if physical panel metadata is unavailable.
-  return !screen.isMainScreen;
-}
+@interface FBHIDOperations ()
++ (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen
+                               displays:(nullable NSArray<id<FBDuoPhysicalDisplay>> *)displays;
+@end
 
 // Work around XCTest updating Duo device orientation without rotating the app.
 // Reproduction details and checks required before removing this workaround:
 // https://github.com/appium/appium-ios/pull/81
-static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
+static NSString *FBHIDOrientationValue(UIDeviceOrientation orientation)
 {
-  XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
+  NSError *error = nil;
+  XCUIScreen *screen = [FBScreen currentScreenWithError:&error];
   if (nil == screen) {
-    return NO;
+    [FBLogger logFmt:@"Cannot resolve the display for Duo rotation: %@", error];
+    return nil;
+  }
+  // Physical panel identity survives changes to XCTest's main screen after folding.
+  Class<FBDuoDisplayProvider> displayClass = (Class)NSClassFromString(@"CADisplay");
+  NSArray<id<FBDuoPhysicalDisplay>> *displays = [displayClass respondsToSelector:@selector(displays)]
+    ? [displayClass displays] : nil;
+  NSNumber *innerDisplay = [FBHIDOperations isInnerDuoDisplay:screen displays:displays];
+  if (nil == innerDisplay) {
+    [FBLogger logFmt:@"Cannot identify the physical Duo panel for display %lld; refusing to guess its rotation mapping",
+     screen.displayID];
+    return nil;
   }
   // The inner panel's native orientation is a quarter turn from the cover.
   // Values match DeviceKit's orientation-picker-control (Xcode 27.1).
-  BOOL isInnerDisplay = FBIsInnerDuoDisplay(screen);
+  BOOL isInnerDisplay = innerDisplay.boolValue;
   NSString *value;
   switch (orientation) {
     case UIDeviceOrientationPortrait:
@@ -189,9 +181,14 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
     case UIDeviceOrientationFaceUp:
     case UIDeviceOrientationFaceDown:
     default:
-      return NO;
+      return nil;
   }
 
+  return value;
+}
+
+static BOOL FBDispatchHIDOrientation(NSString *value)
+{
   const FBHIDAPI *api = FBGetHIDAPI();
   if (NULL == api->serialize || NULL == api->createVendorEvent
       || NULL == api->createClient || NULL == api->dispatchEvent) {
@@ -240,6 +237,25 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 }
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
++ (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen
+                               displays:(nullable NSArray<id<FBDuoPhysicalDisplay>> *)displays
+{
+  for (id<FBDuoPhysicalDisplay> display in displays) {
+    if (![display respondsToSelector:@selector(displayId)]
+        || ![display respondsToSelector:@selector(deviceName)]
+        || display.displayId != screen.displayID) {
+      continue;
+    }
+    if ([display.deviceName isEqualToString:FBDuoInnerDisplayDeviceName]) {
+      return @YES;
+    }
+    if ([display.deviceName isEqualToString:FBDuoCoverDisplayDeviceName]) {
+      return @NO;
+    }
+  }
+  return nil;
+}
+
 + (BOOL)pressHomeWithError:(NSError **)error
 {
   FBLogUnverifiedPhysicalHIDOperation(@"Home");
@@ -257,6 +273,10 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
      interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
+  NSString *value = FBHIDOrientationValue(orientation);
+  if (nil == value) {
+    return NO;
+  }
   FBLogUnverifiedPhysicalHIDOperation(@"rotation");
   XCUIApplication *application = XCUIApplication.fb_activeApplication;
   // Point-based detection can select the cover SpringBoard while the app
@@ -266,7 +286,7 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
   [XCUIDevice sharedDevice].orientation = orientation;
   // On Duo simulators XCTest can update its value without rotating the app.
   // Use the same direct HID path on simulators and physical hinged devices.
-  if (!FBDispatchHIDOrientation(orientation)) {
+  if (!FBDispatchHIDOrientation(value)) {
     return NO;
   }
   // Event dispatch is asynchronous. Check the app, not just XCTest's value.

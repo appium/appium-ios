@@ -166,9 +166,11 @@ Select the active panel with `currentDisplayId` before rotating. The inner
 panel's native orientation is a quarter turn from the cover panel, so WDA
 translates the requested orientation for the selected display. The selected ID
 is matched to Core Animation's physical panel name (`primary` / `primary-1`)
-when available; XCTest's `isMainScreen` can change as the hinge moves and is
-only used as a legacy fallback when this metadata is unavailable. No numeric
-display IDs are hardcoded. On the inner panel, the raw value returned by
+before changing orientation. If the selected display is unavailable or its
+physical panel cannot be identified, rotation fails without changing XCTest's
+device orientation or dispatching the vendor event. XCTest's `isMainScreen`
+can change as the hinge moves, so it is not used to guess panel identity. No
+numeric display IDs are hardcoded. On the inner panel, the raw value returned by
 `GET /wda/deviceOrientation` can differ from the app's interface orientation;
 `GET /orientation` describes the app. Both orientation
 and numeric rotation commands use the same path. WDA waits up to five seconds
