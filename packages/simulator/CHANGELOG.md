@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.1.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.0...appium-ios-simulator@11.1.1) (2026-11-17)
+
+### Bug Fixes
+
+* **simulator:** find UI client processes under a symlinked Xcode ([#207](https://github.com/appium/appium-ios/issues/207)) ([000ed23](https://github.com/appium/appium-ios/commit/000ed23749b49ff61039746b259a5c8a1e89e0b6))
+
+
 ## [11.1.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.0.7...appium-ios-simulator@11.1.0) (2026-11-16)
 
 ### Features

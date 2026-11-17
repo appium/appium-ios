@@ -1,6 +1,6 @@
 {
   "name": "@appium/media-proxy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cross-platform native media transcoder that unifies device screen streams (HEVC) into the common H.264 / MJPEG format",
   "homepage": "https://appium.io",
   "bugs": {
