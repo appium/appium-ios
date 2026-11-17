@@ -1,7 +1,7 @@
 name: Build media-proxy native addon (Reusable)
 
 # Prebuild matrix (darwin/linux/win32 x x64/arm64): cached LGPL FFmpeg + addon + bundled libs.
-# Not called from release.yml yet (unreleased package); see packages/media-proxy/CLAUDE.md.
+# Called from release.yml when @appium/media-proxy itself is being published.
 
 on:
   workflow_call:
