@@ -1,5 +1,6 @@
 import {realpath} from 'node:fs/promises';
 
+import {util} from '@appium/support';
 import {exec} from 'teen_process';
 
 import {log} from '../logger.js';
@@ -51,7 +52,7 @@ async function toAppPathPattern(appPath: string): Promise<string> {
   try {
     realAppPath = await realpath(appPath);
   } catch {
-    return appPath;
+    return util.escapeRegExp(appPath);
   }
-  return realAppPath === appPath ? appPath : `${appPath}|${realAppPath}`;
+  return [...new Set([appPath, realAppPath])].map((p) => util.escapeRegExp(p)).join('|');
 }

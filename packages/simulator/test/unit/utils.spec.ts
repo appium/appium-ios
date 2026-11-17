@@ -31,6 +31,8 @@ const XCODE_VERSION_27 = {
 };
 
 const FAKE_UI_CLIENT_APP = '/fake/UIClient.app';
+// `pgrep -f` / `pkill -f` take an extended regular expression, so the path is escaped.
+const FAKE_UI_CLIENT_APP_PATTERN = '/fake/UIClient\\.app';
 
 let currentExec: (...args: any[]) => any = async () => ({stdout: '', stderr: ''});
 let currentGetVersion: (...args: any[]) => any = async () => XCODE_VERSION_10;
@@ -100,35 +102,35 @@ describe('util', function () {
     it('should use the Simulator UI client bundle id', async function () {
       currentGetVersion = sandbox.stub().withArgs(true).returns(Promise.resolve(XCODE_VERSION_10));
       innerExecStub = sandbox.stub();
-      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP]).throws({code: 1});
+      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]).throws({code: 1});
       currentExec = innerExecStub;
       await killAllSimulators();
       sinon.assert.calledWith(currentGetUiClientAppPath as sinon.SinonStub, SIMULATOR_UI_CLIENT_BUNDLE_ID);
-      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP]);
+      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]);
     });
     it('should use the DeviceHub UI client bundle id', async function () {
       currentGetVersion = sandbox.stub().withArgs(true).returns(Promise.resolve(XCODE_VERSION_27));
       innerExecStub = sandbox.stub();
-      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP]).throws({code: 1});
+      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]).throws({code: 1});
       currentExec = innerExecStub;
       await killAllSimulators();
       sinon.assert.calledWith(currentGetUiClientAppPath as sinon.SinonStub, DEVICE_HUB_UI_CLIENT_BUNDLE_ID);
-      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP]);
+      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]);
     });
     it('should kill UI client by app path when shutdown fails', async function () {
       currentGetVersion = sandbox.stub().withArgs(true).returns(Promise.resolve(XCODE_VERSION_6));
       currentShutdownAllDevices = sandbox.stub().rejects(new Error('shutdown all failed'));
       innerExecStub = sandbox.stub();
-      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP]).returns({stdout: '12345\n'});
-      innerExecStub.withArgs('pkill', ['-9', '-f', FAKE_UI_CLIENT_APP]).returns(undefined);
+      innerExecStub.withArgs('pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]).returns({stdout: '12345\n'});
+      innerExecStub.withArgs('pkill', ['-9', '-f', FAKE_UI_CLIENT_APP_PATTERN]).returns(undefined);
       // getDevices is stubbed, so it won't call exec internally
       // The stub returns devices immediately, so waitForCondition will complete quickly
       currentExec = innerExecStub;
       try {
         await killAllSimulators(500);
       } catch {}
-      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP]);
-      sinon.assert.calledWith(innerExecStub, 'pkill', ['-9', '-f', FAKE_UI_CLIENT_APP]);
+      sinon.assert.calledWith(innerExecStub, 'pgrep', ['-f', FAKE_UI_CLIENT_APP_PATTERN]);
+      sinon.assert.calledWith(innerExecStub, 'pkill', ['-9', '-f', FAKE_UI_CLIENT_APP_PATTERN]);
     });
   });
 

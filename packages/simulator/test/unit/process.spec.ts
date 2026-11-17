@@ -73,6 +73,13 @@ describe('process utils', function () {
       startFakeApp(realAppPath);
       assert.strictEqual(await getMacAppPidByPath(missingAppPath), null);
     });
+
+    it('finds an app whose path contains regular expression characters', async function () {
+      const specialAppPath = path.join(tmpRoot, 'Xcode (beta)+[1].app', 'Contents', 'Applications', 'DeviceHub.app');
+      await fsPromises.mkdir(specialAppPath, {recursive: true});
+      const app = startFakeApp(specialAppPath);
+      assert.strictEqual(await getMacAppPidByPath(specialAppPath), String(app.pid));
+    });
   });
 
   describe('killMacAppByPath', function () {
