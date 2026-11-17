@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {describe, it, beforeEach, afterEach} from 'node:test';
 
-import {getMacAppPidByPath, killMacAppByPath} from '../../lib/utils/process.js';
+import {getMacAppPidByPath, getMacAppPidsByPath, killMacAppByPath} from '../../lib/utils/process.js';
 
 async function waitForExit(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
@@ -20,17 +20,18 @@ describe('process utils', function () {
   let realAppPath: string;
   let linkedAppPath: string;
   let missingAppPath: string;
-  let fakeApp: ChildProcess | undefined;
+  let fakeApps: ChildProcess[];
 
   /**
    * Not `sh -c 'sleep …'`: the shell execs `sleep`, which drops the path from the command line.
    */
   function startFakeApp(appPath: string): ChildProcess {
-    fakeApp = spawn(
+    const fakeApp = spawn(
       process.execPath,
       ['-e', 'setTimeout(() => {}, 30_000)', path.join(appPath, 'Contents', 'MacOS', 'DeviceHub')],
       {stdio: 'ignore'},
     );
+    fakeApps.push(fakeApp);
     return fakeApp;
   }
 
@@ -41,11 +42,11 @@ describe('process utils', function () {
     await fsPromises.symlink(path.join(tmpRoot, 'Xcode-27.0.app'), path.join(tmpRoot, 'Xcode.app'));
     linkedAppPath = path.join(tmpRoot, 'Xcode.app', 'Contents', 'Applications', 'DeviceHub.app');
     missingAppPath = path.join(tmpRoot, 'Missing.app');
-    fakeApp = undefined;
+    fakeApps = [];
   });
 
   afterEach(async function () {
-    if (fakeApp) {
+    for (const fakeApp of fakeApps) {
       fakeApp.kill('SIGKILL');
       await waitForExit(fakeApp);
     }
@@ -79,6 +80,21 @@ describe('process utils', function () {
       await fsPromises.mkdir(specialAppPath, {recursive: true});
       const app = startFakeApp(specialAppPath);
       assert.strictEqual(await getMacAppPidByPath(specialAppPath), String(app.pid));
+    });
+  });
+
+  describe('getMacAppPidsByPath', function () {
+    it('finds every app started from either the real or the symlinked path', async function () {
+      const apps = [startFakeApp(realAppPath), startFakeApp(linkedAppPath)];
+      assert.deepStrictEqual(
+        (await getMacAppPidsByPath(linkedAppPath)).toSorted(),
+        apps.map((app) => String(app.pid)).toSorted(),
+      );
+    });
+
+    it('returns an empty array for a path that does not exist', async function () {
+      startFakeApp(realAppPath);
+      assert.deepStrictEqual(await getMacAppPidsByPath(missingAppPath), []);
     });
   });
 

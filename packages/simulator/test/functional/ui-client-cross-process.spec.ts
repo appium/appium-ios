@@ -3,10 +3,9 @@ import {spawn} from 'node:child_process';
 import {describe, it, before, after} from 'node:test';
 import {fileURLToPath} from 'node:url';
 
-import {exec} from 'teen_process';
-
 import {getSimulator} from '../../lib/simulator.js';
 import {getUiClientAppPath, killAllSimulators} from '../../lib/utils/index.js';
+import {getMacAppPidsByPath} from '../../lib/utils/process.js';
 import {LONG_TIMEOUT} from './helpers.js';
 import {createTestDevice, deleteTestDevice} from './native-test-helpers.js';
 
@@ -73,13 +72,12 @@ function runWorker(udid: string, startupTimeout: number): Promise<WorkerResult> 
       'expected both processes to observe the same, shared UI client PID',
     );
 
-    // The PID equality check above can't catch a case where getMacAppPidByPath's `pgrep -f`
-    // happens to report the same (e.g. first-listed) PID to both callers despite a second UI
-    // client process also being alive, so count matching processes directly.
+    // The PID equality check above can't catch a case where getMacAppPidByPath happens to report
+    // the same (e.g. first-listed) PID to both callers despite a second UI client process also
+    // being alive, so count every matching process.
     const sim = await getSimulator(udids[0]);
     const uiClientAppPath = await getUiClientAppPath(sim.uiClientBundleId, sim.xcodeVersion);
-    const {stdout} = await exec('pgrep', ['-f', uiClientAppPath]);
-    const uiClientPidCount = stdout.trim().split('\n').filter(Boolean).length;
-    assert.strictEqual(uiClientPidCount, 1, 'expected exactly one UI client process to be running');
+    const uiClientPids = await getMacAppPidsByPath(uiClientAppPath);
+    assert.strictEqual(uiClientPids.length, 1, 'expected exactly one UI client process to be running');
   });
 });

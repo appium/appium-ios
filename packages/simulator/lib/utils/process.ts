@@ -15,13 +15,21 @@ import {log} from '../logger.js';
  * @returns The process ID or null if the application is not running.
  */
 export async function getMacAppPidByPath(appPath: string): Promise<string | null> {
+  return (await getMacAppPidsByPath(appPath))[0] ?? null;
+}
+
+/**
+ * @param appPath - Path to the app's `.app` bundle.
+ * @returns The process IDs of every running instance of the app, or an empty array if none is running.
+ */
+export async function getMacAppPidsByPath(appPath: string): Promise<string[]> {
   let stdout: string;
   try {
     ({stdout} = await exec('pgrep', ['-f', await toAppPathPattern(appPath)]));
   } catch {
-    return null;
+    return [];
   }
-  return stdout.trim().split('\n')[0] || null;
+  return stdout.trim().split('\n').filter(Boolean);
 }
 
 /**
