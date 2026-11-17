@@ -10,6 +10,7 @@
 		005B327C702EF47820887884 /* FBErrorBuilder.h in Headers */ = {isa = PBXBuildFile; fileRef = EE3A18601CDE618F00DE4205 /* FBErrorBuilder.h */; };
 		00ABDDC324B060006EA182F7 /* FBScreen.m in Sources */ = {isa = PBXBuildFile; fileRef = 715AFAC01FFA29180053896D /* FBScreen.m */; };
 		8DF7FE0E7A32499BAA86C4E2 /* FBGestureCoordinateContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 9279D81EB4894A61B2DAB7C8 /* FBGestureCoordinateContext.m */; };
+		8A8F853BBC2D439DB661C6B7 /* FBHIDOperations+DuoRotation.m in Sources */ = {isa = PBXBuildFile; fileRef = B515633A5B3548FAAD6A0377 /* FBHIDOperations+DuoRotation.m */; };
 		0161F45997A981E47729DB25 /* RouteResponse.h in Headers */ = {isa = PBXBuildFile; fileRef = 01E7CFEBAD717FCF4BCDD383 /* RouteResponse.h */; };
 		01A6F9758F11F6EF5B495D97 /* XCTPromise.h in Headers */ = {isa = PBXBuildFile; fileRef = 2CA02992F03AE1E134F2CAF5 /* XCTPromise.h */; };
 		01AC2C121519821EC6D2ED6B /* XCTMacCatalystStatusProviding-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 42D2B5A0C490D9698C2A87A9 /* XCTMacCatalystStatusProviding-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -350,6 +351,7 @@
 		641EE6212240C5CA00173FCB /* FBElementTypeTransformer.m in Sources */ = {isa = PBXBuildFile; fileRef = EE9AB7901CAEDF0C008C271F /* FBElementTypeTransformer.m */; };
 		641EE6232240C5CA00173FCB /* FBScreen.m in Sources */ = {isa = PBXBuildFile; fileRef = 715AFAC01FFA29180053896D /* FBScreen.m */; };
 		33B06077BE1041969B44A01A /* FBGestureCoordinateContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 9279D81EB4894A61B2DAB7C8 /* FBGestureCoordinateContext.m */; };
+		5DE77FE43A684122AF635C8D /* FBHIDOperations+DuoRotation.m in Sources */ = {isa = PBXBuildFile; fileRef = B515633A5B3548FAAD6A0377 /* FBHIDOperations+DuoRotation.m */; };
 		641EE6242240C5CA00173FCB /* FBXCTestDaemonsProxy.m in Sources */ = {isa = PBXBuildFile; fileRef = EE35AD7A1E3B80C000A02D78 /* FBXCTestDaemonsProxy.m */; };
 		641EE6262240C5CA00173FCB /* FBMathUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = EE1888391DA661C400307AA8 /* FBMathUtils.m */; };
 		A8FC9D445C9947988C80AFC9 /* FBHIDOperations.m in Sources */ = {isa = PBXBuildFile; fileRef = 3975477AB6C14ABDBBDE3EAD /* FBHIDOperations.m */; };
@@ -357,6 +359,7 @@
 		641EE6312240C5CA00173FCB /* XCUIElement+FBWebDriverAttributes.h in Headers */ = {isa = PBXBuildFile; fileRef = EEE376471D59FAE900ED88DD /* XCUIElement+FBWebDriverAttributes.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		641EE6322240C5CA00173FCB /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		ACF532F31E714D8F89FC1F14 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
+		70FB525D1BCD496A80BF3172 /* FBHIDOperations+DuoRotation.h in Headers */ = {isa = PBXBuildFile; fileRef = 111A6DC1E6DD4BF89EC1F601 /* FBHIDOperations+DuoRotation.h */; };
 		641EE6332240C5CA00173FCB /* XCTestPrivateSymbols.h in Headers */ = {isa = PBXBuildFile; fileRef = EE6B64FB1D0F86EF00E85F5D /* XCTestPrivateSymbols.h */; };
 		641EE6342240C5CA00173FCB /* XCUIElement+FBTyping.h in Headers */ = {isa = PBXBuildFile; fileRef = AD76723B1D6B7CC000610457 /* XCUIElement+FBTyping.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		641EE6352240C5CA00173FCB /* XCUIElement+FBUtilities.h in Headers */ = {isa = PBXBuildFile; fileRef = EEE3763F1D59F81400ED88DD /* XCUIElement+FBUtilities.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -591,8 +594,10 @@
 		715A84D22DD92AD3007134CC /* FBElementHelpers.h in Headers */ = {isa = PBXBuildFile; fileRef = 715A84CD2DD92AD3007134CC /* FBElementHelpers.h */; };
 		715AFAC11FFA29180053896D /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		6D35951C8DB84801B157C5A4 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
+		C121C4B46B1E4D75BADE9B4C /* FBHIDOperations+DuoRotation.h in Headers */ = {isa = PBXBuildFile; fileRef = 111A6DC1E6DD4BF89EC1F601 /* FBHIDOperations+DuoRotation.h */; };
 		715AFAC21FFA29180053896D /* FBScreen.m in Sources */ = {isa = PBXBuildFile; fileRef = 715AFAC01FFA29180053896D /* FBScreen.m */; };
 		3EC777E4AE2944C2998E2626 /* FBGestureCoordinateContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 9279D81EB4894A61B2DAB7C8 /* FBGestureCoordinateContext.m */; };
+		B3268698DC4F44D38FB8B32F /* FBHIDOperations+DuoRotation.m in Sources */ = {isa = PBXBuildFile; fileRef = B515633A5B3548FAAD6A0377 /* FBHIDOperations+DuoRotation.m */; };
 		715AFAC41FFA2AAF0053896D /* FBScreenTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 715AFAC31FFA2AAF0053896D /* FBScreenTests.m */; };
 		8EB95DF348A9438BBEAB4501 /* FBDisplayGestureTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 8EB95DF348A9438BBEAB4502 /* FBDisplayGestureTests.m */; };
 		715D554B2229891B00524509 /* FBExceptionHandlerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 715D554A2229891B00524509 /* FBExceptionHandlerTests.m */; };
@@ -817,6 +822,7 @@
 		932D338E506BD3EDDABBDEA9 /* XCTNSPredicateExpectationObject-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = EE35ACEC1E3B77D600A02D78 /* XCTNSPredicateExpectationObject-Protocol.h */; };
 		93D5C4C8442EFE91D70780CC /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		00E5348C6BD947E88C6B12A8 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
+		F371783BD9E44E97B1920108 /* FBHIDOperations+DuoRotation.h in Headers */ = {isa = PBXBuildFile; fileRef = 111A6DC1E6DD4BF89EC1F601 /* FBHIDOperations+DuoRotation.h */; };
 		9452D57FE97CB2ECED093B9F /* FBAccessibilityTraits.h in Headers */ = {isa = PBXBuildFile; fileRef = B316351E2DDF0D0B007D9317 /* FBAccessibilityTraits.h */; };
 		9472D6847DFCF79A29E201A1 /* FBFailureProofTestCase.m in Sources */ = {isa = PBXBuildFile; fileRef = EE6A89391D0B38640083E92B /* FBFailureProofTestCase.m */; };
 		94D6CDC7620D8C6E67BF2E61 /* XCTMessagingChannel_RunnerToIDE-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = 100F37231BF17CA9BB91DF16 /* XCTMessagingChannel_RunnerToIDE-Protocol.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1641,8 +1647,10 @@
 		715A84CE2DD92AD3007134CC /* FBElementHelpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBElementHelpers.m; sourceTree = "<group>"; };
 		715AFABF1FFA29180053896D /* FBScreen.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBScreen.h; sourceTree = "<group>"; };
 		F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBGestureCoordinateContext.h; sourceTree = "<group>"; };
+		111A6DC1E6DD4BF89EC1F601 /* FBHIDOperations+DuoRotation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FBHIDOperations+DuoRotation.h"; sourceTree = "<group>"; };
 		715AFAC01FFA29180053896D /* FBScreen.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBScreen.m; sourceTree = "<group>"; };
 		9279D81EB4894A61B2DAB7C8 /* FBGestureCoordinateContext.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBGestureCoordinateContext.m; sourceTree = "<group>"; };
+		B515633A5B3548FAAD6A0377 /* FBHIDOperations+DuoRotation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "FBHIDOperations+DuoRotation.m"; sourceTree = "<group>"; };
 		715AFAC31FFA2AAF0053896D /* FBScreenTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBScreenTests.m; sourceTree = "<group>"; };
 		8EB95DF348A9438BBEAB4502 /* FBDisplayGestureTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBDisplayGestureTests.m; sourceTree = "<group>"; };
 		715D554A2229891B00524509 /* FBExceptionHandlerTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBExceptionHandlerTests.m; sourceTree = "<group>"; };
@@ -2652,8 +2660,10 @@
 				71F3E7D725417FF400E0C22C /* FBSettingsHandler.m */,
 				715AFABF1FFA29180053896D /* FBScreen.h */,
 				F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */,
+				111A6DC1E6DD4BF89EC1F601 /* FBHIDOperations+DuoRotation.h */,
 				715AFAC01FFA29180053896D /* FBScreen.m */,
 				9279D81EB4894A61B2DAB7C8 /* FBGestureCoordinateContext.m */,
+				B515633A5B3548FAAD6A0377 /* FBHIDOperations+DuoRotation.m */,
 				71C9EAAA25E8415A00470CD8 /* FBScreenshot.h */,
 				71C9EAAB25E8415A00470CD8 /* FBScreenshot.m */,
 				641EE70A2240CE2D00173FCB /* FBTVNavigationTracker.h */,
@@ -3100,6 +3110,7 @@
 				641EE6312240C5CA00173FCB /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				641EE6322240C5CA00173FCB /* FBScreen.h in Headers */,
 				ACF532F31E714D8F89FC1F14 /* FBGestureCoordinateContext.h in Headers */,
+				70FB525D1BCD496A80BF3172 /* FBHIDOperations+DuoRotation.h in Headers */,
 				641EE6332240C5CA00173FCB /* XCTestPrivateSymbols.h in Headers */,
 				641EE6342240C5CA00173FCB /* XCUIElement+FBTyping.h in Headers */,
 				641EE6352240C5CA00173FCB /* XCUIElement+FBUtilities.h in Headers */,
@@ -3414,6 +3425,7 @@
 				43EBA0D0D54EB99815CE63B6 /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				93D5C4C8442EFE91D70780CC /* FBScreen.h in Headers */,
 				00E5348C6BD947E88C6B12A8 /* FBGestureCoordinateContext.h in Headers */,
+				F371783BD9E44E97B1920108 /* FBHIDOperations+DuoRotation.h in Headers */,
 				B9FAD6E3F3AB201B59D6F8BD /* XCTestPrivateSymbols.h in Headers */,
 				CDDEBD9F5F6A380C8D32D671 /* XCUIElement+FBTyping.h in Headers */,
 				488C4CBD86EBFA2AB5396917 /* XCUIElement+FBUtilities.h in Headers */,
@@ -3683,6 +3695,7 @@
 				EEE376491D59FAE900ED88DD /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				715AFAC11FFA29180053896D /* FBScreen.h in Headers */,
 				6D35951C8DB84801B157C5A4 /* FBGestureCoordinateContext.h in Headers */,
+				C121C4B46B1E4D75BADE9B4C /* FBHIDOperations+DuoRotation.h in Headers */,
 				EE6B64FD1D0F86EF00E85F5D /* XCTestPrivateSymbols.h in Headers */,
 				AD76723D1D6B7CC000610457 /* XCUIElement+FBTyping.h in Headers */,
 				EEE376451D59F81400ED88DD /* XCUIElement+FBUtilities.h in Headers */,
@@ -4594,6 +4607,7 @@
 				13DE7A5E287CA444003243C6 /* FBXCElementSnapshotWrapper+Helpers.m in Sources */,
 				641EE6232240C5CA00173FCB /* FBScreen.m in Sources */,
 				33B06077BE1041969B44A01A /* FBGestureCoordinateContext.m in Sources */,
+				5DE77FE43A684122AF635C8D /* FBHIDOperations+DuoRotation.m in Sources */,
 				71D04DCB25356C43008A052C /* XCUIElement+FBCaching.m in Sources */,
 				641EE6242240C5CA00173FCB /* FBXCTestDaemonsProxy.m in Sources */,
 				13DE7A58287CA1EC003243C6 /* FBXCElementSnapshotWrapper.m in Sources */,
@@ -4752,6 +4766,7 @@
 				9F9218F11A1D06F8DCC8308B /* FBXCElementSnapshotWrapper+Helpers.m in Sources */,
 				00ABDDC324B060006EA182F7 /* FBScreen.m in Sources */,
 				8DF7FE0E7A32499BAA86C4E2 /* FBGestureCoordinateContext.m in Sources */,
+				8A8F853BBC2D439DB661C6B7 /* FBHIDOperations+DuoRotation.m in Sources */,
 				486F5AEF3C385922994476CD /* XCUIElement+FBCaching.m in Sources */,
 				92DC81D2F6E58386AC592482 /* FBXCTestDaemonsProxy.m in Sources */,
 				4819BEAC415E02570C0FA074 /* FBXCElementSnapshotWrapper.m in Sources */,
@@ -4879,6 +4894,7 @@
 				71D3B3D7267FC7260076473D /* XCUIElement+FBResolve.m in Sources */,
 				715AFAC21FFA29180053896D /* FBScreen.m in Sources */,
 				3EC777E4AE2944C2998E2626 /* FBGestureCoordinateContext.m in Sources */,
+				B3268698DC4F44D38FB8B32F /* FBHIDOperations+DuoRotation.m in Sources */,
 				71B155DC230711E900646AFB /* FBCommandStatus.m in Sources */,
 				EE35AD7C1E3B80C000A02D78 /* FBXCTestDaemonsProxy.m in Sources */,
 				EE18883B1DA661C400307AA8 /* FBMathUtils.m in Sources */,

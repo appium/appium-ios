@@ -170,9 +170,10 @@ before changing orientation. If the selected display is unavailable or its
 physical panel cannot be identified, rotation fails without changing XCTest's
 device orientation or dispatching the vendor event. XCTest's `isMainScreen`
 can change as the hinge moves, so it is not used to guess panel identity. No
-numeric display IDs are hardcoded. On the inner panel, the raw value returned by
-`GET /wda/deviceOrientation` can differ from the app's interface orientation;
-`GET /orientation` describes the app. Both orientation
+numeric display IDs are hardcoded. On the tested Duo simulators, iOS 27.1 and
+27.2 retain the requested device orientation in `GET /wda/deviceOrientation`;
+iOS 27.3 reports the quarter-turn-adjusted device orientation on the inner
+panel. `GET /orientation` describes the app's interface orientation. Both orientation
 and numeric rotation commands use the same path. WDA waits up to five seconds
 for the application's interface orientation to match, then waits for stability;
 event submission alone is not success. An app or panel that does not support

@@ -7,6 +7,7 @@
  */
 
 #import "FBHIDOperations.h"
+#import "FBHIDOperations+DuoRotation.h"
 
 #import <dlfcn.h>
 #import <mach/mach_time.h>
@@ -15,9 +16,7 @@
 #import "FBErrorBuilder.h"
 #import "FBLogger.h"
 #import "FBRunLoopSpinner.h"
-#import "FBScreen.h"
 #import "FBSession.h"
-#import "XCUIScreen.h"
 #import "XCUIDevice+FBHinge.h"
 #import "XCUIApplication.h"
 #import "XCUIApplication+FBHelpers.h"
@@ -33,9 +32,6 @@ static const uint32_t FBHIDOrientationUsage = 0x5b;
 static const CFOptionFlags FBHIDBinarySerialization = 1;
 static const NSTimeInterval FBHIDButtonPressDuration = 0.03;
 static const NSTimeInterval FBHIDRotationTimeout = 5.0;
-// Private CADisplay device names observed on Duo simulators.
-static NSString *const FBDuoCoverDisplayDeviceName = @"primary";
-static NSString *const FBDuoInnerDisplayDeviceName = @"primary-1";
 
 typedef struct {
   CFTypeRef (*createKeyboardEvent)(CFAllocatorRef, uint64_t, uint32_t, uint32_t, Boolean, uint32_t);
@@ -125,68 +121,6 @@ static BOOL FBPressHIDButton(uint32_t usage, NSError **error)
                     withDescription:@"Cannot create the button HID event or client"] buildError:error];
 }
 
-@protocol FBDuoPhysicalDisplay <NSObject>
-@property (readonly) unsigned int displayId;
-@property (readonly) NSString *deviceName;
-@end
-
-@protocol FBDuoDisplayProvider <NSObject>
-+ (NSArray<id<FBDuoPhysicalDisplay>> *)displays;
-@end
-
-@interface FBHIDOperations ()
-+ (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen
-                               displays:(nullable NSArray<id<FBDuoPhysicalDisplay>> *)displays;
-@end
-
-// Work around XCTest updating Duo device orientation without rotating the app.
-// Reproduction details and checks required before removing this workaround:
-// https://github.com/appium/appium-ios/pull/81
-static NSString *FBHIDOrientationValue(UIDeviceOrientation orientation)
-{
-  NSError *error = nil;
-  XCUIScreen *screen = [FBScreen currentScreenWithError:&error];
-  if (nil == screen) {
-    [FBLogger logFmt:@"Cannot resolve the display for Duo rotation: %@", error];
-    return nil;
-  }
-  // Physical panel identity survives changes to XCTest's main screen after folding.
-  Class<FBDuoDisplayProvider> displayClass = (Class)NSClassFromString(@"CADisplay");
-  NSArray<id<FBDuoPhysicalDisplay>> *displays = [displayClass respondsToSelector:@selector(displays)]
-    ? [displayClass displays] : nil;
-  NSNumber *innerDisplay = [FBHIDOperations isInnerDuoDisplay:screen displays:displays];
-  if (nil == innerDisplay) {
-    [FBLogger logFmt:@"Cannot identify the physical Duo panel for display %lld; refusing to guess its rotation mapping",
-     screen.displayID];
-    return nil;
-  }
-  // The inner panel's native orientation is a quarter turn from the cover.
-  // Values match DeviceKit's orientation-picker-control (Xcode 27.1).
-  BOOL isInnerDisplay = innerDisplay.boolValue;
-  NSString *value;
-  switch (orientation) {
-    case UIDeviceOrientationPortrait:
-      value = !isInnerDisplay ? @"portrait" : @"landscape-left";
-      break;
-    case UIDeviceOrientationLandscapeLeft:
-      value = !isInnerDisplay ? @"landscape-left" : @"pud";
-      break;
-    case UIDeviceOrientationLandscapeRight:
-      value = !isInnerDisplay ? @"landscape-right" : @"portrait";
-      break;
-    case UIDeviceOrientationPortraitUpsideDown:
-      value = !isInnerDisplay ? @"pud" : @"landscape-right";
-      break;
-    case UIDeviceOrientationUnknown:
-    case UIDeviceOrientationFaceUp:
-    case UIDeviceOrientationFaceDown:
-    default:
-      return nil;
-  }
-
-  return value;
-}
-
 static BOOL FBDispatchHIDOrientation(NSString *value)
 {
   const FBHIDAPI *api = FBGetHIDAPI();
@@ -237,25 +171,6 @@ static BOOL FBDispatchHIDOrientation(NSString *value)
 }
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-+ (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen
-                               displays:(nullable NSArray<id<FBDuoPhysicalDisplay>> *)displays
-{
-  for (id<FBDuoPhysicalDisplay> display in displays) {
-    if (![display respondsToSelector:@selector(displayId)]
-        || ![display respondsToSelector:@selector(deviceName)]
-        || display.displayId != screen.displayID) {
-      continue;
-    }
-    if ([display.deviceName isEqualToString:FBDuoInnerDisplayDeviceName]) {
-      return @YES;
-    }
-    if ([display.deviceName isEqualToString:FBDuoCoverDisplayDeviceName]) {
-      return @NO;
-    }
-  }
-  return nil;
-}
-
 + (BOOL)pressHomeWithError:(NSError **)error
 {
   FBLogUnverifiedPhysicalHIDOperation(@"Home");
@@ -273,7 +188,7 @@ static BOOL FBDispatchHIDOrientation(NSString *value)
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
      interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
-  NSString *value = FBHIDOrientationValue(orientation);
+  NSString *value = [self duoOrientationValue:orientation];
   if (nil == value) {
     return NO;
   }
