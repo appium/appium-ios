@@ -1,3 +1,4 @@
+export {listH264Encoders} from './capabilities.js';
 export {
   MediaProxyEncoderUnavailableError,
   MediaProxyError,
