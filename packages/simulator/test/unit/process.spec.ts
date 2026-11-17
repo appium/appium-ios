@@ -15,39 +15,74 @@ async function waitForExit(child: ChildProcess): Promise<void> {
   await once(child, 'exit');
 }
 
-describe('process utils with a symlinked Xcode', function () {
+describe('process utils', function () {
   let tmpRoot: string;
+  let realAppPath: string;
   let linkedAppPath: string;
-  let fakeApp: ChildProcess;
+  let missingAppPath: string;
+  let fakeApp: ChildProcess | undefined;
+
+  /**
+   * Not `sh -c 'sleep …'`: the shell execs `sleep`, which drops the path from the command line.
+   */
+  function startFakeApp(appPath: string): ChildProcess {
+    fakeApp = spawn(
+      process.execPath,
+      ['-e', 'setTimeout(() => {}, 30_000)', path.join(appPath, 'Contents', 'MacOS', 'DeviceHub')],
+      {stdio: 'ignore'},
+    );
+    return fakeApp;
+  }
 
   beforeEach(async function () {
     tmpRoot = await fsPromises.realpath(await fsPromises.mkdtemp(path.join(os.tmpdir(), 'process-spec-')));
-    const realAppPath = path.join(tmpRoot, 'Xcode-27.0.app', 'Contents', 'Applications', 'DeviceHub.app');
+    realAppPath = path.join(tmpRoot, 'Xcode-27.0.app', 'Contents', 'Applications', 'DeviceHub.app');
     await fsPromises.mkdir(realAppPath, {recursive: true});
     await fsPromises.symlink(path.join(tmpRoot, 'Xcode-27.0.app'), path.join(tmpRoot, 'Xcode.app'));
     linkedAppPath = path.join(tmpRoot, 'Xcode.app', 'Contents', 'Applications', 'DeviceHub.app');
-    // LaunchServices starts an app from its real path, so its command line never contains the symlink.
-    // Not `sh -c 'sleep …'`: the shell execs `sleep`, which drops the path from the command line.
-    fakeApp = spawn(
-      process.execPath,
-      ['-e', 'setTimeout(() => {}, 30_000)', path.join(realAppPath, 'Contents', 'MacOS', 'DeviceHub')],
-      {stdio: 'ignore'},
-    );
+    missingAppPath = path.join(tmpRoot, 'Missing.app');
+    fakeApp = undefined;
   });
 
   afterEach(async function () {
-    fakeApp.kill('SIGKILL');
-    await waitForExit(fakeApp);
+    if (fakeApp) {
+      fakeApp.kill('SIGKILL');
+      await waitForExit(fakeApp);
+    }
     await fsPromises.rm(tmpRoot, {recursive: true, force: true});
   });
 
-  it('getMacAppPidByPath finds an app running from the real path', async function () {
-    assert.strictEqual(await getMacAppPidByPath(linkedAppPath), String(fakeApp.pid));
+  describe('getMacAppPidByPath', function () {
+    it('finds an app started from the real path of a symlinked Xcode', async function () {
+      // LaunchServices starts an app from its real path, so its command line never contains the symlink.
+      const app = startFakeApp(realAppPath);
+      assert.strictEqual(await getMacAppPidByPath(linkedAppPath), String(app.pid));
+    });
+
+    it('finds an app at a path without symlinks', async function () {
+      const app = startFakeApp(realAppPath);
+      assert.strictEqual(await getMacAppPidByPath(realAppPath), String(app.pid));
+    });
+
+    it('returns null for a path that does not exist', async function () {
+      startFakeApp(realAppPath);
+      assert.strictEqual(await getMacAppPidByPath(missingAppPath), null);
+    });
   });
 
-  it('killMacAppByPath kills an app running from the real path', async function () {
-    assert.strictEqual(await killMacAppByPath(linkedAppPath), true);
-    await waitForExit(fakeApp);
-    assert.strictEqual(fakeApp.signalCode, 'SIGKILL');
+  describe('killMacAppByPath', function () {
+    it('kills an app started from the real path of a symlinked Xcode', async function () {
+      const app = startFakeApp(realAppPath);
+      assert.strictEqual(await killMacAppByPath(linkedAppPath), true);
+      await waitForExit(app);
+      assert.strictEqual(app.signalCode, 'SIGKILL');
+    });
+
+    it('returns false for a path that does not exist', async function () {
+      const app = startFakeApp(realAppPath);
+      assert.strictEqual(await killMacAppByPath(missingAppPath), false);
+      assert.strictEqual(app.exitCode, null);
+      assert.strictEqual(app.signalCode, null);
+    });
   });
 });
