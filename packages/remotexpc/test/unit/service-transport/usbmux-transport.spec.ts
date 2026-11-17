@@ -4,7 +4,6 @@ import {afterEach, beforeEach, describe, it} from 'node:test';
 
 import {UnsupportedTransportError, UsbmuxServiceTransport} from '../../../src/lib/service-transport/index.js';
 import {getLockdownServiceName} from '../../../src/lib/service-transport/lockdown-service-names.js';
-import {UsbmuxServiceConnection} from '../../../src/lib/service-transport/usbmux.js';
 import {BaseService} from '../../../src/services/ios/base-service.js';
 
 describe('UsbmuxServiceTransport', function () {
@@ -44,17 +43,6 @@ describe('UsbmuxServiceTransport', function () {
 });
 
 describe('BaseService with the usbmux transport', function () {
-  it('refuses services that need the raw RSD address or a check-in-less socket', async function () {
-    const service = new BaseService('udid', {transport: new UsbmuxServiceTransport('udid')});
-
-    await assert.rejects(
-      service.startLockdownWithoutCheckin('com.apple.instruments.dtservicehub'),
-      (err: Error) => err instanceof UnsupportedTransportError && err.message.includes('RemoteXPC tunnel'),
-    );
-  });
-});
-
-describe('UsbmuxServiceConnection', function () {
   let server: net.Server;
   let client: net.Socket;
   let serverSide: net.Socket;
@@ -73,18 +61,24 @@ describe('UsbmuxServiceConnection', function () {
     server.close();
   });
 
-  it('replays the RSD StartService greeting to a caller that reads before sending', async function () {
-    const conn = new UsbmuxServiceConnection(client, 'com.apple.afc');
+  it('refuses services that need the raw RSD address or a check-in-less socket', async function () {
+    const service = new BaseService('udid', {transport: new UsbmuxServiceTransport('udid')});
 
-    assert.deepEqual(await conn.receive(100), {Request: 'StartService', Service: 'com.apple.afc'});
-    // only once: the next read is real wire data, and there is none
-    await assert.rejects(conn.receive(50));
+    await assert.rejects(
+      service.startLockdownWithoutCheckin('com.apple.instruments.dtservicehub'),
+      (err: Error) => err instanceof UnsupportedTransportError && err.message.includes('RemoteXPC tunnel'),
+    );
   });
 
-  it('does not replay the greeting once the caller has sent a request', async function () {
-    const conn = new UsbmuxServiceConnection(client, 'com.apple.afc');
+  it('starts a lockdown service with no RSD check-in sent and no greeting to read', async function (t) {
+    const transport = new UsbmuxServiceTransport('udid');
+    t.mock.method(transport, 'openSocket', async () => client);
+    const received: Buffer[] = [];
+    serverSide.on('data', (chunk: Buffer) => received.push(chunk));
 
-    conn.sendPlist({Request: 'Anything'});
-    await assert.rejects(conn.receive(50));
+    const conn = await new BaseService('udid', {transport}).startLockdownService('com.apple.afc.shim.remote');
+
+    await assert.rejects(conn.receive(50), /Timed out waiting for plist response/);
+    assert.equal(Buffer.concat(received).length, 0);
   });
 });

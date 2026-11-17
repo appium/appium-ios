@@ -145,23 +145,16 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
 
   /**
    * Connect to the notification proxy service
-   *
-   * Drains the shim's initial `StartService` greeting once, right after establishing a
-   * new connection, so it can never be mistaken for the reply to a later request.
    * @returns Promise resolving to the ServiceConnection instance
    */
   async connectToNotificationProxyService(): Promise<ServiceConnection> {
     if (this._conn) {
       return this._conn;
     }
-    const conn = await this.startLockdownService(NotificationProxyService.RSD_SERVICE_NAME, {
+    this._conn = await this.startLockdownService(NotificationProxyService.RSD_SERVICE_NAME, {
       createConnectionTimeout: this.timeout,
+      handshakeTimeout: this.timeout,
     });
-    const greeting = await conn.receive(this.timeout);
-    if (greeting?.Request !== 'StartService') {
-      throw new Error(`Expected StartService greeting, got: ${JSON.stringify(greeting)}`);
-    }
-    this._conn = conn;
     return this._conn;
   }
 

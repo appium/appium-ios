@@ -191,7 +191,7 @@ export class CrashReportsService {
       waitMs: DEFAULT_TUNNEL_SERVICE_WAIT_MS,
     });
 
-    const socket = await createRawServiceSocket(host, port);
+    const socket = await createRawServiceSocket(host, port, CrashReportsService.RSD_CRASH_MOVER_NAME);
     try {
       const ack = await readExact(socket, 5, 10000);
       const expectedAck = Buffer.from('ping\0', 'utf8');

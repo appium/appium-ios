@@ -129,6 +129,5 @@ function assertUsbmuxSupport(usbmux: UsbmuxServiceTransport, names: string[]): v
 export {getAvailableTransports} from './availability.js';
 export type {AvailabilityProbes, TransportAvailability, TransportAvailabilityOptions} from './availability.js';
 export {UnsupportedTransportError, UsbmuxDeviceUnavailableError, UsbmuxServiceTransport};
-export {UsbmuxServiceConnection} from './usbmux.js';
 export {getLockdownServiceName} from './lockdown-service-names.js';
 export {SERVICE_NAMES} from './service-names.js';

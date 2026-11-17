@@ -4,6 +4,7 @@ import type {Socket} from 'node:net';
 import {type TestContext, describe, it} from 'node:test';
 import {setImmediate as nextTick} from 'node:timers/promises';
 
+import {LockdownStartServiceError} from '../../../src/lib/lockdown/index.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
 import {CompanionProxyError} from '../../../src/services/ios/companion-proxy/errors.js';
 import {type CompanionDeviceEvent, CompanionProxyService} from '../../../src/services/ios/companion-proxy/index.js';
@@ -12,7 +13,6 @@ import {mockImport} from '../../helpers/mock-module.js';
 const UDID = 'phone-udid';
 const WATCH_UDID = 'watch-udid';
 const RSD_SERVICE_NAME = 'com.apple.companion_proxy.shim.remote';
-const GREETING: PlistDictionary = {Request: 'StartService', Service: RSD_SERVICE_NAME, Port: 49152};
 const attach: CompanionDeviceEvent = {
   Command: 'GizmoAttach',
   GizmoUDIDKey: WATCH_UDID,
@@ -92,9 +92,14 @@ interface Harness {
 
 /**
  * Imports the service with BaseService replaced so each `startLockdownService` call hands
- * out the next fake connection, and connectViaTunnel replaced with a recording stub.
+ * out the next fake connection or rejects with the next error, and connectViaTunnel replaced
+ * with a recording stub.
  */
-async function createService(t: TestContext, connections: FakeConnection[], timeout?: number): Promise<Harness> {
+async function createService(
+  t: TestContext,
+  connections: Array<FakeConnection | Error>,
+  timeout?: number,
+): Promise<Harness> {
   const pending = [...connections];
   const startedServices: string[] = [];
   const connectViaTunnelCalls: Array<[string, number]> = [];
@@ -111,6 +116,9 @@ async function createService(t: TestContext, connections: FakeConnection[], time
           const conn = pending.shift();
           if (!conn) {
             throw new Error('no fake connection left for startLockdownService');
+          }
+          if (conn instanceof Error) {
+            throw conn;
           }
           return conn;
         }
@@ -215,8 +223,8 @@ describe('CompanionProxyService', function () {
   });
 
   describe('connection lifecycle', function () {
-    it('checks in, drains the greeting, sends the command with the configured timeout, then closes', async function (t) {
-      const conn = createFakeConnection([GREETING, {PairedDevicesArray: [WATCH_UDID]}]);
+    it('checks in, sends the command with the configured timeout, then closes', async function (t) {
+      const conn = createFakeConnection([{PairedDevicesArray: [WATCH_UDID]}]);
       const {service, startedServices} = await createService(t, [conn], 1234);
 
       await service.list();
@@ -224,13 +232,13 @@ describe('CompanionProxyService', function () {
       assert.deepStrictEqual(startedServices, [RSD_SERVICE_NAME]);
       assert.deepStrictEqual(conn.sentRequests, [{Command: 'GetDeviceRegistry'}]);
       assert.deepStrictEqual(conn.sentMessages, []);
-      assert.deepStrictEqual(conn.timeouts, [1234, 1234]);
+      assert.deepStrictEqual(conn.timeouts, [1234]);
       assert.strictEqual(conn.closeCount, 1);
     });
 
     it('opens a fresh connection for every command', async function (t) {
-      const first = createFakeConnection([GREETING, {PairedDevicesArray: [WATCH_UDID]}]);
-      const second = createFakeConnection([GREETING, {RetrievedValueDictionary: {DeviceName: 'Watch'}}]);
+      const first = createFakeConnection([{PairedDevicesArray: [WATCH_UDID]}]);
+      const second = createFakeConnection([{RetrievedValueDictionary: {DeviceName: 'Watch'}}]);
       const {service, startedServices} = await createService(t, [first, second]);
 
       await service.list();
@@ -241,27 +249,34 @@ describe('CompanionProxyService', function () {
       assert.strictEqual(second.closeCount, 1);
     });
 
-    it('surfaces an Error-bearing greeting (USB-only refusal) and closes without sending', async function (t) {
-      const conn = createFakeConnection([{Request: 'StartService', Error: 'ServiceProhibited'}]);
-      const {service} = await createService(t, [conn]);
+    it('surfaces a refusal to start the service (USB-only) as a CompanionProxyError carrying the code', async function (t) {
+      const refusal = new LockdownStartServiceError(RSD_SERVICE_NAME, 'ServiceProhibited', 'Service is not allowed');
+      const {service} = await createService(t, [refusal]);
 
       await rejectsWithCode(service.list(), 'ServiceProhibited');
-
-      assert.deepStrictEqual(conn.sentRequests, []);
-      assert.strictEqual(conn.closeCount, 1);
     });
 
-    it('rejects a greeting that is not StartService and closes the connection', async function (t) {
-      const conn = createFakeConnection([{Request: 'Something'}]);
-      const {service} = await createService(t, [conn]);
+    it('keeps the error description and the refusal as its cause', async function (t) {
+      const refusal = new LockdownStartServiceError(RSD_SERVICE_NAME, 'ServiceProhibited', 'Service is not allowed');
+      const {service} = await createService(t, [refusal]);
 
-      await assert.rejects(service.list(), CompanionProxyError);
+      await assert.rejects(service.list(), (error: unknown) => {
+        assert.ok(error instanceof CompanionProxyError);
+        assert.strictEqual(error.cause, refusal);
+        assert.match(error.message, /ServiceProhibited \(Service is not allowed\)/);
+        return true;
+      });
+    });
 
-      assert.strictEqual(conn.closeCount, 1);
+    it('passes any other connection failure through unchanged', async function (t) {
+      const failure = new Error('connect ECONNREFUSED');
+      const {service} = await createService(t, [failure]);
+
+      await assert.rejects(service.list(), failure);
     });
 
     it('closes the connection when the command reply times out', async function (t) {
-      const conn = createFakeConnection([GREETING, new Error('Timed out waiting for plist response')]);
+      const conn = createFakeConnection([new Error('Timed out waiting for plist response')]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.list(), /Timed out/);
@@ -272,35 +287,35 @@ describe('CompanionProxyService', function () {
 
   describe('list', function () {
     it('returns PairedDevicesArray', async function (t) {
-      const conn = createFakeConnection([GREETING, {PairedDevicesArray: [WATCH_UDID, 'second-watch']}]);
+      const conn = createFakeConnection([{PairedDevicesArray: [WATCH_UDID, 'second-watch']}]);
       const {service} = await createService(t, [conn]);
 
       assert.deepStrictEqual(await service.list(), [WATCH_UDID, 'second-watch']);
     });
 
     it('returns [] on NoPairedWatches', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'NoPairedWatches'}]);
+      const conn = createFakeConnection([{Error: 'NoPairedWatches'}]);
       const {service} = await createService(t, [conn]);
 
       assert.deepStrictEqual(await service.list(), []);
     });
 
     it('returns [] when PairedDevicesArray is missing', async function (t) {
-      const conn = createFakeConnection([GREETING, {}]);
+      const conn = createFakeConnection([{}]);
       const {service} = await createService(t, [conn]);
 
       assert.deepStrictEqual(await service.list(), []);
     });
 
     it('throws CompanionProxyError with the daemon code on any other Error', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'UnexpectedReply'}]);
+      const conn = createFakeConnection([{Error: 'UnexpectedReply'}]);
       const {service} = await createService(t, [conn]);
 
       await rejectsWithCode(service.list(), 'UnexpectedReply');
     });
 
     it('appends ErrorDescription to the message when the daemon sends one', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'ErrorReply', ErrorDescription: 'watch unreachable'}]);
+      const conn = createFakeConnection([{Error: 'ErrorReply', ErrorDescription: 'watch unreachable'}]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.list(), {
@@ -312,7 +327,7 @@ describe('CompanionProxyService', function () {
 
   describe('getValue', function () {
     it('sends GetValueFromRegistry and unwraps RetrievedValueDictionary[key]', async function (t) {
-      const conn = createFakeConnection([GREETING, {RetrievedValueDictionary: {BatteryCurrentCapacity: 87}}]);
+      const conn = createFakeConnection([{RetrievedValueDictionary: {BatteryCurrentCapacity: 87}}]);
       const {service} = await createService(t, [conn]);
 
       assert.strictEqual(await service.getValue(WATCH_UDID, 'BatteryCurrentCapacity'), 87);
@@ -326,14 +341,14 @@ describe('CompanionProxyService', function () {
     });
 
     it('throws with the daemon code on NoMatchingWatch', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'NoMatchingWatch'}]);
+      const conn = createFakeConnection([{Error: 'NoMatchingWatch'}]);
       const {service} = await createService(t, [conn]);
 
       await rejectsWithCode(service.getValue('unknown', 'DeviceName'), 'NoMatchingWatch');
     });
 
     it('throws when the reply has no RetrievedValueDictionary', async function (t) {
-      const conn = createFakeConnection([GREETING, {Command: 'Whatever'}]);
+      const conn = createFakeConnection([{Command: 'Whatever'}]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.getValue(WATCH_UDID, 'DeviceName'), CompanionProxyError);
@@ -342,10 +357,7 @@ describe('CompanionProxyService', function () {
 
   describe('startForwardingServicePort', function () {
     it('sends the request and returns CompanionProxyServicePort', async function (t) {
-      const conn = createFakeConnection([
-        GREETING,
-        {Command: 'CompanionServiceSetup', CompanionProxyServicePort: 51234},
-      ]);
+      const conn = createFakeConnection([{Command: 'CompanionServiceSetup', CompanionProxyServicePort: 51234}]);
       const {service} = await createService(t, [conn]);
 
       assert.strictEqual(await service.startForwardingServicePort(62078, {preferWifi: true}), 51234);
@@ -360,14 +372,14 @@ describe('CompanionProxyService', function () {
     });
 
     it('throws with the daemon code on ServiceProxySetup', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'ServiceProxySetup'}]);
+      const conn = createFakeConnection([{Error: 'ServiceProxySetup'}]);
       const {service} = await createService(t, [conn]);
 
       await rejectsWithCode(service.startForwardingServicePort(62078), 'ServiceProxySetup');
     });
 
     it('throws when the reply carries no port', async function (t) {
-      const conn = createFakeConnection([GREETING, {Command: 'CompanionServiceSetup'}]);
+      const conn = createFakeConnection([{Command: 'CompanionServiceSetup'}]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.startForwardingServicePort(62078), CompanionProxyError);
@@ -385,7 +397,7 @@ describe('CompanionProxyService', function () {
   describe('stopForwardingServicePort', function () {
     for (const reply of ['ComandSuccess', 'CommandSuccess']) {
       it(`accepts ${reply}`, async function (t) {
-        const conn = createFakeConnection([GREETING, {Command: reply}]);
+        const conn = createFakeConnection([{Command: reply}]);
         const {service} = await createService(t, [conn]);
 
         await service.stopForwardingServicePort(62078);
@@ -398,14 +410,14 @@ describe('CompanionProxyService', function () {
     }
 
     it('throws with the daemon code on MalformedCommand', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'MalformedCommand'}]);
+      const conn = createFakeConnection([{Error: 'MalformedCommand'}]);
       const {service} = await createService(t, [conn]);
 
       await rejectsWithCode(service.stopForwardingServicePort(62078), 'MalformedCommand');
     });
 
     it('throws on an unexpected reply', async function (t) {
-      const conn = createFakeConnection([GREETING, {Command: 'Nope'}]);
+      const conn = createFakeConnection([{Command: 'Nope'}]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.stopForwardingServicePort(62078), CompanionProxyError);
@@ -414,7 +426,7 @@ describe('CompanionProxyService', function () {
 
   describe('listen', function () {
     it('fires StartListeningForDevices once, yields typed events in order, and closes when the consumer stops', async function (t) {
-      const conn = createFakeConnection([GREETING, attach, detach]);
+      const conn = createFakeConnection([attach, detach]);
       const {service} = await createService(t, [conn], 1234);
 
       const events = await take(service.listen(777), 2);
@@ -422,26 +434,26 @@ describe('CompanionProxyService', function () {
       assert.deepStrictEqual(events, [attach, detach]);
       assert.deepStrictEqual(conn.sentMessages, [{Command: 'StartListeningForDevices'}]);
       assert.deepStrictEqual(conn.sentRequests, []);
-      assert.deepStrictEqual(conn.timeouts, [1234, 777, 777]);
+      assert.deepStrictEqual(conn.timeouts, [777, 777]);
       assert.strictEqual(conn.closeCount, 1);
     });
 
     it('throws with the daemon code when the stream answers NoSocket', async function (t) {
-      const conn = createFakeConnection([GREETING, {Error: 'NoSocket'}]);
+      const conn = createFakeConnection([{Error: 'NoSocket'}]);
       const {service} = await createService(t, [conn]);
 
       await rejectsWithCode(take(service.listen(), 1), 'NoSocket');
     });
 
     it('throws on a frame that is not a companion event', async function (t) {
-      const conn = createFakeConnection([GREETING, {Command: 'GizmoAttach'}]);
+      const conn = createFakeConnection([{Command: 'GizmoAttach'}]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(take(service.listen(), 1), CompanionProxyError);
     });
 
     it('propagates receive errors to the consumer and closes the connection', async function (t) {
-      const conn = createFakeConnection([GREETING, new Error('socket lost')]);
+      const conn = createFakeConnection([new Error('socket lost')]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(take(service.listen(), 1), /socket lost/);
@@ -450,8 +462,8 @@ describe('CompanionProxyService', function () {
     });
 
     it('opens a dedicated connection per listen() call and closes it when iteration ends', async function (t) {
-      const first = createFakeConnection([GREETING, attach]);
-      const second = createFakeConnection([GREETING, detach]);
+      const first = createFakeConnection([attach]);
+      const second = createFakeConnection([detach]);
       const {service, startedServices} = await createService(t, [first, second]);
 
       assert.deepStrictEqual(await take(service.listen(), 1), [attach]);
@@ -465,7 +477,7 @@ describe('CompanionProxyService', function () {
     });
 
     it('exits when the daemon closes the socket instead of waiting out the event timeout', async function (t) {
-      const conn = createFakeConnection([GREETING, PENDING]);
+      const conn = createFakeConnection([PENDING]);
       const {service} = await createService(t, [conn]);
 
       const consumed = take(service.listen(), 1);
@@ -479,8 +491,8 @@ describe('CompanionProxyService', function () {
     });
 
     it('does not share a connection between concurrent listeners', async function (t) {
-      const first = createFakeConnection([GREETING, attach]);
-      const second = createFakeConnection([GREETING, detach]);
+      const first = createFakeConnection([attach]);
+      const second = createFakeConnection([detach]);
       const {service, startedServices} = await createService(t, [first, second]);
 
       const events = await Promise.all([take(service.listen(), 1), take(service.listen(), 1)]);
@@ -492,8 +504,8 @@ describe('CompanionProxyService', function () {
     });
 
     it('settles a pending iteration with AbortError and closes only its own connection when the signal aborts', async function (t) {
-      const aborted = createFakeConnection([GREETING, PENDING]);
-      const untouched = createFakeConnection([GREETING, PENDING, attach]);
+      const aborted = createFakeConnection([PENDING]);
+      const untouched = createFakeConnection([PENDING, attach]);
       const {service} = await createService(t, [aborted, untouched]);
       const controller = new AbortController();
       const consumed = take(service.listen(undefined, controller.signal), 1);
@@ -514,7 +526,7 @@ describe('CompanionProxyService', function () {
     });
 
     it('settles the next pull with AbortError and skips another receive when aborted between events', async function (t) {
-      const conn = createFakeConnection([GREETING, attach, PENDING]);
+      const conn = createFakeConnection([attach, PENDING]);
       const {service} = await createService(t, [conn]);
       const controller = new AbortController();
       const events = service.listen(undefined, controller.signal);
@@ -523,12 +535,12 @@ describe('CompanionProxyService', function () {
       controller.abort();
 
       await assert.rejects(events.next(), {name: 'AbortError'});
-      assert.strictEqual(conn.timeouts.length, 2);
+      assert.strictEqual(conn.timeouts.length, 1);
       assert.strictEqual(conn.closeCount, 1);
     });
 
     it('throws the abort reason without streaming when the signal is already aborted', async function (t) {
-      const conn = createFakeConnection([GREETING]);
+      const conn = createFakeConnection([]);
       const {service} = await createService(t, [conn]);
       const reason = new Error('caller gave up');
 
@@ -560,8 +572,8 @@ describe('CompanionProxyService', function () {
     });
 
     it('closes every active listen() connection exactly once', async function (t) {
-      const first = createFakeConnection([GREETING, attach, detach]);
-      const second = createFakeConnection([GREETING, attach, detach]);
+      const first = createFakeConnection([attach, detach]);
+      const second = createFakeConnection([attach, detach]);
       const {service} = await createService(t, [first, second]);
       const firstEvents = service.listen();
       const secondEvents = service.listen();
@@ -579,7 +591,7 @@ describe('CompanionProxyService', function () {
     });
 
     it('swallows errors thrown by the underlying connection close', async function (t) {
-      const conn = createFakeConnection([GREETING, {Command: 'GizmoPaired', GizmoUDIDKey: WATCH_UDID}]);
+      const conn = createFakeConnection([{Command: 'GizmoPaired', GizmoUDIDKey: WATCH_UDID}]);
       conn.close = () => {
         throw new Error('already closed');
       };

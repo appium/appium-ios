@@ -1,8 +1,10 @@
-import net from 'node:net';
+import type net from 'node:net';
 
+import {RSD_HANDSHAKE_FRAMES, rsdHandshakeLockdownPlistService} from '../../../lib/lockdown/index.js';
 import {createPlist} from '../../../lib/plist/plist-creator.js';
 import {parsePlist} from '../../../lib/plist/unified-plist-parser.js';
 import type {PlistDictionary} from '../../../lib/types.js';
+import {ServiceConnection} from '../../../service-connection.js';
 import {
   AFCMAGIC,
   AFC_HEADER_SIZE,
@@ -351,68 +353,32 @@ export async function recvOnePlist(socket: net.Socket): Promise<any> {
 }
 
 /**
- * Perform RSD check-in handshake for raw service sockets.
- */
-export async function rsdHandshakeForRawService(socket: net.Socket): Promise<void> {
-  const request = {
-    Label: 'appium-internal',
-    ProtocolVersion: '2',
-    Request: 'RSDCheckin',
-  };
-  const xml = createPlist(request);
-  const body = Buffer.from(xml, 'utf8');
-  const header = Buffer.alloc(4);
-  header.writeUInt32BE(body.length, 0);
-  await new Promise<void>((resolve, reject) => {
-    socket.write(Buffer.concat([header, body]), (err) => (err ? reject(err) : resolve()));
-  });
-
-  const first = await recvOnePlist(socket);
-  if (!first || first.Request !== 'RSDCheckin') {
-    throw new Error(`Invalid RSDCheckin response: ${JSON.stringify(first)}`);
-  }
-
-  const second = await recvOnePlist(socket);
-  if (!second || second.Request !== 'StartService') {
-    throw new Error(`Invalid StartService response: ${JSON.stringify(second)}`);
-  }
-}
-
-/**
- * Create a raw socket connection to an RSD service.
- * Optionally performs RSD handshake if performHandshake is true.
- * @param host - Hostname to connect to
- * @param port - Port number
- * @param options - Connection options
- * @returns Connected socket (with handshake completed if requested)
+ * Connect to a raw RSD service and complete its handshake, returning the socket positioned at the
+ * first byte of the service's own protocol. The socket is returned paused; the AFC socket reader
+ * resumes it once attached.
+ * @param serviceName RSD service name, reported when the device refuses to start the service
+ * @param options.timeoutMs TCP connect timeout
+ * @throws {LockdownStartServiceError} If the device refuses to start the service
  */
 export async function createRawServiceSocket(
   host: string,
   port: number,
-  options: {timeoutMs?: number; performHandshake?: boolean} = {},
+  serviceName: string,
+  options: {timeoutMs?: number} = {},
 ): Promise<net.Socket> {
-  const {timeoutMs = 10000, performHandshake = true} = options;
-
-  const socket = await new Promise<net.Socket>((resolve, reject) => {
-    const conn = net.createConnection({host, port}, () => {
-      conn.setKeepAlive(true);
-      conn.setNoDelay(true);
-      resolve(conn);
-    });
-    conn.setTimeout(timeoutMs, () => {
-      conn.destroy();
-      reject(new Error('Connection timed out'));
-    });
-    conn.on('error', reject);
+  const {timeoutMs = 10000} = options;
+  const conn = await ServiceConnection.createUsingTCP(host, String(port), {
+    createConnectionTimeout: timeoutMs,
+    plistOptions: {maxFrames: RSD_HANDSHAKE_FRAMES},
   });
-
-  if (performHandshake) {
-    await rsdHandshakeForRawService(socket);
+  try {
+    await rsdHandshakeLockdownPlistService(conn, serviceName);
+  } catch (error) {
+    conn.close();
+    throw error;
   }
-
-  // Connect-time idle timeout must not apply to long-lived service I/O.
-  socket.setTimeout(0);
-
+  const socket = conn.detachSocket();
+  socket.setNoDelay(true);
   return socket;
 }
 

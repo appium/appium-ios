@@ -4,8 +4,8 @@
 export class AmfiError extends Error {
   readonly code?: string;
 
-  constructor(message: string, code?: string) {
-    super(message);
+  constructor(message: string, code?: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'AmfiError';
     this.code = code;
   }

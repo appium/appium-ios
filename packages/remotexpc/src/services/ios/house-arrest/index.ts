@@ -50,12 +50,6 @@ export class HouseArrestService extends BaseService {
     const connection = await this.startLockdownService(HouseArrestService.RSD_SERVICE_NAME);
 
     try {
-      // receive StartService response
-      const startServiceResponse = await connection.receive();
-      if (startServiceResponse?.Request !== 'StartService') {
-        log.warn(`Expected StartService response, got: ${JSON.stringify(startServiceResponse)}`);
-      }
-
       const response = await connection.sendPlistRequest({
         Command: command,
         Identifier: bundleId,

@@ -16,7 +16,7 @@ class MisagentService extends BaseService implements MisagentServiceInterface {
       return this._conn;
     }
 
-    this._conn = await this.startShimService(MisagentService.RSD_SERVICE_NAME);
+    this._conn = await this.startLockdownService(MisagentService.RSD_SERVICE_NAME);
     return this._conn;
   }
 

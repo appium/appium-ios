@@ -450,15 +450,17 @@ export interface CompanionProxyService extends BaseService {
  */
 export interface PowerAssertionService extends BaseService {
   /**
-   * Create a power assertion to prevent system sleep
+   * Create a power assertion to prevent system sleep. It is held until its timeout elapses or
+   * `close()` is called.
    * @param options Options for creating the power assertion
-   * @returns Promise that resolves when the assertion is created
+   * @returns Promise that resolves when the device has created the assertion
+   * @throws {Error} If the device rejects the request
    */
   createPowerAssertion(options: PowerAssertionOptions): Promise<void>;
 
   /**
-   * Close the connection to the power assertion service
-   * @returns Promise that resolves when the connection is closed
+   * Release every power assertion that is still held
+   * @returns Promise that resolves when their connections are closed
    */
   close(): Promise<void>;
 }

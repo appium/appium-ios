@@ -124,7 +124,7 @@ describe('createLockdownServiceForTunnel', function () {
 
       await assert.rejects(
         createLockdownServiceForTunnel(UDID),
-        /RSD remote lockdown service failed: ServiceProhibited/,
+        /Cannot start 'com\.apple\.mobile\.lockdown\.remote\.untrusted': ServiceProhibited \(Service is not allowed\)/,
       );
 
       const socket = (await createUsingTCP.firstCall.returnValue).getSocket();

@@ -1,10 +1,8 @@
 import type net from 'node:net';
 
-import {ServiceConnection, type ServiceConnectionOptions} from '../../service-connection.js';
 import {formatError} from '../format-error.js';
 import {openLockdownSession, pairRecordTlsOptions, upgradeSocketToTLS} from '../lockdown/index.js';
 import {getLogger} from '../logger.js';
-import type {PlistDictionary} from '../types.js';
 import {createUsbmux} from '../usbmux/index.js';
 import {UnsupportedTransportError} from './errors.js';
 import {getLockdownServiceName} from './lockdown-service-names.js';
@@ -88,41 +86,5 @@ export class UsbmuxServiceTransport {
     socket.setKeepAlive(true);
     socket.setNoDelay(true);
     return socket;
-  }
-}
-
-/**
- * Plist service connection over a lockdown-started socket. The RSD tunnel path makes the device send
- * a `StartService` greeting that several service classes read right after connecting; lockdown has no
- * such message, so it is replayed to a caller that reads before sending anything. This keeps the
- * service classes identical for both transports.
- */
-export class UsbmuxServiceConnection extends ServiceConnection {
-  private greetingPending = true;
-
-  constructor(
-    socket: net.Socket,
-    private readonly serviceName: string,
-    options?: ServiceConnectionOptions,
-  ) {
-    super(socket, options);
-  }
-
-  override async receive(timeout?: number): Promise<PlistDictionary> {
-    if (this.greetingPending) {
-      this.greetingPending = false;
-      return {Request: 'StartService', Service: this.serviceName};
-    }
-    return await super.receive(timeout);
-  }
-
-  override async sendAndReceive(message: PlistDictionary, timeout?: number): Promise<PlistDictionary> {
-    this.greetingPending = false;
-    return await super.sendAndReceive(message, timeout);
-  }
-
-  protected override send(message: PlistDictionary): void {
-    this.greetingPending = false;
-    super.send(message);
   }
 }

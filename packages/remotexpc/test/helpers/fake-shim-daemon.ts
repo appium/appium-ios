@@ -10,6 +10,8 @@ export type ShimReply = (request: PlistDictionary, index: number) => PlistDictio
 export interface FakeShimDaemon {
   port: number;
   requests: PlistDictionary[];
+  /** Number of connections neither side has closed yet. */
+  openConnections: () => number;
   settle: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -20,13 +22,20 @@ export interface HeldFirstReply {
   release: () => void;
 }
 
+const START_SERVICE_GREETING: PlistDictionary = {Request: 'StartService'};
+
 /**
  * Replies to requests on one fake shim connection until it is closed. The RSD handshake is
- * answered with the RSDCheckin echo followed by the unsolicited StartService greeting, and
- * every later request is recorded and answered exactly once, in order. `index` counts
+ * answered with the RSDCheckin echo followed by the unsolicited `greeting` (none when `null`),
+ * and every later request is recorded and answered exactly once, in order. `index` counts
  * requests across all connections to the daemon.
  */
-async function respond(service: PlistService, requests: PlistDictionary[], reply: ShimReply): Promise<void> {
+async function respond(
+  service: PlistService,
+  requests: PlistDictionary[],
+  reply: ShimReply,
+  greeting: PlistDictionary | null,
+): Promise<void> {
   for (;;) {
     const request = await service.receivePlist(60_000).catch((): null => null);
     if (!request) {
@@ -34,7 +43,9 @@ async function respond(service: PlistService, requests: PlistDictionary[], reply
     }
     if (request.Request === 'RSDCheckin') {
       service.sendPlist({Request: 'RSDCheckin'});
-      service.sendPlist({Request: 'StartService'});
+      if (greeting) {
+        service.sendPlist(greeting);
+      }
       continue;
     }
     const index = requests.length;
@@ -45,20 +56,25 @@ async function respond(service: PlistService, requests: PlistDictionary[], reply
 
 /**
  * Starts a TCP server that behaves like a `.shim.remote` lockdown service daemon.
+ * @param greeting What follows the RSDCheckin echo: the StartService greeting by default, `null` for nothing
  */
-export async function startFakeShimDaemon(reply: ShimReply): Promise<FakeShimDaemon> {
+export async function startFakeShimDaemon(
+  reply: ShimReply,
+  greeting: PlistDictionary | null = START_SERVICE_GREETING,
+): Promise<FakeShimDaemon> {
   const requests: PlistDictionary[] = [];
   const services: PlistService[] = [];
   const server = net.createServer((socket: Socket) => {
     const service = new PlistService(socket);
     services.push(service);
-    void respond(service, requests, reply);
+    void respond(service, requests, reply, greeting);
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   return {
     port: (server.address() as AddressInfo).port,
     requests,
+    openConnections: () => services.filter((service) => !service.getSocket().destroyed).length,
     settle: async () => {
       await delay(100);
     },

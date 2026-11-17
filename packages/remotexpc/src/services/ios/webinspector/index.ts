@@ -346,17 +346,6 @@ export class WebInspectorService extends BaseService {
       const connection = await this.startLockdownService(WebInspectorService.RSD_SERVICE_NAME);
       this.connection = connection;
 
-      // Consume the StartService response from RSDCheckin so it does not reach the message
-      // handler as an "invalid plist". Continue if nothing is received within 500ms.
-      try {
-        const extra = await connection.receive(500);
-        if (extra) {
-          log.debug(`Consumed post-checkin response during connection setup: ${JSON.stringify(extra)}`);
-        }
-      } catch {
-        // Timeout is normal when the device does not send a post-checkin response
-      }
-
       // Send the initial connection identifier.
       // NOTE: setConnectionKey() in the appium-remote-debugger connect mixin also
       // sends _rpc_reportIdentifier:.  Sending it here as well is intentional:
