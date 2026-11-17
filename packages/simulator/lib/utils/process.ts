@@ -51,7 +51,8 @@ async function toAppPathPattern(appPath: string): Promise<string> {
   let realAppPath: string;
   try {
     realAppPath = await realpath(appPath);
-  } catch {
+  } catch (e: any) {
+    log.debug(`Could not resolve the real path of '${appPath}', matching it as is: ${e.message}`);
     return util.escapeRegExp(appPath);
   }
   return [...new Set([appPath, realAppPath])].map((p) => util.escapeRegExp(p)).join('|');
