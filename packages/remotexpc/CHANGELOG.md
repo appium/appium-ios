@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.0...appium-ios-remotexpc@6.1.1) (2026-11-17)
+
+### Miscellaneous Chores
+
+* **remotexpc:** update dependency path-to-regexp to v9 ([#221](https://github.com/appium/appium-ios/issues/221)) ([efe01a4](https://github.com/appium/appium-ios/commit/efe01a471ec4c614862652ad6c9011bee58d863d))
+* **tuntap:** update dependency commander to v15 ([#222](https://github.com/appium/appium-ios/issues/222)) ([c41089f](https://github.com/appium/appium-ios/commit/c41089f37e162e91ce8851ebb56be3af3b0475ab))
+
+
 ## [6.1.0](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.0.12...appium-ios-remotexpc@6.1.0) (2026-11-16)
 
 ### Features
