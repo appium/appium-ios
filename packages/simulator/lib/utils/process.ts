@@ -5,21 +5,6 @@ import {exec} from 'teen_process';
 import {log} from '../logger.js';
 
 /**
- * LaunchServices starts an app from its real path, so the command line of an app inside a
- * symlinked Xcode.app (e.g. `Xcode.app -> Xcode-27.0.app`) never contains the symlinked path.
- *
- * @param appPath - Path to the app's `.app` bundle.
- * @returns The path with symlinks resolved, or the given path if it cannot be resolved.
- */
-async function toRealAppPath(appPath: string): Promise<string> {
-  try {
-    return await realpath(appPath);
-  } catch {
-    return appPath;
-  }
-}
-
-/**
  * Scans the process table for a running macOS app by its executable path, rather than
  * `lsappinfo`'s LaunchServices/WindowServer-backed lookup — confirmed on at least one hosted CI
  * runner to never see a genuinely-running app (verified via its orphaned process still showing up
@@ -49,5 +34,20 @@ export async function killMacAppByPath(appPath: string): Promise<boolean> {
   } catch (e: any) {
     log.debug(`Could not kill app at '${appPath}': ${e.stderr || e.message}`);
     return false;
+  }
+}
+
+/**
+ * LaunchServices starts an app from its real path, so the command line of an app inside a
+ * symlinked Xcode.app (e.g. `Xcode.app -> Xcode-27.0.app`) never contains the symlinked path.
+ *
+ * @param appPath - Path to the app's `.app` bundle.
+ * @returns The path with symlinks resolved, or the given path if it cannot be resolved.
+ */
+async function toRealAppPath(appPath: string): Promise<string> {
+  try {
+    return await realpath(appPath);
+  } catch {
+    return appPath;
   }
 }
