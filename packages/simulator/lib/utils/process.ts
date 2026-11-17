@@ -16,7 +16,7 @@ import {log} from '../logger.js';
 export async function getMacAppPidByPath(appPath: string): Promise<string | null> {
   let stdout: string;
   try {
-    ({stdout} = await exec('pgrep', ['-f', await toRealAppPath(appPath)]));
+    ({stdout} = await exec('pgrep', ['-f', await toAppPathPattern(appPath)]));
   } catch {
     return null;
   }
@@ -29,7 +29,7 @@ export async function getMacAppPidByPath(appPath: string): Promise<string | null
  */
 export async function killMacAppByPath(appPath: string): Promise<boolean> {
   try {
-    await exec('pkill', ['-9', '-f', await toRealAppPath(appPath)]);
+    await exec('pkill', ['-9', '-f', await toAppPathPattern(appPath)]);
     return true;
   } catch (e: any) {
     log.debug(`Could not kill app at '${appPath}': ${e.stderr || e.message}`);
@@ -39,15 +39,19 @@ export async function killMacAppByPath(appPath: string): Promise<boolean> {
 
 /**
  * LaunchServices starts an app from its real path, so the command line of an app inside a
- * symlinked Xcode.app (e.g. `Xcode.app -> Xcode-27.0.app`) never contains the symlinked path.
+ * symlinked Xcode.app (e.g. `Xcode.app -> Xcode-27.0.app`) never contains the symlinked path,
+ * while an app started directly through the symlink still does.
  *
  * @param appPath - Path to the app's `.app` bundle.
- * @returns The path with symlinks resolved, or the given path if it cannot be resolved.
+ * @returns An extended regular expression for `pgrep -f` / `pkill -f` that matches the given
+ * path or, if it differs, its real path.
  */
-async function toRealAppPath(appPath: string): Promise<string> {
+async function toAppPathPattern(appPath: string): Promise<string> {
+  let realAppPath: string;
   try {
-    return await realpath(appPath);
+    realAppPath = await realpath(appPath);
   } catch {
     return appPath;
   }
+  return realAppPath === appPath ? appPath : `${appPath}|${realAppPath}`;
 }

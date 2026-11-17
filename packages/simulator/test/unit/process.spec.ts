@@ -59,6 +59,11 @@ describe('process utils', function () {
       assert.strictEqual(await getMacAppPidByPath(linkedAppPath), String(app.pid));
     });
 
+    it('finds an app started through a symlinked Xcode', async function () {
+      const app = startFakeApp(linkedAppPath);
+      assert.strictEqual(await getMacAppPidByPath(linkedAppPath), String(app.pid));
+    });
+
     it('finds an app at a path without symlinks', async function () {
       const app = startFakeApp(realAppPath);
       assert.strictEqual(await getMacAppPidByPath(realAppPath), String(app.pid));
@@ -73,6 +78,13 @@ describe('process utils', function () {
   describe('killMacAppByPath', function () {
     it('kills an app started from the real path of a symlinked Xcode', async function () {
       const app = startFakeApp(realAppPath);
+      assert.strictEqual(await killMacAppByPath(linkedAppPath), true);
+      await waitForExit(app);
+      assert.strictEqual(app.signalCode, 'SIGKILL');
+    });
+
+    it('kills an app started through a symlinked Xcode', async function () {
+      const app = startFakeApp(linkedAppPath);
       assert.strictEqual(await killMacAppByPath(linkedAppPath), true);
       await waitForExit(app);
       assert.strictEqual(app.signalCode, 'SIGKILL');
