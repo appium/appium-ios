@@ -101,7 +101,7 @@
     "commander": "^14.0.1",
     "minimatch": "^11.0.1",
     "node-devicectl": "^3.0.3",
-    "path-to-regexp": "^8.4.0"
+    "path-to-regexp": "^9.0.0"
   },
   "devDependencies": {
     "@appium/oxc-config": "^2.0.0-beta.3",
