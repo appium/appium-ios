@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.12](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.11...appium-webdriveragent@17.0.12) (2026-11-18)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve Duo rotation mapping when the main panel changes ([#156](https://github.com/appium/appium-ios/issues/156)) ([e96e24b](https://github.com/appium/appium-ios/commit/e96e24bca38997b115acabcae30c32a69821be86))
+
+
 ## [17.0.11](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.10...appium-webdriveragent@17.0.11) (2026-11-16)
 
 **Note:** Version bump only for package appium-webdriveragent
