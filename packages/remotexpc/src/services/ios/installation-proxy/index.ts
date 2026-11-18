@@ -1,4 +1,4 @@
-import {formatError, formatValue} from '../../../lib/format-error.js';
+import {formatError} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
@@ -285,22 +285,8 @@ export class InstallationProxyService extends BaseService {
 
     this.connection = await this.startLockdownService(InstallationProxyService.RSD_SERVICE_NAME, {
       createConnectionTimeout: this.timeout,
+      handshakeTimeout: this.timeout,
     });
-
-    const startServiceResponse = await this.connection.receive(this.timeout);
-
-    if (!startServiceResponse) {
-      throw new Error('No response received from service');
-    }
-
-    if (startServiceResponse.Request !== 'StartService') {
-      throw new Error(`Expected StartService response, got: ${JSON.stringify(startServiceResponse)}`);
-    }
-
-    if (startServiceResponse.Error) {
-      const errorDesc = startServiceResponse.ErrorDescription ?? 'Unknown error';
-      throw new Error(`Service start failed: ${formatValue(startServiceResponse.Error)} - ${formatValue(errorDesc)}`);
-    }
 
     return this.connection;
   }

@@ -123,12 +123,7 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
   }
 
   private async connectToDiagnosticService(): Promise<ServiceConnection> {
-    const connection = await this.startLockdownService(DiagnosticsService.RSD_SERVICE_NAME);
-    const startServiceResponse = await connection.receive();
-    if (startServiceResponse?.Request !== 'StartService') {
-      throw new Error(`Expected StartService response, got: ${JSON.stringify(startServiceResponse)}`);
-    }
-    return connection;
+    return await this.startLockdownService(DiagnosticsService.RSD_SERVICE_NAME);
   }
 
   private async sendRequest(request: PlistDictionary, timeout?: number): Promise<PlistDictionary> {
@@ -187,8 +182,6 @@ class DiagnosticsService extends BaseService implements DiagnosticsServiceInterf
 
   /**
    * Sends an IORegistry request and returns the diagnostics response.
-   * The shim's StartService greeting is drained in connectToDiagnosticService,
-   * so this is a plain single send/recv.
    */
   private async queryIORegistry(
     conn: ServiceConnection,

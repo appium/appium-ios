@@ -61,7 +61,7 @@ class MobileConfigService extends BaseService implements MobileConfigServiceInte
       return this._conn;
     }
 
-    this._conn = await this.startShimService(MobileConfigService.RSD_SERVICE_NAME);
+    this._conn = await this.startLockdownService(MobileConfigService.RSD_SERVICE_NAME);
     return this._conn;
   }
 

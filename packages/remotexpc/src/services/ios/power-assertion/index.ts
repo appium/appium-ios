@@ -1,3 +1,4 @@
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {PlistDictionary, PowerAssertionService as PowerAssertionServiceInterface} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
@@ -26,41 +27,65 @@ export interface PowerAssertionOptions {
 
 /**
  * PowerAssertionService provides an API to create power assertions.
+ *
+ * The assertion agent takes a single command per connection and ties the assertion to it: the
+ * assertion is released when its timeout elapses (the device then closes the connection) or when
+ * the connection is closed, whichever comes first. Anything else sent on that connection makes
+ * the agent drop it, so every assertion is held on a connection of its own.
  */
 class PowerAssertionService extends BaseService implements PowerAssertionServiceInterface {
   static readonly RSD_SERVICE_NAME = 'com.apple.mobile.assertion_agent.shim.remote';
 
-  private _conn: ServiceConnection | null = null;
+  private readonly _conns = new Set<ServiceConnection>();
+  /** Bumped by `close()`, so a creation that was still connecting knows it must not hold its assertion. */
+  private _generation = 0;
 
   /**
-   * Create a power assertion to prevent system sleep
+   * Create a power assertion to prevent system sleep. It is held until its timeout elapses or
+   * `close()` is called.
    * @param options Options for creating the power assertion
-   * @returns Promise that resolves when the assertion is created
+   * @returns Promise that resolves when the device has created the assertion
+   * @throws {Error} If the device rejects the request, or `close()` is called before it is sent
    */
   async createPowerAssertion(options: PowerAssertionOptions): Promise<void> {
-    if (!this._conn) {
-      this._conn = await this.connectToPowerAssertionService();
+    const generation = this._generation;
+    const conn = await this.startLockdownService(PowerAssertionService.RSD_SERVICE_NAME);
+    if (generation !== this._generation) {
+      conn.close();
+      throw new Error(`Power assertion "${options.name}" was not created: the service was closed`);
     }
-
-    const request = this.buildCreateAssertionRequest(options);
-    await this._conn.sendPlistRequest(request);
+    this._conns.add(conn);
+    conn.getSocket().once('close', () => this.release(conn));
+    try {
+      const response = await conn.sendPlistRequest(this.buildCreateAssertionRequest(options));
+      if (response.ErrorKey !== undefined) {
+        throw new Error(`Failed to create power assertion "${options.name}": ${formatValue(response.ErrorKey)}`);
+      }
+    } catch (error) {
+      this.release(conn);
+      throw error;
+    }
     log.info(`Power assertion created: type="${options.type}", name="${options.name}", timeout=${options.timeout}s`);
   }
 
   /**
-   * Close the connection to the power assertion service
+   * Release every power assertion that is still held, and stop any that is still being created
    */
   async close(): Promise<void> {
-    if (this._conn) {
-      await this._conn.close();
-      this._conn = null;
-      log.debug('Power assertion service connection closed');
+    this._generation++;
+    for (const conn of this._conns) {
+      this.release(conn);
     }
   }
 
-  private async connectToPowerAssertionService(): Promise<ServiceConnection> {
-    log.debug('Connecting to power assertion service');
-    return await this.startLockdownService(PowerAssertionService.RSD_SERVICE_NAME);
+  /**
+   * Close the connection holding an assertion exactly once, which releases the assertion
+   */
+  private release(conn: ServiceConnection): void {
+    if (this._conns.delete(conn)) {
+      conn.close();
+      log.debug('Power assertion connection closed');
+    }
   }
 
   private buildCreateAssertionRequest(options: PowerAssertionOptions): PlistDictionary {

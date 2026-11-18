@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {type TestContext, describe, it} from 'node:test';
 
+import {LockdownStartServiceError} from '../../../src/lib/lockdown/index.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
 import {AmfiError, DeviceHasPasscodeSetError} from '../../../src/services/ios/amfi/errors.js';
 import {AmfiService, DeveloperModeAction} from '../../../src/services/ios/amfi/index.js';
@@ -9,7 +10,6 @@ import {mockImport} from '../../helpers/mock-module.js';
 const UDID = 'phone-udid';
 const AMFI_SERVICE_NAME = 'com.apple.amfi.lockdown.shim.remote';
 const MOUNTER_SERVICE_NAME = 'com.apple.mobile.mobile_image_mounter.shim.remote';
-const GREETING: PlistDictionary = {Request: 'StartService'};
 const SUCCESS: PlistDictionary = {success: true};
 const STATUS_QUERY: PlistDictionary = {Command: 'QueryDeveloperModeStatus'};
 const STATUS_ON: PlistDictionary = {DeveloperModeStatus: true};
@@ -68,9 +68,13 @@ interface Harness {
 
 /**
  * Imports the service with BaseService replaced so each `startLockdownService` call hands
- * out the next fake connection, in order.
+ * out the next fake connection, in order, or rejects with the next error.
  */
-async function createService(t: TestContext, connections: FakeConnection[], timeout?: number): Promise<Harness> {
+async function createService(
+  t: TestContext,
+  connections: Array<FakeConnection | Error>,
+  timeout?: number,
+): Promise<Harness> {
   const pending = [...connections];
   const startedServices: StartedService[] = [];
 
@@ -87,6 +91,9 @@ async function createService(t: TestContext, connections: FakeConnection[], time
             const conn = pending.shift();
             if (!conn) {
               throw new Error('no fake connection left for startLockdownService');
+            }
+            if (conn instanceof Error) {
+              throw conn;
             }
             return conn;
           }
@@ -123,8 +130,8 @@ describe('AmfiService', function () {
   });
 
   describe('isDeveloperModeEnabled', function () {
-    it('queries the image mounter shim after draining its greeting and closes', async function (t) {
-      const conn = createFakeConnection([GREETING, STATUS_ON]);
+    it('queries the image mounter shim and closes', async function (t) {
+      const conn = createFakeConnection([STATUS_ON]);
       const harness = await createService(t, [conn]);
 
       assert.strictEqual(await harness.service.isDeveloperModeEnabled(), true);
@@ -139,25 +146,25 @@ describe('AmfiService', function () {
       [{DeveloperModeStatus: 0}, false],
     ] as Array<[PlistDictionary, boolean]>) {
       it(`reads ${JSON.stringify(reply)} as ${expected}`, async function (t) {
-        const {service} = await createService(t, [createFakeConnection([GREETING, reply])]);
+        const {service} = await createService(t, [createFakeConnection([reply])]);
         assert.strictEqual(await service.isDeveloperModeEnabled(), expected);
       });
     }
 
     it('throws AmfiError when the daemon reports an error', async function (t) {
-      const {service} = await createService(t, [createFakeConnection([GREETING, {Error: 'InternalError'}])]);
+      const {service} = await createService(t, [createFakeConnection([{Error: 'InternalError'}])]);
       await rejectsWithAmfiError(service.isDeveloperModeEnabled(), {name: 'AmfiError', code: 'InternalError'});
     });
 
     it('throws AmfiError when the reply carries no recognisable status', async function (t) {
-      const {service} = await createService(t, [createFakeConnection([GREETING, {}])]);
+      const {service} = await createService(t, [createFakeConnection([{}])]);
       await rejectsWithAmfiError(service.isDeveloperModeEnabled(), {name: 'AmfiError'});
     });
   });
 
   describe('revealDeveloperModeOption', function () {
-    it('drains the StartService greeting, sends {action: 0} and closes', async function (t) {
-      const conn = createFakeConnection([GREETING, SUCCESS]);
+    it('sends {action: 0} and closes', async function (t) {
+      const conn = createFakeConnection([SUCCESS]);
       const harness = await createService(t, [conn]);
 
       await harness.service.revealDeveloperModeOption();
@@ -170,8 +177,8 @@ describe('AmfiService', function () {
 
   describe('acceptDeveloperModePrompt', function () {
     it('reads the status first, then sends {action: 2} when Developer Mode is off', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_OFF]);
-      const amfi = createFakeConnection([GREETING, SUCCESS]);
+      const status = createFakeConnection([STATUS_OFF]);
+      const amfi = createFakeConnection([SUCCESS]);
       const harness = await createService(t, [status, amfi]);
 
       await harness.service.acceptDeveloperModePrompt();
@@ -184,7 +191,7 @@ describe('AmfiService', function () {
     });
 
     it('is a no-op when Developer Mode is already on', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_ON]);
+      const status = createFakeConnection([STATUS_ON]);
       const harness = await createService(t, [status]);
 
       await harness.service.acceptDeveloperModePrompt();
@@ -194,9 +201,9 @@ describe('AmfiService', function () {
     });
 
     it('stays a no-op when already on even though a passcode would otherwise block accept', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_ON]);
+      const status = createFakeConnection([STATUS_ON]);
       // AMFI rejects action 2 with the passcode error when no prompt is pending, but accept must never reach it.
-      const amfi = createFakeConnection([GREETING, {Error: 'Device has a passcode set'}]);
+      const amfi = createFakeConnection([{Error: 'Device has a passcode set'}]);
       const harness = await createService(t, [status, amfi]);
 
       await harness.service.acceptDeveloperModePrompt();
@@ -207,8 +214,8 @@ describe('AmfiService', function () {
     });
 
     it('surfaces the no-prompt-pending error when off and nothing is pending', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_OFF]);
-      const amfi = createFakeConnection([GREETING, {Error: 'An unknown error has occured'}]);
+      const status = createFakeConnection([STATUS_OFF]);
+      const amfi = createFakeConnection([{Error: 'An unknown error has occured'}]);
       const {service} = await createService(t, [status, amfi]);
 
       await rejectsWithAmfiError(service.acceptDeveloperModePrompt(), {
@@ -221,8 +228,8 @@ describe('AmfiService', function () {
 
   describe('enableDeveloperMode', function () {
     it('reads the status first, then sends {action: 1} when Developer Mode is off', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_OFF]);
-      const amfi = createFakeConnection([GREETING, SUCCESS]);
+      const status = createFakeConnection([STATUS_OFF]);
+      const amfi = createFakeConnection([SUCCESS]);
       const harness = await createService(t, [status, amfi]);
 
       await harness.service.enableDeveloperMode();
@@ -235,7 +242,7 @@ describe('AmfiService', function () {
     });
 
     it('is a no-op when Developer Mode is already on', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_ON]);
+      const status = createFakeConnection([STATUS_ON]);
       const harness = await createService(t, [status]);
 
       await harness.service.enableDeveloperMode();
@@ -245,9 +252,9 @@ describe('AmfiService', function () {
     });
 
     it('stays a no-op when already on even though a passcode would otherwise block enable', async function (t) {
-      const status = createFakeConnection([GREETING, STATUS_ON]);
+      const status = createFakeConnection([STATUS_ON]);
       // This AMFI connection would reject with the passcode error, but enable must never reach it.
-      const amfi = createFakeConnection([GREETING, {Error: 'Device has a passcode set'}]);
+      const amfi = createFakeConnection([{Error: 'Device has a passcode set'}]);
       const harness = await createService(t, [status, amfi]);
 
       await harness.service.enableDeveloperMode();
@@ -258,7 +265,7 @@ describe('AmfiService', function () {
     });
 
     it('does not send the action when the status read fails', async function (t) {
-      const status = createFakeConnection([GREETING, {Error: 'InternalError'}]);
+      const status = createFakeConnection([{Error: 'InternalError'}]);
       const harness = await createService(t, [status]);
 
       await rejectsWithAmfiError(harness.service.enableDeveloperMode(), {name: 'AmfiError', code: 'InternalError'});
@@ -266,8 +273,8 @@ describe('AmfiService', function () {
     });
 
     it('accepts integer 1 as success, which the daemon sends for enable', async function (t) {
-      const amfi = createFakeConnection([GREETING, {success: 1}]);
-      const {service} = await createService(t, [createFakeConnection([GREETING, STATUS_OFF]), amfi]);
+      const amfi = createFakeConnection([{success: 1}]);
+      const {service} = await createService(t, [createFakeConnection([STATUS_OFF]), amfi]);
 
       await service.enableDeveloperMode();
 
@@ -276,8 +283,8 @@ describe('AmfiService', function () {
     });
 
     it('throws DeviceHasPasscodeSetError when blocked by a passcode', async function (t) {
-      const amfi = createFakeConnection([GREETING, {Error: 'Device has a passcode set'}]);
-      const {service} = await createService(t, [createFakeConnection([GREETING, STATUS_OFF]), amfi]);
+      const amfi = createFakeConnection([{Error: 'Device has a passcode set'}]);
+      const {service} = await createService(t, [createFakeConnection([STATUS_OFF]), amfi]);
 
       await assert.rejects(service.enableDeveloperMode(), (error: unknown) => {
         assert.ok(
@@ -293,8 +300,8 @@ describe('AmfiService', function () {
     });
 
     it('throws AmfiError carrying the daemon error string for other rejections', async function (t) {
-      const amfi = createFakeConnection([GREETING, {Error: 'Something else'}]);
-      const {service} = await createService(t, [createFakeConnection([GREETING, STATUS_OFF]), amfi]);
+      const amfi = createFakeConnection([{Error: 'Something else'}]);
+      const {service} = await createService(t, [createFakeConnection([STATUS_OFF]), amfi]);
 
       await rejectsWithAmfiError(service.enableDeveloperMode(), {name: 'AmfiError', code: 'Something else'});
     });
@@ -302,8 +309,8 @@ describe('AmfiService', function () {
 
   describe('connection handling', function () {
     it('opens a fresh checked-in connection for every call', async function (t) {
-      const first = createFakeConnection([GREETING, SUCCESS]);
-      const second = createFakeConnection([GREETING, SUCCESS]);
+      const first = createFakeConnection([SUCCESS]);
+      const second = createFakeConnection([SUCCESS]);
       const harness = await createService(t, [first, second]);
 
       await harness.service.revealDeveloperModeOption();
@@ -314,36 +321,47 @@ describe('AmfiService', function () {
       assert.strictEqual(second.closeCount, 1);
     });
 
-    it('applies the configured timeout to connect, greeting and reply', async function (t) {
-      const conn = createFakeConnection([GREETING, SUCCESS]);
+    it('applies the configured timeout to connect and reply', async function (t) {
+      const conn = createFakeConnection([SUCCESS]);
       const harness = await createService(t, [conn], 1234);
 
       await harness.service.revealDeveloperModeOption();
 
-      assert.deepStrictEqual(harness.startedServices[0].options, {createConnectionTimeout: 1234});
-      assert.deepStrictEqual(conn.timeouts, [1234, 1234]);
+      assert.deepStrictEqual(harness.startedServices[0].options, {
+        createConnectionTimeout: 1234,
+        handshakeTimeout: 1234,
+      });
+      assert.deepStrictEqual(conn.timeouts, [1234]);
     });
 
-    it('rejects and closes without sending when the greeting is not StartService', async function (t) {
-      const conn = createFakeConnection([{Request: 'SomethingElse'}]);
-      const {service} = await createService(t, [conn]);
-
-      await rejectsWithAmfiError(service.revealDeveloperModeOption(), {name: 'AmfiError'});
-      assert.deepStrictEqual(conn.sentRequests, []);
-      assert.strictEqual(conn.closeCount, 1);
-    });
-
-    it('surfaces an Error carried in the greeting', async function (t) {
-      const conn = createFakeConnection([{Error: 'ServiceProhibited'}]);
-      const {service} = await createService(t, [conn]);
+    it('surfaces a refusal to start the service as an AmfiError carrying the code', async function (t) {
+      const refusal = new LockdownStartServiceError(AMFI_SERVICE_NAME, 'ServiceProhibited', 'Service is not allowed');
+      const {service} = await createService(t, [refusal]);
 
       await rejectsWithAmfiError(service.revealDeveloperModeOption(), {name: 'AmfiError', code: 'ServiceProhibited'});
-      assert.deepStrictEqual(conn.sentRequests, []);
-      assert.strictEqual(conn.closeCount, 1);
+    });
+
+    it('keeps the lockdown message and the refusal as its cause', async function (t) {
+      const refusal = new LockdownStartServiceError(AMFI_SERVICE_NAME, 'PasswordProtected');
+      const {service} = await createService(t, [refusal]);
+
+      await assert.rejects(service.revealDeveloperModeOption(), (error: unknown) => {
+        assert.ok(error instanceof AmfiError);
+        assert.strictEqual(error.cause, refusal);
+        assert.match(error.message, /locked with a passcode/);
+        return true;
+      });
+    });
+
+    it('passes any other connection failure through unchanged', async function (t) {
+      const failure = new Error('connect ECONNREFUSED');
+      const {service} = await createService(t, [failure]);
+
+      await assert.rejects(service.revealDeveloperModeOption(), failure);
     });
 
     it('closes the connection when the transport fails mid-request', async function (t) {
-      const conn = createFakeConnection([GREETING, new Error('socket hang up')]);
+      const conn = createFakeConnection([new Error('socket hang up')]);
       const {service} = await createService(t, [conn]);
 
       await assert.rejects(service.revealDeveloperModeOption(), /socket hang up/);
@@ -353,17 +371,17 @@ describe('AmfiService', function () {
 
   describe('daemon replies', function () {
     it('throws AmfiError when the reply lacks success', async function (t) {
-      const {service} = await createService(t, [createFakeConnection([GREETING, {}])]);
+      const {service} = await createService(t, [createFakeConnection([{}])]);
       await rejectsWithAmfiError(service.revealDeveloperModeOption(), {name: 'AmfiError'});
     });
 
     it('throws AmfiError when success is 0', async function (t) {
-      const {service} = await createService(t, [createFakeConnection([GREETING, {success: 0}])]);
+      const {service} = await createService(t, [createFakeConnection([{success: 0}])]);
       await rejectsWithAmfiError(service.revealDeveloperModeOption(), {name: 'AmfiError'});
     });
 
     it('throws AmfiError when success is false', async function (t) {
-      const {service} = await createService(t, [createFakeConnection([GREETING, {success: false}])]);
+      const {service} = await createService(t, [createFakeConnection([{success: false}])]);
       await rejectsWithAmfiError(service.revealDeveloperModeOption(), {name: 'AmfiError'});
     });
   });

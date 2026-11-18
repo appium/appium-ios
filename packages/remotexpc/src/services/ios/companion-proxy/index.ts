@@ -3,6 +3,7 @@ import type {Socket} from 'node:net';
 import {util} from '@appium/support';
 
 import {formatValue} from '../../../lib/format-error.js';
+import {LockdownStartServiceError} from '../../../lib/lockdown/index.js';
 import {getLogger} from '../../../lib/logger.js';
 import {connectViaTunnel} from '../../../lib/port-forwarding/connectors.js';
 import type {
@@ -222,21 +223,20 @@ export class CompanionProxyService extends BaseService implements CompanionProxy
   }
 
   /**
-   * Open a fresh checked-in connection and drain the shim's `StartService` greeting.
-   * A greeting carrying `Error` (e.g. `ServiceProhibited`) is surfaced instead of hanging later.
+   * Open a fresh checked-in connection.
+   * A refusal to start the service (e.g. `ServiceProhibited`) is surfaced as a `CompanionProxyError`
+   * carrying the code, with lockdown's message and the `LockdownStartServiceError` as its cause.
    */
   private async connectToCompanionProxyService(): Promise<ServiceConnection> {
-    const conn = await this.startLockdownService(CompanionProxyService.RSD_SERVICE_NAME, {
-      createConnectionTimeout: this.timeout,
-    });
     try {
-      const greeting = this.throwOnError(await conn.receive(this.timeout), 'StartService');
-      if (greeting?.Request !== 'StartService') {
-        throw new CompanionProxyError(`Expected StartService greeting, got: ${JSON.stringify(greeting)}`);
-      }
-      return conn;
+      return await this.startLockdownService(CompanionProxyService.RSD_SERVICE_NAME, {
+        createConnectionTimeout: this.timeout,
+        handshakeTimeout: this.timeout,
+      });
     } catch (error) {
-      conn.close();
+      if (error instanceof LockdownStartServiceError) {
+        throw new CompanionProxyError(error.message, error.reason, {cause: error});
+      }
       throw error;
     }
   }

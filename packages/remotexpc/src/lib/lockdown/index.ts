@@ -19,6 +19,10 @@ const deviceManagerLog = getLogger('DeviceManager');
 // Constants
 const LABEL = 'appium-internal';
 const DEFAULT_TIMEOUT = 5000;
+/** How long the RSD handshake waits for each of its two replies unless the caller says otherwise. */
+export const RSD_HANDSHAKE_TIMEOUT_MS = 10000;
+/** Plist messages the RSD handshake reads before the service's own protocol: the RSDCheckin echo and the StartService greeting. */
+export const RSD_HANDSHAKE_FRAMES = 2;
 /** A device that accepts the connection but never answers the TLS handshake must not hang callers. */
 const TLS_HANDSHAKE_TIMEOUT_MS = 10000;
 const DEFAULT_LOCKDOWN_PORT = 62078;
@@ -90,11 +94,12 @@ export class LockdownStartServiceError extends LockdownError {
   constructor(
     readonly serviceName: string,
     readonly reason: string,
+    readonly description?: string,
   ) {
     super(
       reason === 'PasswordProtected'
         ? `Cannot start '${serviceName}': the device is locked with a passcode. Unlock it and try again.`
-        : `Cannot start '${serviceName}': ${reason}`,
+        : `Cannot start '${serviceName}': ${reason}${description ? ` (${description})` : ''}`,
     );
     this.name = 'LockdownStartServiceError';
   }
@@ -691,7 +696,7 @@ export async function createLockdownServiceForTunnel(udid: string): Promise<Lock
 
   const conn = await ServiceConnection.createUsingTCP(host, String(lockdownPort));
   try {
-    await rsdHandshakeLockdownPlistService(conn);
+    await rsdHandshakeLockdownPlistService(conn, LOCKDOWN_REMOTE_UNTRUSTED, DEFAULT_TIMEOUT);
   } catch (err) {
     conn.close();
     throw err;
@@ -744,26 +749,35 @@ export function upgradeSocketToTLS(
 }
 
 /**
- * RSD handshake on the remote lockdown TCP socket: RSDCheckin, RSDCheckin echo, StartService.
+ * RSD handshake of a lockdown service reached over the tunnel: RSDCheckin, RSDCheckin echo, StartService.
+ * Once it resolves nothing of the handshake is left unread, so the connection is positioned at the
+ * service's own protocol.
+ *
+ * @param timeout Milliseconds to wait for each of the two replies
+ * @throws {LockdownStartServiceError} If the device refuses to start the service (e.g. `ServiceProhibited`)
  */
-async function rsdHandshakeLockdownPlistService(conn: ServiceConnection): Promise<void> {
+export async function rsdHandshakeLockdownPlistService(
+  conn: ServiceConnection,
+  serviceName: string,
+  timeout = RSD_HANDSHAKE_TIMEOUT_MS,
+): Promise<void> {
   const checkin: Record<string, PlistValue> = {
     Label: LABEL,
     ProtocolVersion: '2',
     Request: 'RSDCheckin',
   };
 
-  const first = await conn.sendPlistRequest(checkin, DEFAULT_TIMEOUT);
+  const first = await conn.sendPlistRequest(checkin, timeout);
   if (first.Request !== 'RSDCheckin') {
     throw new LockdownError(`Invalid RSDCheckin response: ${JSON.stringify(first)}`);
   }
 
-  const second = await conn.receive(DEFAULT_TIMEOUT);
-  if (!second || second.Request !== 'StartService') {
-    throw new LockdownError(`Expected StartService after RSDCheckin, got: ${JSON.stringify(second)}`);
+  const second = await conn.receive(timeout);
+  if (second?.Error) {
+    const description = second.ErrorDescription ? formatValue(second.ErrorDescription) : undefined;
+    throw new LockdownStartServiceError(serviceName, formatValue(second.Error), description);
   }
-  if (second.Error) {
-    const desc = second.ErrorDescription ?? 'Unknown error';
-    throw new LockdownError(`RSD remote lockdown service failed: ${formatValue(second.Error)} — ${formatValue(desc)}`);
+  if (second?.Request !== 'StartService') {
+    throw new LockdownError(`Expected StartService after RSDCheckin, got: ${JSON.stringify(second)}`);
   }
 }

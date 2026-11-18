@@ -66,7 +66,7 @@ export class ZipConduitService {
     const {host, port} = await resolveTunnelService(this.udid, ZipConduitService.RSD_SERVICE_NAME, {
       waitMs: DEFAULT_TUNNEL_SERVICE_WAIT_MS,
     });
-    this.socket = await createRawServiceSocket(host, port);
+    this.socket = await createRawServiceSocket(host, port, ZipConduitService.RSD_SERVICE_NAME);
   }
 
   /**

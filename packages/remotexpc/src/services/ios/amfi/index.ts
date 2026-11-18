@@ -1,4 +1,5 @@
 import {formatValue} from '../../../lib/format-error.js';
+import {LockdownStartServiceError} from '../../../lib/lockdown/index.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {AmfiService as AmfiServiceInterface, PlistDictionary, PlistValue} from '../../../lib/types.js';
 import type {ServiceConnection} from '../../../service-connection.js';
@@ -39,8 +40,8 @@ function asFlag(value: PlistValue | undefined): boolean | undefined {
 /**
  * Controls Developer Mode (iOS 16+) through the Apple Mobile File Integrity lockdown shim.
  *
- * Every call opens a fresh checked-in connection, drains the shim's unsolicited
- * `StartService` greeting, sends a single plist request and closes the connection.
+ * Every call opens a fresh checked-in connection, sends a single plist request and
+ * closes the connection.
  * The AMFI daemon answers `{success: true|1}` or `{Error: '<reason>'}`.
  */
 class AmfiService extends BaseService implements AmfiServiceInterface {
@@ -146,22 +147,20 @@ class AmfiService extends BaseService implements AmfiServiceInterface {
   }
 
   /**
-   * Check in to a `.shim.remote` service and drain its `StartService` greeting.
-   * A greeting carrying `Error` (e.g. `ServiceProhibited`) is surfaced instead of hanging later.
+   * Open a checked-in connection to a `.shim.remote` service.
+   * A refusal to start it (e.g. `ServiceProhibited`) is surfaced as an `AmfiError` carrying the code,
+   * with lockdown's message and the `LockdownStartServiceError` as its cause.
    */
   private async connectToShim(serviceName: string): Promise<ServiceConnection> {
-    const conn = await this.startLockdownService(serviceName, {
-      createConnectionTimeout: this.timeout,
-    });
     try {
-      const greeting = await conn.receive(this.timeout);
-      this.throwOnError(greeting, 'StartService');
-      if (greeting.Request !== 'StartService') {
-        throw new AmfiError(`Expected StartService greeting from ${serviceName}, got: ${JSON.stringify(greeting)}`);
-      }
-      return conn;
+      return await this.startLockdownService(serviceName, {
+        createConnectionTimeout: this.timeout,
+        handshakeTimeout: this.timeout,
+      });
     } catch (error) {
-      conn.close();
+      if (error instanceof LockdownStartServiceError) {
+        throw new AmfiError(error.message, error.reason, {cause: error});
+      }
       throw error;
     }
   }

@@ -1,20 +1,14 @@
 import type net from 'node:net';
 
-import {getLogger} from '../../lib/logger.js';
+import {RSD_HANDSHAKE_FRAMES, rsdHandshakeLockdownPlistService} from '../../lib/lockdown/index.js';
 import {
   type ServiceTransport,
   TUNNEL_TRANSPORT,
   UnsupportedTransportError,
-  UsbmuxServiceConnection,
   UsbmuxServiceTransport,
 } from '../../lib/service-transport/index.js';
 import {DEFAULT_TUNNEL_SERVICE_WAIT_MS, resolveTunnelService} from '../../lib/tunnel/tunnel-service-resolver.js';
 import {ServiceConnection, type ServiceConnectionOptions} from '../../service-connection.js';
-
-const log = getLogger('BaseService');
-
-/** Plist messages a shim sends before its own protocol: the RSDCheckin echo and the StartService greeting. */
-const SHIM_HANDSHAKE_FRAMES = 2;
 
 /**
  * Interface for service information
@@ -60,7 +54,11 @@ export class BaseService {
   }
 
   /**
-   * Starts a lockdown service with proper check-in
+   * Starts a lockdown service and completes its handshake, so the returned connection is positioned
+   * at the service's own protocol on either transport. Over the RemoteXPC tunnel the handshake is the
+   * `RSDCheckin` echo followed by the `StartService` greeting. `options.createConnectionTimeout`
+   * bounds the TCP connect and `options.handshakeTimeout` each of those two replies.
+   * @throws {LockdownStartServiceError} If the device refuses to start the service
    */
   public async startLockdownService(
     serviceName: string,
@@ -69,37 +67,9 @@ export class BaseService {
     if (this.serviceTransport instanceof UsbmuxServiceTransport) {
       return await this.startUsbmuxService(this.serviceTransport, serviceName, options);
     }
+    const connection = await this.startLockdownWithoutCheckin(serviceName, options);
     try {
-      const connection = await this.startLockdownWithoutCheckin(serviceName, options);
-      const checkin = {
-        Label: 'appium-internal',
-        ProtocolVersion: '2',
-        Request: 'RSDCheckin',
-      };
-
-      await connection.sendPlistRequest(checkin);
-      return connection;
-    } catch (error: unknown) {
-      log.error('Error during check-in:', error);
-      if (error instanceof Error) {
-        log.error('Error message:', error.message);
-        log.error('Error stack:', error.stack);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Starts a `.shim.remote` lockdown service and drains its initial `StartService` greeting,
-   * so it can never be mistaken for the reply to a later request
-   */
-  protected async startShimService(serviceName: string, options: Record<string, any> = {}): Promise<ServiceConnection> {
-    const connection = await this.startLockdownService(serviceName, options);
-    try {
-      const greeting = await connection.receive();
-      if (greeting?.Request !== 'StartService') {
-        throw new Error(`Expected StartService greeting, got: ${JSON.stringify(greeting)}`);
-      }
+      await rsdHandshakeLockdownPlistService(connection, serviceName, options.handshakeTimeout);
       return connection;
     } catch (error) {
       connection.close();
@@ -116,7 +86,9 @@ export class BaseService {
     if (this.serviceTransport instanceof UsbmuxServiceTransport) {
       return await this.serviceTransport.openSocket(serviceName);
     }
-    const connection = await this.startShimService(serviceName, {plistOptions: {maxFrames: SHIM_HANDSHAKE_FRAMES}});
+    const connection = await this.startLockdownService(serviceName, {
+      plistOptions: {maxFrames: RSD_HANDSHAKE_FRAMES},
+    });
     return connection.detachSocket();
   }
 
@@ -129,7 +101,7 @@ export class BaseService {
     options: Record<string, any>,
   ): Promise<ServiceConnection> {
     const socket = await transport.openSocket(serviceName, {timeoutMs: options.createConnectionTimeout});
-    return new UsbmuxServiceConnection(socket, serviceName, options as ServiceConnectionOptions);
+    return new ServiceConnection(socket, options as ServiceConnectionOptions);
   }
 
   /** Services that need the raw RSD address (DTX, CoreDevice) cannot run over usbmux. */

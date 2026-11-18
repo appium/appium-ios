@@ -161,7 +161,7 @@ class SpringBoardService extends BaseService implements SpringboardInterface {
     if (this._conn) {
       return this._conn;
     }
-    this._conn = await this.startShimService(SpringBoardService.RSD_SERVICE_NAME);
+    this._conn = await this.startLockdownService(SpringBoardService.RSD_SERVICE_NAME);
     return this._conn;
   }
 

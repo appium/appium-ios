@@ -791,7 +791,7 @@ export class AfcService {
       waitMs: DEFAULT_TUNNEL_SERVICE_WAIT_MS,
     });
 
-    this.socket = await createRawServiceSocket(resolved.host, resolved.port, {
+    this.socket = await createRawServiceSocket(resolved.host, resolved.port, this.rsdServiceName, {
       timeoutMs: 30000,
     });
     this._getDemux().ensureReaderStarted(this.socket);
