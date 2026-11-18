@@ -7,6 +7,7 @@
  */
 
 #import "FBHIDOperations.h"
+#import "FBHIDOperations+DuoRotation.h"
 
 #import <dlfcn.h>
 #import <mach/mach_time.h>
@@ -15,9 +16,7 @@
 #import "FBErrorBuilder.h"
 #import "FBLogger.h"
 #import "FBRunLoopSpinner.h"
-#import "FBScreen.h"
 #import "FBSession.h"
-#import "XCUIScreen.h"
 #import "XCUIDevice+FBHinge.h"
 #import "XCUIApplication.h"
 #import "XCUIApplication+FBHelpers.h"
@@ -122,38 +121,8 @@ static BOOL FBPressHIDButton(uint32_t usage, NSError **error)
                     withDescription:@"Cannot create the button HID event or client"] buildError:error];
 }
 
-// Work around XCTest updating Duo device orientation without rotating the app.
-// Reproduction details and checks required before removing this workaround:
-// https://github.com/appium/appium-ios/pull/81
-static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
+static BOOL FBDispatchHIDOrientation(NSString *value)
 {
-  XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
-  if (nil == screen) {
-    return NO;
-  }
-  // The inner panel's native orientation is a quarter turn from the cover.
-  // Values match DeviceKit's orientation-picker-control (Xcode 27.1).
-  NSString *value;
-  switch (orientation) {
-    case UIDeviceOrientationPortrait:
-      value = screen.isMainScreen ? @"portrait" : @"landscape-left";
-      break;
-    case UIDeviceOrientationLandscapeLeft:
-      value = screen.isMainScreen ? @"landscape-left" : @"pud";
-      break;
-    case UIDeviceOrientationLandscapeRight:
-      value = screen.isMainScreen ? @"landscape-right" : @"portrait";
-      break;
-    case UIDeviceOrientationPortraitUpsideDown:
-      value = screen.isMainScreen ? @"pud" : @"landscape-right";
-      break;
-    case UIDeviceOrientationUnknown:
-    case UIDeviceOrientationFaceUp:
-    case UIDeviceOrientationFaceDown:
-    default:
-      return NO;
-  }
-
   const FBHIDAPI *api = FBGetHIDAPI();
   if (NULL == api->serialize || NULL == api->createVendorEvent
       || NULL == api->createClient || NULL == api->dispatchEvent) {
@@ -219,6 +188,10 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
 + (BOOL)rotateToOrientation:(UIDeviceOrientation)orientation
      interfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
+  NSString *value = [self duoOrientationValue:orientation];
+  if (nil == value) {
+    return NO;
+  }
   FBLogUnverifiedPhysicalHIDOperation(@"rotation");
   XCUIApplication *application = XCUIApplication.fb_activeApplication;
   // Point-based detection can select the cover SpringBoard while the app
@@ -228,7 +201,7 @@ static BOOL FBDispatchHIDOrientation(UIDeviceOrientation orientation)
   [XCUIDevice sharedDevice].orientation = orientation;
   // On Duo simulators XCTest can update its value without rotating the app.
   // Use the same direct HID path on simulators and physical hinged devices.
-  if (!FBDispatchHIDOrientation(orientation)) {
+  if (!FBDispatchHIDOrientation(value)) {
     return NO;
   }
   // Event dispatch is asynchronous. Check the app, not just XCTest's value.

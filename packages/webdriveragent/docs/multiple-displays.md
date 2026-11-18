@@ -150,16 +150,12 @@ requests and responses, and observed results.
 
 ### Rotation on Duo devices
 
-On Duo Simulator 27.1, assigning `XCUIDevice.orientation` can update XCTest's
-reported orientation without rotating the application. On Duo simulators with
-an available hinge sensor, WDA directly dispatches the vendor-defined
-`orientation-picker-control` event used by Xcode 27.1's Duo controls, while also
-keeping XCTest's reported device orientation in sync.
-
-On physical devices with an available hinge sensor, WDA first uses XCTest and
-checks the application's interface orientation after waiting for stability.
-Only if that check fails does WDA log the transition to the vendor HID fallback
-and attempt it. Devices without a hinge retain the XCTest path.
+On Duo simulators, assigning `XCUIDevice.orientation` can update XCTest's
+reported orientation without rotating the application. WDA dispatches the
+vendor-defined `orientation-picker-control` event used by Xcode's Duo controls,
+after assigning XCTest's device orientation. Devices without a hinge retain
+the XCTest path. The hinge-specific path is also attempted on physical devices
+with an available hinge sensor; physical behavior is unverified.
 
 The vendor event has only been verified on the Duo simulator. Its
 `com.apple.Virtualization.VirtualMachines` receiver may not exist on physical
@@ -168,7 +164,16 @@ or successful event submission does not establish that rotation works.
 
 Select the active panel with `currentDisplayId` before rotating. The inner
 panel's native orientation is a quarter turn from the cover panel, so WDA
-translates the requested orientation for the selected display. Both orientation
+translates the requested orientation for the selected display. The selected ID
+is matched to Core Animation's physical panel name (`primary` / `primary-1`)
+before changing orientation. If the selected display is unavailable or its
+physical panel cannot be identified, rotation fails without changing XCTest's
+device orientation or dispatching the vendor event. XCTest's `isMainScreen`
+can change as the hinge moves, so it is not used to guess panel identity. No
+numeric display IDs are hardcoded. On the tested Duo simulators, iOS 27.1 and
+27.2 retain the requested device orientation in `GET /wda/deviceOrientation`;
+iOS 27.3 reports the quarter-turn-adjusted device orientation on the inner
+panel. `GET /orientation` describes the app's interface orientation. Both orientation
 and numeric rotation commands use the same path. WDA waits up to five seconds
 for the application's interface orientation to match, then waits for stability;
 event submission alone is not success. An app or panel that does not support
