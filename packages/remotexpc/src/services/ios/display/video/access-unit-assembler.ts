@@ -12,6 +12,13 @@ import {
 
 const log = getLogger('AccessUnitAssembler');
 
+/**
+ * Limits of one access unit. A real picture stays far below them; a stream that never sets the marker bit
+ * would otherwise grow without limit, so the picture is dropped once it exceeds either.
+ */
+export const MAX_ACCESS_UNIT_BYTES = 32 * 1024 * 1024;
+export const MAX_ACCESS_UNIT_NALS = 4096;
+
 /** One decoded video access unit (all NAL units of a single picture). */
 export interface VideoAccessUnit {
   /** NAL units making up this picture, in bitstream order. */
@@ -74,6 +81,7 @@ export class AccessUnitAssembler {
   };
 
   private currentNals: Buffer[] = [];
+  private currentBytes = 0;
   private currentIsKey = false;
   private currentTimestamp = 0;
   private currentCorrupt = false;
@@ -162,10 +170,22 @@ export class AccessUnitAssembler {
       default:
         break;
     }
+    if (this.currentCorrupt) {
+      // The picture is dropped at its marker bit anyway, so do not collect the rest of it
+      return;
+    }
     if (isKeyNalType(nalType)) {
       this.currentIsKey = true;
     }
+    if (this.currentNals.length >= MAX_ACCESS_UNIT_NALS || this.currentBytes + nal.length > MAX_ACCESS_UNIT_BYTES) {
+      // Keep the picture marked corrupt, so it is dropped at its marker bit, and free what it held
+      this.currentCorrupt = true;
+      this.currentNals = [];
+      this.currentBytes = 0;
+      return;
+    }
     this.currentNals.push(nal);
+    this.currentBytes += nal.length;
   }
 
   private cacheCodecString(sps: Buffer): void {
@@ -183,6 +203,7 @@ export class AccessUnitAssembler {
     const corrupt = this.currentCorrupt;
 
     this.currentNals = [];
+    this.currentBytes = 0;
     this.currentIsKey = false;
     this.currentCorrupt = false;
 

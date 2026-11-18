@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
 import type {RtpPacket} from '../../../../src/services/ios/display/transport/rtp.js';
-import {AccessUnitAssembler} from '../../../../src/services/ios/display/video/access-unit-assembler.js';
+import {
+  AccessUnitAssembler,
+  MAX_ACCESS_UNIT_BYTES,
+  MAX_ACCESS_UNIT_NALS,
+} from '../../../../src/services/ios/display/video/access-unit-assembler.js';
 import {HevcNalType} from '../../../../src/services/ios/display/video/hevc.js';
 
 function nalHeader(nalType: number): Buffer {
@@ -112,6 +116,34 @@ describe('AccessUnitAssembler', function () {
     assert.strictEqual(assembler.stats.packetsLost, 3);
     assert.strictEqual(assembler.stats.accessUnitsDropped, 1);
     assert.strictEqual(assembler.stats.accessUnitsEmitted, 0);
+  });
+
+  it('drops a picture that never ends instead of collecting it without limit', function () {
+    const assembler = new AccessUnitAssembler();
+
+    for (let i = 0; i <= MAX_ACCESS_UNIT_NALS; i++) {
+      assert.strictEqual(assembler.push(packet(DELTA, {sequence: i})), undefined);
+    }
+    const unit = assembler.push(packet(DELTA, {sequence: MAX_ACCESS_UNIT_NALS + 1, marker: true}));
+
+    assert.strictEqual(unit, undefined);
+    assert.strictEqual(assembler.stats.accessUnitsDropped, 1);
+    // The next picture is intact
+    const next = assembler.push(packet(IDR, {sequence: MAX_ACCESS_UNIT_NALS + 2, marker: true}));
+    assert.notStrictEqual(next, undefined);
+  });
+
+  it('drops a picture that exceeds the byte limit', function () {
+    const assembler = new AccessUnitAssembler();
+    const big = makeNal(1, Buffer.alloc(MAX_ACCESS_UNIT_BYTES / 4));
+
+    let sequence = 0;
+    for (let i = 0; i < 5; i++) {
+      assembler.push(packet(big, {sequence: sequence++}));
+    }
+
+    assert.strictEqual(assembler.push(packet(DELTA, {sequence, marker: true})), undefined);
+    assert.strictEqual(assembler.stats.accessUnitsDropped, 1);
   });
 
   it('recovers on the next intact access unit after a loss', function () {

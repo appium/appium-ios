@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
-import {UdpMediaReceiver, isNextSequence, parseRtpPacket} from '../../../../src/services/ios/display/transport/rtp.js';
+import {
+  MAX_QUEUED_DATAGRAMS,
+  UdpMediaReceiver,
+  isNextSequence,
+  parseRtpPacket,
+} from '../../../../src/services/ios/display/transport/rtp.js';
 
 /** Options for {@link makeRtpPacket}. */
 interface RtpFixtureOptions {
@@ -186,6 +191,84 @@ describe('RTP', function () {
 
         assert.strictEqual((await pending).done, true);
       } finally {
+        receiver.close();
+      }
+    });
+
+    it('ignores datagrams from any other source once restricted', async function () {
+      const receiver = await UdpMediaReceiver.bind();
+      const {createSocket} = await import('node:dgram');
+      const sender = createSocket('udp6');
+      try {
+        receiver.restrictTo('::2');
+        await new Promise<void>((resolve, reject) => {
+          sender.send(Buffer.from('spoof'), receiver.port, '::1', (error) => (error ? reject(error) : resolve()));
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        assert.strictEqual(receiver.pendingCount, 0);
+      } finally {
+        sender.close();
+        receiver.close();
+      }
+    });
+
+    it('accepts datagrams from the allowed source, whatever the spelling of its address', async function () {
+      const receiver = await UdpMediaReceiver.bind();
+      const {createSocket} = await import('node:dgram');
+      const sender = createSocket('udp6');
+      try {
+        receiver.restrictTo('::1%lo0');
+        await new Promise<void>((resolve, reject) => {
+          sender.send(Buffer.from('ok'), receiver.port, '::1', (error) => (error ? reject(error) : resolve()));
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        assert.strictEqual(receiver.pendingCount, 1);
+      } finally {
+        sender.close();
+        receiver.close();
+      }
+    });
+
+    it('discards what was queued before the restriction', async function () {
+      const receiver = await UdpMediaReceiver.bind();
+      const {createSocket} = await import('node:dgram');
+      const sender = createSocket('udp6');
+      try {
+        await new Promise<void>((resolve, reject) => {
+          sender.send(Buffer.from('early'), receiver.port, '::1', (error) => (error ? reject(error) : resolve()));
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.strictEqual(receiver.pendingCount, 1);
+
+        receiver.restrictTo('::1');
+
+        assert.strictEqual(receiver.pendingCount, 0);
+      } finally {
+        sender.close();
+        receiver.close();
+      }
+    });
+
+    it('stops queueing when the consumer does not keep up', async function () {
+      const receiver = await UdpMediaReceiver.bind();
+      const {createSocket} = await import('node:dgram');
+      const sender = createSocket('udp6');
+      try {
+        const total = MAX_QUEUED_DATAGRAMS + 500;
+        for (let i = 0; i < total; i++) {
+          sender.send(Buffer.from([i & 0xff]), receiver.port, '::1');
+          if (i % 200 === 0) {
+            // Let the receiver keep up, or the kernel drops them before the queue is reached
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        assert.ok(receiver.pendingCount <= MAX_QUEUED_DATAGRAMS);
+      } finally {
+        sender.close();
         receiver.close();
       }
     });

@@ -3,7 +3,7 @@
  * a UDP socket bound on the tunnel plus just enough header parsing to recover
  * payloads, marker bits and sequence numbers.
  */
-import {type Socket, createSocket} from 'node:dgram';
+import {type RemoteInfo, type Socket, createSocket} from 'node:dgram';
 
 import {getLogger} from '../../../../lib/logger.js';
 
@@ -85,6 +85,18 @@ export function isNextSequence(previous: number, sequence: number): boolean {
  */
 const RECEIVE_BUFFER_SIZES = [4 * 1024 * 1024, 1 * 1024 * 1024, 256 * 1024];
 
+/**
+ * The most datagrams held for the consumer. The kernel buffer already holds a few thousand, so this is only
+ * reached when the consumer stalls; further datagrams are dropped rather than growing memory without limit.
+ */
+export const MAX_QUEUED_DATAGRAMS = 8192;
+
+/** Strips an IPv6 zone id (`fe80::1%en0`) and lowercases, so two spellings of an address compare equal. */
+function normalizeAddress(address: string): string {
+  const zone = address.indexOf('%');
+  return (zone < 0 ? address : address.slice(0, zone)).toLowerCase();
+}
+
 /** Options for {@link UdpMediaReceiver.bind}. */
 export interface UdpMediaReceiverOptions {
   /** Local UDP port; `0` (default) lets the OS choose. */
@@ -105,10 +117,12 @@ export class UdpMediaReceiver {
   private readonly queue: Buffer[] = [];
   private pendingResolve: ((value: Buffer | undefined) => void) | undefined;
   private closed = false;
+  private allowedSource: string | undefined;
+  private droppedDatagrams = 0;
 
   private constructor(socket: Socket) {
     this.socket = socket;
-    socket.on('message', (data: Buffer) => this.enqueue(data));
+    socket.on('message', (data: Buffer, rinfo: RemoteInfo) => this.onMessage(data, rinfo));
     socket.on('error', (error: Error) => {
       log.debug(`Media receiver socket error: ${error.message}`);
       this.close();
@@ -140,6 +154,18 @@ export class UdpMediaReceiver {
     }
 
     return new UdpMediaReceiver(socket);
+  }
+
+  /**
+   * Accepts datagrams from `address` only. The socket listens on every interface, so without this any host
+   * that finds the port could inject packets or flood the queue. Datagrams queued so far are discarded: the
+   * device only starts sending once it has the answer to the negotiation, which comes after this call.
+   *
+   * @param address The device's address, as used to send it RTCP.
+   */
+  restrictTo(address: string): void {
+    this.allowedSource = normalizeAddress(address);
+    this.queue.length = 0;
   }
 
   /** The bound local port, to advertise to the device. */
@@ -212,6 +238,25 @@ export class UdpMediaReceiver {
       // Already closing or closed.
     }
     this.wake(undefined);
+  }
+
+  private onMessage(data: Buffer, rinfo: RemoteInfo): void {
+    if (this.allowedSource !== undefined && normalizeAddress(rinfo.address) !== this.allowedSource) {
+      this.noteDropped(`from unexpected source [${rinfo.address}]:${rinfo.port}`);
+      return;
+    }
+    if (!this.pendingResolve && this.queue.length >= MAX_QUEUED_DATAGRAMS) {
+      this.noteDropped('because the queue is full');
+      return;
+    }
+    this.enqueue(data);
+  }
+
+  // Logs the first drop and then every 1000th, so a flood does not flood the log too
+  private noteDropped(reason: string): void {
+    if (this.droppedDatagrams++ % 1000 === 0) {
+      log.debug(`Dropped a media datagram ${reason} (${this.droppedDatagrams} dropped so far)`);
+    }
   }
 
   private enqueue(data: Buffer): void {

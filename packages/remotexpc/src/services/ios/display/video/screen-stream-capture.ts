@@ -116,6 +116,7 @@ export class ScreenStreamCapture {
     const receiver = await UdpMediaReceiver.bind({port: receiverPort});
     try {
       const [receiverIp, senderIp] = await Promise.all([service.getTunnelLocalAddress(), service.getDeviceAddress()]);
+      receiver.restrictTo(senderIp);
       log.debug(`Media receiver bound on [${receiverIp}]:${receiver.port}, device at ${senderIp}`);
       const answer = await service.startVideoStream({receiverIp, receiverPort: receiver.port, senderIp}, streamOptions);
       const capture = new ScreenStreamCapture(service, receiver, answer);
