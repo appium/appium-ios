@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.1...appium-ios-remotexpc@6.1.2) (2026-11-18)
+
+### Bug Fixes
+
+* **remotexpc:** complete the RSD handshake in startLockdownService ([#220](https://github.com/appium/appium-ios/issues/220)) ([d01a5a8](https://github.com/appium/appium-ios/commit/d01a5a8b2f1110056d59a68c1a6ae9f4239d5ef8))
+
+
 ## [6.1.1](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.0...appium-ios-remotexpc@6.1.1) (2026-11-17)
 
 ### Miscellaneous Chores
