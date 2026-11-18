@@ -51,7 +51,7 @@
     "asyncbox": "^7.0.0",
     "semver": "^7.0.0",
     "teen_process": "^5.0.0",
-    "which": "^6.0.0"
+    "which": "^7.0.0"
   },
   "devDependencies": {
     "@appium/tsconfig": "^2.0.0-beta.2",
