@@ -28,7 +28,7 @@ export class WebInspectorService extends BaseService {
   static readonly RSD_SERVICE_NAME = 'com.apple.webinspector.shim.remote';
 
   // RPC method selectors
-  private static readonly FLUSH_FRAME = ' ' as unknown as PlistDictionary;
+  private static readonly FLUSH_FRAME: PlistDictionary = {};
 
   private static readonly RPC_REPORT_IDENTIFIER = '_rpc_reportIdentifier:';
   private static readonly RPC_REQUEST_APPLICATION_LAUNCH = '_rpc_requestApplicationLaunch:';
@@ -82,7 +82,7 @@ export class WebInspectorService extends BaseService {
     connection.sendPlist(message);
     if (this.serviceTransport.kind === 'usbmux') {
       // webinspectord over lockdown may hold a command until more bytes arrive
-      // (appium-ios-device sent the same blank frame)
+      // (appium-ios-device sent a blank frame after each message)
       connection.sendPlist(WebInspectorService.FLUSH_FRAME);
     }
   }

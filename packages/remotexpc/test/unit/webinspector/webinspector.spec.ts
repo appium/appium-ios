@@ -42,7 +42,7 @@ describe('WebInspectorService', function () {
       await service.sendMessage('_rpc_forwardSocketData:');
       assert.equal(sent.length, 2);
       assert.equal((sent[0] as {__selector: string}).__selector, '_rpc_forwardSocketData:');
-      assert.equal(sent[1], ' ');
+      assert.deepEqual(sent[1], {});
     });
 
     it('sends only the message over the tunnel', async function () {
