@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.21](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.20...appium-remote-debugger@19.1.21) (2026-11-19)
+
+### Miscellaneous Chores
+
+* **remote-debugger:** update dependency jsdom to v31 ([#225](https://github.com/appium/appium-ios/issues/225)) ([52e2a77](https://github.com/appium/appium-ios/commit/52e2a771807e2a3f2b2d529e6638bef1e9ab9a29))
+
+
 ## [19.1.20](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.19...appium-remote-debugger@19.1.20) (2026-11-18)
 
 **Note:** Version bump only for package appium-remote-debugger
