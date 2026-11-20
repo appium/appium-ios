@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.2...appium-ios-remotexpc@6.1.3) (2026-11-20)
+
+### Bug Fixes
+
+* **remotexpc:** follow each WebInspector command with a blank frame over usbmux ([#227](https://github.com/appium/appium-ios/issues/227)) ([c927e10](https://github.com/appium/appium-ios/commit/c927e1053b26ce6553dc42cf9e29e52eeeec8eee))
+
+
 ## [6.1.2](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.1...appium-ios-remotexpc@6.1.2) (2026-11-18)
 
 ### Bug Fixes
