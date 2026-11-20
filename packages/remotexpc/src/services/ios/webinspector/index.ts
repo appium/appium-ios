@@ -37,6 +37,9 @@ export class WebInspectorService extends BaseService {
   private static readonly RPC_FORWARD_SOCKET_DATA = '_rpc_forwardSocketData:';
   private static readonly RPC_FORWARD_INDICATE_WEB_VIEW = '_rpc_forwardIndicateWebView:';
 
+  // Blank frame sent after each message over usbmux
+  private static readonly FLUSH_FRAME: PlistDictionary = {};
+
   private connection: ServiceConnection | null = null;
   private connectionPromise: Promise<ServiceConnection> | null = null;
   private messageEmitter: EventEmitter = new EventEmitter();
@@ -78,6 +81,11 @@ export class WebInspectorService extends BaseService {
     log.debug(`Sending WebInspector message: ${selector}`);
 
     connection.sendPlist(message);
+    if (this.serviceTransport.kind === 'usbmux') {
+      // webinspectord over lockdown may hold a command until more bytes arrive
+      // (appium-ios-device sent a blank frame after each message)
+      connection.sendPlist(WebInspectorService.FLUSH_FRAME);
+    }
   }
 
   /**

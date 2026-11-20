@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 
+import {UsbmuxServiceTransport} from '../../../src/lib/service-transport/usbmux.js';
 import {WebInspectorService} from '../../../src/services/ios/webinspector/index.js';
 
 describe('WebInspectorService', function () {
@@ -21,6 +22,36 @@ describe('WebInspectorService', function () {
           // no messages expected
         }
       }, /socket lost/);
+    });
+  });
+
+  describe('sendMessage', function () {
+    function connectWith(service: WebInspectorService, sent: unknown[]) {
+      (service as unknown as {connection: unknown}).connection = {
+        sendPlist: (msg: unknown) => sent.push(msg),
+      };
+    }
+
+    it('follows each message with a blank frame over usbmux', async function () {
+      const service = new WebInspectorService('test-udid', {
+        transport: new UsbmuxServiceTransport('test-udid'),
+      });
+      const sent: unknown[] = [];
+      connectWith(service, sent);
+
+      await service.sendMessage('_rpc_forwardSocketData:');
+      assert.equal(sent.length, 2);
+      assert.equal((sent[0] as {__selector: string}).__selector, '_rpc_forwardSocketData:');
+      assert.deepEqual(sent[1], {});
+    });
+
+    it('sends only the message over the tunnel', async function () {
+      const service = new WebInspectorService('test-udid');
+      const sent: unknown[] = [];
+      connectWith(service, sent);
+
+      await service.sendMessage('_rpc_forwardSocketData:');
+      assert.equal(sent.length, 1);
     });
   });
 
