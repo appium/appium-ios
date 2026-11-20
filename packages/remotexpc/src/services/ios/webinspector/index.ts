@@ -28,8 +28,6 @@ export class WebInspectorService extends BaseService {
   static readonly RSD_SERVICE_NAME = 'com.apple.webinspector.shim.remote';
 
   // RPC method selectors
-  private static readonly FLUSH_FRAME: PlistDictionary = {};
-
   private static readonly RPC_REPORT_IDENTIFIER = '_rpc_reportIdentifier:';
   private static readonly RPC_REQUEST_APPLICATION_LAUNCH = '_rpc_requestApplicationLaunch:';
   private static readonly RPC_GET_CONNECTED_APPLICATIONS = '_rpc_getConnectedApplications:';
@@ -38,6 +36,9 @@ export class WebInspectorService extends BaseService {
   private static readonly RPC_FORWARD_SOCKET_SETUP = '_rpc_forwardSocketSetup:';
   private static readonly RPC_FORWARD_SOCKET_DATA = '_rpc_forwardSocketData:';
   private static readonly RPC_FORWARD_INDICATE_WEB_VIEW = '_rpc_forwardIndicateWebView:';
+
+  // Blank frame sent after each message over usbmux
+  private static readonly FLUSH_FRAME: PlistDictionary = {};
 
   private connection: ServiceConnection | null = null;
   private connectionPromise: Promise<ServiceConnection> | null = null;
