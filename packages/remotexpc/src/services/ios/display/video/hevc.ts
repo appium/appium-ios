@@ -68,6 +68,7 @@ export class HevcDepacketizer {
   private fuBuffer: Buffer[] = [];
   private fuBytes = 0;
   private fuActive = false;
+  private oversized = false;
 
   /**
    * Feeds one RTP payload and returns whatever complete NAL units it produced
@@ -95,6 +96,16 @@ export class HevcDepacketizer {
     this.fuBuffer = [];
     this.fuBytes = 0;
     this.fuActive = false;
+  }
+
+  /**
+   * Returns whether a NAL was dropped for exceeding {@link MAX_NAL_BYTES} since the last call, so the caller
+   * can discard the picture it belonged to.
+   */
+  takeOversized(): boolean {
+    const {oversized} = this;
+    this.oversized = false;
+    return oversized;
   }
 
   private pushAggregationPacket(payload: Buffer): Buffer[] {
@@ -138,6 +149,7 @@ export class HevcDepacketizer {
       if (this.fuBytes > MAX_NAL_BYTES) {
         // A NAL this large is not a real one; stop collecting fragments of it
         this.reset();
+        this.oversized = true;
         return [];
       }
       this.fuBuffer.push(payload.subarray(3));

@@ -7,7 +7,7 @@ import {
   MAX_ACCESS_UNIT_BYTES,
   MAX_ACCESS_UNIT_NALS,
 } from '../../../../src/services/ios/display/video/access-unit-assembler.js';
-import {HevcNalType} from '../../../../src/services/ios/display/video/hevc.js';
+import {HevcNalType, MAX_NAL_BYTES} from '../../../../src/services/ios/display/video/hevc.js';
 
 function nalHeader(nalType: number): Buffer {
   return Buffer.from([(nalType << 1) & 0x7e, 0x01]);
@@ -135,14 +135,37 @@ describe('AccessUnitAssembler', function () {
 
   it('drops a picture that exceeds the byte limit', function () {
     const assembler = new AccessUnitAssembler();
-    const big = makeNal(1, Buffer.alloc(MAX_ACCESS_UNIT_BYTES / 4));
+    const chunk = Buffer.alloc(MAX_NAL_BYTES / 8);
 
+    // Five NALs just under the per-NAL limit, sent as fragments as they arrive over UDP
     let sequence = 0;
     for (let i = 0; i < 5; i++) {
-      assembler.push(packet(big, {sequence: sequence++}));
+      assembler.push(packet(fu(1, chunk, true, false), {sequence: sequence++}));
+      for (let j = 0; j < 6; j++) {
+        assembler.push(packet(fu(1, chunk, false, false), {sequence: sequence++}));
+      }
+      assembler.push(packet(fu(1, chunk, false, true), {sequence: sequence++}));
     }
+    assert.ok(5 * 8 * chunk.length > MAX_ACCESS_UNIT_BYTES);
 
     assert.strictEqual(assembler.push(packet(DELTA, {sequence, marker: true})), undefined);
+    assert.strictEqual(assembler.stats.accessUnitsDropped, 1);
+  });
+
+  it('drops the whole picture when one of its NALs is oversized', function () {
+    const assembler = new AccessUnitAssembler();
+    const chunk = Buffer.alloc(1024 * 1024);
+
+    let sequence = 0;
+    assembler.push(packet(VPS, {sequence: sequence++}));
+    assembler.push(packet(fu(HevcNalType.IDR_W_RADL, chunk, true, false), {sequence: sequence++}));
+    for (let i = 0; i <= MAX_NAL_BYTES / chunk.length; i++) {
+      assembler.push(packet(fu(HevcNalType.IDR_W_RADL, chunk, false, false), {sequence: sequence++}));
+    }
+    const unit = assembler.push(packet(fu(HevcNalType.IDR_W_RADL, chunk, false, true), {sequence, marker: true}));
+
+    assert.strictEqual(unit, undefined);
+    assert.strictEqual(assembler.stats.accessUnitsEmitted, 0);
     assert.strictEqual(assembler.stats.accessUnitsDropped, 1);
   });
 

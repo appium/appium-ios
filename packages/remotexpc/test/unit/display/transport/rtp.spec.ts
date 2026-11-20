@@ -213,23 +213,31 @@ describe('RTP', function () {
       }
     });
 
-    it('accepts datagrams from the allowed source, whatever the spelling of its address', async function () {
-      const receiver = await UdpMediaReceiver.bind();
-      const {createSocket} = await import('node:dgram');
-      const sender = createSocket('udp6');
-      try {
-        receiver.restrictTo('::1%lo0');
-        await new Promise<void>((resolve, reject) => {
-          sender.send(Buffer.from('ok'), receiver.port, '::1', (error) => (error ? reject(error) : resolve()));
-        });
-        await new Promise((resolve) => setTimeout(resolve, 50));
+    for (const spelling of [
+      '::1%lo0',
+      '0:0:0:0:0:0:0:1',
+      '::01',
+      '0000:0000:0000:0000:0000:0000:0000:0001',
+      '::0001',
+    ]) {
+      it(`accepts datagrams from the allowed source spelled ${spelling}`, async function () {
+        const receiver = await UdpMediaReceiver.bind();
+        const {createSocket} = await import('node:dgram');
+        const sender = createSocket('udp6');
+        try {
+          receiver.restrictTo(spelling);
+          await new Promise<void>((resolve, reject) => {
+            sender.send(Buffer.from('ok'), receiver.port, '::1', (error) => (error ? reject(error) : resolve()));
+          });
+          await new Promise((resolve) => setTimeout(resolve, 50));
 
-        assert.strictEqual(receiver.pendingCount, 1);
-      } finally {
-        sender.close();
-        receiver.close();
-      }
-    });
+          assert.strictEqual(receiver.pendingCount, 1);
+        } finally {
+          sender.close();
+          receiver.close();
+        }
+      });
+    }
 
     it('discards what was queued before the restriction', async function () {
       const receiver = await UdpMediaReceiver.bind();

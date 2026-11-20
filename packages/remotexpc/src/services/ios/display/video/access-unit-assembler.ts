@@ -109,6 +109,10 @@ export class AccessUnitAssembler {
     for (const nal of this.depacketizer.push(packet.payload)) {
       this.absorbNal(nal);
     }
+    if (this.depacketizer.takeOversized()) {
+      // The picture lost a NAL, so it is dropped at its marker bit like one that lost a packet
+      this.discardPicture();
+    }
 
     return packet.marker ? this.completeAccessUnit() : undefined;
   }
@@ -178,14 +182,18 @@ export class AccessUnitAssembler {
       this.currentIsKey = true;
     }
     if (this.currentNals.length >= MAX_ACCESS_UNIT_NALS || this.currentBytes + nal.length > MAX_ACCESS_UNIT_BYTES) {
-      // Keep the picture marked corrupt, so it is dropped at its marker bit, and free what it held
-      this.currentCorrupt = true;
-      this.currentNals = [];
-      this.currentBytes = 0;
+      this.discardPicture();
       return;
     }
     this.currentNals.push(nal);
     this.currentBytes += nal.length;
+  }
+
+  /** Marks the picture corrupt, so it is dropped at its marker bit, and frees what it held. */
+  private discardPicture(): void {
+    this.currentCorrupt = true;
+    this.currentNals = [];
+    this.currentBytes = 0;
   }
 
   private cacheCodecString(sps: Buffer): void {

@@ -91,10 +91,15 @@ const RECEIVE_BUFFER_SIZES = [4 * 1024 * 1024, 1 * 1024 * 1024, 256 * 1024];
  */
 export const MAX_QUEUED_DATAGRAMS = 8192;
 
-/** Strips an IPv6 zone id (`fe80::1%en0`) and lowercases, so two spellings of an address compare equal. */
+/** Strips an IPv6 zone id (`fe80::1%en0`) and writes the address in canonical form, so any spelling of it compares equal. */
 function normalizeAddress(address: string): string {
   const zone = address.indexOf('%');
-  return (zone < 0 ? address : address.slice(0, zone)).toLowerCase();
+  const bare = (zone < 0 ? address : address.slice(0, zone)).toLowerCase();
+  try {
+    return new URL(`http://[${bare}]`).hostname;
+  } catch {
+    return bare;
+  }
 }
 
 /** Options for {@link UdpMediaReceiver.bind}. */
@@ -118,6 +123,7 @@ export class UdpMediaReceiver {
   private pendingResolve: ((value: Buffer | undefined) => void) | undefined;
   private closed = false;
   private allowedSource: string | undefined;
+  private lastSource: {address: string; allowed: boolean} | undefined;
   private droppedDatagrams = 0;
 
   private constructor(socket: Socket) {
@@ -165,6 +171,7 @@ export class UdpMediaReceiver {
    */
   restrictTo(address: string): void {
     this.allowedSource = normalizeAddress(address);
+    this.lastSource = undefined;
     this.queue.length = 0;
   }
 
@@ -241,7 +248,7 @@ export class UdpMediaReceiver {
   }
 
   private onMessage(data: Buffer, rinfo: RemoteInfo): void {
-    if (this.allowedSource !== undefined && normalizeAddress(rinfo.address) !== this.allowedSource) {
+    if (!this.isAllowed(rinfo.address)) {
       this.noteDropped(`from unexpected source [${rinfo.address}]:${rinfo.port}`);
       return;
     }
@@ -250,6 +257,17 @@ export class UdpMediaReceiver {
       return;
     }
     this.enqueue(data);
+  }
+
+  // One-entry cache: the sender is almost always the same, and canonicalizing per datagram is wasteful
+  private isAllowed(address: string): boolean {
+    if (this.allowedSource === undefined) {
+      return true;
+    }
+    if (this.lastSource?.address !== address) {
+      this.lastSource = {address, allowed: normalizeAddress(address) === this.allowedSource};
+    }
+    return this.lastSource.allowed;
   }
 
   // Logs the first drop and then every 1000th, so a flood does not flood the log too

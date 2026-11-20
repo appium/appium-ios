@@ -151,6 +151,8 @@ describe('HEVC helpers', function () {
       for (let i = 0; i < MAX_NAL_BYTES / chunk.length; i++) {
         assert.deepStrictEqual(depacketizer.push(makeFu(1, chunk, false, false)), []);
       }
+      assert.strictEqual(depacketizer.takeOversized(), true);
+      assert.strictEqual(depacketizer.takeOversized(), false);
       // The oversized NAL is gone: its end fragment completes nothing
       assert.deepStrictEqual(depacketizer.push(makeFu(1, Buffer.from('tail'), false, true)), []);
 
