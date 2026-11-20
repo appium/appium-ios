@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.3...appium-ios-remotexpc@6.1.4) (2026-11-20)
+
+### Bug Fixes
+
+* **remotexpc:** bound the media receiver and accept only the device&#x27;s packets ([#224](https://github.com/appium/appium-ios/issues/224)) ([c7a0ed8](https://github.com/appium/appium-ios/commit/c7a0ed815b3d91d691c96f48532ae18ced6fa40e))
+
+
 ## [6.1.3](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.2...appium-ios-remotexpc@6.1.3) (2026-11-20)
 
 ### Bug Fixes
