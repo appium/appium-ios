@@ -52,6 +52,9 @@ function stripDisplayServiceTrailer(nal: Buffer): Buffer {
   return nal;
 }
 
+/** The most bytes one reassembled NAL unit may have; a larger one is dropped instead of growing without limit. */
+export const MAX_NAL_BYTES = 8 * 1024 * 1024;
+
 /**
  * Reassembles HEVC NAL units from RTP payloads (RFC 7798).
  *
@@ -63,7 +66,9 @@ function stripDisplayServiceTrailer(nal: Buffer): Buffer {
  */
 export class HevcDepacketizer {
   private fuBuffer: Buffer[] = [];
+  private fuBytes = 0;
   private fuActive = false;
+  private oversized = false;
 
   /**
    * Feeds one RTP payload and returns whatever complete NAL units it produced
@@ -89,7 +94,18 @@ export class HevcDepacketizer {
    */
   reset(): void {
     this.fuBuffer = [];
+    this.fuBytes = 0;
     this.fuActive = false;
+  }
+
+  /**
+   * Returns whether a NAL was dropped for exceeding {@link MAX_NAL_BYTES} since the last call, so the caller
+   * can discard the picture it belonged to.
+   */
+  takeOversized(): boolean {
+    const {oversized} = this;
+    this.oversized = false;
+    return oversized;
   }
 
   private pushAggregationPacket(payload: Buffer): Buffer[] {
@@ -121,11 +137,19 @@ export class HevcDepacketizer {
       // the low layer-id bit from the payload header, splice the real type in.
       const byte0 = (payload[0] & 0x81) | (originalNalType << 1);
       this.fuBuffer = [Buffer.from([byte0, payload[1]]), payload.subarray(3)];
+      this.fuBytes = 2 + payload.length - 3;
       this.fuActive = true;
     } else {
       if (!this.fuActive) {
         // Continuation without a start (we joined mid-NAL, or the start was
         // lost): there is no valid header to prepend, so drop it.
+        return [];
+      }
+      this.fuBytes += payload.length - 3;
+      if (this.fuBytes > MAX_NAL_BYTES) {
+        // A NAL this large is not a real one; stop collecting fragments of it
+        this.reset();
+        this.oversized = true;
         return [];
       }
       this.fuBuffer.push(payload.subarray(3));

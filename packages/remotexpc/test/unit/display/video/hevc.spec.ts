@@ -4,6 +4,7 @@ import {describe, it} from 'node:test';
 import {
   HevcDepacketizer,
   HevcNalType,
+  MAX_NAL_BYTES,
   buildHevcDecoderConfigurationRecord,
   hevcCodecStringFromSps,
   isKeyNalType,
@@ -140,6 +141,23 @@ describe('HEVC helpers', function () {
 
       // Joining mid-NAL: there is no header to rebuild, so nothing can be emitted.
       assert.deepStrictEqual(depacketizer.push(makeFu(1, Buffer.from('tail'), false, true)), []);
+    });
+
+    it('drops a fragmented NAL that grows past the size limit and recovers on the next one', function () {
+      const depacketizer = new HevcDepacketizer();
+      const chunk = Buffer.alloc(1024 * 1024);
+
+      depacketizer.push(makeFu(1, chunk, true, false));
+      for (let i = 0; i < MAX_NAL_BYTES / chunk.length; i++) {
+        assert.deepStrictEqual(depacketizer.push(makeFu(1, chunk, false, false)), []);
+      }
+      assert.strictEqual(depacketizer.takeOversized(), true);
+      assert.strictEqual(depacketizer.takeOversized(), false);
+      // The oversized NAL is gone: its end fragment completes nothing
+      assert.deepStrictEqual(depacketizer.push(makeFu(1, Buffer.from('tail'), false, true)), []);
+
+      depacketizer.push(makeFu(1, Buffer.from('ab'), true, false));
+      assert.strictEqual(depacketizer.push(makeFu(1, Buffer.from('cd'), false, true)).length, 1);
     });
 
     it('discards in-flight fragments on reset', function () {

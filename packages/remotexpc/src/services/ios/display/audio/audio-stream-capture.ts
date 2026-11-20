@@ -103,6 +103,7 @@ export class AudioStreamCapture {
     const receiver = await UdpMediaReceiver.bind({port: receiverPort});
     try {
       const [receiverIp, senderIp] = await Promise.all([service.getTunnelLocalAddress(), service.getDeviceAddress()]);
+      receiver.restrictTo(senderIp);
       log.debug(`Audio receiver bound on [${receiverIp}]:${receiver.port}, device at ${senderIp}`);
       const answer = await service.startAudioStream({receiverIp, receiverPort: receiver.port, senderIp}, streamOptions);
       const capture = new AudioStreamCapture(service, receiver, answer);
