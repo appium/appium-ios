@@ -1,7 +1,8 @@
 import type net from 'node:net';
 
 import {RSD_HANDSHAKE_FRAMES, rsdHandshakeLockdownPlistService} from '../../../lib/lockdown/index.js';
-import {createPlist} from '../../../lib/plist/plist-creator.js';
+import {LENGTH_FIELD_4_BYTES} from '../../../lib/plist/constants.js';
+import {framePlist} from '../../../lib/plist/plist-encoder.js';
 import {parsePlist} from '../../../lib/plist/unified-plist-parser.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {ServiceConnection} from '../../../service-connection.js';
@@ -335,11 +336,7 @@ export function buildLinkPayload(type: number, target: string, source: string): 
  * Send a single length-prefixed XML plist on the socket.
  */
 export async function sendOnePlist(socket: net.Socket, request: PlistDictionary): Promise<void> {
-  const xml = createPlist(request);
-  const body = Buffer.from(xml, 'utf8');
-  const header = Buffer.alloc(4);
-  header.writeUInt32BE(body.length, 0);
-  await writeBufferToSocket(socket, Buffer.concat([header, body]));
+  await writeBufferToSocket(socket, framePlist(request));
 }
 
 /**
@@ -347,7 +344,7 @@ export async function sendOnePlist(socket: net.Socket, request: PlistDictionary)
  * @param timeoutMs How long each read may wait for its bytes; see {@link readExact}
  */
 export async function recvOnePlist(socket: net.Socket, timeoutMs = AFC_OPERATION_TIMEOUT_MS): Promise<any> {
-  const lenBuf = await readExact(socket, 4, timeoutMs);
+  const lenBuf = await readExact(socket, LENGTH_FIELD_4_BYTES, timeoutMs);
   const respLen = lenBuf.readUInt32BE(0);
   const respBody = await readExact(socket, respLen, timeoutMs);
   return parsePlist(respBody);
