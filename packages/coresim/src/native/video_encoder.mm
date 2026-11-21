@@ -193,7 +193,8 @@ class VideoFrameEncoder::Impl {
         onSample_(std::move(onSample)),
         onError_(std::move(onError)),
         onEnd_(std::move(onEnd)),
-        sharedClockOrigin_(sharedClockOrigin) {
+        sharedClockOrigin_(sharedClockOrigin),
+        displaySurface_(device, options.displayId) {
     queue_ = dispatch_queue_create("io.appium.coresim.videoEncoder", DISPATCH_QUEUE_SERIAL);
     // Persistent, like JpegStreamSession's own (see sim_jpeg_stream.mm) — a continuous stream, not
     // CaptureScreenshot's deliberately one-shot context.
@@ -348,6 +349,9 @@ class VideoFrameEncoder::Impl {
   }
 
   void TearDownSessionAndFireEnd() {
+    // Tick() can no longer run here (see Stop()/StopFromQueue()). A stopped encoder can outlive its
+    // stream by a long time (see CLAUDE.md), and must not keep the display's surface alive that long.
+    displaySurface_.Reset();
     if (session_ != nullptr) {
       // Flushes and blocks until every already-submitted frame's callback has returned — without
       // this, a frame submitted just before Stop() could fire after onEnd_ releases whatever
@@ -378,19 +382,19 @@ class VideoFrameEncoder::Impl {
     }
     @autoreleasepool {
       try {
-        // Re-resolved every tick (like CaptureScreenshot does), not cached once in Start(), so a
-        // deleted device or disconnected display surfaces a real error instead of Tick() quietly
-        // doing nothing forever.
+        // Looked up again about once a second (see PolledDisplaySurface), not cached once in
+        // Start(), so a deleted device or disconnected display still surfaces a real error instead
+        // of Tick() quietly doing nothing forever. Not on every tick either: that cost far more
+        // than everything else an unchanged tick does.
         NSError* resolveError = nil;
-        id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &resolveError);
-        if (descriptor == nil) {
+        id surfaceObj = displaySurface_.Current(&resolveError);
+        if (surfaceObj == nil && resolveError != nil) {
           if (onError_) {
             onError_(resolveError);
           }
           StopFromQueue();
           return;
         }
-        id surfaceObj = CurrentDisplaySurface(descriptor);
         if (surfaceObj == nil) {
           return;  // transient — the connection may not have a frame ready yet, try again next tick
         }
@@ -588,6 +592,8 @@ class VideoFrameEncoder::Impl {
   std::function<void(NSError*)> onError_;
   std::function<void()> onEnd_;
   const double* sharedClockOrigin_;
+  // Tick()'s source of frames. Only touched on queue_, or once it has drained (teardown).
+  PolledDisplaySurface displaySurface_;
 
   dispatch_queue_t queue_ = nullptr;
   dispatch_source_t timer_ = nullptr;

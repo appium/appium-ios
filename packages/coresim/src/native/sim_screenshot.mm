@@ -5,6 +5,7 @@
 #import <ImageIO/ImageIO.h>
 #import <objc/message.h>
 
+#include "monotonic_clock.h"
 #include "objc_runtime.h"
 #include "safe_dispatch.h"
 #include "screenshot_errors.h"
@@ -174,6 +175,26 @@ id ResolveScreenCaptureService(id device, NSError** error) {
 }
 
 id CurrentDisplaySurface(id descriptor) { return RenderableSurface(descriptor); }
+
+PolledDisplaySurface::PolledDisplaySurface(id device, NSString* displayId) : device_(device), displayId_(displayId) {}
+
+id PolledDisplaySurface::Current(NSError** error) {
+  double now = MonotonicSeconds();
+  if (surface_ != nil && now - refreshedAt_ < kRefreshIntervalSeconds) {
+    return surface_;
+  }
+  // Dropped first, so neither a failure nor an exception below leaves a stale surface behind.
+  surface_ = nil;
+  id descriptor = ResolveCaptureDisplay(device_, displayId_, error);
+  if (descriptor == nil) {
+    return nil;
+  }
+  surface_ = CurrentDisplaySurface(descriptor);
+  refreshedAt_ = now;
+  return surface_;
+}
+
+void PolledDisplaySurface::Reset() { surface_ = nil; }
 
 NSArray<NSDictionary*>* ListDisplays(id device, NSError** error) {
   NSArray<NSDictionary*>* candidates = RenderableDisplayCandidates(device, error);

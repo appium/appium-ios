@@ -32,6 +32,38 @@ id ResolveScreenCaptureService(id device, NSError** error);
 // legitimately happen from one call to the next on a live device.
 id CurrentDisplaySurface(id descriptor);
 
+// One display's surface for a caller that polls it many times a second (the streaming sessions'
+// timers). ResolveCaptureDisplay + CurrentDisplaySurface walk the device's IO ports over
+// synchronous XPC, about 2 ms a call: done on every poll of a screen that never changed, that
+// alone cost about 15% of a CPU core in this process and 20% in CoreSimulator's own services at
+// 30 polls a second (M5 Pro, Xcode 27.2). So the surface is kept between polls and only looked up
+// again once per kRefreshIntervalSeconds. That interval is therefore also how late a deleted or
+// shut down device, a disconnected display or a replaced surface is noticed.
+// Not thread-safe: every call must come from the same serial queue, or after it has drained.
+class PolledDisplaySurface {
+ public:
+  static constexpr double kRefreshIntervalSeconds = 1.0;
+
+  // `displayId` has ResolveCaptureDisplay's own semantics.
+  PolledDisplaySurface(id device, NSString* displayId);
+
+  // The display's surface as an `IOSurfaceRef` (bridge-cast the returned `id`). nil with *error
+  // set means the display itself could not be resolved (ResolveCaptureDisplay's errors, e.g. the
+  // device is gone). nil with *error left nil means it has no surface right now: transient, and
+  // looked up again on the very next call instead of after the interval.
+  id Current(NSError** error);
+
+  // Drops the kept surface, so a session that has stopped does not pin it for as long as its own
+  // object happens to live.
+  void Reset();
+
+ private:
+  id device_;
+  NSString* displayId_;
+  id surface_ = nil;
+  double refreshedAt_ = 0;
+};
+
 enum class ScreenshotFormat { kPNG, kJPEG };
 
 // Encodes `cgImage` via ImageIO into `format` — the same CGImageDestination-based encode
