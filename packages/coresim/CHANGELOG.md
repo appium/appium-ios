@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.1.1](https://github.com/appium/appium-ios/compare/@appium/coresim@2.1.0...@appium/coresim@2.1.1) (2026-11-21)
+
+### Performance Improvements
+
+* **coresim:** keep the display surface between stream polls ([#230](https://github.com/appium/appium-ios/issues/230)) ([9faddec](https://github.com/appium/appium-ios/commit/9faddec293675d9d8fc8fd7a9414a81ef734a802))
+
+
 ## [2.1.0](https://github.com/appium/appium-ios/compare/@appium/coresim@2.0.5...@appium/coresim@2.1.0) (2026-11-16)
 
 ### Features

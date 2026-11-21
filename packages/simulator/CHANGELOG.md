@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.1.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.1...appium-ios-simulator@11.1.2) (2026-11-21)
+
+**Note:** Version bump only for package appium-ios-simulator
+
+
+
+
+
 ## [11.1.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.0...appium-ios-simulator@11.1.1) (2026-11-17)
 
 ### Bug Fixes
