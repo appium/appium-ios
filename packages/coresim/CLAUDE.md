@@ -157,7 +157,15 @@ toolchain (`make` and `xcodebuild`).
   XPC, about 2 ms a time, which at 30-60 fps cost more CPU than everything else a still screen
   needs, both here and in CoreSimulator's own services. `PolledDisplaySurface`
   (`sim_screenshot.h`) looks it up again once a second, so a stream notices a deleted or shut down
-  device, or a surface CoreSimulator replaced, up to 1 s late. Teardown needs two paths:
+  device, or a surface CoreSimulator replaced, up to 1 s late. Its `Current()` returns an explicit
+  status: a surface, no surface right now, or the display unavailable with its error. Only a found
+  surface is kept, so the other two are looked up again on the next tick. `Start()` reads through
+  the same object, so the first tick reuses the surface `Start()` encoded.
+  `VideoFrameEncoder::Tick()` also drops the kept surface when the polled orientation changes,
+  since a rotation is when CoreSimulator may replace it. The lookup and the clock are injectable:
+  the addon's `_createPolledDisplaySurfaceForTesting` export (internal, not in the typed exports)
+  lets `test/unit/polled-display-surface.spec.ts` cover the caching rules without a simulator.
+  Teardown needs two paths:
   `Impl::Stop()` (external callers) `dispatch_sync`s onto the
   encoder queue to drain any in-flight `Tick()`; `Impl::StopFromQueue()` is the same minus that
   barrier, for when `Tick()` itself triggers teardown (already on that queue — `dispatch_sync`ing

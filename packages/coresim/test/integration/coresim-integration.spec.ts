@@ -1661,16 +1661,18 @@ describe('NativeSimctl integration', () => {
       // CLAUDE.md), so it must still notice the device going away instead of polling a dead surface
       // forever.
       it('ends running video and JPEG streams with an error once the device shuts down', async (t) => {
-        let video: Awaited<ReturnType<typeof sim.startVideoStream>>;
+        let video: Awaited<ReturnType<typeof sim.startVideoStream>> | undefined;
+        let jpeg: Awaited<ReturnType<typeof sim.startJpegStream>> | undefined;
         try {
           video = await sim.startVideoStream(device!.udid, {fps: 10});
+          jpeg = await sim.startJpegStream(device!.udid, {fps: 10});
         } catch (err) {
+          await video?.stop();
           if (err instanceof NativeSimUnavailableError) {
-            return t.skip(`video streaming unavailable on this CoreSimulator: ${err.message}`);
+            return t.skip(`streaming unavailable on this CoreSimulator: ${err.message}`);
           }
           throw err;
         }
-        let jpeg: Awaited<ReturnType<typeof sim.startJpegStream>> | undefined;
         const controller = new AbortController();
         // An aborted consumer returns instead of throwing, which fails assert.rejects below.
         const timeout = setTimeout(() => controller.abort(), 30000);
@@ -1679,18 +1681,25 @@ describe('NativeSimctl integration', () => {
             void unit;
           }
         };
+        // The stream must end because its display lookup says the display is gone, which is an
+        // error in the lookup's own domain. An encoder failure or the JPEG stall timeout would be
+        // a different way to end, and is not what this test is about.
+        const displayIsGone = (err: unknown): boolean =>
+          err instanceof NativeSimOperationError && err.domain === 'io.appium.coresim.Screenshot';
+        const ended = Promise.all([
+          assert.rejects(drain(video.accessUnits(controller.signal)), displayIsGone),
+          assert.rejects(drain(jpeg.frames(controller.signal)), displayIsGone),
+        ]);
+        // Awaited below on every path, but a failing shutdownDevice() gets there first. Without
+        // this, the rejection it leaves behind would surface as unhandled in some later test.
+        ended.catch(() => {});
         try {
-          jpeg = await sim.startJpegStream(device!.udid, {fps: 10});
-          const ended = Promise.all([
-            assert.rejects(drain(video.accessUnits(controller.signal)), NativeSimError),
-            assert.rejects(drain(jpeg.frames(controller.signal)), NativeSimError),
-          ]);
           await sim.shutdownDevice(device!.udid);
           await ended;
         } finally {
           clearTimeout(timeout);
           await video.stop();
-          await jpeg?.stop();
+          await jpeg.stop();
         }
       });
 

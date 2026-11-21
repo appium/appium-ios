@@ -37,8 +37,7 @@ class JpegStreamSession::Impl {
  public:
   Impl(id device, JpegStreamOptions options, std::function<void(JpegFrame)> onFrame,
        std::function<void(NSError*)> onError, std::function<void()> onEnd, std::function<void()> onAbortDelivery)
-      : device_(device),
-        options_(options),
+      : options_(options),
         onFrame_(std::move(onFrame)),
         onError_(std::move(onError)),
         onEnd_(std::move(onEnd)),
@@ -54,16 +53,16 @@ class JpegStreamSession::Impl {
   ~Impl() { Stop(); }
 
   void Start() {
-    NSError* error = nil;
-    id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &error);
-    if (descriptor == nil) {
-      throw NSErrorException(error);
+    // Through displaySurface_, so the first Tick() reuses this surface instead of looking it up
+    // again. No timer exists yet, so nothing else can be using it.
+    DisplaySurfaceLookup found = displaySurface_.Current();
+    if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
+      throw NSErrorException(found.error);
     }
-    id surfaceObj = CurrentDisplaySurface(descriptor);
-    if (surfaceObj == nil) {
+    if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
       throw NSErrorException(MakeError(1, @"The device's display surface is not available yet"));
     }
-    IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
+    IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
 
     startTime_ = MonotonicSeconds();
     // Set before the initial encode below — EmitFrame measures elapsed time from it, and running_
@@ -147,24 +146,24 @@ class JpegStreamSession::Impl {
     }
     @autoreleasepool {
       try {
-        // Looked up again about once a second (see PolledDisplaySurface), not cached once in
-        // Start(), so a deleted device or disconnected display still surfaces a real error instead
-        // of Tick() quietly doing nothing forever. Not on every tick either: that cost far more
-        // than everything else an unchanged tick does.
-        NSError* resolveError = nil;
-        id surfaceObj = displaySurface_.Current(&resolveError);
-        if (surfaceObj == nil && resolveError != nil) {
+        // The surface Start() or an earlier tick found, for up to a second (see
+        // PolledDisplaySurface): looking it up on every tick cost far more than everything else an
+        // unchanged tick does. It is still looked up again every second rather than kept for good,
+        // so a deleted device or disconnected display surfaces a real error instead of Tick()
+        // quietly doing nothing forever.
+        DisplaySurfaceLookup found = displaySurface_.Current();
+        if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
           if (onError_) {
-            onError_(resolveError);
+            onError_(found.error);
           }
           StopFromQueue();
           return;
         }
-        if (surfaceObj == nil) {
+        if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
           ReportIfStalledTooLong();  // transient — the connection may not have a frame ready yet
           return;
         }
-        IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
+        IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
         uint32_t seed = IOSurfaceGetSeed(surface);
         if (seed == lastSeed_) {
           // Unchanged since the last tick (mirrors VideoFrameEncoder's own seed check) — the
@@ -291,13 +290,13 @@ class JpegStreamSession::Impl {
     }
   }
 
-  id device_;
   JpegStreamOptions options_;
   std::function<void(JpegFrame)> onFrame_;
   std::function<void(NSError*)> onError_;
   std::function<void()> onEnd_;
   std::function<void()> onAbortDelivery_;
-  // Tick()'s source of frames. Only touched on queue_, or once it has drained (teardown).
+  // Start()'s and Tick()'s source of frames. Only touched on queue_, before its timer starts
+  // (Start()), or once it has drained (teardown).
   PolledDisplaySurface displaySurface_;
 
   dispatch_queue_t queue_ = nullptr;

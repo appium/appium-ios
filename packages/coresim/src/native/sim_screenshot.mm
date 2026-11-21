@@ -176,22 +176,46 @@ id ResolveScreenCaptureService(id device, NSError** error) {
 
 id CurrentDisplaySurface(id descriptor) { return RenderableSurface(descriptor); }
 
-PolledDisplaySurface::PolledDisplaySurface(id device, NSString* displayId) : device_(device), displayId_(displayId) {}
+PolledDisplaySurface::PolledDisplaySurface(id device, NSString* displayId)
+    : PolledDisplaySurface(
+          [device, displayId]() {
+            DisplaySurfaceLookup found;
+            NSError* error = nil;
+            id descriptor = ResolveCaptureDisplay(device, displayId, &error);
+            if (descriptor == nil) {
+              found.status = DisplaySurfaceLookup::Status::kUnavailable;
+              found.error = error;
+              return found;
+            }
+            found.surface = CurrentDisplaySurface(descriptor);
+            found.status = found.surface != nil ? DisplaySurfaceLookup::Status::kSurface
+                                                : DisplaySurfaceLookup::Status::kNoSurface;
+            return found;
+          },
+          MonotonicSeconds) {}
 
-id PolledDisplaySurface::Current(NSError** error) {
-  double now = MonotonicSeconds();
+PolledDisplaySurface::PolledDisplaySurface(Lookup lookup, Clock clock)
+    : lookup_(std::move(lookup)), clock_(std::move(clock)) {}
+
+DisplaySurfaceLookup PolledDisplaySurface::Current() {
+  double now = clock_();
   if (surface_ != nil && now - refreshedAt_ < kRefreshIntervalSeconds) {
-    return surface_;
+    DisplaySurfaceLookup kept;
+    kept.status = DisplaySurfaceLookup::Status::kSurface;
+    kept.surface = surface_;
+    return kept;
   }
-  // Dropped first, so neither a failure nor an exception below leaves a stale surface behind.
+  // Dropped first, so neither a failed lookup nor an exception below leaves a stale surface behind.
   surface_ = nil;
-  id descriptor = ResolveCaptureDisplay(device_, displayId_, error);
-  if (descriptor == nil) {
-    return nil;
+  DisplaySurfaceLookup found = lookup_();
+  if (found.status == DisplaySurfaceLookup::Status::kSurface && found.surface == nil) {
+    found.status = DisplaySurfaceLookup::Status::kNoSurface;
   }
-  surface_ = CurrentDisplaySurface(descriptor);
-  refreshedAt_ = now;
-  return surface_;
+  if (found.status == DisplaySurfaceLookup::Status::kSurface) {
+    surface_ = found.surface;
+    refreshedAt_ = now;
+  }
+  return found;
 }
 
 void PolledDisplaySurface::Reset() { surface_ = nil; }
