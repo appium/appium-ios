@@ -152,7 +152,21 @@ toolchain (`make` and `xcodebuild`).
   writes to a file with no per-frame callback. `sim_video_stream.mm` instead polls the same display
   `IOSurface` `getScreenshot` reads on a GCD timer, skips unchanged frames (`IOSurfaceGetSeed()`),
   and encodes changed ones via a real `VTCompressionSession` (public VideoToolbox) into Annex-B
-  H.264/HEVC. Teardown needs two paths: `Impl::Stop()` (external callers) `dispatch_sync`s onto the
+  H.264/HEVC. The surface is kept between ticks, not looked up on each one: finding it
+  (`ResolveCaptureDisplay` + `CurrentDisplaySurface`) walks the device's IO ports over synchronous
+  XPC, about 2 ms a time, which at 30-60 fps cost more CPU than everything else a still screen
+  needs, both here and in CoreSimulator's own services. `PolledDisplaySurface`
+  (`sim_screenshot.h`) looks it up again once a second, so a stream notices a deleted or shut down
+  device, or a surface CoreSimulator replaced, up to 1 s late. Its `Current()` returns an explicit
+  status: a surface, no surface right now, or the display unavailable with its error. Only a found
+  surface is kept, so the other two are looked up again on the next tick. `Start()` reads through
+  the same object, so the first tick reuses the surface `Start()` encoded.
+  `VideoFrameEncoder::Tick()` also drops the kept surface when the polled orientation changes,
+  since a rotation is when CoreSimulator may replace it. The lookup and the clock are injectable:
+  the addon's `_createPolledDisplaySurfaceForTesting` export (internal, not in the typed exports)
+  lets `test/unit/polled-display-surface.spec.ts` cover the caching rules without a simulator.
+  Teardown needs two paths:
+  `Impl::Stop()` (external callers) `dispatch_sync`s onto the
   encoder queue to drain any in-flight `Tick()`; `Impl::StopFromQueue()` is the same minus that
   barrier, for when `Tick()` itself triggers teardown (already on that queue — `dispatch_sync`ing
   there would deadlock). `onEnd`, fired once from whichever path wins, is the only safe point to
@@ -161,7 +175,8 @@ toolchain (`make` and `xcodebuild`).
   of `startVideoRecording` — any number of
   streams and one recording can run concurrently.
 - **JPEG streaming (`startJpegStream`) reuses `startVideoStream`'s IOSurface-poll/GCD-timer/seed-
-  check skeleton but drops everything codec-specific.** `sim_jpeg_stream.mm` JPEG-encodes each
+  check skeleton (`PolledDisplaySurface` included) but drops everything codec-specific.**
+  `sim_jpeg_stream.mm` JPEG-encodes each
   changed frame synchronously, on the polling queue itself, via the same ImageIO `CGImageDestination`
   path `getScreenshot`'s `format: 'jpeg'` uses — except through one persistent `CIContext` (created
   once, not per frame/call) instead of `CaptureScreenshot`'s deliberately one-shot context (see
@@ -306,3 +321,6 @@ toolchain (`make` and `xcodebuild`).
   never rotated this boot, indistinguishable from one that genuinely has.
 - A device created and booted in-process can silently drop `LookupMachPort` messages
   (`setOrientation`, pasteboard) for that process's lifetime (see detailed bullet above).
+- A running `startVideoStream`/`startJpegStream` reads a display's old surface for up to 1 s after
+  CoreSimulator replaces it, and reports a deleted or shut down device up to 1 s late (see
+  `PolledDisplaySurface` in the video streaming bullet above).

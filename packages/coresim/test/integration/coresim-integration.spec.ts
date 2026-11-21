@@ -1656,11 +1656,63 @@ describe('NativeSimctl integration', () => {
         }
       });
 
+      // Second to last, since it leaves the device Shutdown like the erase test below. A stream keeps
+      // its display's surface between polls and only looks it up again once a second (see
+      // CLAUDE.md), so it must still notice the device going away instead of polling a dead surface
+      // forever.
+      it('ends running video and JPEG streams with an error once the device shuts down', async (t) => {
+        let video: Awaited<ReturnType<typeof sim.startVideoStream>> | undefined;
+        let jpeg: Awaited<ReturnType<typeof sim.startJpegStream>> | undefined;
+        try {
+          video = await sim.startVideoStream(device!.udid, {fps: 10});
+          jpeg = await sim.startJpegStream(device!.udid, {fps: 10});
+        } catch (err) {
+          await video?.stop();
+          if (err instanceof NativeSimUnavailableError) {
+            return t.skip(`streaming unavailable on this CoreSimulator: ${err.message}`);
+          }
+          throw err;
+        }
+        const controller = new AbortController();
+        // An aborted consumer returns instead of throwing, which fails assert.rejects below.
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const drain = async (units: AsyncIterable<unknown>): Promise<void> => {
+          for await (const unit of units) {
+            void unit;
+          }
+        };
+        // The stream must end because its display lookup says the display is gone, which is an
+        // error in the lookup's own domain. An encoder failure or the JPEG stall timeout would be
+        // a different way to end, and is not what this test is about.
+        const displayIsGone = (err: unknown): boolean =>
+          err instanceof NativeSimOperationError && err.domain === 'io.appium.coresim.Screenshot';
+        const ended = Promise.all([
+          assert.rejects(drain(video.accessUnits(controller.signal)), displayIsGone),
+          assert.rejects(drain(jpeg.frames(controller.signal)), displayIsGone),
+        ]);
+        // Awaited below on every path, but a failing shutdownDevice() gets there first. Without
+        // this, the rejection it leaves behind would surface as unhandled in some later test.
+        ended.catch(() => {});
+        try {
+          await sim.shutdownDevice(device!.udid);
+          await ended;
+        } finally {
+          clearTimeout(timeout);
+          await video.stop();
+          await jpeg.stop();
+        }
+      });
+
       // Last: eraseDevice requires Shutdown (see CLAUDE.md), and leaves the device that way — no
       // later test here can assume Booted again. The outer after() hook tolerates this without
       // rebooting the device just to shut it down a second time.
       it('erases the device once shut down', async () => {
-        await sim.shutdownDevice(device!.udid);
+        // Normally Shutdown already (the stream test above); shutdownDevice() rejects on such a
+        // device rather than being a no-op, so only call it if that test was skipped or filtered out.
+        const current = (await sim.getDevices()).find((d) => d.udid === device!.udid);
+        if (current?.state === SimDeviceState.Booted) {
+          await sim.shutdownDevice(device!.udid);
+        }
         await sim.eraseDevice(device!.udid);
         assert.strictEqual(
           (await sim.getDevices()).find((d) => d.udid === device!.udid)?.state,

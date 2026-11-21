@@ -37,12 +37,12 @@ class JpegStreamSession::Impl {
  public:
   Impl(id device, JpegStreamOptions options, std::function<void(JpegFrame)> onFrame,
        std::function<void(NSError*)> onError, std::function<void()> onEnd, std::function<void()> onAbortDelivery)
-      : device_(device),
-        options_(options),
+      : options_(options),
         onFrame_(std::move(onFrame)),
         onError_(std::move(onError)),
         onEnd_(std::move(onEnd)),
-        onAbortDelivery_(std::move(onAbortDelivery)) {
+        onAbortDelivery_(std::move(onAbortDelivery)),
+        displaySurface_(device, options.displayId) {
     queue_ = dispatch_queue_create("io.appium.coresim.jpegStream", DISPATCH_QUEUE_SERIAL);
     // Persistent, unlike CaptureScreenshot's own one-shot CIContext (see sim_screenshot.mm) — that
     // file's comment calls this out as exactly the tradeoff a continuous streaming path should
@@ -53,16 +53,16 @@ class JpegStreamSession::Impl {
   ~Impl() { Stop(); }
 
   void Start() {
-    NSError* error = nil;
-    id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &error);
-    if (descriptor == nil) {
-      throw NSErrorException(error);
+    // Through displaySurface_, so the first Tick() reuses this surface instead of looking it up
+    // again. No timer exists yet, so nothing else can be using it.
+    DisplaySurfaceLookup found = displaySurface_.Current();
+    if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
+      throw NSErrorException(found.error);
     }
-    id surfaceObj = CurrentDisplaySurface(descriptor);
-    if (surfaceObj == nil) {
+    if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
       throw NSErrorException(MakeError(1, @"The device's display surface is not available yet"));
     }
-    IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
+    IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
 
     startTime_ = MonotonicSeconds();
     // Set before the initial encode below — EmitFrame measures elapsed time from it, and running_
@@ -108,9 +108,7 @@ class JpegStreamSession::Impl {
                     });
       timer_ = nullptr;
     }
-    if (onEnd_) {
-      onEnd_();
-    }
+    ReleaseSurfaceAndFireEnd();
   }
 
   void AbortDelivery() {
@@ -130,6 +128,13 @@ class JpegStreamSession::Impl {
       dispatch_source_cancel(timer_);
       timer_ = nullptr;
     }
+    ReleaseSurfaceAndFireEnd();
+  }
+
+  void ReleaseSurfaceAndFireEnd() {
+    // Tick() can no longer run here (see Stop()/StopFromQueue()). A stopped session can outlive its
+    // stream by a long time (see CLAUDE.md), and must not keep the display's surface alive that long.
+    displaySurface_.Reset();
     if (onEnd_) {
       onEnd_();
     }
@@ -141,24 +146,24 @@ class JpegStreamSession::Impl {
     }
     @autoreleasepool {
       try {
-        // Re-resolved every tick (like CaptureScreenshot does), not cached once in Start(), so a
-        // deleted device or disconnected display surfaces a real error instead of Tick() quietly
-        // doing nothing forever.
-        NSError* resolveError = nil;
-        id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &resolveError);
-        if (descriptor == nil) {
+        // The surface Start() or an earlier tick found, for up to a second (see
+        // PolledDisplaySurface): looking it up on every tick cost far more than everything else an
+        // unchanged tick does. It is still looked up again every second rather than kept for good,
+        // so a deleted device or disconnected display surfaces a real error instead of Tick()
+        // quietly doing nothing forever.
+        DisplaySurfaceLookup found = displaySurface_.Current();
+        if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
           if (onError_) {
-            onError_(resolveError);
+            onError_(found.error);
           }
           StopFromQueue();
           return;
         }
-        id surfaceObj = CurrentDisplaySurface(descriptor);
-        if (surfaceObj == nil) {
+        if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
           ReportIfStalledTooLong();  // transient — the connection may not have a frame ready yet
           return;
         }
-        IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
+        IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
         uint32_t seed = IOSurfaceGetSeed(surface);
         if (seed == lastSeed_) {
           // Unchanged since the last tick (mirrors VideoFrameEncoder's own seed check) — the
@@ -285,12 +290,14 @@ class JpegStreamSession::Impl {
     }
   }
 
-  id device_;
   JpegStreamOptions options_;
   std::function<void(JpegFrame)> onFrame_;
   std::function<void(NSError*)> onError_;
   std::function<void()> onEnd_;
   std::function<void()> onAbortDelivery_;
+  // Start()'s and Tick()'s source of frames. Only touched on queue_, before its timer starts
+  // (Start()), or once it has drained (teardown).
+  PolledDisplaySurface displaySurface_;
 
   dispatch_queue_t queue_ = nullptr;
   dispatch_source_t timer_ = nullptr;

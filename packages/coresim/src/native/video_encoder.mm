@@ -193,7 +193,8 @@ class VideoFrameEncoder::Impl {
         onSample_(std::move(onSample)),
         onError_(std::move(onError)),
         onEnd_(std::move(onEnd)),
-        sharedClockOrigin_(sharedClockOrigin) {
+        sharedClockOrigin_(sharedClockOrigin),
+        displaySurface_(device, options.displayId) {
     queue_ = dispatch_queue_create("io.appium.coresim.videoEncoder", DISPATCH_QUEUE_SERIAL);
     // Persistent, like JpegStreamSession's own (see sim_jpeg_stream.mm) — a continuous stream, not
     // CaptureScreenshot's deliberately one-shot context.
@@ -203,16 +204,16 @@ class VideoFrameEncoder::Impl {
   ~Impl() { Stop(); }
 
   void Start() {
-    NSError* error = nil;
-    id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &error);
-    if (descriptor == nil) {
-      throw NSErrorException(error);
+    // Through displaySurface_, so the first Tick() reuses this surface instead of looking it up
+    // again. No timer exists yet, so nothing else can be using it.
+    DisplaySurfaceLookup found = displaySurface_.Current();
+    if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
+      throw NSErrorException(found.error);
     }
-    id surfaceObj = CurrentDisplaySurface(descriptor);
-    if (surfaceObj == nil) {
+    if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
       throw NSErrorException(MakeError(4, @"The device's display surface is not available yet"));
     }
-    IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
+    IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
     // One-time blocking read so the first frame is already correctly oriented, before the
     // periodic poll below even starts.
     int32_t orientation = BlockingReadOrientation();
@@ -348,6 +349,9 @@ class VideoFrameEncoder::Impl {
   }
 
   void TearDownSessionAndFireEnd() {
+    // Tick() can no longer run here (see Stop()/StopFromQueue()). A stopped encoder can outlive its
+    // stream by a long time (see CLAUDE.md), and must not keep the display's surface alive that long.
+    displaySurface_.Reset();
     if (session_ != nullptr) {
       // Flushes and blocks until every already-submitted frame's callback has returned — without
       // this, a frame submitted just before Stop() could fire after onEnd_ releases whatever
@@ -378,24 +382,30 @@ class VideoFrameEncoder::Impl {
     }
     @autoreleasepool {
       try {
-        // Re-resolved every tick (like CaptureScreenshot does), not cached once in Start(), so a
-        // deleted device or disconnected display surfaces a real error instead of Tick() quietly
-        // doing nothing forever.
-        NSError* resolveError = nil;
-        id descriptor = ResolveCaptureDisplay(device_, options_.displayId, &resolveError);
-        if (descriptor == nil) {
+        int32_t orientation = polledOrientation_->load(std::memory_order_relaxed);
+        if (orientation != sessionOrientation_) {
+          // A rotation is when CoreSimulator may replace the surface (the raw resize below), and a
+          // replaced surface only shows at a lookup. Look it up now, so the frame encoded and the
+          // session sized for the new orientation never come from a surface kept from before it.
+          displaySurface_.Reset();
+        }
+        // The surface Start() or an earlier tick found, for up to a second (see
+        // PolledDisplaySurface): looking it up on every tick cost far more than everything else an
+        // unchanged tick does. It is still looked up again every second rather than kept for good,
+        // so a deleted device or disconnected display surfaces a real error instead of Tick()
+        // quietly doing nothing forever.
+        DisplaySurfaceLookup found = displaySurface_.Current();
+        if (found.status == DisplaySurfaceLookup::Status::kUnavailable) {
           if (onError_) {
-            onError_(resolveError);
+            onError_(found.error);
           }
           StopFromQueue();
           return;
         }
-        id surfaceObj = CurrentDisplaySurface(descriptor);
-        if (surfaceObj == nil) {
+        if (found.status == DisplaySurfaceLookup::Status::kNoSurface) {
           return;  // transient — the connection may not have a frame ready yet, try again next tick
         }
-        IOSurfaceRef surface = (__bridge IOSurfaceRef)surfaceObj;
-        int32_t orientation = polledOrientation_->load(std::memory_order_relaxed);
+        IOSurfaceRef surface = (__bridge IOSurfaceRef)found.surface;
         int32_t rawWidth = static_cast<int32_t>(IOSurfaceGetWidth(surface));
         int32_t rawHeight = static_cast<int32_t>(IOSurfaceGetHeight(surface));
         if (options_.fixedFrameSize) {
@@ -588,6 +598,9 @@ class VideoFrameEncoder::Impl {
   std::function<void(NSError*)> onError_;
   std::function<void()> onEnd_;
   const double* sharedClockOrigin_;
+  // Start()'s and Tick()'s source of frames. Only touched on queue_, before its timer starts
+  // (Start()), or once it has drained (teardown).
+  PolledDisplaySurface displaySurface_;
 
   dispatch_queue_t queue_ = nullptr;
   dispatch_source_t timer_ = nullptr;

@@ -5,6 +5,7 @@
 #import <ImageIO/ImageIO.h>
 #import <objc/message.h>
 
+#include "monotonic_clock.h"
 #include "objc_runtime.h"
 #include "safe_dispatch.h"
 #include "screenshot_errors.h"
@@ -174,6 +175,50 @@ id ResolveScreenCaptureService(id device, NSError** error) {
 }
 
 id CurrentDisplaySurface(id descriptor) { return RenderableSurface(descriptor); }
+
+PolledDisplaySurface::PolledDisplaySurface(id device, NSString* displayId)
+    : PolledDisplaySurface(
+          [device, displayId]() {
+            DisplaySurfaceLookup found;
+            NSError* error = nil;
+            id descriptor = ResolveCaptureDisplay(device, displayId, &error);
+            if (descriptor == nil) {
+              found.status = DisplaySurfaceLookup::Status::kUnavailable;
+              found.error = error;
+              return found;
+            }
+            found.surface = CurrentDisplaySurface(descriptor);
+            found.status = found.surface != nil ? DisplaySurfaceLookup::Status::kSurface
+                                                : DisplaySurfaceLookup::Status::kNoSurface;
+            return found;
+          },
+          MonotonicSeconds) {}
+
+PolledDisplaySurface::PolledDisplaySurface(Lookup lookup, Clock clock)
+    : lookup_(std::move(lookup)), clock_(std::move(clock)) {}
+
+DisplaySurfaceLookup PolledDisplaySurface::Current() {
+  double now = clock_();
+  if (surface_ != nil && now - refreshedAt_ < kRefreshIntervalSeconds) {
+    DisplaySurfaceLookup kept;
+    kept.status = DisplaySurfaceLookup::Status::kSurface;
+    kept.surface = surface_;
+    return kept;
+  }
+  // Dropped first, so neither a failed lookup nor an exception below leaves a stale surface behind.
+  surface_ = nil;
+  DisplaySurfaceLookup found = lookup_();
+  if (found.status == DisplaySurfaceLookup::Status::kSurface && found.surface == nil) {
+    found.status = DisplaySurfaceLookup::Status::kNoSurface;
+  }
+  if (found.status == DisplaySurfaceLookup::Status::kSurface) {
+    surface_ = found.surface;
+    refreshedAt_ = now;
+  }
+  return found;
+}
+
+void PolledDisplaySurface::Reset() { surface_ = nil; }
 
 NSArray<NSDictionary*>* ListDisplays(id device, NSError** error) {
   NSArray<NSDictionary*>* candidates = RenderableDisplayCandidates(device, error);

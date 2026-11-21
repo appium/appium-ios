@@ -2108,6 +2108,68 @@ Napi::Value FlushActiveSessionsBinding(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// For test/unit/polled-display-surface.spec.ts only (hence the underscore, and no entry in
+// NativeCoreSimModule): builds a PolledDisplaySurface on a JS lookup and a JS clock, so its caching
+// rules run in the unit tests, which have no simulator. `lookup()` returns {status: 'surface',
+// token: number}, {status: 'noSurface'} or {status: 'unavailable', message: string}; the returned
+// object's `current()` reports what PolledDisplaySurface::Current() found in the same shape.
+// Everything runs synchronously on the calling JS thread.
+Napi::Value CreatePolledDisplaySurfaceForTestingBinding(const Napi::CallbackInfo& info) {
+  using Status = coresim::DisplaySurfaceLookup::Status;
+  struct State {
+    Napi::FunctionReference lookup;
+    Napi::FunctionReference clock;
+    std::unique_ptr<coresim::PolledDisplaySurface> polled;
+  };
+  Napi::Env env = info.Env();
+  auto state = std::make_shared<State>();
+  state->lookup = Napi::Persistent(info[0].As<Napi::Function>());
+  state->clock = Napi::Persistent(info[1].As<Napi::Function>());
+  // A raw pointer, not `state` itself: `polled` is owned by State, so a shared_ptr here would be a cycle.
+  State* raw = state.get();
+  state->polled = std::make_unique<coresim::PolledDisplaySurface>(
+      [raw]() {
+        Napi::Object found = raw->lookup.Call({}).As<Napi::Object>();
+        std::string status = found.Get("status").As<Napi::String>().Utf8Value();
+        coresim::DisplaySurfaceLookup lookup;
+        if (status == "surface") {
+          lookup.status = Status::kSurface;
+          lookup.surface = @(found.Get("token").As<Napi::Number>().DoubleValue());
+        } else if (status == "unavailable") {
+          lookup.status = Status::kUnavailable;
+          NSString* message = @(found.Get("message").As<Napi::String>().Utf8Value().c_str());
+          lookup.error = [NSError errorWithDomain:@"io.appium.coresim.Testing"
+                                             code:1
+                                         userInfo:@{NSLocalizedDescriptionKey : message}];
+        }
+        return lookup;
+      },
+      [raw]() { return raw->clock.Call({}).As<Napi::Number>().DoubleValue(); });
+
+  Napi::Object handle = Napi::Object::New(env);
+  handle.Set("refreshIntervalSeconds", Napi::Number::New(env, coresim::PolledDisplaySurface::kRefreshIntervalSeconds));
+  handle.Set("current", Napi::Function::New(env, [state](const Napi::CallbackInfo& info) -> Napi::Value {
+               coresim::DisplaySurfaceLookup found = state->polled->Current();
+               Napi::Object result = Napi::Object::New(info.Env());
+               switch (found.status) {
+                 case Status::kSurface:
+                   result.Set("status", "surface");
+                   result.Set("token", [(NSNumber*)found.surface doubleValue]);
+                   break;
+                 case Status::kNoSurface:
+                   result.Set("status", "noSurface");
+                   break;
+                 case Status::kUnavailable:
+                   result.Set("status", "unavailable");
+                   result.Set("message", found.error.localizedDescription.UTF8String);
+                   break;
+               }
+               return result;
+             }));
+  handle.Set("reset", Napi::Function::New(env, [state](const Napi::CallbackInfo&) { state->polled->Reset(); }));
+  return handle;
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   // Runs once per Environment (see AddonInstanceData above) — never shared across a
   // worker_threads instance also `require()`-ing this addon.
@@ -2125,6 +2187,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("sharedServiceContext", Napi::Function::New(env, SharedServiceContextBinding));
   exports.Set("frameworkVersion", Napi::Function::New(env, FrameworkVersionBinding));
   exports.Set("flushActiveSessions", Napi::Function::New(env, FlushActiveSessionsBinding));
+  exports.Set("_createPolledDisplaySurfaceForTesting",
+              Napi::Function::New(env, CreatePolledDisplaySurfaceForTestingBinding));
   return exports;
 }
 
