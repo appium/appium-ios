@@ -99,6 +99,7 @@ export class ZipConduitService {
       return;
     }
     cleanupServiceSocket(this.socket);
+    this.socket.destroy();
     this.socket = null;
   }
 
@@ -208,7 +209,7 @@ async function recvOnePlistWithTimeout(socket: net.Socket, timeoutMs: number): P
   });
 
   try {
-    return await Promise.race([recvOnePlist(socket), timeoutPromise]);
+    return await Promise.race([recvOnePlist(socket, timeoutMs), timeoutPromise]);
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);

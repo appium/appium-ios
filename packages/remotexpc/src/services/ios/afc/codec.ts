@@ -344,11 +344,12 @@ export async function sendOnePlist(socket: net.Socket, request: PlistDictionary)
 
 /**
  * Receive a single length-prefixed plist from the socket
+ * @param timeoutMs How long each read may wait for its bytes; see {@link readExact}
  */
-export async function recvOnePlist(socket: net.Socket): Promise<any> {
-  const lenBuf = await readExact(socket, 4);
+export async function recvOnePlist(socket: net.Socket, timeoutMs = AFC_OPERATION_TIMEOUT_MS): Promise<any> {
+  const lenBuf = await readExact(socket, 4, timeoutMs);
   const respLen = lenBuf.readUInt32BE(0);
-  const respBody = await readExact(socket, respLen);
+  const respBody = await readExact(socket, respLen, timeoutMs);
   return parsePlist(respBody);
 }
 
