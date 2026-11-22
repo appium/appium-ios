@@ -311,7 +311,7 @@ static BOOL FBIsPositionCharacter(unichar character)
   }
   errno = 0;
   long long value = strtoll(string.UTF8String, NULL, 10);
-  if (ERANGE == errno || 0 == value || llabs(value) > INT_MAX) {
+  if (ERANGE == errno || 0 == value || value < -INT_MAX || value > INT_MAX) {
     return nil;
   }
   return @(value);
@@ -387,7 +387,14 @@ static BOOL FBIsPositionCharacter(unichar character)
           }
           return nil;
         }
-        NSPredicate *value = [NSPredicate fb_snapshotBlockPredicateWithPredicate:[NSPredicate predicateWithFormat:group.text argumentArray:@[]]];
+        NSPredicate *rawPredicate = nil;
+        @try {
+          rawPredicate = [NSPredicate predicateWithFormat:group.text argumentArray:@[]];
+        } @catch (NSException *e) {
+          // Foundation raises different exception names depending on the failure and OS version
+          @throw [NSException exceptionWithName:NSInvalidArgumentException reason:e.reason userInfo:e.userInfo];
+        }
+        NSPredicate *value = [NSPredicate fb_snapshotBlockPredicateWithPredicate:rawPredicate];
         [predicates addObject:FBRawGroupKindSelfPredicate == group.kind
          ? [[FBSelfPredicateItem alloc] initWithValue:value]
          : [[FBDescendantPredicateItem alloc] initWithValue:value]];

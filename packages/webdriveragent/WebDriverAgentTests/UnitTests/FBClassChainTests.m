@@ -446,12 +446,12 @@ static NSString *FBDescribeChain(FBClassChain *chain)
   XCTAssertNil([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[``name == 'a'`]" error:&error]);
   XCTAssertNotNil(error);
   // The predicate text is "`name == 'a'", where the doubled marker is an escaped one
-  XCTAssertThrows([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[```name == 'a'`]" error:&error]);
+  XCTAssertThrowsSpecificNamed([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[```name == 'a'`]" error:&error], NSException, NSInvalidArgumentException);
 }
 
 - (void)testPositionIsAnAsciiInt
 {
-  NSArray<NSString *> *invalid = @[@"[٣]", @"[0]", @"[4294967296]", @"[99999999999999999999]", @"[-99999999999999999999]", @"[2147483648]", @"[-2147483648]"];
+  NSArray<NSString *> *invalid = @[@"[٣]", @"[0]", @"[4294967296]", @"[99999999999999999999]", @"[-99999999999999999999]", @"[2147483648]", @"[-2147483648]", @"[-9223372036854775808]"];
   for (NSString *position in invalid) {
     NSString *query = [@"XCUIElementTypeWindow" stringByAppendingString:position];
     NSError *error = nil;
@@ -466,8 +466,8 @@ static NSString *FBDescribeChain(FBClassChain *chain)
   FBClassChain *chain = [FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name LIKE '50%'`]" error:&error];
   XCTAssertNotNil(chain);
   XCTAssertEqual(chain.elements.firstObject.predicates.count, 1);
-  XCTAssertThrows([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %@`]" error:&error]);
-  XCTAssertThrows([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %d AND label == %@`]" error:&error]);
+  XCTAssertThrowsSpecificNamed([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %@`]" error:&error], NSException, NSInvalidArgumentException);
+  XCTAssertThrowsSpecificNamed([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %d AND label == %@`]" error:&error], NSException, NSInvalidArgumentException);
 }
 
 - (void)testErrorMessages
