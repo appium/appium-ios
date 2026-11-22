@@ -14,6 +14,11 @@
 #import "XCUIElement+FBUtilities.h"
 #import "XCUIElementQuery+FBHelpers.h"
 
+static BOOL FBIsAxisItem(FBClassChainItem *item)
+{
+  return FBClassChainAxisChild != item.axis && FBClassChainAxisDescendant != item.axis;
+}
+
 @implementation XCUIElement (FBClassChain)
 
 - (NSArray<XCUIElement *> *)fb_descendantsMatchingClassChain:(NSString *)classChainQuery shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
@@ -61,7 +66,7 @@
 + (NSUInteger)fb_indexOfFirstAxisItem:(NSArray<FBClassChainItem *> *)chainItems
 {
   return [chainItems indexOfObjectPassingTest:^BOOL(FBClassChainItem *item, NSUInteger idx, BOOL *stop) {
-    return FBClassChainAxisChild != item.axis && FBClassChainAxisDescendant != item.axis;
+    return FBIsAxisItem(item);
   }];
 }
 
@@ -234,7 +239,7 @@
 {
   NSMutableArray<id<FBXCElementSnapshot>> *typeMatches = [NSMutableArray array];
   for (id<FBXCElementSnapshot> root in roots) {
-    if (FBClassChainAxisChild != item.axis && FBClassChainAxisDescendant != item.axis) {
+    if (FBIsAxisItem(item)) {
       for (id<FBXCElementSnapshot> candidate in [self.class fb_axisSnapshotsOfRoot:root axis:item.axis]) {
         if (item.type == XCUIElementTypeAny || candidate.elementType == item.type) {
           [typeMatches addObject:candidate];

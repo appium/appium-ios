@@ -860,6 +860,31 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
   });
 }
 
+- (void)testPrefixWithAxisOnContextElement
+{
+  FBForEachBinding(^{
+    XCUIElement *mainView = self.testedApplication.otherElements[@"MainView"];
+    XCTAssertEqualObjects(FBLookupLabels(mainView, @"**/XCUIElementTypeButton[`label == 'Attributes'`]/>XCUIElementTypeButton[1]"), @[@"Scrolling"]);
+    XCTAssertEqualObjects(FBLookupLabels(mainView, @"**/XCUIElementTypeButton[`label == 'Attributes'`]/.."), @[@"MainView"]);
+    NSArray<XCUIElement *> *ancestors = [mainView fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]/^*"
+                                                        shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(ancestors.firstObject.elementType, XCUIElementTypeApplication);
+    XCTAssertEqualObjects(ancestors.lastObject.label, @"MainView");
+  });
+}
+
+- (void)testFirstMatchWithPositionedAxisStep
+{
+  FBForEachBinding(^{
+    XCUIApplication *app = self.testedApplication;
+    for (NSNumber *firstMatch in @[@NO, @YES]) {
+      NSArray<XCUIElement *> *matches = [app fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Alerts'`]/~XCUIElementTypeButton[2]"
+                                                  shouldReturnAfterFirstMatch:firstMatch.boolValue];
+      XCTAssertEqualObjects([matches valueForKey:@"label"], @[@"Attributes"]);
+    }
+  });
+}
+
 - (void)testAxisResultsAreUsable
 {
   FBForEachBinding(^{

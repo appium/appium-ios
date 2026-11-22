@@ -48,7 +48,8 @@ NS_ASSUME_NONNULL_BEGIN
  <XCUIElementTypeButton - all preceding siblings, which are buttons
  ~XCUIElementTypeButton - all siblings, which are buttons, except the matched element itself
  Axis steps support '*', predicates and positions like regular steps. Positions count along the axis: from the nearest element for the ancestors and preceding siblings,
- in document order for the following siblings and all siblings, and from the other end if negative. For example:
+ in document order for the following siblings and all siblings, and from the other end if negative. As for any other step, a position selects among
+ the matches of the whole step, not per matched element of the previous step. For example:
  ** /XCUIElementTypeButton[`name == "OK"`]/<XCUIElementTypeButton[1] - the button right before the "OK" button.
  ** /XCUIElementTypeButton[`name == "OK"`]/^XCUIElementTypeTable[1] - the closest table containing the "OK" button.
  ** /XCUIElementTypeButton[`name == "OK"`]/../XCUIElementTypeButton - all buttons, which are children of the parent of the "OK" button (including the button itself).
