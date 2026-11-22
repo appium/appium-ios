@@ -357,7 +357,8 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
         ? result.reverseObjectEnumerator.allObjects
         : result.copy;
     }
-    default:
+    case FBClassChainAxisChild:
+    case FBClassChainAxisDescendant:
       return @[];
   }
 }
