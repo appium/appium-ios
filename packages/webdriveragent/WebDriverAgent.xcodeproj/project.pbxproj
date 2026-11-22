@@ -652,8 +652,6 @@
 		71A7EAF91E224648001DA4F2 /* FBClassChainQueryParser.h in Headers */ = {isa = PBXBuildFile; fileRef = 71A7EAF71E224648001DA4F2 /* FBClassChainQueryParser.h */; };
 		71A7EAFA1E224648001DA4F2 /* FBClassChainQueryParser.m in Sources */ = {isa = PBXBuildFile; fileRef = 71A7EAF81E224648001DA4F2 /* FBClassChainQueryParser.m */; };
 		71A7EAFC1E229302001DA4F2 /* FBClassChainTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 71A7EAFB1E229302001DA4F2 /* FBClassChainTests.m */; };
-		A1C0FFEE00000000000000B1 /* FBClassChainCompatibilityTests.m in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000000000000F1 /* FBClassChainCompatibilityTests.m */; };
-		A1C0FFEE00000000000000B2 /* FBClassChainLegacyParser.m in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000000000000F2 /* FBClassChainLegacyParser.m */; };
 		71ACF5B8242F2FDC00F0AAD4 /* FBSafariAlertTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 71ACF5B7242F2FDC00F0AAD4 /* FBSafariAlertTests.m */; };
 		71AE3CF72D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.h in Headers */ = {isa = PBXBuildFile; fileRef = 71AE3CF52D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.h */; };
 		71AE3CF82D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.m in Sources */ = {isa = PBXBuildFile; fileRef = 71AE3CF62D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.m */; };
@@ -1697,9 +1695,6 @@
 		71A7EAF71E224648001DA4F2 /* FBClassChainQueryParser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FBClassChainQueryParser.h; sourceTree = "<group>"; };
 		71A7EAF81E224648001DA4F2 /* FBClassChainQueryParser.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBClassChainQueryParser.m; sourceTree = "<group>"; };
 		71A7EAFB1E229302001DA4F2 /* FBClassChainTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBClassChainTests.m; sourceTree = "<group>"; };
-		A1C0FFEE00000000000000F1 /* FBClassChainCompatibilityTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBClassChainCompatibilityTests.m; sourceTree = "<group>"; };
-		A1C0FFEE00000000000000F2 /* FBClassChainLegacyParser.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBClassChainLegacyParser.m; sourceTree = "<group>"; };
-		A1C0FFEE00000000000000F3 /* FBClassChainLegacyParser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FBClassChainLegacyParser.h; sourceTree = "<group>"; };
 		71ACF5B7242F2FDC00F0AAD4 /* FBSafariAlertTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBSafariAlertTests.m; sourceTree = "<group>"; };
 		71AE3CF52D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "XCUIElement+FBVisibleFrame.h"; sourceTree = "<group>"; };
 		71AE3CF62D38EE8E0039FC36 /* XCUIElement+FBVisibleFrame.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "XCUIElement+FBVisibleFrame.m"; sourceTree = "<group>"; };
@@ -2778,9 +2773,6 @@
 				1D04760558C64B8EB69380E0 /* FBTouchableViewTests.m */,
 				ADBC39951D07840300327304 /* Doubles */,
 				71A7EAFB1E229302001DA4F2 /* FBClassChainTests.m */,
-				A1C0FFEE00000000000000F1 /* FBClassChainCompatibilityTests.m */,
-				A1C0FFEE00000000000000F2 /* FBClassChainLegacyParser.m */,
-				A1C0FFEE00000000000000F3 /* FBClassChainLegacyParser.h */,
 				EEE16E961D33A25500172525 /* FBConfigurationTests.m */,
 				ADBC39931D0782CD00327304 /* FBElementCacheTests.m */,
 				EE3F8CFF1D08B05F006F02CE /* FBElementTypeTransformerTests.m */,
@@ -4995,8 +4987,6 @@
 				7139145A1DF01989005896C2 /* XCUIElementHelpersTests.m in Sources */,
 				EE6A89261D0B19E60083E92B /* FBSessionTests.m in Sources */,
 				71A7EAFC1E229302001DA4F2 /* FBClassChainTests.m in Sources */,
-				A1C0FFEE00000000000000B1 /* FBClassChainCompatibilityTests.m in Sources */,
-				A1C0FFEE00000000000000B2 /* FBClassChainLegacyParser.m in Sources */,
 				EE18883D1DA663EB00307AA8 /* FBMathUtilsTests.m in Sources */,
 				21C0068C990412E75A135DD4 /* FBCustomCommandsTests.m in Sources */,
 			);
