@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.0.14](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.13...appium-webdriveragent@17.0.14) (2026-11-22)
+
+### Code Refactoring
+
+* **webdriveragent:** replace the class chain tokenizer with a recursive-descent parser ([#234](https://github.com/appium/appium-ios/issues/234)) ([23e77cb](https://github.com/appium/appium-ios/commit/23e77cbf250a5edc100a147fe3a7e3ac4a1adb29))
+
+
 ## [17.0.13](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.12...appium-webdriveragent@17.0.13) (2026-11-21)
 
 **Note:** Version bump only for package appium-webdriveragent
