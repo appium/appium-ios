@@ -90,7 +90,10 @@ NS_ASSUME_NONNULL_BEGIN
    there are query parsing errors
  @return list of parsed primitives packed to FBClassChainElement class or nil in case
    there was parsing error (the parameter will be initialized with detailed error description in such case)
- @throws FBUnknownAttributeException if any of predicates in the chain contains unknown attribute 
+ @throws FBUnknownAttributeException if any of predicates in the chain contains unknown attribute
+ @throws NSInvalidArgumentException if the text of any predicate in the chain is not a valid predicate.
+   The text is never used as a format, so it must not contain format specifiers.
+   An empty query is reported as an error, not as an exception.
  */
 + (nullable FBClassChain*)parseQuery:(NSString*)classChainQuery error:(NSError **)error;
 
