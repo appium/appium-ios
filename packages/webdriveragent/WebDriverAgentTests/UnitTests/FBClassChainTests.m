@@ -326,7 +326,17 @@ static NSString *FBDescribeChain(FBClassChain *chain)
       }
     }
     NSString *type = [[FBElementTypeTransformer stringWithElementType:item.type] stringByReplacingOccurrencesOfString:@"XCUIElementType" withString:@""];
-    [items addObject:[NSString stringWithFormat:@"%@%@%@{%lu,%lu}", item.isDescendant ? @"**/" : @"", type,
+    NSDictionary<NSNumber *, NSString *> *prefixes = @{
+      @(FBClassChainAxisDescendant): @"**/",
+      @(FBClassChainAxisAncestor): @"^",
+      @(FBClassChainAxisFollowingSibling): @">",
+      @(FBClassChainAxisPrecedingSibling): @"<",
+      @(FBClassChainAxisSibling): @"~",
+    };
+    if (FBClassChainAxisParent == item.axis) {
+      type = @"..";
+    }
+    [items addObject:[NSString stringWithFormat:@"%@%@%@{%lu,%lu}", prefixes[@(item.axis)] ?: @"", type,
                       nil == item.position ? @"" : [NSString stringWithFormat:@"[%@]", item.position],
                       (unsigned long)selfPredicates, (unsigned long)descendantPredicates]];
   }
@@ -468,6 +478,81 @@ static NSString *FBDescribeChain(FBClassChain *chain)
   XCTAssertEqual(chain.elements.firstObject.predicates.count, 1);
   XCTAssertThrowsSpecificNamed([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %@`]" error:&error], NSException, NSInvalidArgumentException);
   XCTAssertThrowsSpecificNamed([FBClassChainQueryParser parseQuery:@"XCUIElementTypeWindow[`name == %d AND label == %@`]" error:&error], NSException, NSInvalidArgumentException);
+}
+
+- (void)testAxisItems
+{
+  NSDictionary<NSString *, NSString *> *expectations = @{
+    @"..": @"..{0,0}",
+    @"../..": @"..{0,0} ..{0,0}",
+    @"..[`name == 'a'`][$visible == 1$]": @"..{1,1}",
+    @"^XCUIElementTypeCell": @"^Cell{0,0}",
+    @"^XCUIElementTypeCell[1]": @"^Cell[1]{0,0}",
+    @"^*[-1]": @"^Any[-1]{0,0}",
+    @">XCUIElementTypeButton[`visible == 1`][2]": @">Button[2]{1,0}",
+    @"<XCUIElementTypeButton": @"<Button{0,0}",
+    @"~*": @"~Any{0,0}",
+    @"XCUIElementTypeButton/..": @"Button{0,0} ..{0,0}",
+    @"XCUIElementTypeButton/../XCUIElementTypeTextField[2]": @"Button{0,0} ..{0,0} TextField[2]{0,0}",
+    @"**/XCUIElementTypeButton/..": @"**/Button{0,0} ..{0,0}",
+    @"**/XCUIElementTypeButton/>*[1]/**/XCUIElementTypeImage": @"**/Button{0,0} >Any[1]{0,0} **/Image{0,0}",
+    @"XCUIElementTypeButton/../**/XCUIElementTypeImage": @"Button{0,0} ..{0,0} **/Image{0,0}",
+    @"XCUIElementTypeButton/^XCUIElementTypeCell/<XCUIElementTypeCell[-1]/~*": @"Button{0,0} ^Cell{0,0} <Cell[-1]{0,0} ~Any{0,0}",
+    @"../XCUIElementTypeButton": @"..{0,0} Button{0,0}",
+  };
+  for (NSString *query in expectations) {
+    NSError *error = nil;
+    FBClassChain *chain = [FBClassChainQueryParser parseQuery:query error:&error];
+    XCTAssertNotNil(chain, @"%@ %@", query, error);
+    XCTAssertEqualObjects(FBDescribeChain(chain), expectations[query], @"%@", query);
+  }
+}
+
+- (void)testInvalidAxes
+{
+  NSArray<NSString *> *invalidQueries = @[
+    @".", @"...", @"....", @"..XCUIElementTypeButton", @"..*", @"..[1]", @"..[`name == 'a'`][1]", @"..[1][`name == 'a'`]",
+    @"**/..", @"XCUIElementTypeWindow/**/..", @"**/^XCUIElementTypeCell", @"XCUIElementTypeWindow/**/>*",
+    @"XCUIElementTypeWindow/**/<*", @"**/~*", @"^", @">", @"<", @"~", @"^[1]", @"~/*", @"XCUIElementTypeWindow/^",
+    @"XCUIElementTypeWindow/..x", @"XCUIElementTypeWindow/.", @"XCUIElementTypeWindow./..", @"XCUIElementTypeWindow..",
+    @"^^XCUIElementTypeCell", @">>*", @"^>*", @">**/*", @"^**", @"^XCUIElementTypeCell[0]", @"^XCUIElementTypeCell[1][2]",
+    @"^XCUIElementTypeCell[1][`name == 'a'`]", @"^blabla", @"XCUIElementTypeWindow/../", @"XCUIElementTypeWindow/..//*",
+    @"XCUIElementTypeWindow^XCUIElementTypeCell", @"XCUIElementTypeWindow>*", @"XCUIElementTypeWindow/ ..",
+  ];
+  for (NSString *query in invalidQueries) {
+    NSError *error = nil;
+    XCTAssertNil([FBClassChainQueryParser parseQuery:query error:&error], @"%@", query);
+    XCTAssertNotNil(error, @"%@", query);
+  }
+}
+
+- (void)testAxisErrorMessages
+{
+  NSDictionary<NSString *, NSString *> *expectations = @{
+    @"**/..": @"Cannot parse class chain query '**/..'. Unexpected character detected at position 4:\n**/. <----",
+    @"..XCUIElementTypeButton": @"Cannot parse class chain query '..XCUIElementTypeButton'. Unexpected character detected at position 3:\n..X <----",
+    @"..[1]": @"Cannot parse class chain query '..[1]'. Unexpected character detected at position 4:\n..[1 <----",
+    @"XCUIElementTypeWindow/.": @"Cannot parse class chain query 'XCUIElementTypeWindow/.'. Unexpected character detected at position 23:\nXCUIElementTypeWindow/. <----",
+    @"XCUIElementTypeWindow/**/^*": @"Cannot parse class chain query 'XCUIElementTypeWindow/**/^*'. Unexpected character detected at position 26:\nXCUIElementTypeWindow/**/^ <----",
+    @"^blabla": @"Cannot parse class chain query '^blabla'. 'blabla' class name is unknown to WDA",
+  };
+  for (NSString *query in expectations) {
+    NSError *error = nil;
+    XCTAssertNil([FBClassChainQueryParser parseQuery:query error:&error], @"%@", query);
+    XCTAssertEqualObjects(error.localizedDescription, expectations[query], @"%@", query);
+  }
+}
+
+- (void)testAxisItemsKeepLegacyInitializerSemantics
+{
+  FBClassChainItem *child = [[FBClassChainItem alloc] initWithType:XCUIElementTypeButton position:nil predicates:@[] isDescendant:NO];
+  FBClassChainItem *descendant = [[FBClassChainItem alloc] initWithType:XCUIElementTypeButton position:nil predicates:@[] isDescendant:YES];
+  FBClassChainItem *parent = [[FBClassChainItem alloc] initWithType:XCUIElementTypeAny position:nil predicates:@[] axis:FBClassChainAxisParent];
+  XCTAssertEqual(child.axis, FBClassChainAxisChild);
+  XCTAssertFalse(child.isDescendant);
+  XCTAssertEqual(descendant.axis, FBClassChainAxisDescendant);
+  XCTAssertTrue(descendant.isDescendant);
+  XCTAssertFalse(parent.isDescendant);
 }
 
 - (void)testErrorMessages

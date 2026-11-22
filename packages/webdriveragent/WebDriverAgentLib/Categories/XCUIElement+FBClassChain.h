@@ -41,6 +41,21 @@ NS_ASSUME_NONNULL_BEGIN
 
  Double star and slash is the marker of the fact, that the next following item is the descendant of the previous chain item, rather than its child.
  
+ Axis steps select elements relative to the elements matched by the previous step:
+ .. - the parent. It has no class name and no position, but may have predicates: `XCUIElementTypeButton[`name == "OK"`]/..`
+ ^XCUIElementTypeCell - all ancestors of the matched elements, which are cells
+ >XCUIElementTypeButton - all following siblings, which are buttons
+ <XCUIElementTypeButton - all preceding siblings, which are buttons
+ ~XCUIElementTypeButton - all siblings, which are buttons, except the matched element itself
+ Axis steps support '*', predicates and positions like regular steps. Positions count along the axis: from the nearest element for the ancestors and preceding siblings,
+ in document order for the following siblings and all siblings, and from the other end if negative. For example:
+ ** /XCUIElementTypeButton[`name == "OK"`]/<XCUIElementTypeButton[1] - the button right before the "OK" button.
+ ** /XCUIElementTypeButton[`name == "OK"`]/^XCUIElementTypeTable[1] - the closest table containing the "OK" button.
+ ** /XCUIElementTypeButton[`name == "OK"`]/../XCUIElementTypeButton - all buttons, which are children of the parent of the "OK" button (including the button itself).
+ An axis step may follow any step and may start the chain, then it is relative to the element the lookup is made on. It cannot directly follow the double star marker,
+ but the double star marker may follow it: `XCUIElementTypeButton/../ ** /XCUIElementTypeImage`.
+ The matches of a chain with axis steps are always returned in document order. They are resolved on the snapshots of the accessibility tree, so the lookup is about as fast as the lookup of the part of the chain before the first axis step.
+
  The matching result is similar to what XCTest's children... and descendants... selector calls of XCUIElement class instances produce when combined into a chain.
  
  @param classChainQuery valid class chain query string
