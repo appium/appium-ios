@@ -25,6 +25,13 @@
 
 @implementation FBElementSwipingTests
 
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+            && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testSwipeDownWithVelocity"],
+            @"Failed on Azure Pipeline. Local run succeeded.");
+}
+
 - (void)openScrollView
 {
   [self launchApplication];
@@ -70,9 +77,6 @@
 
 - (void)testSwipeDownWithVelocity
 {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    XCTSkip(@"Failed on Azure Pipeline. Local run succeeded.");
-  }
   [self.scrollView fb_swipeWithDirection:@"up" velocity:@2500];
   FBAssertInvisibleCell(@"0");
   [self.scrollView fb_swipeWithDirection:@"down" velocity:@3000];
@@ -87,6 +91,13 @@
 @end
 
 @implementation FBElementSwipingApplicationTests
+
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+            && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testSwipeDownWithVelocity"],
+            @"Failed on Azure Pipeline. Local run succeeded.");
+}
 
 - (void)openScrollView
 {
@@ -119,9 +130,6 @@
 
 - (void)testSwipeDownWithVelocity
 {
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    XCTSkip(@"Failed on Azure Pipeline. Local run succeeded.");
-  }
   [self.testedApplication fb_swipeWithDirection:@"up" velocity:@2500];
   FBAssertInvisibleCell(@"0");
   [self.testedApplication fb_swipeWithDirection:@"down" velocity:@2500];

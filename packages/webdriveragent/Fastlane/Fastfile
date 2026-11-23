@@ -8,7 +8,8 @@ lane :test do
     scheme: ENV['SCHEME'],
     sdk: ENV['SDK'],
     device: ENV['DEVICE'],
-    number_of_retries: 3,
+    # Retries only re-run the failed tests; each extra attempt of a stuck test costs minutes
+    number_of_retries: 2,
     # Forwarded into the on-simulator test process via each scheme's CI
     # LaunchAction environment variable, since xcodebuild does not propagate
     # the calling shell's environment to the app under test on its own.

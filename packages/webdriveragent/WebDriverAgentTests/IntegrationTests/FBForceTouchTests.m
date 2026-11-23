@@ -25,6 +25,13 @@
 
 @implementation FBForceTouchTests
 
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0") && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testForceTap"],
+            @"FIXME: Unstable on platform version 27.");
+  XCTSkipIf(![XCUIDevice sharedDevice].supportsPressureInteraction, @"Device does not support pressure interaction");
+}
+
 - (void)verifyForceTapWithOrientation:(UIDeviceOrientation)orientation
 {
   [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation];
@@ -57,31 +64,16 @@
 
 - (void)testForceTap
 {
-  XCTSkipIf(SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"27.0"),
-            @"FIXME: Unstable on platform version 27.");
-
-  if (![XCUIDevice sharedDevice].supportsPressureInteraction) {
-    XCTSkip(@"Device does not support pressure interaction");
-  }
-
   [self verifyForceTapWithOrientation:UIDeviceOrientationPortrait];
 }
 
 - (void)testForceTapInLandscapeLeft
 {
-  if (![XCUIDevice sharedDevice].supportsPressureInteraction) {
-    XCTSkip(@"Device does not support pressure interaction");
-  }
-
   [self verifyForceTapWithOrientation:UIDeviceOrientationLandscapeLeft];
 }
 
 - (void)testForceTapInLandscapeRight
 {
-  if (![XCUIDevice sharedDevice].supportsPressureInteraction) {
-    XCTSkip(@"Device does not support pressure interaction");
-  }
-
   [self verifyForceTapWithOrientation:UIDeviceOrientationLandscapeRight];
 }
 

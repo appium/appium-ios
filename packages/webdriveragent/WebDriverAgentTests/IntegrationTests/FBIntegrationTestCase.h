@@ -36,6 +36,12 @@ extern NSArray<NSString *> *const FBMainViewButtonLabels;
 + (BOOL)isRunningInCI;
 
 /**
+ Override to XCTSkip the running test (see self.invocation.selector) when it is unsupported
+ on this device/OS/CI. Called from setUp before the app is launched, so skipped tests stay cheap.
+ */
+- (void)skipIfUnsupported;
+
+/**
  Launches application and resets side effects of testing like orientation etc.
  */
 - (void)launchApplication;

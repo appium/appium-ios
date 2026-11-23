@@ -49,6 +49,24 @@
 
 @implementation FBDisplayGestureTests
 
+// Skipped before the (slow) app launch
+- (void)skipIfUnsupported
+{
+  NSString *name = NSStringFromSelector(self.invocation.selector);
+  if ([name containsString:@"FoldStates"]) {
+    XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  }
+  NSArray<NSString *> *multiDisplayTests = @[
+    @"testNativeCoordinatesRejectMismatchedWindowDisplay",
+    @"testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp",
+    @"testWindowAnchorCacheDoesNotHideAnotherApplicationsFailure",
+    @"testMixedOriginsRejectAnElementOnAnotherDisplay",
+  ];
+  if ([multiDisplayTests containsObject:name]) {
+    XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
+  }
+}
+
 - (void)setUp
 {
   [super setUp];

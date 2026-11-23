@@ -230,18 +230,33 @@ jobs:
       - uses: ./.github/actions/webdriveragent-xcode-setup
         with:
           xcode_version: ${{ matrix.config.xcode_version }}
-      # - name: Start iOS Simulator UI
-      #   run: open -Fn "$(xcode-select --print-path)/Applications/Simulator.app"
-      # - name: Prepare iOS simulator
-      #   id: prepareSimulator
-      #   uses: futureware-tech/simulator-action@v4
-      #   with:
-      #     model: "${{ matrix.config.dest == 'iphone' && matrix.config.iphone_model || matrix.config.ipad_model }}"
-      #     os_version: "${{ matrix.config.ios_version }}"
-      #     shutdown_after_job: false
-      #     wait_for_boot: true
-      # - name: Finalize iOS simulator boot
-      #   run: xcrun --sdk iphonesimulator --show-sdk-version
+      # Start booting the target simulator now (no wait): a cold boot on a fresh runner otherwise
+      # delays the first test by several minutes after the build. Best effort - xcodebuild boots
+      # the device itself if this fails.
+      - name: Pre-boot simulator
+        continue-on-error: true
+        run: |
+          case "$DEST" in
+            iphone) MODEL="$IPHONE_MODEL"; PLATFORM=iOS; VERSION="$IOS_VERSION" ;;
+            ipad) MODEL="$IPAD_MODEL"; PLATFORM=iOS; VERSION="$IOS_VERSION" ;;
+            tv) MODEL="$TV_MODEL"; PLATFORM=tvOS; VERSION="$TV_VERSION" ;;
+            watch) MODEL="$WATCH_MODEL"; PLATFORM=watchOS; VERSION="$WATCH_VERSION" ;;
+          esac
+          MODEL="${MODEL//\'/}"
+          RUNTIME="com.apple.CoreSimulator.SimRuntime.${PLATFORM}-${VERSION//./-}"
+          UDID="$(xcrun simctl list devices available -j | jq -r --arg rt "$RUNTIME" --arg name "$MODEL" \
+            '.devices[$rt] // [] | map(select(.name == $name)) | first | .udid // empty')"
+          if [ -z "$UDID" ]; then echo "No simulator '$MODEL' for $RUNTIME, leaving it to xcodebuild"; exit 0; fi
+          xcrun simctl boot "$UDID" || true
+        env:
+          DEST: ${{ matrix.config.dest }}
+          IPHONE_MODEL: ${{ matrix.config.iphone_model }}
+          IPAD_MODEL: ${{ matrix.config.ipad_model }}
+          IOS_VERSION: ${{ matrix.config.ios_version }}
+          TV_MODEL: ${{ matrix.config.tv_model }}
+          TV_VERSION: ${{ matrix.config.tv_version }}
+          WATCH_MODEL: ${{ matrix.config.watch_model }}
+          WATCH_VERSION: ${{ matrix.config.watch_version }}
       - name: Run integration test
         run: ./Scripts/build.sh
         env:

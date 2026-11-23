@@ -12,11 +12,13 @@
 
 #import "FBElementCache.h"
 #import "FBMathUtils.h"
+#import "FBRunLoopSpinner.h"
 #import "FBTestMacros.h"
 #import "XCUIApplication+FBTouchAction.h"
 #import "XCUICoordinate.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIElement+FBIsVisible.h"
+#import "XCUIElement+FBUtilities.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBTapTest : FBIntegrationTestCase
@@ -26,16 +28,42 @@
 
 @implementation FBTapTest
 
-- (void)verifyTapWithOrientation:(UIDeviceOrientation)orientation
+// One launch covers all orientations: re-launching per orientation only added ~10s each.
+- (NSArray<NSNumber *> *)orientations
+{
+  NSMutableArray<NSNumber *> *result = [NSMutableArray arrayWithObjects:
+                                        @(UIDeviceOrientationPortrait),
+                                        @(UIDeviceOrientationLandscapeLeft),
+                                        @(UIDeviceOrientationLandscapeRight), nil];
+  // Upside-down is unsupported on iPad
+  if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPad) {
+    [result addObject:@(UIDeviceOrientationPortraitUpsideDown)];
+  }
+  return result;
+}
+
+- (void)verifyTapWithOrientation:(UIDeviceOrientation)orientation byCoordinates:(BOOL)byCoordinates
 {
   [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation];
-  [self.testedApplication.buttons[FBShowAlertButtonName] tap];
-  FBAssertWaitTillBecomesTrue(self.testedApplication.alerts.count > 0);
+  // The app is not re-launched between orientations, so let it finish re-laying out first
+  [self.testedApplication fb_waitUntilStable];
+  XCUIElement *dstButton = self.testedApplication.buttons[FBShowAlertButtonName];
+  FBAssertWaitTillBecomesTrue(dstButton.isHittable);
+  if (byCoordinates) {
+    [[dstButton coordinateWithNormalizedOffset:CGVectorMake(0.5, 0.5)] tap];
+  } else {
+    [dstButton tap];
+  }
+  BOOL alertShown = [[[FBRunLoopSpinner new] interval:1.0] spinUntilTrue:^BOOL{
+    return self.testedApplication.alerts.count > 0;
+  }];
+  XCTAssertTrue(alertShown, @"No alert after tapping in orientation %ld (by coordinates: %d)",
+                (long)orientation, byCoordinates);
+  [self clearAlert];
 }
 
 - (void)setUp
 {
-  // Launch the app everytime to ensure the orientation for each test.
   [super setUp];
   [self launchApplication];
   [self goToAlertsPage];
@@ -49,59 +77,18 @@
   [super tearDown];
 }
 
-- (void)testTap
+- (void)testTapInAllOrientations
 {
-  [self verifyTapWithOrientation:UIDeviceOrientationPortrait];
-}
-
-- (void)testTapInLandscapeLeft
-{
-  [self verifyTapWithOrientation:UIDeviceOrientationLandscapeLeft];
-}
-
-- (void)testTapInLandscapeRight
-{
-
-  [self verifyTapWithOrientation:UIDeviceOrientationLandscapeRight];
-}
-
-- (void)testTapInPortraitUpsideDown
-{
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    XCTSkip(@"Failed on Azure Pipeline. Local run succeeded.");
+  for (NSNumber *orientation in self.orientations) {
+    [self verifyTapWithOrientation:orientation.integerValue byCoordinates:NO];
   }
-  [self verifyTapWithOrientation:UIDeviceOrientationPortraitUpsideDown];
 }
 
-- (void)verifyTapByCoordinatesWithOrientation:(UIDeviceOrientation)orientation
+- (void)testTapCoordinatesInAllOrientations
 {
-  [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation];
-  XCUIElement *dstButton = self.testedApplication.buttons[FBShowAlertButtonName];
-  [[dstButton coordinateWithNormalizedOffset:CGVectorMake(0.5, 0.5)] tap];
-  FBAssertWaitTillBecomesTrue(self.testedApplication.alerts.count > 0);
-}
-
-- (void)testTapCoordinates
-{
-  [self verifyTapByCoordinatesWithOrientation:UIDeviceOrientationPortrait];
-}
-
-- (void)testTapCoordinatesInLandscapeLeft
-{
-  [self verifyTapByCoordinatesWithOrientation:UIDeviceOrientationLandscapeLeft];
-}
-
-- (void)testTapCoordinatesInLandscapeRight
-{
-  [self verifyTapByCoordinatesWithOrientation:UIDeviceOrientationLandscapeRight];
-}
-
-- (void)testTapCoordinatesInPortraitUpsideDown
-{
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    XCTSkip(@"Failed on Azure Pipeline. Local run succeeded.");
+  for (NSNumber *orientation in self.orientations) {
+    [self verifyTapWithOrientation:orientation.integerValue byCoordinates:YES];
   }
-  [self verifyTapByCoordinatesWithOrientation:UIDeviceOrientationPortraitUpsideDown];
 }
 
 // Element-less absolute offsets are never rescaled by XCTest's XCUICoordinate (verified by
