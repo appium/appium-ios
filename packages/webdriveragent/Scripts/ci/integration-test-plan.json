@@ -2,9 +2,7 @@
   "_comment": "iPhone chunks must cover every test class exactly once (checked by check-integration-test-plan.mjs). The iPad job's tests are declared by the +iPadTests class methods in the test sources.",
   "iphone": [
     {
-      "IntegrationTests_1": [
-        "FBIntegrationAppTests"
-      ],
+      "IntegrationTests_1": ["FBIntegrationAppTests"],
       "IntegrationTests_2": [
         "FBConfigurationTests",
         "XCElementSnapshotHelperTests",
@@ -61,17 +59,10 @@
         "XCUIElementFBFindTests_ResponseFields",
         "XCUIElementFBFindTests_ScrollPage"
       ],
-      "IntegrationTests_3": [
-        "FBScreenTests",
-        "FBVoiceOverTests",
-        "FBW3CTouchActionsIntegrationTestsPart2"
-      ]
+      "IntegrationTests_3": ["FBScreenTests", "FBVoiceOverTests", "FBW3CTouchActionsIntegrationTestsPart2"]
     },
     {
-      "IntegrationTests_1": [
-        "FBFailureProofTestCaseTests",
-        "FBScrollingTests"
-      ],
+      "IntegrationTests_1": ["FBFailureProofTestCaseTests", "FBScrollingTests"],
       "IntegrationTests_2": [
         "FBW3CTypeActionsTests",
         "XCElementSnapshotHelperTests_AttributePage",
@@ -82,11 +73,7 @@
         "XCUIElementFBFindTests_CompactResponses",
         "XCUIElementFBFindTests_StaleAppSnapshot"
       ],
-      "IntegrationTests_3": [
-        "FBAutoAlertsHandlerTests",
-        "FBElementSwipingTests",
-        "FBTapTest"
-      ]
+      "IntegrationTests_3": ["FBAutoAlertsHandlerTests", "FBElementSwipingTests", "FBTapTest"]
     }
   ]
 }

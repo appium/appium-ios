@@ -18,9 +18,12 @@ const pbxproj = readFileSync(path.join(ROOT, 'WebDriverAgent.xcodeproj/project.p
 
 /** Source file names compiled into a bundle, from its Sources build phase. */
 function bundleSources(bundle) {
-  const target = pbxproj.match(new RegExp(`/\\* ${bundle} \\*/ = \\{\\s*isa = PBXNativeTarget;[\\s\\S]*?buildPhases = \\(([\\s\\S]*?)\\);`));
+  const target = pbxproj.match(
+    new RegExp(`/\\* ${bundle} \\*/ = \\{\\s*isa = PBXNativeTarget;[\\s\\S]*?buildPhases = \\(([\\s\\S]*?)\\);`),
+  );
   const phaseId = target?.[1].match(/(\w{24}) \/\* Sources \*\//)?.[1];
-  const phase = phaseId && pbxproj.match(new RegExp(`${phaseId} /\\* Sources \\*/ = \\{[\\s\\S]*?files = \\(([\\s\\S]*?)\\);`));
+  const phase =
+    phaseId && pbxproj.match(new RegExp(`${phaseId} /\\* Sources \\*/ = \\{[\\s\\S]*?files = \\(([\\s\\S]*?)\\);`));
   if (!phase) {
     throw new Error(`Cannot find the Sources phase of ${bundle}`);
   }
@@ -69,7 +72,9 @@ for (const bundle of BUNDLES) {
     return new Set([...cls.tests, ...(cls.superclass ? tests(cls.superclass, seen) : [])]);
   };
   bundles[bundle] = Object.fromEntries(
-    Object.keys(all).map((name) => [name, tests(name)]).filter(([, t]) => t.size > 0),
+    Object.keys(all)
+      .map((name) => [name, tests(name)])
+      .filter(([, t]) => t.size > 0),
   );
   ipadTests[bundle] = Object.entries(all)
     .filter(([name, cls]) => cls.ipad.length > 0 && bundles[bundle][name])
@@ -77,8 +82,18 @@ for (const bundle of BUNDLES) {
 }
 
 if (process.argv.includes('--dump')) {
-  console.log(JSON.stringify(Object.fromEntries(Object.entries(bundles).map(([b, c]) =>
-    [b, Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v.size]))])), null, 1));
+  console.log(
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(bundles).map(([b, c]) => [
+          b,
+          Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v.size])),
+        ]),
+      ),
+      null,
+      1,
+    ),
+  );
   process.exit(0);
 }
 

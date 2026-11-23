@@ -102,6 +102,12 @@ jobs:
         fi
       env:
         PLATFORM_VERSION: ${{matrix.test_targets.PLATFORM_VERSION}}
+    - uses: ./.github/actions/slim-simulator
+      if: matrix.test_targets.PLATFORM_NAME == 'iOS'
+      with:
+        platform: iOS
+        model: ${{matrix.test_targets.DEVICE_NAME}}
+        version: ${{matrix.test_targets.PLATFORM_VERSION}}
     - name: Prepare simulator
       id: prepareSimulator
       if: steps.tvos.outputs.skip != 'true'
@@ -111,6 +117,8 @@ jobs:
         os: '${{matrix.test_targets.PLATFORM_NAME}}'
         os_version: '${{matrix.test_targets.PLATFORM_VERSION}}'
         shutdown_after_job: false
+        # Fresh runner, nothing to erase; erasing would also drop slim-simulator's disabled.plist
+        erase_before_boot: false
         wait_for_boot: true
         settle_timeout_seconds: 60
         settle_cpu_threshold_percent: 30
