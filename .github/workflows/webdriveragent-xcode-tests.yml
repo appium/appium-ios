@@ -329,19 +329,6 @@ jobs:
         env:
           TV_MODEL: ${{ matrix.config.tv_model }}
           TV_VERSION: ${{ matrix.config.tv_version }}
-      # Boot (and let it settle) in a separate step so the cold boot does not compete with
-      # xcodebuild for CPU and delay the first test.
-      - name: Prepare simulator
-        if: steps.tvos.outputs.skip != 'true'
-        uses: futureware-tech/simulator-action@v6
-        with:
-          model: ${{ matrix.config.dest == 'iphone' && matrix.config.iphone_model || matrix.config.dest == 'ipad' && matrix.config.ipad_model || matrix.config.dest == 'tv' && matrix.config.tv_model || matrix.config.watch_model }}
-          os: ${{ matrix.config.dest == 'tv' && 'tvOS' || matrix.config.dest == 'watch' && 'watchOS' || 'iOS' }}
-          os_version: ${{ matrix.config.dest == 'tv' && matrix.config.tv_version || matrix.config.dest == 'watch' && matrix.config.watch_version || matrix.config.ios_version }}
-          shutdown_after_job: false
-          wait_for_boot: true
-          settle_timeout_seconds: 60
-          settle_cpu_threshold_percent: 70
       - uses: actions/download-artifact@v8
         if: steps.tvos.outputs.skip != 'true'
         with:

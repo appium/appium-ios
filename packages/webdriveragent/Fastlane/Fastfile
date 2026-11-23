@@ -8,6 +8,8 @@ lane :test do
   run_tests(
     xctestrun: xctestrun,
     only_testing: only_testing,
+    # The prebuilt products already resolved packages; skips a slow xcodebuild call
+    skip_package_dependencies_resolution: !xctestrun.nil?,
     project: XC_PROJECT,
     fail_build: true,
     scheme: ENV['SCHEME'],
