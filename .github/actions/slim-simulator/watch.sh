@@ -9,12 +9,7 @@ bootout_all() {
   xcrun simctl spawn "$udid" killall diagnosticd >/dev/null 2>&1
 }
 
-for _ in $(seq 1 450); do   # up to 15 min for the device to boot
-  if xcrun simctl spawn "$udid" launchctl list >/dev/null 2>&1; then
-    sleep 20; bootout_all; echo "pass 1 done"
-    sleep 40; bootout_all; echo "pass 2 done"
-    exit 0
-  fi
-  sleep 2
-done
-echo "device $udid never booted"
+# Without -b this only waits (also for a device that is not booted yet) until boot completes
+xcrun simctl bootstatus "$udid" >/dev/null 2>&1
+bootout_all; echo "pass 1 done"
+sleep 40; bootout_all; echo "pass 2 done"   # catch respawns
