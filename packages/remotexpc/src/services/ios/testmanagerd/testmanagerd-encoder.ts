@@ -21,17 +21,9 @@ export class TestmanagerdEncoder extends NSKeyedArchiverEncoder {
     if (isPlainObject(value)) {
       switch (value.__type) {
         case 'NSUUID':
-          if (typeof value.uuid !== 'string') {
-            throw new Error('NSUUID marker requires a string uuid');
-          }
-          return this.archiveNSUUID(value.uuid);
-        case 'XCTCapabilities': {
-          const capabilities = value.capabilities ?? {};
-          if (!isPlainObject(capabilities)) {
-            throw new Error('XCTCapabilities marker requires a capabilities object');
-          }
-          return this.archiveXCTCapabilities(capabilities);
-        }
+          return this.archiveNSUUID(value.uuid as string);
+        case 'XCTCapabilities':
+          return this.archiveXCTCapabilities((value.capabilities ?? {}) as Record<string, unknown>);
       }
     }
 

@@ -21,15 +21,3 @@ export function formatValue(value: unknown): string {
       return inspect(value);
   }
 }
-
-/**
- * Formats a plist value as JSON for messages. Bigint values (DTX INT64) are written as strings,
- * since `JSON.stringify` throws on them, and values JSON cannot represent, such as `undefined`,
- * fall back to {@link formatValue}.
- */
-export function formatJson(value: unknown): string {
-  if (typeof value === 'bigint') {
-    return value.toString();
-  }
-  return JSON.stringify(value, (_key, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)) ?? formatValue(value);
-}

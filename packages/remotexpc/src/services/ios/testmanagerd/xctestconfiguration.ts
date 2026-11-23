@@ -77,17 +77,10 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
 
     if (isPlainObject(value)) {
       if (value.__type === 'NSURL') {
-        const {base, relative} = value;
-        if ((base != null && typeof base !== 'string') || typeof relative !== 'string') {
-          throw new Error('NSURL marker requires a string relative and a string or null base');
-        }
-        return this.archiveNSURL(base ?? null, relative);
+        return this.archiveNSURL(value.base as string | null, value.relative as string);
       }
       if (value.__type === 'XCTestConfiguration') {
-        if (!isPlainObject(value.fields)) {
-          throw new Error('XCTestConfiguration marker requires a fields object');
-        }
-        return this.archiveXCTestConfiguration(value.fields);
+        return this.archiveXCTestConfiguration(value.fields as Record<string, unknown>);
       }
     }
 

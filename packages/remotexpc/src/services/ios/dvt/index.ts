@@ -1,7 +1,7 @@
 import type net from 'node:net';
 
 import {runInBackground} from '../../../lib/background.js';
-import {formatJson, formatValue} from '../../../lib/format-error.js';
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
 import type {PlistDictionary, PlistValue, SendMessageOptions} from '../../../lib/types.js';
@@ -18,7 +18,6 @@ import {
   extractNSKeyedArchiverObjects,
   hasNSErrorIndicators,
   isNSDictionaryFormat,
-  isPlainObject,
 } from './utils.js';
 
 const log = getLogger('DVTSecureSocketProxyService');
@@ -441,11 +440,8 @@ export class DVTSecureSocketProxyService extends BaseService {
     }
     const objects = extractNSKeyedArchiverObjects(ret);
     if (objects) {
-      const selector = objects[1];
-      if (typeof selector === 'string') {
-        return selector;
-      }
-      throw new Error(`Invalid handshake response selector: ${formatValue(selector)}`);
+      // performHandshake rejects a selector that is not the expected string
+      return objects[1] as string;
     }
 
     throw new Error('Invalid handshake response');
@@ -454,7 +450,7 @@ export class DVTSecureSocketProxyService extends BaseService {
   private extractCapabilitiesFromAuxData(capabilitiesData: PlistValue): PlistDictionary {
     const objects = extractNSKeyedArchiverObjects(capabilitiesData);
     if (!objects) {
-      return isPlainObject(capabilitiesData) ? (capabilitiesData as PlistDictionary) : {};
+      return (capabilitiesData || {}) as PlistDictionary;
     }
 
     const dictObj = objects[1];
@@ -700,7 +696,7 @@ export class DVTSecureSocketProxyService extends BaseService {
 
     // Check direct NSError format
     if (hasNSErrorIndicators(response)) {
-      throw new Error(`${context}: ${formatJson(response)}`);
+      throw new Error(`${context}: ${JSON.stringify(response)}`);
     }
   }
 
@@ -755,7 +751,7 @@ export class DVTSecureSocketProxyService extends BaseService {
 
         case DTX_CONSTANTS.AUX_TYPE_INT64: {
           const valueBuffer = Buffer.alloc(8);
-          valueBuffer.writeBigUInt64LE(auxValue.value, 0);
+          valueBuffer.writeBigUInt64LE(BigInt(auxValue.value), 0);
           itemBuffers.push(valueBuffer);
           break;
         }

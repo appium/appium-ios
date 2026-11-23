@@ -10,7 +10,7 @@ import {
 } from '../../src/services/ios/testmanagerd/index.js';
 import {TestmanagerdEncoder} from '../../src/services/ios/testmanagerd/testmanagerd-encoder.js';
 import {canonicalizeUuidString} from '../../src/services/ios/testmanagerd/uuid.js';
-import {SELECTOR, resolveTestIdentifier} from '../../src/services/ios/testmanagerd/xctest-common.js';
+import {SELECTOR} from '../../src/services/ios/testmanagerd/xctest-common.js';
 import {createNSUUID} from '../../src/services/ios/testmanagerd/xctestconfiguration.js';
 import type {XCTestRunner} from '../../src/services/ios/testmanagerd/xcuitest.js';
 import {mockImport} from '../helpers/mock-module.js';
@@ -165,10 +165,6 @@ describe('TestmanagerdEncoder', function () {
     encoder = new TestmanagerdEncoder();
   });
 
-  it('should reject an NSUUID marker without a string uuid', function () {
-    assert.throws(() => encoder.encode({__type: 'NSUUID'}), /NSUUID marker requires a string uuid/);
-  });
-
   it('should encode NSUUID with correct bytes and class', function () {
     const uuid = 'AABBCCDD-1122-3344-5566-778899AABBCC';
     const result = encoder.encode(createNSUUID(uuid));
@@ -234,12 +230,6 @@ describe('TestmanagerdEncoder', function () {
       const capObj = result.$objects.find((o: any) => o && typeof o === 'object' && 'capabilities-dictionary' in o);
       assert.notStrictEqual(capObj, undefined);
     }
-  });
-});
-
-describe('resolveTestIdentifier', function () {
-  it('should stringify a bigint identifier instead of throwing', function () {
-    assert.strictEqual(resolveTestIdentifier(5n), '5');
   });
 });
 

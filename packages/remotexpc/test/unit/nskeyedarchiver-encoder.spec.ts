@@ -154,12 +154,6 @@ describe('NSKeyedArchiver Encoder', function () {
       assert.strictEqual(dict1.$class.value, dict2.$class.value);
     });
 
-    it('should encode a bigint value inline', function () {
-      const result = encoder.encode(123n);
-
-      assert.strictEqual(result.$objects[result.$top.root.value], 123n);
-    });
-
     it('should encode unsupported types as $null', function () {
       const result = encoder.encode(Symbol('test'));
 

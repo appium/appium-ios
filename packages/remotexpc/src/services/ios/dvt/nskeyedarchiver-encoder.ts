@@ -39,7 +39,7 @@ export class NSKeyedArchiverEncoder {
       return index;
     }
 
-    if (typeof value === 'number' || typeof value === 'bigint') {
+    if (typeof value === 'number') {
       const index = this.objects.length;
       this.objects.push(value);
       return index;

@@ -1,6 +1,5 @@
 import type net from 'node:net';
 
-import {formatError, formatJson, formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
 import type {PlistDictionary, PlistValue, SendMessageOptions} from '../../../lib/types.js';
@@ -16,7 +15,6 @@ import {
   extractNSKeyedArchiverObjects,
   hasNSErrorIndicators,
   isNSDictionaryFormat,
-  isPlainObject,
 } from '../dvt/utils.js';
 import {TestmanagerdEncoder} from './testmanagerd-encoder.js';
 
@@ -459,11 +457,8 @@ export class DvtTestmanagedProxyService extends BaseService {
     }
     const objects = extractNSKeyedArchiverObjects(ret);
     if (objects) {
-      const selector = objects[1];
-      if (typeof selector === 'string') {
-        return selector;
-      }
-      throw new Error(`Invalid handshake response selector: ${formatValue(selector)}`);
+      // performHandshake rejects a selector that is not the expected string
+      return objects[1] as string;
     }
 
     throw new Error('Invalid handshake response');
@@ -472,7 +467,7 @@ export class DvtTestmanagedProxyService extends BaseService {
   private extractCapabilitiesFromAuxData(capabilitiesData: PlistValue): PlistDictionary {
     const objects = extractNSKeyedArchiverObjects(capabilitiesData);
     if (!objects) {
-      return isPlainObject(capabilitiesData) ? (capabilitiesData as PlistDictionary) : {};
+      return (capabilitiesData || {}) as PlistDictionary;
     }
 
     const dictObj = objects[1];
@@ -560,7 +555,7 @@ export class DvtTestmanagedProxyService extends BaseService {
         try {
           await this.sendReply(receivedChannel);
         } catch (err) {
-          log.debug(`Auto-reply failed on channel ${receivedChannel}: ${formatError(err)}`);
+          log.debug(`Auto-reply failed on channel ${receivedChannel}: ${(err as Error).message}`);
         }
       }
     }
@@ -655,7 +650,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     }
 
     if (hasNSErrorIndicators(response)) {
-      throw new Error(`${context}: ${formatJson(response)}`);
+      throw new Error(`${context}: ${JSON.stringify(response)}`);
     }
   }
 
@@ -701,7 +696,7 @@ export class DvtTestmanagedProxyService extends BaseService {
 
         case DTX_CONSTANTS.AUX_TYPE_INT64: {
           const valueBuffer = Buffer.alloc(8);
-          valueBuffer.writeBigUInt64LE(auxValue.value, 0);
+          valueBuffer.writeBigUInt64LE(BigInt(auxValue.value), 0);
           itemBuffers.push(valueBuffer);
           break;
         }

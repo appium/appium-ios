@@ -102,8 +102,8 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    // Handle Buffer/binary data (eg. screenshots) and dates, which hold no references
-    if (Buffer.isBuffer(obj) || obj instanceof Date) {
+    // Handle Buffer/binary data (eg. screenshots)
+    if (Buffer.isBuffer(obj)) {
       this.decoded.set(index, obj);
       visited.delete(index);
       return obj;
@@ -114,15 +114,6 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    // A raw array holds literal members, so only UIDs are references (unlike NS.objects slots)
-    if (Array.isArray(obj)) {
-      const result = obj.map((member) => this.decodeMember(member, visited, depth));
-      this.decoded.set(index, result);
-      visited.delete(index);
-      return result;
-    }
-
-    // What is left is an archived object whose properties may hold UID references
     const record = obj as Record<string, PlistValue>;
 
     // Handle NSDictionary (NS.keys + NS.objects) - check this FIRST before NSArray
@@ -148,20 +139,17 @@ export class NSKeyedArchiverDecoder {
         continue; // Skip class metadata
       }
 
-      setDictionaryEntry(result, key, this.decodeMember(value, visited, depth));
+      const uid = toUidIndex(value);
+      setDictionaryEntry(
+        result,
+        key,
+        uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1),
+      );
     }
 
     this.decoded.set(index, result);
     visited.delete(index);
     return result;
-  }
-
-  /**
-   * Decode the object a UID member of an archived object or raw array points at, or return a literal member unchanged
-   */
-  private decodeMember(value: PlistValue, visited: Set<number>, depth: number): PlistValue {
-    const uid = toUidIndex(value);
-    return uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1);
   }
 
   /**

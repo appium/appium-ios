@@ -1,4 +1,3 @@
-import {formatJson} from '../../../lib/format-error.js';
 import {decodeNSKeyedArchiver} from '../dvt/nskeyedarchiver-decoder.js';
 import {isPlainObject} from '../dvt/utils.js';
 
@@ -137,7 +136,7 @@ export function resolveTestIdentifier(value: unknown): string {
   }
 
   // Last resort
-  return formatJson(value);
+  return JSON.stringify(value);
 }
 
 /**
@@ -335,7 +334,7 @@ export function parseCallback(selector: string, auxiliaries: unknown[]): XCTestE
     case SELECTOR.logDebugMessage:
       return {
         type: 'log',
-        message: typeof auxiliaries[0] === 'string' ? auxiliaries[0] : formatJson(auxiliaries[0]),
+        message: typeof auxiliaries[0] === 'string' ? auxiliaries[0] : JSON.stringify(auxiliaries[0]),
       };
 
     case SELECTOR.testRunnerReady:

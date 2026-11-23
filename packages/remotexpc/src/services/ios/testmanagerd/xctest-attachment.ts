@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 
-import {formatJson} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {TestmanagerdService} from '../../../lib/types.js';
 import * as Services from '../../../services.js';
@@ -89,7 +88,7 @@ function throwIfNSErrorReply(result: unknown, context: string): void {
     }
   }
   if (hasNSErrorIndicators(result)) {
-    throw new Error(`${context}: ${formatJson(result)}`);
+    throw new Error(`${context}: ${JSON.stringify(result)}`);
   }
 }
 
