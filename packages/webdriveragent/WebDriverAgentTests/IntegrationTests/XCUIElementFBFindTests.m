@@ -33,6 +33,12 @@
 
 @implementation XCUIElementFBFindTests
 
+// The iPad view hierarchy is nested differently
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"testDescendantsWithClassChainWithIndex"];
+}
+
 - (void)setUp
 {
   [super setUp];

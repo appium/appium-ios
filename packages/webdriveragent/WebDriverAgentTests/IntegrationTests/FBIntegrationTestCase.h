@@ -36,6 +36,20 @@ extern NSArray<NSString *> *const FBMainViewButtonLabels;
 + (BOOL)isRunningInCI;
 
 /**
+ Names of this class's tests that depend on the iPad form factor and so also run in the dedicated
+ iPad CI job (@[@"*"] for all of them). The iPhone jobs run every test. This is only metadata:
+ Scripts/ci/check-integration-test-plan.mjs reads the literal `return @[...]` of overrides to
+ build the iPad job's test list.
+ */
++ (NSArray<NSString *> *)iPadTests;
+
+/**
+ Override to XCTSkip the running test (see self.invocation.selector) when it is unsupported
+ on this device/OS/CI. Called from setUp before the app is launched, so skipped tests stay cheap.
+ */
+- (void)skipIfUnsupported;
+
+/**
  Launches application and resets side effects of testing like orientation etc.
  */
 - (void)launchApplication;

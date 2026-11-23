@@ -55,6 +55,7 @@ NSArray<NSString *> *const FBMainViewButtonLabels = @[
   // Enable it to get extended XCTest logs printed into the console
   // [FBConfiguration.sharedInstance enableXcTestDebugLogs];
   [super setUp];
+  [self skipIfUnsupported];
   [FBConfiguration.sharedInstance disableRemoteQueryEvaluation];
   [FBConfiguration.sharedInstance disableAttributeKeyPathAnalysis];
   [FBConfiguration.sharedInstance configureDefaultKeyboardPreferences];
@@ -63,6 +64,15 @@ NSArray<NSString *> *const FBMainViewButtonLabels = @[
   self.continueAfterFailure = NO;
   self.springboard = XCUIApplication.fb_systemApplication;
   self.testedApplication = [XCUIApplication new];
+}
+
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[];
+}
+
+- (void)skipIfUnsupported
+{
 }
 
 - (void)resetOrientation

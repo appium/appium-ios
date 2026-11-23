@@ -48,6 +48,7 @@ jobs:
 
     # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
     runs-on: ${{matrix.test_targets.HOST_OS}}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: packages/webdriveragent
@@ -68,11 +69,29 @@ jobs:
         mkdir -p ./Resources/WebDriverAgent.bundle
       name: Build
 
+    # tvOS simulators sometimes fail to load on the runner (xcodebuild then only sees placeholder
+    # destinations). Skip the tvOS legs with a warning instead of failing the job.
+    - name: Check tvOS simulator
+      id: tvos
+      if: matrix.test_targets.PLATFORM_NAME == 'tvOS'
+      run: |
+        DESTINATIONS="$(xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner_tvOS -showdestinations 2>/dev/null || true)"
+        if echo "$DESTINATIONS" | grep -F 'platform:tvOS Simulator' | grep -F "OS:$PLATFORM_VERSION" | grep -qF "name:$DEVICE_NAME"; then
+          echo "tvOS simulator '$DEVICE_NAME' ($PLATFORM_VERSION) is available"
+        else
+          echo "::warning::tvOS simulator '$DEVICE_NAME' ($PLATFORM_VERSION) failed to load, skipping the tvOS functional tests"
+          echo "$DESTINATIONS"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        fi
+      env:
+        DEVICE_NAME: ${{matrix.test_targets.DEVICE_NAME}}
+        PLATFORM_VERSION: ${{matrix.test_targets.PLATFORM_VERSION}}
     - run: xcrun simctl list devices available
       name: List Installed Simulators
     - run: xcrun simctl list runtimes
       name: List Runtimes
     - name: Start Simulator UI
+      if: steps.tvos.outputs.skip != 'true'
       # Xcode 27 replaced Simulator.app with DeviceHub.app, one directory level up from
       # Simulator.app's location (Contents/Applications instead of Contents/Developer/Applications).
       run: |
@@ -85,6 +104,7 @@ jobs:
         PLATFORM_VERSION: ${{matrix.test_targets.PLATFORM_VERSION}}
     - name: Prepare simulator
       id: prepareSimulator
+      if: steps.tvos.outputs.skip != 'true'
       uses: futureware-tech/simulator-action@v6
       with:
         model: '${{matrix.test_targets.DEVICE_NAME}}'
@@ -92,11 +112,12 @@ jobs:
         os_version: '${{matrix.test_targets.PLATFORM_VERSION}}'
         shutdown_after_job: false
         wait_for_boot: true
-        settle_timeout_seconds: 150
+        settle_timeout_seconds: 60
         settle_cpu_threshold_percent: 30
 
     - run: npm run e2e-test
       name: Run functional tests
+      if: steps.tvos.outputs.skip != 'true'
       env:
         CI: true
         _FORCE_LOGS: 1

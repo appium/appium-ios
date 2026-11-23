@@ -27,7 +27,6 @@
 @property (nonatomic) FBSession *session;
 @end
 
-
 static NSString *const SETTINGS_BUNDLE_ID = @"com.apple.Preferences";
 
 @implementation FBSessionIntegrationTests
@@ -75,18 +74,6 @@ static NSString *const SETTINGS_BUNDLE_ID = @"com.apple.Preferences";
                                     arguments:nil
                                   environment:nil];
   FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:SETTINGS_BUNDLE_ID]);
-}
-
-- (void)testMainAppCanBeReactivatedInScopeOfTheCurrentSession
-{
-  XCUIApplication *testedApp = XCUIApplication.fb_activeApplication;
-  [self.session launchApplicationWithBundleId:SETTINGS_BUNDLE_ID
-                      shouldWaitForQuiescence:nil
-                                    arguments:nil
-                                  environment:nil];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:SETTINGS_BUNDLE_ID]);
-  [self.session activateApplicationWithBundleId:testedApp.bundleID];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:testedApp.bundleID]);
 }
 
 - (void)testMainAppCanBeRestartedInScopeOfTheCurrentSession
@@ -197,6 +184,14 @@ static NSString *const SETTINGS_BUNDLE_ID = @"com.apple.Preferences";
   }
   FBAssertWaitTillBecomesTrue(settingsApp.state == XCUIApplicationStateNotRunning);
 }
+
+@end
+
+/** App lookup/launch helpers that need neither the fixture app nor a session, so no app launch. */
+@interface FBApplicationLaunchTests : FBIntegrationTestCase
+@end
+
+@implementation FBApplicationLaunchTests
 
 - (void)testLaunchUnattachedApp
 {

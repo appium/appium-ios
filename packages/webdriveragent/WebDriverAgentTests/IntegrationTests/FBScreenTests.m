@@ -76,10 +76,60 @@
 }
 @end
 
-@interface FBScreenTests : FBIntegrationTestCase
+/** Shared helpers; does not launch the app. */
+@interface FBScreenTestCase : FBIntegrationTestCase
+@end
+
+@implementation FBScreenTestCase
+
+- (void)tearDown
+{
+  FBConfiguration.sharedInstance.currentDisplayId = nil;
+  [super tearDown];
+}
+
+- (long long)unknownDisplayID
+{
+  long long maxID = 0;
+  for (NSDictionary<NSString *, id> *screen in [FBScreen screensWithError:nil]) {
+    maxID = MAX(maxID, [screen[@"displayId"] longLongValue]);
+  }
+  return maxID + 1;
+}
+
+- (NSDictionary *)screenInfoResponse
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/screen"]
+                                                  parameters:@{}
+                                                   arguments:@{}];
+  RouteResponse *response = [RouteResponse new];
+  [[FBCustomCommands handleGetScreen:request] dispatchWithResponse:response];
+  return [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+}
+
+@end
+
+/** Display lookup logic that does not need the app under test, so it skips the app launch. */
+@interface FBScreenLookupTests : FBScreenTestCase
+@end
+
+/** Screen metadata that depends on the fixture app being in the foreground. */
+@interface FBScreenTests : FBScreenTestCase
 @end
 
 @implementation FBScreenTests
+
+// iPad status bar / landscape-native panel metadata
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
+- (void)skipIfUnsupported
+{
+  XCTSkipIf([NSStringFromSelector(self.invocation.selector) isEqualToString:@"testScreenInfoAcrossFoldStates"]
+            && !XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+}
 
 - (void)setUp
 {
@@ -87,11 +137,94 @@
   [self launchApplication];
 }
 
-- (void)tearDown
+- (void)testScreenInfoAcrossPortraitAndLandscapeOrientations
 {
-  FBConfiguration.sharedInstance.currentDisplayId = nil;
-  [super tearDown];
+  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
+            @"Foldable orientations are covered by testScreenInfoAcrossFoldStates");
+  XCUIElement *window = self.testedApplication.windows.firstMatch;
+  (void)window.frame;
+  XCTSkipIf(window.screen.displayID != XCUIScreen.mainScreen.displayID,
+            @"Requires the fixture on the main display");
+  [self addTeardownBlock:^{
+    [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationPortrait];
+  }];
+  BOOL expectsVisibleBar = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
+  for (NSNumber *orientation in @[@(UIDeviceOrientationPortrait),
+                                   @(UIDeviceOrientationLandscapeLeft),
+                                   @(UIDeviceOrientationLandscapeRight),
+                                   @(UIDeviceOrientationPortrait)]) {
+    XCTAssertTrue([[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation.integerValue]);
+    __block NSDictionary *info = nil;
+    BOOL isPortrait = UIDeviceOrientationIsPortrait(orientation.integerValue);
+    // Include portrait before and after rotation: landscape-native iPad panels
+    // must swap their screen bounds back and retain the visible top status bar.
+    // Wait for rotation rather than accepting a transient zero crop.
+    XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL {
+      info = [self screenInfoResponse];
+      double width = [info[@"screenSize"][@"width"] doubleValue];
+      double height = [info[@"screenSize"][@"height"] doubleValue];
+      double barWidth = [info[@"statusBarSize"][@"width"] doubleValue];
+      double barHeight = [info[@"statusBarSize"][@"height"] doubleValue];
+      if (nil != info[@"error"] || width <= 0 || height <= 0
+          || (isPortrait ? width >= height : width <= height)) {
+        return NO;
+      }
+      if (barHeight == 0) {
+        return !expectsVisibleBar && !isPortrait && barWidth == 0;
+      }
+      return barHeight > 0 && barHeight < height && fabs(barWidth - width) <= 1;
+    }], @"Unexpected screen metadata at orientation %@: %@", orientation, info);
+  }
 }
+
+- (void)testScreenInfoAcrossFoldStates
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  NSError *error = nil;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:&error];
+  XCTAssertNotNil(originalAngle, @"%@", error);
+  [self addTeardownBlock:^{
+    if (nil != originalAngle) {
+      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+    }
+  }];
+  for (NSNumber *angle in @[@0, @90, @180, @0]) {
+    [self.testedApplication terminate];
+    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
+    [self launchApplication];
+    XCUIElement *window = self.testedApplication.windows.firstMatch;
+    CGRect frame = window.frame;
+    FBConfiguration.sharedInstance.currentDisplayId = @(window.screen.displayID);
+    __block NSDictionary *info = nil;
+    XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL {
+      info = [self screenInfoResponse];
+      double width = [info[@"screenSize"][@"width"] doubleValue];
+      double height = [info[@"screenSize"][@"height"] doubleValue];
+      double barHeight = [info[@"statusBarSize"][@"height"] doubleValue];
+      return nil == info[@"error"] && fabs(width - frame.size.width) <= 1
+        && fabs(height - frame.size.height) <= 1
+        && barHeight >= 0 && barHeight < height
+        && (barHeight == 0 || fabs([info[@"statusBarSize"][@"width"] doubleValue] - width) <= 1)
+        && (angle.doubleValue == 0 || barHeight == 0);
+    }], @"Unexpected screen metadata at hinge angle %@: %@", angle, info);
+  }
+}
+
+- (void)testScreenInfoIncludesTopStatusBarOnSingleDisplay
+{
+  XCTSkipIf([FBScreen screensWithError:nil].count != 1, @"Requires a single-display device");
+  // The integration fixture uses the ordinary visible portrait status bar.
+  // An unresolved XCUIElement has displayID == 0; it must not be filtered out.
+  NSDictionary *info = [self screenInfoResponse];
+  XCTAssertGreaterThan([info[@"statusBarSize"][@"height"] doubleValue], 0);
+  XCTAssertEqualWithAccuracy([info[@"statusBarSize"][@"width"] doubleValue],
+                            [info[@"screenSize"][@"width"] doubleValue], 1);
+}
+
+@end
+
+@implementation FBScreenLookupTests
 
 - (void)testDisplayID
 {
@@ -324,29 +457,12 @@
   XCTAssertTrue([error.localizedDescription containsString:@"Available display ids"]);
 }
 
-- (long long)unknownDisplayID
-{
-  long long maxID = 0;
-  for (NSDictionary<NSString *, id> *screen in [FBScreen screensWithError:nil]) {
-    maxID = MAX(maxID, [screen[@"displayId"] longLongValue]);
-  }
-  return maxID + 1;
-}
 
 - (void)testScreenScale
 {
   XCTAssertTrue([FBScreen scale] >= 2);
 }
 
-- (NSDictionary *)screenInfoResponse
-{
-  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/screen"]
-                                                  parameters:@{}
-                                                   arguments:@{}];
-  RouteResponse *response = [RouteResponse new];
-  [[FBCustomCommands handleGetScreen:request] dispatchWithResponse:response];
-  return [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
-}
 
 - (void)testScreenInfoFollowsDisplaySelection
 {
@@ -389,89 +505,7 @@
   XCTAssertTrue([info[@"message"] containsString:@"Available display ids"]);
 }
 
-- (void)testScreenInfoAcrossPortraitAndLandscapeOrientations
-{
-  XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
-            @"Foldable orientations are covered by testScreenInfoAcrossFoldStates");
-  XCUIElement *window = self.testedApplication.windows.firstMatch;
-  (void)window.frame;
-  XCTSkipIf(window.screen.displayID != XCUIScreen.mainScreen.displayID,
-            @"Requires the fixture on the main display");
-  [self addTeardownBlock:^{
-    [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationPortrait];
-  }];
-  BOOL expectsVisibleBar = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
-  for (NSNumber *orientation in @[@(UIDeviceOrientationPortrait),
-                                   @(UIDeviceOrientationLandscapeLeft),
-                                   @(UIDeviceOrientationLandscapeRight),
-                                   @(UIDeviceOrientationPortrait)]) {
-    XCTAssertTrue([[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation.integerValue]);
-    __block NSDictionary *info = nil;
-    BOOL isPortrait = UIDeviceOrientationIsPortrait(orientation.integerValue);
-    // Include portrait before and after rotation: landscape-native iPad panels
-    // must swap their screen bounds back and retain the visible top status bar.
-    // Wait for rotation rather than accepting a transient zero crop.
-    XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL {
-      info = [self screenInfoResponse];
-      double width = [info[@"screenSize"][@"width"] doubleValue];
-      double height = [info[@"screenSize"][@"height"] doubleValue];
-      double barWidth = [info[@"statusBarSize"][@"width"] doubleValue];
-      double barHeight = [info[@"statusBarSize"][@"height"] doubleValue];
-      if (nil != info[@"error"] || width <= 0 || height <= 0
-          || (isPortrait ? width >= height : width <= height)) {
-        return NO;
-      }
-      if (barHeight == 0) {
-        return !expectsVisibleBar && !isPortrait && barWidth == 0;
-      }
-      return barHeight > 0 && barHeight < height && fabs(barWidth - width) <= 1;
-    }], @"Unexpected screen metadata at orientation %@: %@", orientation, info);
-  }
-}
 
-- (void)testScreenInfoAcrossFoldStates
-{
-  XCUIDevice *device = XCUIDevice.sharedDevice;
-  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
-  NSError *error = nil;
-  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:&error];
-  XCTAssertNotNil(originalAngle, @"%@", error);
-  [self addTeardownBlock:^{
-    if (nil != originalAngle) {
-      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
-    }
-  }];
-  for (NSNumber *angle in @[@0, @90, @180, @0]) {
-    [self.testedApplication terminate];
-    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
-    [self launchApplication];
-    XCUIElement *window = self.testedApplication.windows.firstMatch;
-    CGRect frame = window.frame;
-    FBConfiguration.sharedInstance.currentDisplayId = @(window.screen.displayID);
-    __block NSDictionary *info = nil;
-    XCTAssertTrue([[[FBRunLoopSpinner new] timeout:5] spinUntilTrue:^BOOL {
-      info = [self screenInfoResponse];
-      double width = [info[@"screenSize"][@"width"] doubleValue];
-      double height = [info[@"screenSize"][@"height"] doubleValue];
-      double barHeight = [info[@"statusBarSize"][@"height"] doubleValue];
-      return nil == info[@"error"] && fabs(width - frame.size.width) <= 1
-        && fabs(height - frame.size.height) <= 1
-        && barHeight >= 0 && barHeight < height
-        && (barHeight == 0 || fabs([info[@"statusBarSize"][@"width"] doubleValue] - width) <= 1)
-        && (angle.doubleValue == 0 || barHeight == 0);
-    }], @"Unexpected screen metadata at hinge angle %@: %@", angle, info);
-  }
-}
 
-- (void)testScreenInfoIncludesTopStatusBarOnSingleDisplay
-{
-  XCTSkipIf([FBScreen screensWithError:nil].count != 1, @"Requires a single-display device");
-  // The integration fixture uses the ordinary visible portrait status bar.
-  // An unresolved XCUIElement has displayID == 0; it must not be filtered out.
-  NSDictionary *info = [self screenInfoResponse];
-  XCTAssertGreaterThan([info[@"statusBarSize"][@"height"] doubleValue], 0);
-  XCTAssertEqualWithAccuracy([info[@"statusBarSize"][@"width"] doubleValue],
-                            [info[@"screenSize"][@"width"] doubleValue], 1);
-}
 
 @end
