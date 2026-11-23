@@ -45,6 +45,9 @@ export const USBMUXD_PORT = 27015;
 export const DEFAULT_USBMUXD_SOCKET = '/var/run/usbmuxd';
 export const DEFAULT_USBMUXD_HOST = '127.0.0.1';
 
+/** Default wait for a usbmuxd request or connection, in milliseconds. */
+const DEFAULT_USBMUXD_TIMEOUT_MS = 5000;
+
 // Result codes from usbmuxd
 export const USBMUX_RESULT = {
   OK: 0,
@@ -123,7 +126,7 @@ export class Usbmux extends BaseSocketService {
    * @param timeout - Timeout in milliseconds
    * @returns Promise that resolves with the BUID
    */
-  async readBUID(timeout = 5000): Promise<string> {
+  async readBUID(timeout = DEFAULT_USBMUXD_TIMEOUT_MS): Promise<string> {
     const {tag, receivePromise} = this._receivePlistPromise<string>(timeout, (data) => {
       if (data.payload.BUID) {
         return data.payload.BUID as string;
@@ -149,7 +152,7 @@ export class Usbmux extends BaseSocketService {
    * @param timeout - Timeout in milliseconds
    * @returns Promise that resolves with the pair record or null if not found
    */
-  async readPairRecord(udid: string, timeout = 5000): Promise<PairRecord | null> {
+  async readPairRecord(udid: string, timeout = DEFAULT_USBMUXD_TIMEOUT_MS): Promise<PairRecord | null> {
     // Request from usbmuxd if not found in cache
     const {tag, receivePromise} = this._receivePlistPromise<PairRecord | null>(timeout, (data) => {
       if (!data.payload.PairRecordData) {
@@ -185,7 +188,7 @@ export class Usbmux extends BaseSocketService {
    * @param timeout - Timeout in milliseconds
    * @returns Promise that resolves with the device list
    */
-  async listDevices(timeout = 5000): Promise<Device[]> {
+  async listDevices(timeout = DEFAULT_USBMUXD_TIMEOUT_MS): Promise<Device[]> {
     const {tag, receivePromise} = this._receivePlistPromise<Device[]>(timeout, (data) => {
       if (data.payload.DeviceList) {
         return data.payload.DeviceList as unknown as Device[];
@@ -212,7 +215,7 @@ export class Usbmux extends BaseSocketService {
    * @param timeout - Timeout in milliseconds
    * @returns Promise that resolves with the device or undefined if not found
    */
-  async findDevice(udid: string, timeout = 5000): Promise<Device | undefined> {
+  async findDevice(udid: string, timeout = DEFAULT_USBMUXD_TIMEOUT_MS): Promise<Device | undefined> {
     const devices = await this.listDevices(timeout);
     return devices.find((device) => device.Properties.SerialNumber.toLowerCase() === udid.toLowerCase());
   }
@@ -279,7 +282,7 @@ export class Usbmux extends BaseSocketService {
    * @param timeout - Timeout in milliseconds
    * @returns Promise that resolves with the connected socket
    */
-  async connect(deviceID: string | number, port: number, timeout = 5000): Promise<Socket> {
+  async connect(deviceID: string | number, port: number, timeout = DEFAULT_USBMUXD_TIMEOUT_MS): Promise<Socket> {
     const {tag, receivePromise} = this._receivePlistPromise<Socket>(timeout, (data) => {
       if (data.payload.MessageType !== 'Result') {
         throw new Error(`Unexpected data: ${JSON.stringify(data)}`);
@@ -425,7 +428,7 @@ export class Usbmux extends BaseSocketService {
    * @private
    */
   private _receivePlistPromise<T>(
-    timeout = 5000,
+    timeout = DEFAULT_USBMUXD_TIMEOUT_MS,
     responseCallback: (data: DecodedUsbmux) => T,
   ): {tag: number; receivePromise: Promise<T>} {
     const tag = this._tag++;
@@ -603,7 +606,7 @@ export async function getDefaultSocket(opts: Partial<SocketOptions> = {}): Promi
     socketPath: DEFAULT_USBMUXD_SOCKET,
     socketPort: USBMUXD_PORT,
     socketHost: DEFAULT_USBMUXD_HOST,
-    timeout: 5000,
+    timeout: DEFAULT_USBMUXD_TIMEOUT_MS,
   };
 
   const hasSocketOpts = Boolean(opts.socketPath || opts.socketPort || opts.socketHost);

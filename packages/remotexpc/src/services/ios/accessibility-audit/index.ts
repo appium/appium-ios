@@ -377,7 +377,7 @@ export class AccessibilityAuditService {
    * @param options Timeout, and whether to draw the on-device highlight.
    */
   async getFocusedElement(options: InspectOptions = {}): Promise<AxInspectedElement> {
-    const {timeoutMs = 15000, showVisuals = false} = options;
+    const {timeoutMs = DEFAULT_FOCUS_TIMEOUT_MS, showVisuals = false} = options;
     const pushed = this.transport.waitForInbound('hostInspectorCurrentElementChanged:', timeoutMs);
     this.setMonitoredEventType(MONITORED_EVENT_FOCUS);
     if (showVisuals) {

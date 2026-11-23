@@ -22,6 +22,9 @@ export interface PostNotificationRequest extends PlistDictionary {
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
+/** Default wait for an observed notification to arrive, in milliseconds. */
+const DEFAULT_NOTIFICATION_TIMEOUT_MS = 120000;
+
 export interface NotificationProxyServiceOptions extends BaseServiceOptions {
   /** Request timeout in milliseconds */
   timeout?: number;
@@ -94,7 +97,7 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
    * @param timeout Timeout in milliseconds
    * @returns AsyncGenerator yielding PlistMessage objects
    */
-  async *expectNotifications(timeout: number = 120000): AsyncGenerator<PlistMessage> {
+  async *expectNotifications(timeout: number = DEFAULT_NOTIFICATION_TIMEOUT_MS): AsyncGenerator<PlistMessage> {
     if (!this._conn) {
       this._conn = await this.connectToNotificationProxyService();
     }
@@ -117,7 +120,7 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
    * @param timeout Timeout in milliseconds
    * @returns Promise resolving to the expected notification
    */
-  async expectNotification(timeout: number = 120000): Promise<PlistMessage> {
+  async expectNotification(timeout: number = DEFAULT_NOTIFICATION_TIMEOUT_MS): Promise<PlistMessage> {
     const generator = this.expectNotifications(timeout);
     const {value, done} = await generator.next();
     if (done || !value) {

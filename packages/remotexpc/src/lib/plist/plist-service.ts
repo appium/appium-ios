@@ -10,6 +10,9 @@ import {PlistServiceEncoder} from './plist-encoder.js';
 const log = getLogger('Plist');
 const errorLog = getLogger('PlistError');
 
+/** Default wait for a plist response, in milliseconds. */
+const DEFAULT_RECEIVE_TIMEOUT_MS = 5000;
+
 const config = {
   verboseErrorLogging: false,
 };
@@ -117,7 +120,7 @@ export class PlistService {
    * @param timeout Response timeout in ms
    * @returns Promise resolving to the received message
    */
-  public async sendPlistAndReceive(data: PlistMessage, timeout = 5000): Promise<PlistMessage> {
+  public async sendPlistAndReceive(data: PlistMessage, timeout = DEFAULT_RECEIVE_TIMEOUT_MS): Promise<PlistMessage> {
     this.sendPlist(data);
     return this.receivePlist(timeout);
   }
@@ -140,7 +143,7 @@ export class PlistService {
    * @returns Promise resolving to the received message
    * @throws Error if the timeout is reached, or if close() is called before a message arrives
    */
-  public async receivePlist(timeout = 5000): Promise<PlistMessage> {
+  public async receivePlist(timeout = DEFAULT_RECEIVE_TIMEOUT_MS): Promise<PlistMessage> {
     return new Promise<PlistMessage>((resolve, reject) => {
       const message = this._messageQueue.shift();
       if (message) {
