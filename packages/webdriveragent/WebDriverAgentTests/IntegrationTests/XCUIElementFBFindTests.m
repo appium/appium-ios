@@ -913,11 +913,12 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
 
 - (void)testFirstMatchTrimsAxisResults
 {
-  XCUIElement *match = [self.testedApplication fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]/~XCUIElementTypeButton"
-                                                    shouldReturnAfterFirstMatch:YES].firstObject;
-  XCTAssertEqualObjects(match.label, @"Alerts");
-  XCTAssertEqual([self.testedApplication fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]/~XCUIElementTypeButton"
-                                                shouldReturnAfterFirstMatch:YES].count, 1);
+  FBForEachBinding(^{
+    NSArray<XCUIElement *> *matches = [self.testedApplication fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]/~XCUIElementTypeButton"
+                                                                   shouldReturnAfterFirstMatch:YES];
+    XCTAssertEqual(matches.count, 1);
+    XCTAssertEqualObjects(matches.firstObject.label, @"Alerts");
+  });
 }
 
 - (void)testPredicatesOnAxisSteps
@@ -1031,6 +1032,16 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
   });
 }
 
+- (void)testNextStepFollowsAxisMatchesInDocumentOrder
+{
+  FBForEachBinding(^{
+    // The ancestors of View 10 come before the ancestors of View 30 in the candidates, but not in the document
+    NSString *query = @"**/XCUIElementTypeOther[`label IN {\"View 10\", \"View 30\"}`]"
+      "/^XCUIElementTypeOther[`label BEGINSWITH \"View\"`]/XCUIElementTypeOther[1]";
+    XCTAssertEqualObjects(FBLookupLabels(self.testedApplication, query), @[@"View 2"]);
+  });
+}
+
 - (void)testPerformanceOfAxisLookupOnDeepHierarchy
 {
   NSString *query = @"**/XCUIElementTypeOther[`label == \"View 30\"`]/../XCUIElementTypeOther[1]";
@@ -1115,7 +1126,7 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
   // Regression guard for "identifier != nil AND identifier != ''": the old
   // wdName lookup used the nonempty label, or nil when both fields were empty.
   // Thus an empty query matched neither element. Checking only identifier != nil
-  // would instead let label == @"" match both, changing existing behavior.
+  // would instead let identifier == @"" match both, changing existing behavior.
   BOOL previousFirstMatch = FBConfiguration.sharedInstance.useFirstMatch;
   @try {
     for (NSNumber *useFirstMatch in @[@NO, @YES]) {
