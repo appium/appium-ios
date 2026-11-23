@@ -885,6 +885,20 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
   });
 }
 
+- (void)testPositionedSiblingAxisWithSeveralStartingElements
+{
+  FBForEachBinding(^{
+    XCUIElement *mainView = self.testedApplication.otherElements[@"MainView"];
+    NSString *prefix = @"**/XCUIElementTypeButton/";
+    // Candidates of all the buttons are merged in document order before the position is applied
+    XCTAssertEqualObjects(FBLookupLabels(mainView, [prefix stringByAppendingString:@"~XCUIElementTypeButton[1]"]), @[@"Alerts"]);
+    XCTAssertEqualObjects(FBLookupLabels(mainView, [prefix stringByAppendingString:@"~XCUIElementTypeButton[2]"]), @[@"Deadlock app"]);
+    XCTAssertEqualObjects(FBLookupLabels(mainView, [prefix stringByAppendingString:@"~XCUIElementTypeButton[-1]"]), @[@"Coordinate Probe"]);
+    XCTAssertEqualObjects(FBLookupLabels(mainView, [prefix stringByAppendingString:@">XCUIElementTypeButton[1]"]), @[@"Deadlock app"]);
+    XCTAssertEqualObjects(FBLookupLabels(mainView, [prefix stringByAppendingString:@">XCUIElementTypeButton[-1]"]), @[@"Coordinate Probe"]);
+  });
+}
+
 - (void)testAxisResultsAreUsable
 {
   FBForEachBinding(^{

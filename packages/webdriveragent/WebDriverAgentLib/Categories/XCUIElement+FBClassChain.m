@@ -275,6 +275,10 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
       }
     }
     typeMatches = dedupedMatches;
+    if (FBClassChainAxisFollowingSibling == item.axis || FBClassChainAxisSibling == item.axis) {
+      // Positions of these axes count in document order of all the candidates
+      typeMatches = [[self fb_snapshotsInDocumentOrder:typeMatches] mutableCopy];
+    }
   }
   for (FBAbstractPredicateItem *predicateItem in item.predicates) {
     if ([predicateItem isKindOfClass:FBSelfPredicateItem.class]) {
