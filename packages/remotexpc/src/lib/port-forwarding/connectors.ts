@@ -8,11 +8,8 @@ import type {PortForwardingConnector} from './types.js';
 /** Default budget for opening a forwarded connection, in milliseconds. */
 const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
 
-const connectViaUsbmuxImpl = async (
-  udid: string,
-  devicePort: number,
-  connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
-): Promise<Socket> => {
+/** Omitting `connectTimeoutMs` lets usbmux apply its own default. */
+const connectViaUsbmuxImpl = async (udid: string, devicePort: number, connectTimeoutMs?: number): Promise<Socket> => {
   const usbmux = await createUsbmux();
   let remoteSocket: Socket | undefined;
   try {

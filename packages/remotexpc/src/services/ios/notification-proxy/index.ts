@@ -20,7 +20,8 @@ export interface PostNotificationRequest extends PlistDictionary {
   Name: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 10000;
+/** Default request timeout, in milliseconds. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
 /** Default wait for an observed notification to arrive, in milliseconds. */
 const DEFAULT_NOTIFICATION_TIMEOUT_MS = 120000;
@@ -49,7 +50,7 @@ class NotificationProxyService extends BaseService implements NotificationProxyS
   constructor(udid: string, timeoutOrOptions?: number | NotificationProxyServiceOptions) {
     const options = typeof timeoutOrOptions === 'number' ? {timeout: timeoutOrOptions} : (timeoutOrOptions ?? {});
     super(udid, options);
-    this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.timeout = options.timeout ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /**

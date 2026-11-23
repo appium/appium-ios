@@ -27,6 +27,9 @@ const CONNECT_TIMEOUT_MS = 30000;
 /** How long the checkin handshake may take before the socket is torn down. */
 const HANDSHAKE_TIMEOUT_MS = 30000;
 
+/** Default wait for a reply to an invoked selector, in milliseconds. */
+const DEFAULT_REPLY_TIMEOUT_MS = 15000;
+
 /** Safety valve for the checkin loop; iOS 27 sends two plists. */
 const MAX_CHECKIN_PLISTS = 8;
 
@@ -44,7 +47,7 @@ const AUX_INT64_SIZE = 8;
 
 /** Options for {@link AxAuditDtxTransport.invoke}. */
 export interface InvokeOptions {
-  /** How long to wait for the reply, in milliseconds. Defaults to 15000. */
+  /** How long to wait for the reply, in milliseconds. Defaults to `DEFAULT_REPLY_TIMEOUT_MS`. */
   timeoutMs?: number;
 }
 
@@ -483,7 +486,7 @@ export class AxAuditDtxTransport extends BaseService {
       return Promise.reject(this.closeError ?? new Error('Connection closed'));
     }
     const identifier = this.nextMessageId++;
-    const {timeoutMs = 15000} = options;
+    const {timeoutMs = DEFAULT_REPLY_TIMEOUT_MS} = options;
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingReplies.delete(identifier);
