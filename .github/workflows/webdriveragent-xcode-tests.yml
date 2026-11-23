@@ -256,6 +256,5 @@ jobs:
           TV_VERSION: ${{ matrix.config.tv_version }}
           WATCH_MODEL: ${{ matrix.config.watch_model }}
           WATCH_VERSION: ${{ matrix.config.watch_version }}
-          SKIP_TESTING: ${{ startsWith(matrix.config.ios_version, '27.') && matrix.config.action == 'int_test_3' && 'IntegrationTests_3/FBForceTouchTests/testForceTap' || '' }}
           FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 600
           FASTLANE_XCODEBUILD_SETTINGS_RETRIES: 2

@@ -43,14 +43,19 @@
 
 // Binds every snapshot to its AX element directly, without a query over the whole tree.
 // Returns nil if that is not possible, so the caller can fall back to FBQueryElementsWithUids.
-static NSArray<XCUIElement *> *FBBindSnapshotsToElements(XCUIElementQuery *scopeQuery,
+static NSArray<XCUIElement *> *FBBindSnapshotsToElements(XCUIElement *scope,
                                                          NSArray<id<FBXCElementSnapshot>> *snapshots,
                                                          NSArray<NSString *> *uids,
                                                          NSString *excludedUid)
 {
-  XCUIElementQuery *anyQuery = [scopeQuery descendantsMatchingType:XCUIElementTypeAny];
-  if (FBConfiguration.sharedInstance.boundElementsByIndex
-      || ![anyQuery respondsToSelector:@selector(_elementMatchingAccessibilityElementOfSnapshot:)]) {
+  XCUIElementQuery *anyQuery = [scope.fb_query descendantsMatchingType:XCUIElementTypeAny];
+  BOOL isApplicationScope = [scope isKindOfClass:XCUIApplication.class];
+  // Binding by the AX element only creates a reference, which is resolved on first use. The lookup by
+  // snapshot searches the tree and is much slower, but only it resolves in the scope of a non-app element.
+  SEL bindSelector = isApplicationScope
+    ? @selector(_descendantMatchingAccessibilityElement:)
+    : @selector(_elementMatchingAccessibilityElementOfSnapshot:);
+  if (FBConfiguration.sharedInstance.boundElementsByIndex || ![anyQuery respondsToSelector:bindSelector]) {
     return nil;
   }
   NSMutableArray<XCUIElement *> *result = [NSMutableArray array];
@@ -58,7 +63,13 @@ static NSArray<XCUIElement *> *FBBindSnapshotsToElements(XCUIElementQuery *scope
     if ([uids[i] isEqualToString:excludedUid]) {
       continue;
     }
-    XCUIElement *el = [anyQuery _elementMatchingAccessibilityElementOfSnapshot:snapshots[i]];
+    id<FBXCAccessibilityElement> axElement = snapshots[i].accessibilityElement;
+    if (isApplicationScope && nil == axElement) {
+      return nil;
+    }
+    XCUIElement *el = isApplicationScope
+      ? [anyQuery _descendantMatchingAccessibilityElement:axElement]
+      : [anyQuery _elementMatchingAccessibilityElementOfSnapshot:snapshots[i]];
     if (nil == el.fb_boundAccessibilityElement) {
       return nil;
     }
@@ -160,7 +171,7 @@ static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQu
     [result addObject:stableSelf];
   }
 
-  NSArray<XCUIElement *> *descendants = FBBindSnapshotsToElements(self.fb_query, matchedSnapshots, matchedIds, selfUid)
+  NSArray<XCUIElement *> *descendants = FBBindSnapshotsToElements(self, matchedSnapshots, matchedIds, selfUid)
     ?: FBQueryElementsWithUids(self.fb_query, matchedSnapshots, matchedIds, onlyChildren);
   [result addObjectsFromArray:descendants];
   for (XCUIElement *el in result) {

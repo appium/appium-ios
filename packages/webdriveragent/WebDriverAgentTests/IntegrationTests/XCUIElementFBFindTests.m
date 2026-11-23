@@ -738,6 +738,90 @@
 @end
 
 
+// Runs the block with both element binding strategies
+static void FBForEachBinding(void (^block)(void))
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    for (NSNumber *boundByIndex in @[@NO, @YES]) {
+      FBConfiguration.sharedInstance.boundElementsByIndex = boundByIndex.boolValue;
+      block();
+    }
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
+{
+  NSArray<XCUIElement *> *matches = [root fb_descendantsMatchingClassChain:query shouldReturnAfterFirstMatch:NO];
+  return [matches valueForKey:@"label"];
+}
+
+// The evaluation itself is covered by the unit tests, these only check the lookups against a real tree
+@interface XCUIElementFBFindTests_ClassChainAxes : FBIntegrationTestCase
+@end
+@implementation XCUIElementFBFindTests_ClassChainAxes
+
+- (void)setUp
+{
+  [super setUp];
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    [self launchApplication];
+  });
+  FBAssertWaitTillBecomesTrue(self.testedApplication.otherElements[@"MainView"].exists);
+}
+
+- (void)testParentAncestorsAndSiblings
+{
+  FBForEachBinding(^{
+    XCUIApplication *app = self.testedApplication;
+    NSString *prefix = @"**/XCUIElementTypeButton[`label == 'Attributes'`]/";
+    XCTAssertEqualObjects(FBLookupLabels(app, [prefix stringByAppendingString:@".."]), @[@"MainView"]);
+    NSArray<XCUIElement *> *ancestors = [app fb_descendantsMatchingClassChain:[prefix stringByAppendingString:@"^*"]
+                                                  shouldReturnAfterFirstMatch:NO];
+    XCTAssertEqual(ancestors.firstObject.elementType, XCUIElementTypeApplication);
+    XCTAssertEqualObjects(ancestors.lastObject.label, @"MainView");
+    XCTAssertEqualObjects(FBLookupLabels(app, [prefix stringByAppendingString:@">XCUIElementTypeButton"]),
+                          (@[@"Scrolling", @"Touch", @"DeepHierarchy", @"Coordinate Probe"]));
+    XCTAssertEqualObjects(FBLookupLabels(app, [prefix stringByAppendingString:@"<XCUIElementTypeButton[1]"]), @[@"Deadlock app"]);
+    XCTAssertEqualObjects(FBLookupLabels(app, [prefix stringByAppendingString:@"~XCUIElementTypeButton[-1]"]), @[@"Coordinate Probe"]);
+    XCTAssertEqualObjects(FBLookupLabels(app, @"**/XCUIElementTypeButton[3]/>XCUIElementTypeButton[1]"), @[@"Scrolling"]);
+    XCTAssertEqualObjects(FBLookupLabels(app, [prefix stringByAppendingString:@"../XCUIElementTypeButton[`label == 'Touch'`]"]), @[@"Touch"]);
+    XCTAssertEqual([app fb_descendantsMatchingClassChain:[prefix stringByAppendingString:@">XCUIElementTypeButton[20]"] shouldReturnAfterFirstMatch:NO].count, 0);
+  });
+}
+
+- (void)testFirstMatchAndResultsAreUsable
+{
+  FBForEachBinding(^{
+    NSArray<XCUIElement *> *matches = [self.testedApplication fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]/~XCUIElementTypeButton"
+                                                                   shouldReturnAfterFirstMatch:YES];
+    XCTAssertEqual(matches.count, 1);
+    XCTAssertEqualObjects(matches.firstObject.label, @"Alerts");
+    XCTAssertTrue(matches.firstObject.exists);
+    XCTAssertEqual(matches.firstObject.elementType, XCUIElementTypeButton);
+  });
+}
+
+- (void)testContextElementLookup
+{
+  FBForEachBinding(^{
+    XCUIElement *mainView = self.testedApplication.otherElements[@"MainView"];
+    // The prefix is resolved relative to the context element
+    XCTAssertEqualObjects(FBLookupLabels(mainView, @"**/XCUIElementTypeButton[`label == 'Attributes'`]/>XCUIElementTypeButton[1]"), @[@"Scrolling"]);
+    XCUIElement *button = [self.testedApplication fb_descendantsMatchingClassChain:@"**/XCUIElementTypeButton[`label == 'Attributes'`]"
+                                                       shouldReturnAfterFirstMatch:YES].firstObject;
+    XCTAssertNotNil(button);
+    // The axes start right at the context element
+    XCTAssertEqualObjects(FBLookupLabels(button, @">XCUIElementTypeButton[1]"), @[@"Scrolling"]);
+    XCTAssertEqualObjects(FBLookupLabels(button, @".."), @[@"MainView"]);
+  });
+}
+
+@end
+
 @interface XCUIElementFBFindTests_IdentifierSemantics : FBIntegrationTestCase
 @end
 
