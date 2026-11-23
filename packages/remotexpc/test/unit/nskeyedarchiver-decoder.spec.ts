@@ -306,6 +306,25 @@ describe('NSKeyedArchiver Decoder', () => {
 
       assert.deepStrictEqual(decodeNSKeyedArchiver(archive), {items: ['first', 42]});
     });
+
+    it('should resolve UIDs inside a raw array stored as an $objects entry', () => {
+      const archive = parseBinaryArchive([
+        '$null',
+        {items: new PlistUID(2)},
+        [new PlistUID(3), new PlistUID(4)],
+        'a',
+        'b',
+      ]);
+
+      assert.deepStrictEqual(decodeNSKeyedArchiver(archive), {items: {0: 'a', 1: 'b'}});
+    });
+
+    it('should return a Date stored as an $objects entry unchanged', () => {
+      const when = new Date('2026-01-02T03:04:05.000Z');
+      const archive = parseBinaryArchive(['$null', {when: new PlistUID(2)}, when]);
+
+      assert.deepStrictEqual(decodeNSKeyedArchiver(archive), {when});
+    });
   });
 });
 

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import type {TestmanagerdService} from '../../../lib/types.js';
 import * as Services from '../../../services.js';
@@ -82,13 +83,13 @@ function throwIfNSErrorReply(result: unknown, context: string): void {
     const hasErr = objects.some((o) => hasNSErrorIndicators(o));
     if (hasErr) {
       const msg =
-        objects.find((o: any) => typeof o === 'string' && o.length > MIN_NSERROR_DESCRIPTION_LEN) ??
+        objects.find((o): o is string => typeof o === 'string' && o.length > MIN_NSERROR_DESCRIPTION_LEN) ??
         'NSError from testmanagerd';
       throw new Error(`${context}: ${msg}`);
     }
   }
   if (hasNSErrorIndicators(result)) {
-    throw new Error(`${context}: ${JSON.stringify(result)}`);
+    throw new Error(`${context}: ${formatValue(result)}`);
   }
 }
 

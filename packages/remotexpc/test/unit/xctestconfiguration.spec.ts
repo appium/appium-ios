@@ -26,6 +26,17 @@ describe('XCTestConfigurationEncoder', function () {
   });
 
   describe('NSURL encoding', function () {
+    it('should encode an NSURL marker without a base key with a null base', function () {
+      const result = encoder.encode({__type: 'NSURL', relative: 'file:///x.xctest'});
+      const url = result.$objects[result.$top.root.value];
+
+      assert.strictEqual(url['NS.base'].value, 0);
+    });
+
+    it('should reject an NSURL marker without a string relative', function () {
+      assert.throws(() => encoder.encode({__type: 'NSURL', base: null}), /NSURL marker requires a string relative/);
+    });
+
     it('should encode NSURL with null base', function () {
       const result = encoder.encode(createNSURL('file:///path/to/test.xctest'));
       const {objects} = getRootConfig(result);

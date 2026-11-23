@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 
 import {PlistUID} from '../../../lib/plist/index.js';
+import type {PlistValue} from '../../../lib/types.js';
+import {isPlainObject} from '../dvt/utils.js';
 import {TestmanagerdEncoder} from './testmanagerd-encoder.js';
 
 /**
@@ -68,16 +70,23 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return this.encode(configObj);
   }
 
-  protected override archiveObject(value: any): number {
+  protected override archiveObject(value: unknown): number {
     if (value === null || value === undefined) {
       return 0;
     }
 
-    if (value && typeof value === 'object') {
+    if (isPlainObject(value)) {
       if (value.__type === 'NSURL') {
-        return this.archiveNSURL(value.base, value.relative);
+        const {base, relative} = value;
+        if ((base != null && typeof base !== 'string') || typeof relative !== 'string') {
+          throw new Error('NSURL marker requires a string relative and a string or null base');
+        }
+        return this.archiveNSURL(base ?? null, relative);
       }
       if (value.__type === 'XCTestConfiguration') {
+        if (!isPlainObject(value.fields)) {
+          throw new Error('XCTestConfiguration marker requires a fields object');
+        }
         return this.archiveXCTestConfiguration(value.fields);
       }
     }
@@ -103,11 +112,11 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return index;
   }
 
-  private archiveXCTestConfiguration(fields: Record<string, any>): number {
+  private archiveXCTestConfiguration(fields: Record<string, unknown>): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
 
-    const archivedFields: Record<string, any> = {};
+    const archivedFields: Record<string, PlistValue> = {};
     for (const [key, value] of Object.entries(fields)) {
       if (value === undefined) {
         continue;
@@ -146,7 +155,7 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return index;
   }
 
-  private buildConfigObject(config: XCTestConfigurationParams): Record<string, any> {
+  private buildConfigObject(config: XCTestConfigurationParams): Record<string, unknown> {
     const sessionId = config.sessionIdentifier || crypto.randomUUID();
 
     return {

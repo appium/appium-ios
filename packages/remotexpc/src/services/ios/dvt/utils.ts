@@ -1,18 +1,18 @@
 import {setDictionaryEntry} from '../../../lib/dictionary.js';
 import {PlistUID} from '../../../lib/plist/plist-uid.js';
-import type {PlistDictionary} from '../../../lib/types.js';
+import type {PlistDictionary, PlistValue} from '../../../lib/types.js';
 
 /**
  * Check whether a value is a non-null plain object.
  */
-export function isPlainObject(value: any): value is Record<string, any> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
  * Check whether an object contains all requested property keys.
  */
-export function hasProperties(obj: any, ...props: string[]): boolean {
+export function hasProperties(obj: unknown, ...props: string[]): boolean {
   return isPlainObject(obj) ? props.every((prop) => prop in obj) : false;
 }
 
@@ -20,7 +20,7 @@ export function hasProperties(obj: any, ...props: string[]): boolean {
  * Return the `$objects` index a UID points at, or null when the value is not a UID.
  * Binary plists yield `PlistUID`, XML plists yield `{CF$UID: n}`.
  */
-export function toUidIndex(value: any): number | null {
+export function toUidIndex(value: unknown): number | null {
   if (value instanceof PlistUID) {
     return value.value;
   }
@@ -31,28 +31,28 @@ export function toUidIndex(value: any): number | null {
  * Return the `$objects` index of a value in a slot that only ever holds
  * references, such as `NS.objects` members or `$top.root`, so a plain index is accepted too.
  */
-export function toRefIndex(value: any): number | null {
+export function toRefIndex(value: unknown): number | null {
   return typeof value === 'number' ? value : toUidIndex(value);
 }
 
 /**
  * Check whether data appears to be NSKeyedArchiver payload format.
  */
-export function isNSKeyedArchiverFormat(data: any): boolean {
-  return hasProperties(data, '$objects') && Array.isArray(data.$objects) && data.$objects.length > 0;
+export function isNSKeyedArchiverFormat(data: unknown): data is {$objects: PlistValue[]} {
+  return isPlainObject(data) && Array.isArray(data.$objects) && data.$objects.length > 0;
 }
 
 /**
  * Check whether an object matches NSDictionary-style archive keys.
  */
-export function isNSDictionaryFormat(obj: any): boolean {
+export function isNSDictionaryFormat(obj: unknown): obj is {'NS.keys': unknown; 'NS.objects': unknown} {
   return hasProperties(obj, 'NS.keys', 'NS.objects');
 }
 
 /**
  * Check whether an object carries NSError-like marker properties.
  */
-export function hasNSErrorIndicators(obj: any): boolean {
+export function hasNSErrorIndicators(obj: unknown): boolean {
   if (!isPlainObject(obj)) {
     return false;
   }
@@ -64,7 +64,7 @@ export function hasNSErrorIndicators(obj: any): boolean {
 /**
  * Extract $objects array from NSKeyedArchiver format, returns null if invalid
  */
-export function extractNSKeyedArchiverObjects(data: any): any[] | null {
+export function extractNSKeyedArchiverObjects(data: unknown): PlistValue[] | null {
   if (!isNSKeyedArchiverFormat(data)) {
     return null;
   }
@@ -76,7 +76,7 @@ export function extractNSKeyedArchiverObjects(data: any): any[] | null {
 /**
  * Extract NSDictionary from NSKeyedArchiver objects using key/value references
  */
-export function extractNSDictionary(dictObj: any, objects: any[]): PlistDictionary {
+export function extractNSDictionary(dictObj: unknown, objects: PlistValue[]): PlistDictionary {
   if (!isNSDictionaryFormat(dictObj)) {
     return {};
   }
@@ -107,7 +107,7 @@ export function extractNSDictionary(dictObj: any, objects: any[]): PlistDictiona
 /**
  * Extract strings from NSKeyedArchiver objects array as dictionary keys
  */
-export function extractCapabilityStrings(objects: any[]): PlistDictionary {
+export function extractCapabilityStrings(objects: PlistValue[]): PlistDictionary {
   const result: PlistDictionary = {};
 
   // Start from index 1 because index 0 is always '$null' in NSKeyedArchiver format

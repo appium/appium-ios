@@ -1,9 +1,16 @@
 import {setDictionaryEntry} from '../../../lib/dictionary.js';
 import {getLogger} from '../../../lib/logger.js';
-import {toRefIndex, toUidIndex} from './utils.js';
+import type {PlistArray, PlistDictionary, PlistValue} from '../../../lib/types.js';
+import {isPlainObject, toRefIndex, toUidIndex} from './utils.js';
 
 const log = getLogger('NSKeyedArchiverDecoder');
 const MAX_DECODE_DEPTH = 1000;
+
+/** The top level of an NSKeyedArchiver plist. */
+interface NSKeyedArchive extends PlistDictionary {
+  $archiver: 'NSKeyedArchiver';
+  $objects: PlistValue[];
+}
 
 /**
  * Decode NSKeyedArchiver formatted data into native JavaScript objects
@@ -16,11 +23,11 @@ const MAX_DECODE_DEPTH = 1000;
  * - $objects: Array of all objects with cross-references
  */
 export class NSKeyedArchiverDecoder {
-  private readonly objects: any[];
-  private readonly decoded: Map<number, any>;
-  private readonly archive: any;
+  private readonly objects: PlistValue[];
+  private readonly decoded: Map<number, PlistValue>;
+  private readonly archive: NSKeyedArchive;
 
-  constructor(data: any) {
+  constructor(data: unknown) {
     if (!NSKeyedArchiverDecoder.isNSKeyedArchive(data)) {
       throw new Error('Data is not in NSKeyedArchiver format');
     }
@@ -33,25 +40,20 @@ export class NSKeyedArchiverDecoder {
   /**
    * Check if data is in NSKeyedArchiver format
    */
-  static isNSKeyedArchive(data: any): boolean {
-    if (!data || typeof data !== 'object') {
-      return false;
-    }
-
-    return (
-      '$archiver' in data && data.$archiver === 'NSKeyedArchiver' && '$objects' in data && Array.isArray(data.$objects)
-    );
+  static isNSKeyedArchive(data: unknown): data is NSKeyedArchive {
+    return isPlainObject(data) && data.$archiver === 'NSKeyedArchiver' && Array.isArray(data.$objects);
   }
 
   /**
    * Decode the entire archive starting from the root
    */
-  decode(): any {
+  decode(): PlistValue {
     if (!this.objects || this.objects.length === 0) {
       return null;
     }
 
-    const rootIndex = toRefIndex(this.archive.$top?.root);
+    const top = this.archive.$top;
+    const rootIndex = isPlainObject(top) ? toRefIndex(top.root) : null;
     if (rootIndex !== null) {
       return this.decodeObject(rootIndex);
     }
@@ -64,7 +66,7 @@ export class NSKeyedArchiverDecoder {
   /**
    * Decode an object at a specific index
    */
-  private decodeObject(index: number, visited: Set<number> = new Set(), depth: number = 0): any {
+  private decodeObject(index: number, visited: Set<number> = new Set(), depth: number = 0): PlistValue {
     // Prevent stack overflow with depth limit
     if (depth > MAX_DECODE_DEPTH) {
       log.warn(`Maximum decode depth exceeded at index ${index}`);
@@ -80,8 +82,9 @@ export class NSKeyedArchiverDecoder {
     }
 
     // Check cache
-    if (this.decoded.has(index)) {
-      return this.decoded.get(index);
+    const cached = this.decoded.get(index);
+    if (cached !== undefined) {
+      return cached;
     }
 
     visited.add(index);
@@ -99,8 +102,8 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    // Handle Buffer/binary data (eg. screenshots)
-    if (Buffer.isBuffer(obj)) {
+    // Handle Buffer/binary data (eg. screenshots) and dates, which hold no references
+    if (Buffer.isBuffer(obj) || obj instanceof Date) {
       this.decoded.set(index, obj);
       visited.delete(index);
       return obj;
@@ -111,25 +114,28 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
+    // What is left is keyed (an archived object, or rarely a raw array) and may hold UID references
+    const record = obj as Record<string, PlistValue>;
+
     // Handle NSDictionary (NS.keys + NS.objects) - check this FIRST before NSArray
-    if ('NS.keys' in obj && 'NS.objects' in obj) {
-      const result = this.decodeDictionary(obj['NS.keys'], obj['NS.objects'], visited, depth);
+    if ('NS.keys' in record && 'NS.objects' in record) {
+      const result = this.decodeDictionary(record['NS.keys'], record['NS.objects'], visited, depth);
       this.decoded.set(index, result);
       visited.delete(index);
       return result;
     }
 
     // Handle NSArray (NS.objects only, without NS.keys)
-    if ('NS.objects' in obj) {
-      const result = this.decodeArray(obj['NS.objects'], visited, depth);
+    if ('NS.objects' in record) {
+      const result = this.decodeArray(record['NS.objects'], visited, depth);
       this.decoded.set(index, result);
       visited.delete(index);
       return result;
     }
 
     // Handle regular objects - just return as-is but resolve references
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
+    const result: PlistDictionary = {};
+    for (const [key, value] of Object.entries(record)) {
       if (key === '$class') {
         continue; // Skip class metadata
       }
@@ -150,7 +156,7 @@ export class NSKeyedArchiverDecoder {
   /**
    * Decode the object a collection member references, or return the member unchanged when it is not a reference
    */
-  private decodeRef(ref: any, visited: Set<number>, depth: number): any {
+  private decodeRef(ref: PlistValue, visited: Set<number>, depth: number): PlistValue {
     const index = toRefIndex(ref);
     return index === null ? ref : this.decodeObject(index, visited, depth);
   }
@@ -158,7 +164,7 @@ export class NSKeyedArchiverDecoder {
   /**
    * Decode an NSArray
    */
-  private decodeArray(refs: any, visited: Set<number> = new Set(), depth: number = 0): any[] {
+  private decodeArray(refs: PlistValue, visited: Set<number> = new Set(), depth: number = 0): PlistArray {
     if (!Array.isArray(refs)) {
       return [];
     }
@@ -169,12 +175,17 @@ export class NSKeyedArchiverDecoder {
   /**
    * Decode an NSDictionary
    */
-  private decodeDictionary(keyRefs: any, valueRefs: any, visited: Set<number> = new Set(), depth: number = 0): any {
+  private decodeDictionary(
+    keyRefs: PlistValue,
+    valueRefs: PlistValue,
+    visited: Set<number> = new Set(),
+    depth: number = 0,
+  ): PlistDictionary {
     if (!Array.isArray(keyRefs) || !Array.isArray(valueRefs)) {
       return {};
     }
 
-    const result: any = {};
+    const result: PlistDictionary = {};
 
     for (let i = 0; i < keyRefs.length && i < valueRefs.length; i++) {
       const key = this.decodeRef(keyRefs[i], visited, depth + 1);
@@ -194,7 +205,7 @@ export class NSKeyedArchiverDecoder {
 /**
  * Decode NSKeyedArchiver data or return as-is if not archived
  */
-export function decodeNSKeyedArchiver(data: any): any {
+export function decodeNSKeyedArchiver(data: unknown): any {
   if (!data) {
     return data;
   }

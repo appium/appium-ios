@@ -1,4 +1,6 @@
+import {formatValue} from '../../../lib/format-error.js';
 import {decodeNSKeyedArchiver} from '../dvt/nskeyedarchiver-decoder.js';
+import {isPlainObject} from '../dvt/utils.js';
 
 // #region Constants
 
@@ -100,14 +102,14 @@ export function getXctestNameFromBundleId(xctestBundleId: string): string {
  *   where `c` = components, `ocm` = onlyCountMatches, `os` = ordered set
  * - A raw object/dict that needs stringification
  */
-export function resolveTestIdentifier(value: any): string {
+export function resolveTestIdentifier(value: unknown): string {
   if (typeof value === 'string') {
     return value;
   }
 
   // Try decoding NSKeyedArchiver if it's an archived object
-  let decoded = value;
-  if (value && typeof value === 'object' && value.$archiver === 'NSKeyedArchiver') {
+  let decoded: unknown = value;
+  if (isPlainObject(value) && value.$archiver === 'NSKeyedArchiver') {
     try {
       decoded = decodeNSKeyedArchiver(value);
     } catch {
@@ -119,12 +121,12 @@ export function resolveTestIdentifier(value: any): string {
     return decoded;
   }
 
-  if (decoded && typeof decoded === 'object') {
+  if (isPlainObject(decoded)) {
     // XCTTestIdentifier uses abbreviated keys:
     //   c = components, e.g. ['BasicUITests', 'testExample']
     const components = decoded.c ?? decoded.components;
     if (Array.isArray(components) && components.length > 0) {
-      return components.filter((v: any) => typeof v === 'string').join('/');
+      return components.filter((v) => typeof v === 'string').join('/');
     }
     if (typeof decoded.identifier === 'string') {
       return decoded.identifier;
@@ -135,7 +137,7 @@ export function resolveTestIdentifier(value: any): string {
   }
 
   // Last resort
-  return JSON.stringify(value);
+  return formatValue(value);
 }
 
 /**
@@ -328,12 +330,12 @@ export class XCTestRunError extends Error {
 }
 
 /** Parse a raw callback selector + auxiliaries into a typed event. */
-export function parseCallback(selector: string, auxiliaries: any[]): XCTestEvent {
+export function parseCallback(selector: string, auxiliaries: unknown[]): XCTestEvent {
   switch (selector) {
     case SELECTOR.logDebugMessage:
       return {
         type: 'log',
-        message: typeof auxiliaries[0] === 'string' ? auxiliaries[0] : JSON.stringify(auxiliaries[0]),
+        message: formatValue(auxiliaries[0]),
       };
 
     case SELECTOR.testRunnerReady:

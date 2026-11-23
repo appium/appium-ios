@@ -1,5 +1,6 @@
 import {getLogger} from '../../../lib/logger.js';
 import {PlistUID} from '../../../lib/plist/index.js';
+import type {PlistValue} from '../../../lib/types.js';
 
 const log = getLogger('NSKeyedArchiverEncoder');
 
@@ -8,14 +9,14 @@ const log = getLogger('NSKeyedArchiverEncoder');
  * capable of satisfying NSSecureCoding requirements.
  */
 export class NSKeyedArchiverEncoder {
-  protected objects: any[] = ['$null'];
-  protected objectCache = new Map<any, number>(); // Cache for object identity/deduplication
+  protected objects: PlistValue[] = ['$null'];
+  protected objectCache = new Map<object, number>(); // Cache for object identity/deduplication
   protected classes = new Map<string, number>(); // Cache for class definitions
 
   /**
    * Encode the root value into NSKeyedArchiver format
    */
-  encode(rootValue: any): any {
+  encode(rootValue: unknown): any {
     const rootIndex = this.archiveObject(rootValue);
 
     return {
@@ -26,7 +27,7 @@ export class NSKeyedArchiverEncoder {
     };
   }
 
-  protected archiveObject(value: any): number {
+  protected archiveObject(value: unknown): number {
     if (value === null || value === undefined) {
       return 0; // $null is always at index 0
     }
@@ -38,7 +39,7 @@ export class NSKeyedArchiverEncoder {
       return index;
     }
 
-    if (typeof value === 'number') {
+    if (typeof value === 'number' || typeof value === 'bigint') {
       const index = this.objects.length;
       this.objects.push(value);
       return index;
@@ -66,7 +67,7 @@ export class NSKeyedArchiverEncoder {
       index = this.archiveArray(value);
     } else if (typeof value === 'object') {
       // Treat generic objects as dictionaries
-      index = this.archiveDictionary(value);
+      index = this.archiveDictionary(value as Record<string, unknown>);
     } else {
       // Fallback (e.g. symbols, functions) — encode as $null to avoid breaking pipelines
       log.warn(`Unsupported type for NSKeyedArchiver: ${typeof value}. Encoding as $null`);
@@ -76,7 +77,7 @@ export class NSKeyedArchiverEncoder {
     return index;
   }
 
-  protected archiveArray(array: any[]): number {
+  protected archiveArray(array: unknown[]): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
     this.objectCache.set(array, index);
@@ -97,7 +98,7 @@ export class NSKeyedArchiverEncoder {
   }
 
   /** NSSet — same `NS.objects` layout as NSArray; matches NSKeyedArchiver on Apple platforms. */
-  protected archiveSet(set: Set<any>): number {
+  protected archiveSet(set: Set<unknown>): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
     this.objectCache.set(set, index);
@@ -114,7 +115,7 @@ export class NSKeyedArchiverEncoder {
     return index;
   }
 
-  protected archiveDictionary(dict: Record<string, any>): number {
+  protected archiveDictionary(dict: Record<string, unknown>): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
     this.objectCache.set(dict, index);

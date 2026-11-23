@@ -1,5 +1,6 @@
 import {PlistUID} from '../../../lib/plist/index.js';
 import {NSKeyedArchiverEncoder} from '../dvt/nskeyedarchiver-encoder.js';
+import {isPlainObject} from '../dvt/utils.js';
 
 /**
  * Extended NSKeyedArchiver encoder that handles testmanagerd-specific
@@ -12,17 +13,25 @@ import {NSKeyedArchiverEncoder} from '../dvt/nskeyedarchiver-encoder.js';
  * encoder does not validate or normalize (see {@link archiveNSUUID}).
  */
 export class TestmanagerdEncoder extends NSKeyedArchiverEncoder {
-  protected override archiveObject(value: any): number {
+  protected override archiveObject(value: unknown): number {
     if (value === null || value === undefined) {
       return 0;
     }
 
-    if (value && typeof value === 'object' && value.__type) {
+    if (isPlainObject(value)) {
       switch (value.__type) {
         case 'NSUUID':
+          if (typeof value.uuid !== 'string') {
+            throw new Error('NSUUID marker requires a string uuid');
+          }
           return this.archiveNSUUID(value.uuid);
-        case 'XCTCapabilities':
-          return this.archiveXCTCapabilities(value.capabilities ?? {});
+        case 'XCTCapabilities': {
+          const capabilities = value.capabilities ?? {};
+          if (!isPlainObject(capabilities)) {
+            throw new Error('XCTCapabilities marker requires a capabilities object');
+          }
+          return this.archiveXCTCapabilities(capabilities);
+        }
       }
     }
 
@@ -50,7 +59,7 @@ export class TestmanagerdEncoder extends NSKeyedArchiverEncoder {
     return index;
   }
 
-  private archiveXCTCapabilities(capabilities: Record<string, any>): number {
+  private archiveXCTCapabilities(capabilities: Record<string, unknown>): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
 

@@ -23,12 +23,12 @@ export interface DTXMessagePayloadHeader {
 }
 
 /**
- * Message auxiliary value structure
+ * Message auxiliary value structure, discriminated by the DTX auxiliary type
  */
-export interface MessageAuxValue {
-  type: number;
-  value: any;
-}
+export type MessageAuxValue =
+  | {type: typeof DTX_CONSTANTS.AUX_TYPE_INT32; value: number}
+  | {type: typeof DTX_CONSTANTS.AUX_TYPE_INT64; value: bigint}
+  | {type: typeof DTX_CONSTANTS.AUX_TYPE_OBJECT; value: unknown};
 
 /**
  * DTX Protocol constants
@@ -160,7 +160,7 @@ export class MessageAux {
   /**
    * Append an object (will be archived as NSKeyedArchiver plist)
    */
-  appendObj(value: any): MessageAux {
+  appendObj(value: unknown): MessageAux {
     this.values.push({type: DTX_CONSTANTS.AUX_TYPE_OBJECT, value});
     return this;
   }
