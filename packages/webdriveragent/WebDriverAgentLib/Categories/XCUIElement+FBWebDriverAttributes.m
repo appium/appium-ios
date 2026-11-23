@@ -75,12 +75,6 @@
 
 @implementation FBXCElementSnapshotWrapper (WebDriverAttributes)
 
-+ (void)fb_prepareFramesForApplicationSnapshot:(id<FBXCElementSnapshot>)root
-{
-  FBPrepareDisplayFrames(root);
-}
-
-
 - (id)fb_valueForWDAttributeName:(NSString *)name
 {
   return [self valueForKey:[FBElementUtils wdAttributeNameForAttributeName:name]];

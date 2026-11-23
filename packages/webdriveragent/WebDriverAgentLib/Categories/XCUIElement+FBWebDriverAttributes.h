@@ -27,9 +27,6 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (nullable NSString *)wdNameWithSnapshot:(id<FBXCElementSnapshot>)snapshot;
 
-/** Resolve cross-display controls while the window still represents this snapshot. */
-+ (void)fb_prepareFramesForApplicationSnapshot:(id<FBXCElementSnapshot>)root;
-
 @end
 
 NS_ASSUME_NONNULL_END

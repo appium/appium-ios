@@ -587,11 +587,12 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 #else
   NSError *error = nil;
   FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:&error];
-  if (nil == context) {
+  if (nil == context && FBConfiguration.sharedInstance.currentDisplayId != nil) {
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
                                                                        traceback:nil]);
   }
-  CGRect frame = [context windowFrameForApplication:app error:&error];
+  // Older runtimes may not support display enumeration. Preserve default-session geometry.
+  CGRect frame = context == nil ? app.wdFrame : [context windowFrameForApplication:app error:&error];
   if (CGRectIsNull(frame)) {
     return FBResponseWithUnknownError(error);
   }

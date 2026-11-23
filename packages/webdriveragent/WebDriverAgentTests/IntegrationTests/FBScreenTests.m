@@ -7,6 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
@@ -14,6 +15,7 @@
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
+#import "XCUIApplication.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBActiveAppDetectionPoint.h"
@@ -434,6 +436,48 @@
       }
       return barHeight > 0 && barHeight < height && fabs(barWidth - width) <= 1;
     }], @"Unexpected screen metadata at orientation %@: %@", orientation, info);
+  }
+}
+
+- (void)testWindowGeometryWhenDisplayEnumerationFails
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/"]
+                                                     parameters:@{} arguments:@{}];
+  request.session = [FBSession initWithApplication:self.testedApplication];
+  request.session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [request.session kill]; }];
+
+  NSNumber *mainDisplay = @([FBScreen displayID]);
+  NSDictionary *rect = self.testedApplication.wdRect;
+  NSDictionary *size = @{@"width": rect[@"width"], @"height": rect[@"height"]};
+  Method method = class_getClassMethod(FBScreen.class, @selector(hasMultipleScreensWithError:));
+  IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
+    if (error != NULL) {
+      *error = [NSError errorWithDomain:@"Test" code:1 userInfo:@{NSLocalizedDescriptionKey: @"No display list"}];
+    }
+    return nil;
+  });
+  IMP original = method_setImplementation(method, replacement);
+  @try {
+    for (NSNumber *explicit in @[@NO, @YES]) {
+      FBConfiguration.sharedInstance.currentDisplayId = explicit.boolValue ? mainDisplay : nil;
+      RouteResponse *sizeResponse = [RouteResponse new];
+      [[FBElementCommands handleGetWindowSize:request] dispatchWithResponse:sizeResponse];
+      RouteResponse *rectResponse = [RouteResponse new];
+      [[FBElementCommands handleGetWindowRect:request] dispatchWithResponse:rectResponse];
+      NSDictionary *actualSize = [NSJSONSerialization JSONObjectWithData:sizeResponse.responseData options:0 error:nil][@"value"];
+      NSDictionary *actualRect = [NSJSONSerialization JSONObjectWithData:rectResponse.responseData options:0 error:nil][@"value"];
+      if (explicit.boolValue) {
+        XCTAssertEqualObjects(actualSize[@"error"], @"invalid argument");
+        XCTAssertEqualObjects(actualRect[@"error"], @"invalid argument");
+      } else {
+        XCTAssertEqualObjects(actualSize, size);
+        XCTAssertEqualObjects(actualRect, rect);
+      }
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
   }
 }
 

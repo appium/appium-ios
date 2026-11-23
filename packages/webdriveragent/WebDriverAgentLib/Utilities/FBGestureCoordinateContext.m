@@ -10,6 +10,7 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 #import "FBConfiguration.h"
+#import "FBDisplayGeometry.h"
 #import "FBErrorBuilder.h"
 #import "FBMathUtils.h"
 #import "FBScreen.h"
@@ -133,17 +134,13 @@
   // A window coordinate keeps XCTest's display affinity and rotation intact.
   // It is only a coordinate anchor, not a hit-test boundary. Preserve edge and
   // outside offsets just as on the main display; XCTest handles their delivery.
-  for (XCUIElement *window in [application childrenMatchingType:XCUIElementTypeWindow].allElementsBoundByIndex) {
-    // Resolve the window before reading its display affinity: an unresolved
-    // element may report displayID == 0.
-    (void)window.frame;
-    CGRect frame = window.wdFrame;
-    if (window.screen.displayID == screen.displayID && !CGRectIsEmpty(frame)) {
-      FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
-      anchor.window = window;
-      anchor.frame = frame;
-      return anchor;
-    }
+  CGRect frame;
+  XCUIElement *window = FBWindowOnDisplay(application, screen.displayID, &frame);
+  if (window != nil) {
+    FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
+    anchor.window = window;
+    anchor.frame = frame;
+    return anchor;
   }
   [[[FBErrorBuilder builder] withDescriptionFormat:@"No non-empty application window on display %lld is available as a coordinate anchor", screen.displayID]
     buildError:error];

@@ -9,6 +9,7 @@
 #import "FBXPath.h"
 
 #import "FBConfiguration.h"
+#import "FBDisplayGeometry.h"
 #import "FBExceptions.h"
 #import "FBElementUtils.h"
 #import "FBLogger.h"
@@ -463,9 +464,10 @@ static NSString *const topNodeIndexPath = @"top";
   }
   [FBLogger logFmt:@"The following attributes were requested to be included into the XML: %@", includedAttributes];
 
+  FBDisplaySnapshotMap *displaySnapshots = nil;
   for (Class attribute in includedAttributes) {
     if ([attribute isSubclassOfClass:FBDimensionAttribute.class]) {
-      [FBXCElementSnapshotWrapper fb_prepareFramesForApplicationSnapshot:root];
+      displaySnapshots = FBDisplaySnapshotsForTree(root);
       break;
     }
   }
@@ -474,7 +476,9 @@ static NSString *const topNodeIndexPath = @"top";
                                indexPath:(elementStore != nil ? topNodeIndexPath : nil)
                             elementStore:elementStore
                       includedAttributes:includedAttributes.copy
-                                  writer:writer];
+                                  writer:writer
+                            siblingIndex:nil
+                        displaySnapshots:displaySnapshots];
   if (rc < 0) {
     [FBLogger log:@"Failed to generate XML presentation of a screen element"];
     return rc;
@@ -533,7 +537,7 @@ static NSString *const topNodeIndexPath = @"top";
             includedAttributes:(nullable NSSet<Class> *)includedAttributes
 {
   return [self recordElementAttributes:writer forElement:element indexPath:indexPath
-                   includedAttributes:includedAttributes siblingIndex:nil];
+                   includedAttributes:includedAttributes siblingIndex:nil geometrySnapshot:nil];
 }
 
 + (int)recordElementAttributes:(xmlTextWriterPtr)writer
@@ -541,6 +545,7 @@ static NSString *const topNodeIndexPath = @"top";
                      indexPath:(nullable NSString *)indexPath
             includedAttributes:(nullable NSSet<Class> *)includedAttributes
                   siblingIndex:(nullable NSNumber *)siblingIndex
+              geometrySnapshot:(nullable id<FBXCElementSnapshot>)geometrySnapshot
 {
   FBXCElementSnapshotWrapper *wrapped = [FBXCElementSnapshotWrapper ensureWrapped:element];
   NSDictionary *rect = nil;
@@ -563,7 +568,9 @@ static NSString *const topNodeIndexPath = @"top";
     if (attributeCls == FBIndexAttribute.class && nil != siblingIndex) {
       rc = [attributeCls recordWithWriter:writer forValue:siblingIndex.stringValue];
     } else if ([attributeCls isSubclassOfClass:FBDimensionAttribute.class]) {
-      rect = rect ?: wrapped.wdRect;
+      if (rect == nil) {
+        rect = geometrySnapshot == nil ? wrapped.wdRect : [FBXCElementSnapshotWrapper ensureWrapped:geometrySnapshot].wdRect;
+      }
       rc = [attributeCls recordWithWriter:writer forValue:[rect[[attributeCls name]] description]];
     } else {
       rc = [attributeCls recordWithWriter:writer forElement:wrapped];
@@ -608,7 +615,7 @@ static NSString *const topNodeIndexPath = @"top";
                         writer:(xmlTextWriterPtr)writer
 {
   return [self writeXmlWithRootElement:root indexPath:indexPath elementStore:elementStore
-                   includedAttributes:includedAttributes writer:writer siblingIndex:nil];
+                   includedAttributes:includedAttributes writer:writer siblingIndex:nil displaySnapshots:nil];
 }
 
 + (int)writeXmlWithRootElement:(id<FBXCElementSnapshot>)root
@@ -617,6 +624,7 @@ static NSString *const topNodeIndexPath = @"top";
             includedAttributes:(nullable NSSet<Class> *)includedAttributes
                         writer:(xmlTextWriterPtr)writer
                   siblingIndex:(nullable NSNumber *)siblingIndex
+              displaySnapshots:(nullable FBDisplaySnapshotMap *)displaySnapshots
 {
   NSAssert((indexPath == nil && elementStore == nil) || (indexPath != nil && elementStore != nil), @"Either both or none of indexPath and elementStore arguments should be equal to nil", nil);
 
@@ -637,7 +645,8 @@ static NSString *const topNodeIndexPath = @"top";
                           forElement:root
                            indexPath:indexPath
                   includedAttributes:includedAttributes
-                        siblingIndex:siblingIndex];
+                        siblingIndex:siblingIndex
+                    geometrySnapshot:[displaySnapshots objectForKey:wrappedSnapshot.snapshot]];
   if (rc < 0) {
     return rc;
   }
@@ -654,7 +663,8 @@ static NSString *const topNodeIndexPath = @"top";
                             elementStore:elementStore
                       includedAttributes:includedAttributes
                                   writer:writer
-                            siblingIndex:@(i)];
+                            siblingIndex:@(i)
+                        displaySnapshots:displaySnapshots];
       if (rc < 0) {
         return rc;
       }

@@ -9,6 +9,7 @@
 #import "XCUIApplication+FBHelpers.h"
 
 #import "FBActiveAppDetectionPoint.h"
+#import "FBDisplayGeometry.h"
 #import "FBElementTypeTransformer.h"
 #import "FBKeyboard.h"
 #import "FBLogger.h"
@@ -220,8 +221,8 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *)excludedAttributes
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
-  [FBXCElementSnapshotWrapper fb_prepareFramesForApplicationSnapshot:snapshot];
   return [self.class dictionaryForElement:snapshot
+                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot)
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
 }
@@ -232,7 +233,8 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   return [self.class accessibilityInfoForElement:snapshot];
 }
 
-+ (NSDictionary *)dictionaryForElement:(id<FBXCElementSnapshot>)snapshot 
++ (NSDictionary *)dictionaryForElement:(id<FBXCElementSnapshot>)snapshot
+                      displaySnapshots:(nullable FBDisplaySnapshotMap *)displaySnapshots
                              recursive:(BOOL)recursive
                     excludedAttributes:(nullable NSSet<NSString *> *)excludedAttributes
 {
@@ -243,7 +245,8 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   info[@"name"] = FBValueOrNull(wrappedSnapshot.wdName);
   info[@"value"] = FBValueOrNull(wrappedSnapshot.wdValue);
   info[@"label"] = FBValueOrNull(wrappedSnapshot.wdLabel);
-  info[@"rect"] = wrappedSnapshot.wdRect;
+  id<FBXCElementSnapshot> counterpart = [displaySnapshots objectForKey:snapshot];
+  info[@"rect"] = counterpart == nil ? wrappedSnapshot.wdRect : [FBXCElementSnapshotWrapper ensureWrapped:counterpart].wdRect;
   
   NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
@@ -278,6 +281,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
     for (id<FBXCElementSnapshot> childSnapshot in childElements) {
       @autoreleasepool {
         [info[@"children"] addObject:[self dictionaryForElement:childSnapshot
+                                               displaySnapshots:displaySnapshots
                                                       recursive:YES
                                              excludedAttributes:excludedAttributes]];
       }
@@ -536,6 +540,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
       id<FBXCElementSnapshot> elementSnapshot = [extractedElement fb_cachedSnapshot] ?: [extractedElement fb_standardSnapshot];
       NSDictionary *elementAttributes = elementSnapshot
       ? [self.class dictionaryForElement:elementSnapshot
+                        displaySnapshots:nil
                                recursive:NO
                       excludedAttributes:customAttributesToExclude]
       : @{};

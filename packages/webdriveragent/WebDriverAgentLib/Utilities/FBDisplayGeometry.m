@@ -12,8 +12,8 @@
 #import "XCUIElement+FBUtilities.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-#import <objc/runtime.h>
-#import "FBGestureCoordinateContext.h"
+#import "FBScreen.h"
+#import "XCUIScreen.h"
 #import "FBMathUtils.h"
 #import "FBXCAccessibilityElement.h"
 #import "FBXCAXClientProxy.h"
@@ -35,8 +35,6 @@
 @property (nonatomic, readonly) NSString *label;
 @property (nonatomic, readonly) id<FBAXUIElementRef> uiElement;
 @end
-
-static char FBSelectedWindowFrameKey;
 
 static BOOL FBIsSystemApplicationSnapshot(id<FBXCElementSnapshot> snapshot)
 {
@@ -104,15 +102,9 @@ static id<FBXCElementSnapshot> FBMatchingDisplaySnapshot(id<FBXCElementSnapshot>
   return live;
 }
 
-static void FBStoreDisplayFrame(id<FBXCElementSnapshot> node, CGRect frame)
-{
-  objc_setAssociatedObject(node, &FBSelectedWindowFrameKey, [NSValue valueWithCGRect:frame],
-                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
 // The accessible control is a descendant of the module icon. The latter is
 // absent from accessibleDescendants, but its own frame is available on the live AX parent chain.
-static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElementSnapshot> live)
+static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElementSnapshot> live, FBDisplaySnapshotMap *matches)
 {
   id<FBXCElementSnapshot> icon = [[FBXCElementSnapshotWrapper ensureWrapped:original] fb_parentMatchingType:XCUIElementTypeIcon];
   if (icon.identifier.length == 0 || icon.displayID != original.displayID) {
@@ -134,7 +126,7 @@ static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElement
       id<FBXCElementSnapshot> counterpart = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
       if (counterpart.elementType == icon.elementType && counterpart.displayID == live.displayID
           && [counterpart.label isEqual:icon.label] && !CGRectIsEmpty(counterpart.frame)) {
-        FBStoreDisplayFrame(icon, counterpart.frame);
+        [matches setObject:counterpart forKey:icon];
       }
       return;
     }
@@ -161,15 +153,14 @@ static id<FBXCElementSnapshot> FBResolveCrossDisplaySnapshot(XCUIElement *elemen
   }
   if (member.elementType == XCUIElementTypeIcon) {
     // An icon's frame is recovered through its accessible child.
-    FBPrepareDisplayFrames(tree);
-    return member;
+    return [FBDisplaySnapshotsForTree(tree) objectForKey:member] ?: member;
   }
   id<FBXCElementSnapshot> window = [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
   if ([window respondsToSelector:@selector(displayID)] && window.displayID == displayID) {
     id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(snapshot, FBWindowAccessibilityElements(window),
                                                              displayID);
     if (live != nil) {
-      FBStoreDisplayFrame(snapshot, live.frame);
+      return live;
     }
   }
   return snapshot;
@@ -191,6 +182,28 @@ static CGRect FBWindowFrameInSnapshot(id<FBXCElementSnapshot> root, long long di
   }
   return CGRectNull;
 }
+
+XCUIElement *FBWindowOnDisplay(XCUIElement *application, long long displayID, CGRect *frame)
+{
+  for (XCUIElement *window in [application childrenMatchingType:XCUIElementTypeWindow].allElementsBoundByIndex) {
+    // Resolve the window before reading its display affinity.
+    (void)window.frame;
+    if (window.screen.displayID != displayID) {
+      continue;
+    }
+    id<FBXCElementSnapshot> snapshot = FBConfiguration.sharedInstance.enforceCustomSnapshots
+      ? [window fb_customSnapshot] : [window fb_standardSnapshot];
+    CGRect bounds = CGRectIntegral(snapshot.frame);
+    if (!CGRectIsEmpty(bounds) && !CGRectIsInfinite(bounds)
+        && isfinite(bounds.origin.x) && isfinite(bounds.origin.y)
+        && isfinite(bounds.size.width) && isfinite(bounds.size.height)) {
+      *frame = bounds;
+      return window;
+    }
+  }
+  *frame = CGRectNull;
+  return nil;
+}
 #endif
 
 id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL useCustomSnapshot)
@@ -210,14 +223,17 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
   return snapshot;
 }
 
-void FBPrepareDisplayFrames(id<FBXCElementSnapshot> root)
+FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root)
 {
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
   NSNumber *display = FBConfiguration.sharedInstance.currentDisplayId;
   if (display == nil || root.elementType != XCUIElementTypeApplication
       || !FBIsSystemApplicationSnapshot(root)) {
-    return;
+    return nil;
   }
+  // The caller owns this map for one traversal. XCTest can reuse the underlying snapshots.
+  FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
+                                                        valueOptions:NSPointerFunctionsStrongMemory];
   for (id<FBXCElementSnapshot> window in root.children) {
     if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
         || window.displayID != display.longLongValue) {
@@ -231,11 +247,14 @@ void FBPrepareDisplayFrames(id<FBXCElementSnapshot> root)
       elements = elements ?: FBWindowAccessibilityElements(window);
       id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(node, elements, display.longLongValue);
       if (live != nil) {
-        FBStoreDisplayFrame(node, live.frame);
-        FBResolveModuleIcon(node, live);
+        [matches setObject:live forKey:node];
+        FBResolveModuleIcon(node, live, matches);
       }
     }
   }
+  return matches;
+#else
+  return nil;
 #endif
 }
 
@@ -246,27 +265,21 @@ CGRect FBFrameForDisplayGeometry(id<FBXCElementSnapshot> snapshot)
   if (display == nil) {
     return snapshot.frame;
   }
-  NSValue *resolved = objc_getAssociatedObject(snapshot, &FBSelectedWindowFrameKey);
-  if (resolved != nil) {
-    return resolved.CGRectValue;
-  }
   if (snapshot.elementType != XCUIElementTypeApplication || !FBIsSystemApplicationSnapshot(snapshot)) {
     return snapshot.frame;
   }
-  FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:nil];
-  if (!context.usesWindowCoordinates) {
+  if ([FBScreen currentScreenWithError:nil] == nil || ![FBScreen hasMultipleScreensWithError:nil].boolValue) {
     return snapshot.frame;
   }
 
   XCUIApplication *application = XCUIApplication.fb_systemApplication;
   CGRect frame = FBWindowFrameInSnapshot(snapshot, display.longLongValue);
   if (CGRectIsNull(frame)) {
-    frame = [context windowFrameForApplication:application error:nil];
+    FBWindowOnDisplay(application, display.longLongValue, &frame);
   }
   if (!CGRectIsEmpty(frame)) {
     // Use the oriented window dimensions reported by /window/rect.
     frame.size = FBAdjustDimensionsForApplication(frame.size, application.interfaceOrientation);
-    FBStoreDisplayFrame(snapshot, frame);
     return frame;
   }
 #endif
