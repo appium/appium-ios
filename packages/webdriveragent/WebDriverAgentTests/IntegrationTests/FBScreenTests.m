@@ -21,12 +21,19 @@
 #import "FBScreenshot.h"
 #import "XCUIScreen.h"
 #import "FBCustomCommands.h"
-#import "FBRouteRequest.h"
+#import "FBElementCommands.h"
+#import "FBRouteRequest-Private.h"
+#import "FBSession.h"
 #import "FBResponsePayload.h"
 #import "RouteResponse.h"
 
 @interface FBCustomCommands (FBScreenInfoTesting)
 + (id<FBResponsePayload>)handleGetScreen:(FBRouteRequest *)request;
+@end
+
+@interface FBElementCommands (FBWindowGeometryTesting)
++ (id<FBResponsePayload>)handleGetWindowSize:(FBRouteRequest *)request;
++ (id<FBResponsePayload>)handleGetWindowRect:(FBRouteRequest *)request;
 @end
 
 @interface FBScreen (FBLookupTesting)
@@ -441,6 +448,11 @@
       [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
     }
   }];
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/"]
+                                                     parameters:@{} arguments:@{}];
+  request.session = [FBSession initWithApplication:nil];
+  request.session.defaultActiveApplication = @"com.apple.springboard";
+  [self addTeardownBlock:^{ [request.session kill]; }];
   for (NSNumber *angle in @[@0, @90, @180, @0]) {
     [self.testedApplication terminate];
     XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
@@ -460,6 +472,18 @@
         && (barHeight == 0 || fabs([info[@"statusBarSize"][@"width"] doubleValue] - width) <= 1)
         && (angle.doubleValue == 0 || barHeight == 0);
     }], @"Unexpected screen metadata at hinge angle %@: %@", angle, info);
+
+    // SpringBoard exposes windows on both panels even when its root retains the cover frame.
+    RouteResponse *sizeResponse = [RouteResponse new];
+    [[FBElementCommands handleGetWindowSize:request] dispatchWithResponse:sizeResponse];
+    NSDictionary *size = [NSJSONSerialization JSONObjectWithData:sizeResponse.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(size, info[@"screenSize"]);
+    RouteResponse *rectResponse = [RouteResponse new];
+    [[FBElementCommands handleGetWindowRect:request] dispatchWithResponse:rectResponse];
+    NSDictionary *rect = [NSJSONSerialization JSONObjectWithData:rectResponse.responseData options:0 error:nil][@"value"];
+    NSDictionary *expectedRect = @{@"x": @0, @"y": @0, @"width": size[@"width"] ?: NSNull.null,
+                                   @"height": size[@"height"] ?: NSNull.null};
+    XCTAssertEqualObjects(rect, expectedRect);
   }
 }
 

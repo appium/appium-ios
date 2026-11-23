@@ -9,6 +9,7 @@
 #import "FBGestureCoordinateContext.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+#import "FBConfiguration.h"
 #import "FBErrorBuilder.h"
 #import "FBMathUtils.h"
 #import "FBScreen.h"
@@ -64,6 +65,26 @@
     }
   }
   return self;
+}
+
+- (CGRect)windowFrameForApplication:(XCUIElement *)application error:(NSError **)error
+{
+  if (!self.usesWindowCoordinates) {
+    return application.wdFrame;
+  }
+  NSError *lookupError = nil;
+  FBWindowCoordinateAnchor *anchor = [self windowAnchorForApplication:application error:&lookupError];
+  if (nil != anchor) {
+    return anchor.frame;
+  }
+  // XCTest's main screen may still be the cover when the app is on the inner panel.
+  if (nil == FBConfiguration.sharedInstance.currentDisplayId) {
+    return application.wdFrame;
+  }
+  if (NULL != error) {
+    *error = lookupError;
+  }
+  return CGRectNull;
 }
 
 - (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application

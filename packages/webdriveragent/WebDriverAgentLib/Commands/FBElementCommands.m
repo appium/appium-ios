@@ -571,37 +571,38 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 
 + (id<FBResponsePayload>)handleGetWindowSize:(FBRouteRequest *)request
 {
-  XCUIApplication *app = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
-
-  CGRect frame = app.wdFrame;
-#if TARGET_OS_TV || TARGET_OS_WATCH
-  CGSize screenSize = frame.size;
-#else
-  CGSize screenSize = FBAdjustDimensionsForApplication(frame.size, app.interfaceOrientation);
-#endif
-  return FBResponseWithObject(@{
-    @"width": @(screenSize.width),
-    @"height": @(screenSize.height),
-  });
+  return [self windowGeometryForRequest:request includeOrigin:NO];
 }
-
 
 + (id<FBResponsePayload>)handleGetWindowRect:(FBRouteRequest *)request
 {
-  XCUIApplication *app = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
+  return [self windowGeometryForRequest:request includeOrigin:YES];
+}
 
-  CGRect frame = app.wdFrame;
++ (id<FBResponsePayload>)windowGeometryForRequest:(FBRouteRequest *)request includeOrigin:(BOOL)includeOrigin
+{
+  XCUIApplication *app = request.session.activeApplication ?: XCUIApplication.fb_activeApplication;
 #if TARGET_OS_TV || TARGET_OS_WATCH
-  CGSize screenSize = frame.size;
+  CGRect frame = app.wdFrame;
 #else
-  CGSize screenSize = FBAdjustDimensionsForApplication(frame.size, app.interfaceOrientation);
+  NSError *error = nil;
+  FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:&error];
+  if (nil == context) {
+    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
+                                                                       traceback:nil]);
+  }
+  CGRect frame = [context windowFrameForApplication:app error:&error];
+  if (CGRectIsNull(frame)) {
+    return FBResponseWithUnknownError(error);
+  }
+  frame.size = FBAdjustDimensionsForApplication(frame.size, app.interfaceOrientation);
 #endif
-  return FBResponseWithObject(@{
-    @"x": @(frame.origin.x),
-    @"y": @(frame.origin.y),
-    @"width": @(screenSize.width),
-    @"height": @(screenSize.height),
-  });
+  NSMutableDictionary *geometry = [@{@"width": @(frame.size.width), @"height": @(frame.size.height)} mutableCopy];
+  if (includeOrigin) {
+    geometry[@"x"] = @(frame.origin.x);
+    geometry[@"y"] = @(frame.origin.y);
+  }
+  return FBResponseWithObject(geometry);
 }
 
 + (id<FBResponsePayload>)handleElementScreenshot:(FBRouteRequest *)request

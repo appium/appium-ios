@@ -22,6 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 /** Keyboard/pause-only actions use the main screen without selected-display lookup. */
 + (nullable instancetype)contextWithDisplayRequired:(BOOL)requiresDisplay error:(NSError **)error;
 
+/** Application frame on a single display, or its window frame on the selected display. Returns CGRectNull on failure. */
+- (CGRect)windowFrameForApplication:(XCUIElement *)application error:(NSError **)error;
+
 /** Native application-root or multi-display viewport coordinates. */
 - (nullable XCUICoordinate *)coordinateWithApplication:(XCUIElement *)application
                                               offset:(CGVector)offset
