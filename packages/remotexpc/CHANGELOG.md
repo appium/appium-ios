@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.5...appium-ios-remotexpc@6.1.6) (2026-11-23)
+
+### Code Refactoring
+
+* **remotexpc:** reuse framePlist in AFC sendOnePlist ([#233](https://github.com/appium/appium-ios/issues/233)) ([86085d5](https://github.com/appium/appium-ios/commit/86085d5c8d5819a4332a118a7aa797c7c28153e1))
+
+
 ## [6.1.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.4...appium-ios-remotexpc@6.1.5) (2026-11-23)
 
 ### Bug Fixes
