@@ -84,11 +84,18 @@ export class ZipConduitService {
       throw new Error('Directory install is not supported yet; provide a path to an .ipa file');
     }
 
-    const streamStats = await this.sendIpaFile(socket, appPath);
-    if (options.streamOnly) {
-      return streamStats;
+    // A failed upload or install wait leaves the connection mid-protocol, so drop it and let the
+    // next install() connect afresh.
+    try {
+      const streamStats = await this.sendIpaFile(socket, appPath);
+      if (options.streamOnly) {
+        return streamStats;
+      }
+      await this.waitForInstallation(socket, options);
+    } catch (error) {
+      this.close();
+      throw error;
     }
-    await this.waitForInstallation(socket, options);
   }
 
   /**
@@ -99,6 +106,7 @@ export class ZipConduitService {
       return;
     }
     cleanupServiceSocket(this.socket);
+    this.socket.destroy();
     this.socket = null;
   }
 
@@ -208,7 +216,7 @@ async function recvOnePlistWithTimeout(socket: net.Socket, timeoutMs: number): P
   });
 
   try {
-    return await Promise.race([recvOnePlist(socket), timeoutPromise]);
+    return await Promise.race([recvOnePlist(socket, timeoutMs), timeoutPromise]);
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
