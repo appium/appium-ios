@@ -1,8 +1,13 @@
 XC_PROJECT = File.absolute_path('../WebDriverAgent.xcodeproj')
 
 lane :test do
+  # Prebuilt .xctestrun (see Scripts/build.sh build_for_testing): skips the build
+  xctestrun = ENV['XCTESTRUN'].to_s.empty? ? nil : ENV['XCTESTRUN']
+  only_testing = ENV['ONLY_TESTING'].to_s.empty? ? nil : ENV['ONLY_TESTING'].split(',')
   # https://docs.fastlane.tools/actions/scan/
   run_tests(
+    xctestrun: xctestrun,
+    only_testing: only_testing,
     project: XC_PROJECT,
     fail_build: true,
     scheme: ENV['SCHEME'],

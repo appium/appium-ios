@@ -48,6 +48,7 @@ jobs:
 
     # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
     runs-on: ${{matrix.test_targets.HOST_OS}}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: packages/webdriveragent
@@ -111,7 +112,7 @@ jobs:
         os_version: '${{matrix.test_targets.PLATFORM_VERSION}}'
         shutdown_after_job: false
         wait_for_boot: true
-        settle_timeout_seconds: 150
+        settle_timeout_seconds: 60
         settle_cpu_threshold_percent: 30
 
     - run: npm run e2e-test
