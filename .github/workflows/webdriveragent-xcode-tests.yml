@@ -339,6 +339,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/wda-derived-data"
           tar -C "$RUNNER_TEMP/wda-derived-data" -xzf "$RUNNER_TEMP/wda-products/wda-products.tgz"
+      # Cuts idle simulator CPU (it saturates the 3-core runner) before xcodebuild boots the device
+      - uses: ./.github/actions/slim-simulator
+        if: matrix.config.dest == 'iphone' || matrix.config.dest == 'ipad'
+        with:
+          platform: iOS
+          model: ${{ matrix.config.dest == 'ipad' && matrix.config.ipad_model || matrix.config.iphone_model }}
+          version: ${{ matrix.config.ios_version }}
       - name: Run integration test
         if: steps.tvos.outputs.skip != 'true'
         run: ./Scripts/build.sh

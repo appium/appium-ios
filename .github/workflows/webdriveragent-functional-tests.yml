@@ -102,6 +102,12 @@ jobs:
         fi
       env:
         PLATFORM_VERSION: ${{matrix.test_targets.PLATFORM_VERSION}}
+    - uses: ./.github/actions/slim-simulator
+      if: matrix.test_targets.PLATFORM_NAME == 'iOS'
+      with:
+        platform: iOS
+        model: ${{matrix.test_targets.DEVICE_NAME}}
+        version: ${{matrix.test_targets.PLATFORM_VERSION}}
     - name: Prepare simulator
       id: prepareSimulator
       if: steps.tvos.outputs.skip != 'true'
