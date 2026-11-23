@@ -1,7 +1,7 @@
 import type net from 'node:net';
 
 import {runInBackground} from '../../../lib/background.js';
-import {formatValue} from '../../../lib/format-error.js';
+import {formatJson, formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
 import type {PlistDictionary, PlistValue, SendMessageOptions} from '../../../lib/types.js';
@@ -9,7 +9,7 @@ import {type ServiceConnection} from '../../../service-connection.js';
 import {BaseService, stripSSL} from '../base-service.js';
 import {ChannelFragmenter, type MessageFilter, isReplyTo} from './channel-fragmenter.js';
 import {Channel} from './channel.js';
-import {type DTXMessageHeader, type MessageAuxValue, DTXMessage, DTX_CONSTANTS, MessageAux} from './dtx-message.js';
+import {type DTXMessageHeader, DTXMessage, DTX_CONSTANTS, MessageAux} from './dtx-message.js';
 import {decodeNSKeyedArchiver} from './nskeyedarchiver-decoder.js';
 import {NSKeyedArchiverEncoder} from './nskeyedarchiver-encoder.js';
 import {
@@ -700,7 +700,7 @@ export class DVTSecureSocketProxyService extends BaseService {
 
     // Check direct NSError format
     if (hasNSErrorIndicators(response)) {
-      throw new Error(`${context}: ${formatValue(response)}`);
+      throw new Error(`${context}: ${formatJson(response)}`);
     }
   }
 
@@ -755,7 +755,7 @@ export class DVTSecureSocketProxyService extends BaseService {
 
         case DTX_CONSTANTS.AUX_TYPE_INT64: {
           const valueBuffer = Buffer.alloc(8);
-          valueBuffer.writeBigUInt64LE(BigInt(auxValue.value), 0);
+          valueBuffer.writeBigUInt64LE(auxValue.value, 0);
           itemBuffers.push(valueBuffer);
           break;
         }
@@ -771,7 +771,7 @@ export class DVTSecureSocketProxyService extends BaseService {
 
         default: {
           const unsupported: never = auxValue;
-          throw new Error(`Unsupported auxiliary type: ${(unsupported as MessageAuxValue).type}`);
+          throw new Error(`Unsupported auxiliary type: ${(unsupported as {type: number}).type}`);
         }
       }
     }

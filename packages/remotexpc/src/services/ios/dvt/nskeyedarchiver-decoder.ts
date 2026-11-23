@@ -114,7 +114,15 @@ export class NSKeyedArchiverDecoder {
       return obj;
     }
 
-    // What is left is keyed (an archived object, or rarely a raw array) and may hold UID references
+    // A raw array holds literal members, so only UIDs are references (unlike NS.objects slots)
+    if (Array.isArray(obj)) {
+      const result = obj.map((member) => this.decodeMember(member, visited, depth));
+      this.decoded.set(index, result);
+      visited.delete(index);
+      return result;
+    }
+
+    // What is left is an archived object whose properties may hold UID references
     const record = obj as Record<string, PlistValue>;
 
     // Handle NSDictionary (NS.keys + NS.objects) - check this FIRST before NSArray
@@ -140,17 +148,20 @@ export class NSKeyedArchiverDecoder {
         continue; // Skip class metadata
       }
 
-      const uid = toUidIndex(value);
-      setDictionaryEntry(
-        result,
-        key,
-        uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1),
-      );
+      setDictionaryEntry(result, key, this.decodeMember(value, visited, depth));
     }
 
     this.decoded.set(index, result);
     visited.delete(index);
     return result;
+  }
+
+  /**
+   * Decode the object a UID member of an archived object or raw array points at, or return a literal member unchanged
+   */
+  private decodeMember(value: PlistValue, visited: Set<number>, depth: number): PlistValue {
+    const uid = toUidIndex(value);
+    return uid === null || visited.has(uid) ? value : this.decodeObject(uid, visited, depth + 1);
   }
 
   /**
