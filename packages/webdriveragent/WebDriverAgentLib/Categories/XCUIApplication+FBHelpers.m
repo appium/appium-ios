@@ -220,6 +220,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *)excludedAttributes
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
+  [FBXCElementSnapshotWrapper fb_prepareFramesForApplicationSnapshot:snapshot];
   return [self.class dictionaryForElement:snapshot
                                 recursive:YES
                        excludedAttributes:excludedAttributes];

@@ -8,7 +8,14 @@
 
 #import "XCUIElement+FBWebDriverAttributes.h"
 
+#import <objc/runtime.h>
+
 #import "FBConfiguration.h"
+#import "FBGestureCoordinateContext.h"
+#import "FBMathUtils.h"
+#import "XCUIApplication+FBHelpers.h"
+#import "FBXCAccessibilityElement.h"
+#import "FBXCAXClientProxy.h"
 #import "FBElementTypeTransformer.h"
 #import "FBElementHelpers.h"
 #import "FBLogger.h"
@@ -28,6 +35,117 @@
 
 #define BROKEN_RECT CGRectMake(-1, -1, 0, 0)
 
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+@protocol FBAXUIElementRef <NSObject>
+@property (nonatomic, readonly) struct __AXUIElement *axElement;
+@end
+
+@protocol FBAXDisplayElement <NSObject>
++ (instancetype)elementWithAXUIElement:(const struct __AXUIElement *)element;
+@property (nonatomic, readonly) NSArray<id<FBAXDisplayElement>> *accessibleDescendants;
+@property (nonatomic, readonly) unsigned int windowDisplayId;
+@property (nonatomic, readonly) NSString *axIdentifier;
+@property (nonatomic, readonly) NSString *label;
+@property (nonatomic, readonly) id<FBAXUIElementRef> uiElement;
+@end
+
+static char FBSelectedWindowFrameKey;
+
+static BOOL FBHasOtherDisplay(id<FBXCElementSnapshot> snapshot, NSNumber *display)
+{
+  return display != nil && [snapshot respondsToSelector:@selector(displayID)]
+    && snapshot.displayID != 0 && snapshot.displayID != display.longLongValue;
+}
+
+// XCTest may attach a Control Center module from the cover to the inner window.
+// Read that window's accessibility hierarchy before serializing any other windows.
+static NSArray<id<FBAXDisplayElement>> *FBWindowAccessibilityElements(id<FBXCElementSnapshot> window)
+{
+  Class<FBAXDisplayElement> axClass = NSClassFromString(@"AXElement");
+  if (![axClass respondsToSelector:@selector(elementWithAXUIElement:)]
+      || ![window.accessibilityElement respondsToSelector:@selector(AXUIElement)]) {
+    return @[];
+  }
+  const struct __AXUIElement *ref = window.accessibilityElement.AXUIElement;
+  id<FBAXDisplayElement> axWindow = ref == NULL ? nil : [axClass elementWithAXUIElement:ref];
+  return [axWindow respondsToSelector:@selector(accessibleDescendants)] ? axWindow.accessibleDescendants : @[];
+}
+
+static id<FBXCElementSnapshot> FBMatchingDisplaySnapshot(id<FBXCElementSnapshot> original,
+                                                          NSArray<id<FBAXDisplayElement>> *elements,
+                                                          long long displayID)
+{
+  id<FBAXDisplayElement> match = nil;
+  for (id<FBAXDisplayElement> candidate in elements) {
+    if ([candidate respondsToSelector:@selector(windowDisplayId)] && candidate.windowDisplayId == displayID
+        && [candidate respondsToSelector:@selector(axIdentifier)] && [candidate.axIdentifier isEqualToString:original.identifier]
+        && [candidate respondsToSelector:@selector(label)] && [candidate.label isEqualToString:original.label]) {
+      if (match != nil) {
+        return nil;
+      }
+      match = candidate;
+    }
+  }
+  Class<FBXCAccessibilityElement> xcClass = NSClassFromString(@"XCAccessibilityElement");
+  if (![match respondsToSelector:@selector(uiElement)] || ![match.uiElement respondsToSelector:@selector(axElement)]
+      || ![xcClass respondsToSelector:@selector(elementWithAXUIElement:)]) {
+    return nil;
+  }
+  struct __AXUIElement *ref = match.uiElement.axElement;
+  if (ref == NULL) {
+    return nil;
+  }
+  id<FBXCAccessibilityElement> ax = [xcClass elementWithAXUIElement:ref];
+  id<FBXCElementSnapshot> live = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
+  if (live.displayID != displayID || live.elementType != original.elementType
+      || ![live.identifier isEqualToString:original.identifier] || CGRectIsEmpty(live.frame)) {
+    return nil;
+  }
+  return live;
+}
+
+static void FBStoreDisplayFrame(id<FBXCElementSnapshot> node, CGRect frame)
+{
+  objc_setAssociatedObject(node, &FBSelectedWindowFrameKey, [NSValue valueWithCGRect:frame],
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+// The accessible control is a descendant of the module icon. The latter is
+// absent from accessibleDescendants, but its own frame is available on the live AX parent chain.
+static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElementSnapshot> live)
+{
+  id<FBXCElementSnapshot> icon = original.parent;
+  while (icon != nil && icon.elementType != XCUIElementTypeIcon) {
+    icon = icon.parent;
+  }
+  if (icon.identifier.length == 0 || icon.displayID != original.displayID) {
+    return;
+  }
+  NSString *parentKey = @"XC_kAXXCAttributeParent";
+  NSString *identifierKey = @"XC_kAXXCAttributeIdentifier";
+  NSString *displayKey = @"XC_kAXXCAttributeWindowDisplayId";
+  id<FBXCAccessibilityElement> ax = live.accessibilityElement;
+  NSMutableSet *visited = [NSMutableSet set];
+  while (ax != nil && ![visited containsObject:ax]) {
+    [visited addObject:ax];
+    NSDictionary *attrs = [FBXCAXClientProxy.sharedClient attributesForElement:ax
+                                attributes:@[parentKey, identifierKey, displayKey] error:nil];
+    if ([attrs[displayKey] longLongValue] != live.displayID) {
+      return;
+    }
+    if ([attrs[identifierKey] isEqual:icon.identifier]) {
+      id<FBXCElementSnapshot> counterpart = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
+      if (counterpart.elementType == icon.elementType && counterpart.displayID == live.displayID
+          && [counterpart.label isEqual:icon.label] && !CGRectIsEmpty(counterpart.frame)) {
+        FBStoreDisplayFrame(icon, counterpart.frame);
+      }
+      return;
+    }
+    ax = attrs[parentKey];
+  }
+}
+#endif
+
 @implementation XCUIElement (WebDriverAttributesForwarding)
 
 - (id<FBXCElementSnapshot>)fb_snapshotForAttributeName:(NSString *)name
@@ -36,20 +154,27 @@
   if ([name isEqualToString:FBStringify(XCUIElement, isWDHittable)]) {
     return [self fb_nativeSnapshot];
   }
-  // https://github.com/appium/WebDriverAgent/issues/1085
-  if (FBConfiguration.sharedInstance.enforceCustomSnapshots) {
-    return [self fb_customSnapshot];
-  }
-  // https://github.com/appium/appium-xcuitest-driver/issues/2552
   BOOL isValueRequest = [name isEqualToString:FBStringify(XCUIElement, wdValue)];
-  if ([self isKindOfClass:XCUIApplication.class] && !isValueRequest) {
-    return [self fb_standardSnapshot];
+  BOOL isCustomSnapshot = FBConfiguration.sharedInstance.enforceCustomSnapshots
+    || isValueRequest
+    || (![self isKindOfClass:XCUIApplication.class]
+        && ([name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
+            || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
+            || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
+  id<FBXCElementSnapshot> snapshot = isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  // A standalone element snapshot does not include the window that contains it.
+  if (([name isEqualToString:@"wdRect"] || [name isEqualToString:@"wdFrame"]) && snapshot.identifier.length > 0
+      && FBHasOtherDisplay(snapshot, FBConfiguration.sharedInstance.currentDisplayId)) {
+    id<FBXCElementSnapshot> tree = [self.application fb_standardSnapshot];
+    [FBXCElementSnapshotWrapper fb_prepareFramesForApplicationSnapshot:tree];
+    id<FBXCElementSnapshot> member = [tree elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
+    if (member != nil) {
+      snapshot = member;
+    }
   }
-  BOOL isCustomSnapshot = [name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
-    || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
-    || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]
-    || isValueRequest;
-  return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];
+#endif
+  return snapshot;
 }
 
 - (id)fb_valueForWDAttributeName:(NSString *)name
@@ -76,6 +201,36 @@
 
 
 @implementation FBXCElementSnapshotWrapper (WebDriverAttributes)
+
++ (void)fb_prepareFramesForApplicationSnapshot:(id<FBXCElementSnapshot>)root
+{
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  NSNumber *display = FBConfiguration.sharedInstance.currentDisplayId;
+  if (display == nil || root.elementType != XCUIElementTypeApplication
+      || root.accessibilityElement.processIdentifier != FBXCAXClientProxy.sharedClient.systemApplication.processIdentifier) {
+    return;
+  }
+  for (id<FBXCElementSnapshot> window in root.children) {
+    if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
+        || window.displayID != display.longLongValue) {
+      continue;
+    }
+    NSArray<id<FBAXDisplayElement>> *elements = nil;
+    for (id<FBXCElementSnapshot> node in window._allDescendants) {
+      if (node.identifier.length == 0 || !FBHasOtherDisplay(node, display)) {
+        continue;
+      }
+      elements = elements ?: FBWindowAccessibilityElements(window);
+      id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(node, elements, display.longLongValue);
+      if (live != nil) {
+        FBStoreDisplayFrame(node, live.frame);
+        FBResolveModuleIcon(node, live);
+      }
+    }
+  }
+#endif
+}
+
 
 - (id)fb_valueForWDAttributeName:(NSString *)name
 {
@@ -159,6 +314,28 @@
 - (CGRect)wdFrame
 {
   CGRect frame = self.frame;
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (FBConfiguration.sharedInstance.currentDisplayId != nil) {
+    NSValue *resolved = objc_getAssociatedObject(self.snapshot, &FBSelectedWindowFrameKey);
+    if (resolved != nil) {
+      frame = resolved.CGRectValue;
+    } else if (self.elementType == XCUIElementTypeApplication
+               && self.snapshot.accessibilityElement.processIdentifier == FBXCAXClientProxy.sharedClient.systemApplication.processIdentifier) {
+      // Resolve the same oriented window as /window/rect. A snapshot of the
+      // window alone can retain portrait dimensions after the panel rotates.
+      FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:nil];
+      if (context.usesWindowCoordinates) {
+        XCUIApplication *application = XCUIApplication.fb_systemApplication;
+        CGRect windowFrame = [context windowFrameForApplication:application error:nil];
+        if (!CGRectIsEmpty(windowFrame)) {
+          frame = windowFrame;
+          frame.size = FBAdjustDimensionsForApplication(frame.size, application.interfaceOrientation);
+          FBStoreDisplayFrame(self.snapshot, frame);
+        }
+      }
+    }
+  }
+#endif
   // It is mandatory to replace all Infinity values with numbers to avoid JSON parsing
   // exceptions like https://github.com/facebook/WebDriverAgent/issues/639#issuecomment-314421206
   // caused by broken element dimensions returned by XCTest

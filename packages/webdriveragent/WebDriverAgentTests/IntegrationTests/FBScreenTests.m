@@ -15,6 +15,7 @@
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
 #import "XCUIElement.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBActiveAppDetectionPoint.h"
 #import "FBExceptions.h"
 #import "FBScreenRecordingRequest.h"
@@ -484,6 +485,8 @@
     NSDictionary *expectedRect = @{@"x": @0, @"y": @0, @"width": size[@"width"] ?: NSNull.null,
                                    @"height": size[@"height"] ?: NSNull.null};
     XCTAssertEqualObjects(rect, expectedRect);
+    XCTAssertEqualObjects(request.session.activeApplication.wdRect, expectedRect,
+                          @"Unexpected SpringBoard root rect at hinge angle %@", angle);
   }
 }
 

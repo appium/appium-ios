@@ -463,6 +463,13 @@ static NSString *const topNodeIndexPath = @"top";
   }
   [FBLogger logFmt:@"The following attributes were requested to be included into the XML: %@", includedAttributes];
 
+  for (Class attribute in includedAttributes) {
+    if ([attribute isSubclassOfClass:FBDimensionAttribute.class]) {
+      [FBXCElementSnapshotWrapper fb_prepareFramesForApplicationSnapshot:root];
+      break;
+    }
+  }
+
   int rc = [self writeXmlWithRootElement:root
                                indexPath:(elementStore != nil ? topNodeIndexPath : nil)
                             elementStore:elementStore
