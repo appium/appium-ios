@@ -2,7 +2,7 @@ import type net from 'node:net';
 
 import {RSD_HANDSHAKE_FRAMES, rsdHandshakeLockdownPlistService} from '../../../lib/lockdown/index.js';
 import {LENGTH_FIELD_4_BYTES} from '../../../lib/plist/constants.js';
-import {framePlist} from '../../../lib/plist/plist-encoder.js';
+import {framePlist} from '../../../lib/plist/index.js';
 import {parsePlist} from '../../../lib/plist/unified-plist-parser.js';
 import type {PlistDictionary} from '../../../lib/types.js';
 import {ServiceConnection} from '../../../service-connection.js';

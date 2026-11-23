@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import type net from 'node:net';
 import {describe, it} from 'node:test';
 
+import {parseXmlPlist} from '../../../src/lib/plist/index.js';
 import {
   cstr,
   encodeHeader,
@@ -9,6 +11,7 @@ import {
   parseCStringArray,
   parseKeyValueNullList,
   readUInt64LE,
+  sendOnePlist,
   writeUInt64LE,
 } from '../../../src/services/ios/afc/codec.js';
 import {AFCMAGIC, AFC_FOPEN_TEXTUAL_MODES, AFC_HEADER_SIZE} from '../../../src/services/ios/afc/constants.js';
@@ -109,5 +112,25 @@ describe('AFC Codec Utilities', function () {
     const ns = '1729866045000000000';
     const ms = nanosecondsToMilliseconds(ns);
     assert.strictEqual(ms, 1729866045000);
+  });
+
+  it('should send a plist as a 4-byte big-endian length followed by the XML body', async function () {
+    const chunks: Buffer[] = [];
+    const socket = {
+      destroyed: false,
+      write: (chunk: Buffer) => {
+        chunks.push(chunk);
+        return true;
+      },
+    } as unknown as net.Socket;
+    const request = {Command: 'Ping', Count: 3};
+
+    await sendOnePlist(socket, request);
+
+    const sent = Buffer.concat(chunks);
+    const body = sent.subarray(4);
+    assert.strictEqual(sent.readUInt32BE(0), body.length);
+    assert.ok(body.toString('utf8').startsWith('<?xml'));
+    assert.deepStrictEqual(parseXmlPlist(body.toString('utf8')), request);
   });
 });
