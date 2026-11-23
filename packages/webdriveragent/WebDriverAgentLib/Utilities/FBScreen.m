@@ -11,6 +11,8 @@
 #import "FBErrorBuilder.h"
 #import "XCUIElement+FBIsVisible.h"
 #import "FBXCodeCompatibility.h"
+#import "XCUIElement.h"
+#import "XCUIElement+FBUtilities.h"
 #import "XCUIDevice.h"
 #import "XCUIScreen.h"
 #import <objc/message.h>
@@ -145,3 +147,27 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
 }
 
 @end
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+XCUIElement *FBWindowOnDisplay(XCUIElement *application, long long displayID, CGRect *frame)
+{
+  for (XCUIElement *window in [application childrenMatchingType:XCUIElementTypeWindow].allElementsBoundByIndex) {
+    // Resolve the window before reading its display affinity.
+    (void)window.frame;
+    if (window.screen.displayID != displayID) {
+      continue;
+    }
+    id<FBXCElementSnapshot> snapshot = FBConfiguration.sharedInstance.enforceCustomSnapshots
+      ? [window fb_customSnapshot] : [window fb_standardSnapshot];
+    CGRect bounds = CGRectIntegral(snapshot.frame);
+    if (!CGRectIsEmpty(bounds) && !CGRectIsInfinite(bounds)
+        && isfinite(bounds.origin.x) && isfinite(bounds.origin.y)
+        && isfinite(bounds.size.width) && isfinite(bounds.size.height)) {
+      *frame = bounds;
+      return window;
+    }
+  }
+  *frame = CGRectNull;
+  return nil;
+}
+#endif

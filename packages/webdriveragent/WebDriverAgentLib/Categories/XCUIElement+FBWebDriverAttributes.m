@@ -37,14 +37,16 @@
   if ([name isEqualToString:FBStringify(XCUIElement, isWDHittable)]) {
     return [self fb_nativeSnapshot];
   }
+  // Application snapshots: https://github.com/appium/appium-xcuitest-driver/issues/2552
   BOOL isValueRequest = [name isEqualToString:FBStringify(XCUIElement, wdValue)];
+  // Custom snapshot override: https://github.com/appium/WebDriverAgent/issues/1085
   BOOL isCustomSnapshot = FBConfiguration.sharedInstance.enforceCustomSnapshots
     || isValueRequest
     || (![self isKindOfClass:XCUIApplication.class]
         && ([name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
             || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
             || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
-  if ([name isEqualToString:@"wdRect"] || [name isEqualToString:@"wdFrame"]) {
+  if ([name isEqualToString:FBStringify(XCUIElement, wdRect)] || [name isEqualToString:FBStringify(XCUIElement, wdFrame)]) {
     return FBSnapshotForDisplayGeometry(self, isCustomSnapshot);
   }
   return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];

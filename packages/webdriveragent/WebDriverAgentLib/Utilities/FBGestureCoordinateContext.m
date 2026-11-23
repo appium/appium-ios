@@ -10,7 +10,6 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 #import "FBConfiguration.h"
-#import "FBDisplayGeometry.h"
 #import "FBErrorBuilder.h"
 #import "FBMathUtils.h"
 #import "FBScreen.h"

@@ -246,12 +246,15 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   info[@"value"] = FBValueOrNull(wrappedSnapshot.wdValue);
   info[@"label"] = FBValueOrNull(wrappedSnapshot.wdLabel);
   id<FBXCElementSnapshot> counterpart = [displaySnapshots objectForKey:snapshot];
-  info[@"rect"] = counterpart == nil ? wrappedSnapshot.wdRect : [FBXCElementSnapshotWrapper ensureWrapped:counterpart].wdRect;
+  FBXCElementSnapshotWrapper *geometry = counterpart == nil ? wrappedSnapshot : [FBXCElementSnapshotWrapper ensureWrapped:counterpart];
+  info[@"rect"] = geometry.wdRect;
+  if (![excludedAttributes containsObject:FBExclusionAttributeFrame]) {
+    info[FBExclusionAttributeFrame] = NSStringFromCGRect(geometry.wdFrame);
+  }
   
   NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
   NSSet *nonPrefixedKeys = [NSSet setWithObjects:
-                            FBExclusionAttributeFrame,
                             FBExclusionAttributePlaceholderValue,
                             FBExclusionAttributeNativeFrame,
                             FBExclusionAttributeTraits,
@@ -293,14 +296,10 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 // Helper used by `dictionaryForElement:` to assemble attribute value blocks,
 // including both common attributes and conditionally included ones like placeholderValue.
 + (NSDictionary<NSString *, NSString *(^)(void)> *)fb_attributeBlockMapForWrappedSnapshot:(FBXCElementSnapshotWrapper *)wrappedSnapshot
-
 {
   // Base attributes common to every element
   NSMutableDictionary<NSString *, id(^)(void)> *blocks =
   [@{
-    FBExclusionAttributeFrame: ^{
-    return NSStringFromCGRect(wrappedSnapshot.wdFrame);
-  },
     FBExclusionAttributeNativeFrame: ^{
     return NSStringFromCGRect(wrappedSnapshot.wdNativeFrame);
   },
