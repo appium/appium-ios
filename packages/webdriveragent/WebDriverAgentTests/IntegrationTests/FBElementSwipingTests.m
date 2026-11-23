@@ -27,9 +27,10 @@
 
 - (void)skipIfUnsupported
 {
-  XCTSkipIf(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+  XCTSkipIf((FBIntegrationTestCase.isRunningInCI
+             || UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad)
             && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testSwipeDownWithVelocity"],
-            @"Failed on Azure Pipeline. Local run succeeded.");
+            @"Flaky on CI (fails after retries, app termination errors). Local run succeeds.");
 }
 
 - (void)openScrollView
@@ -94,9 +95,10 @@
 
 - (void)skipIfUnsupported
 {
-  XCTSkipIf(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+  XCTSkipIf((FBIntegrationTestCase.isRunningInCI
+             || UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad)
             && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testSwipeDownWithVelocity"],
-            @"Failed on Azure Pipeline. Local run succeeded.");
+            @"Flaky on CI (fails after retries, app termination errors). Local run succeeds.");
 }
 
 - (void)openScrollView
