@@ -146,6 +146,12 @@
 
 @implementation XCUIDeviceRotationTests
 
+// iPad orientation changes
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
 - (void)setUp
 {
   [super setUp];

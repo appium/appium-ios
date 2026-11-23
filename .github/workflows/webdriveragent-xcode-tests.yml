@@ -98,29 +98,40 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      # Fails when a test class is missing from the iPhone chunks (it would silently never run)
+      - name: Check integration test plan
+        run: node packages/webdriveragent/Scripts/ci/check-integration-test-plan.mjs
       - id: set-matrix
+        # iPhone runs everything in 4 chunks (Scripts/ci/integration-test-plan.json); iPad only the
+        # tests that declare it via +iPadTests.
+        env:
+          MIN: ${{ needs.xcode_matrix.outputs.min }}
+          MAX: ${{ needs.xcode_matrix.outputs.max }}
         run: |
-          cat <<'MATRIX_JSON' | jq -c . > matrix.json
-          [
-            {"name": "iphone_int_test_1_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "iphone_int_test_2_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "iphone_int_test_3_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "ipad_int_test_1_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "ipad_int_test_2_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "ipad_int_test_3_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).iosVersion }}"},
-            {"name": "iphone_int_test_1_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_1", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "iphone_int_test_2_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_2", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "iphone_int_test_3_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_3", "dest": "iphone", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "ipad_int_test_1_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_1", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "ipad_int_test_2_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_2", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "ipad_int_test_3_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "int_test_3", "dest": "ipad", "sdk": "sim", "iphone_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).deviceName }}", "ipad_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).ipadDeviceName }}", "ios_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).iosVersion }}"},
-            {"name": "tv_int_test_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).tvosDeviceName }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).tvosVersion }}"},
-            {"name": "tv_int_test_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "tv_int_test", "dest": "tv", "sdk": "tv_sim", "tv_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).tvosDeviceName }}", "tv_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).tvosVersion }}"},
-            {"name": "watch_int_test_Max_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.max).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).xcodeVersion }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ fromJSON(needs.xcode_matrix.outputs.max).watchosDeviceName }}", "watch_version": "${{ fromJSON(needs.xcode_matrix.outputs.max).watchosVersion }}"},
-            {"name": "watch_int_test_Min_Xcode", "vm_image": "${{ fromJSON(needs.xcode_matrix.outputs.min).image }}", "xcode_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).xcodeVersion }}", "action": "watch_int_test", "dest": "watch", "sdk": "watch_sim", "watch_model": "${{ fromJSON(needs.xcode_matrix.outputs.min).watchosDeviceName }}", "watch_version": "${{ fromJSON(needs.xcode_matrix.outputs.min).watchosVersion }}"}
-          ]
-          MATRIX_JSON
-          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+          IPAD="$(node packages/webdriveragent/Scripts/ci/check-integration-test-plan.mjs --ipad-plan)"
+          jq -nc --argjson min "$MIN" --argjson max "$MAX" --argjson ipad "$IPAD" \
+            --slurpfile plan packages/webdriveragent/Scripts/ci/integration-test-plan.json '
+            def tests($chunk): $chunk | to_entries | map("\(.key):\(.value | join(","))") | join(" ");
+            def base($c; $label): {
+              vm_image: $c.image, xcode_version: $c.xcodeVersion, label: $label,
+              iphone_model: $c.deviceName, ipad_model: $c.ipadDeviceName, ios_version: $c.iosVersion,
+              tv_model: $c.tvosDeviceName, tv_version: $c.tvosVersion,
+              watch_model: $c.watchosDeviceName, watch_version: $c.watchosVersion
+            };
+            def entries($c; $label): base($c; $label) as $b
+              | [ range(0; $plan[0].iphone | length) as $i
+                  | $b + {name: "iphone_int_test_\($i + 1)_\($label)_Xcode", action: "int_test", dest: "iphone", sdk: "sim",
+                          tests: tests($plan[0].iphone[$i])} ]
+              + [ $b + {name: "ipad_int_test_\($label)_Xcode", action: "int_test", dest: "ipad", sdk: "sim",
+                        tests: tests($ipad)} ]
+              + [ $b + {name: "tv_int_test_\($label)_Xcode", action: "tv_int_test", dest: "tv", sdk: "tv_sim"} ]
+              + [ $b + {name: "watch_int_test_\($label)_Xcode", action: "watch_int_test", dest: "watch", sdk: "watch_sim"} ];
+            entries($max; "Max") + entries($min; "Min")
+          ' | sed 's/^/matrix=/' >> "$GITHUB_OUTPUT"
 
   build_tests_matrix:
     needs: xcode_matrix
@@ -346,6 +357,7 @@ jobs:
         run: ./Scripts/build.sh
         env:
           DERIVED_DATA_PATH: ${{ runner.temp }}/wda-derived-data
+          TEST_PLAN: ${{ matrix.config.tests }}
           ACTION: ${{ matrix.config.action }}
           DEST: ${{ matrix.config.dest }}
           TARGET: lib

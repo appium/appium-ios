@@ -25,6 +25,12 @@
 
 @implementation XCUIDeviceHelperTests
 
+// Screenshot orientation on iPad
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"testLandscapeScreenshot"];
+}
+
 - (void)skipIfUnsupported
 {
   XCTSkipIf(self.class.isRunningInCI && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testRepeatedLockUnlockAcrossHingePoses"],

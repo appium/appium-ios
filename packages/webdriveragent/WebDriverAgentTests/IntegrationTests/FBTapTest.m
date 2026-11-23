@@ -28,6 +28,12 @@
 
 @implementation FBTapTest
 
+// iPad orientation handling (no upside-down)
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
 // One launch covers all orientations: re-launching per orientation only added ~10s each.
 - (NSArray<NSNumber *> *)orientations
 {

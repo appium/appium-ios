@@ -66,6 +66,11 @@ NSArray<NSString *> *const FBMainViewButtonLabels = @[
   self.testedApplication = [XCUIApplication new];
 }
 
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[];
+}
+
 - (void)skipIfUnsupported
 {
 }

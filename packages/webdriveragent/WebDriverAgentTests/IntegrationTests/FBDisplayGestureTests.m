@@ -49,6 +49,12 @@
 
 @implementation FBDisplayGestureTests
 
+// Landscape-native iPad panels
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"testNativeCoordinatesInLandscapeLeft", @"testNativeCoordinatesInLandscapeRight", @"testW3CApplicationOriginAcrossOrientations"];
+}
+
 // Skipped before the (slow) app launch
 - (void)skipIfUnsupported
 {

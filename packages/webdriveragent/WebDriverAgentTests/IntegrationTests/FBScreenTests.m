@@ -119,6 +119,12 @@
 
 @implementation FBScreenTests
 
+// iPad status bar / landscape-native panel metadata
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
 - (void)skipIfUnsupported
 {
   XCTSkipIf([NSStringFromSelector(self.invocation.selector) isEqualToString:@"testScreenInfoAcrossFoldStates"]

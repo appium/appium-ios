@@ -142,6 +142,43 @@ function build_for_testing() {
         -destination "$generic" -derivedDataPath "$DERIVED_DATA_PATH" \
         CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CI=true build-for-testing )
   done
+  merge_xctestruns
+}
+
+# Merges the per-scheme .xctestrun files into one (xctestrun format 1 is a plain dictionary keyed
+# by test bundle), so a chunk can run tests from several bundles in a single xcodebuild run.
+function merge_xctestruns() {
+  python3 - "$DERIVED_DATA_PATH/Build/Products" <<'PY'
+import glob, plistlib, sys
+products = sys.argv[1]
+files = sorted(f for f in glob.glob(products + '/*.xctestrun') if '/WDAMerged_' not in f)
+if len(files) < 2:
+    sys.exit(0)
+merged = {}
+for f in files:
+    with open(f, 'rb') as fh:
+        data = plistlib.load(fh)
+    merged.update({k: v for k, v in data.items() if k != '__xctestrun_metadata__'})
+    merged.setdefault('__xctestrun_metadata__', data['__xctestrun_metadata__'])
+with open(files[0].replace('/IntegrationTests_', '/WDAMerged_', 1), 'wb') as fh:
+    plistlib.dump(merged, fh)
+PY
+}
+
+# Runs the TEST_PLAN ("<bundle>:<Class>[/test],<Class>... <bundle>:..."), a subset of the prebuilt
+# test bundles, in a single xcodebuild run.
+function int_test_plan() {
+  local only="" entry bundle item
+  if [[ -z "${TEST_PLAN:-}" || -z "${DERIVED_DATA_PATH:-}" ]]; then
+    echo "TEST_PLAN and DERIVED_DATA_PATH (with the prebuilt tests) are required"; exit 1
+  fi
+  for entry in $TEST_PLAN; do
+    bundle="${entry%%:*}"
+    for item in ${entry#*:}; do
+      only+="${only:+,}$bundle/${item//,/,$bundle/}"
+    done
+  done
+  ONLY_TESTING="$only" fastlane_test "${TEST_PLAN%%:*}" WDAMerged
 }
 
 function fastlane_test() {
@@ -177,7 +214,7 @@ function fastlane_test() {
   # Prebuilt products (see build_for_testing): run them without rebuilding
   local xctestrun=""
   if [[ -n "${DERIVED_DATA_PATH:-}" ]]; then
-    xctestrun="$(ls "$DERIVED_DATA_PATH"/Build/Products/"$1"_*.xctestrun 2>/dev/null | head -n 1)"
+    xctestrun="$(ls "$DERIVED_DATA_PATH"/Build/Products/"${2:-$1}"_*.xctestrun 2>/dev/null | head -n 1)"
     [[ -n "$xctestrun" ]] && echo "  XCTESTRUN=$xctestrun"
   fi
 
@@ -188,9 +225,7 @@ define_xc_macros
 case "$ACTION" in
   "analyze" ) analyze ;;
   "build_for_testing" ) build_for_testing ;;
-  "int_test_1" ) fastlane_test IntegrationTests_1 ;;
-  "int_test_2" ) fastlane_test IntegrationTests_2 ;;
-  "int_test_3" ) fastlane_test IntegrationTests_3 ;;
+  "int_test" ) int_test_plan ;;
   "tv_int_test" ) fastlane_test IntegrationTests_tvOS ;;
   # Like the iOS/tvOS integration tests, this launches the app under test in-process via
   # XCUIApplication rather than driving a separately running WDA server over HTTP.
