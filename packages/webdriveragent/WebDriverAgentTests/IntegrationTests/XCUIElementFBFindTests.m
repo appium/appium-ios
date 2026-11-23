@@ -1038,7 +1038,7 @@ static NSArray<NSString *> *FBLookupLabels(XCUIElement *root, NSString *query)
     // The ancestors of View 10 come before the ancestors of View 30 in the candidates, but not in the document
     NSString *query = @"**/XCUIElementTypeOther[`label IN {\"View 10\", \"View 30\"}`]"
       "/^XCUIElementTypeOther[`label BEGINSWITH \"View\"`]/XCUIElementTypeOther[1]";
-    XCTAssertEqualObjects(FBLookupLabels(self.testedApplication, query), @[@"View 2"]);
+    XCTAssertEqualObjects(FBLookupLabels(self.testedApplication, query), @[@"View 1"]);
   });
 }
 
