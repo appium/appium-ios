@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import net, {type AddressInfo} from 'node:net';
-import {describe, it} from 'node:test';
+import {type TestContext, describe, it} from 'node:test';
+import {fileURLToPath} from 'node:url';
 
 import {createPlist} from '../../../src/lib/plist/plist-creator.js';
 import type {PlistDictionary} from '../../../src/lib/types.js';
-import {ZipConduitService} from '../../../src/services/ios/zipconduit/index.js';
+import {
+  type ZipConduitInstallOptions,
+  type ZipConduitProgressCallback,
+  ZipConduitService,
+} from '../../../src/services/ios/zipconduit/index.js';
 
 const UDID = '00008030-000000000000002E';
 const DATA_COMPLETE: PlistDictionary = {Status: 'DataComplete'};
@@ -49,8 +54,39 @@ async function withConnectedService(
   }
 }
 
-function waitForInstallation(service: ZipConduitService, client: net.Socket, timeoutMs: number): Promise<void> {
-  return (service as any).waitForInstallation(client, {timeoutMs});
+function waitForInstallation(
+  service: ZipConduitService,
+  client: net.Socket,
+  timeoutMs: number,
+  progress?: ZipConduitProgressCallback,
+): Promise<void> {
+  return (service as any).waitForInstallation(client, {timeoutMs, progress});
+}
+
+/** A progress callback paired with a promise that settles once the device has reported `percent`. */
+function progressReached(percent: number): {progress: ZipConduitProgressCallback; reached: Promise<void>} {
+  let markReached: () => void = () => {};
+  const reached = new Promise<void>((resolve) => {
+    markReached = resolve;
+  });
+  return {
+    reached,
+    progress: (update) => {
+      if (update.percent === percent) {
+        markReached();
+      }
+    },
+  };
+}
+
+/** Runs `install()` on this spec file as the IPA, with the upload stubbed out, so only the install wait talks to the device. */
+function installWithoutUpload(
+  t: TestContext,
+  service: ZipConduitService,
+  options: ZipConduitInstallOptions,
+): Promise<unknown> {
+  t.mock.method(service as any, 'sendIpaFile', async () => ({streamMs: 0, payloadBytes: 0, entryCount: 0}));
+  return service.install(fileURLToPath(import.meta.url), options);
 }
 
 describe('ZipConduitService', function () {
@@ -58,10 +94,11 @@ describe('ZipConduitService', function () {
     it('keeps waiting past 30s between progress updates while within the install timeout', async function (t) {
       await withConnectedService(async (service, client, device) => {
         t.mock.timers.enable({apis: ['setTimeout']});
-        const installation = waitForInstallation(service, client, 10 * 60 * 1000);
+        const {progress, reached} = progressReached(40);
+        const installation = waitForInstallation(service, client, 10 * 60 * 1000, progress);
 
         device.write(frame(PROGRESS));
-        await flush();
+        await reached;
         t.mock.timers.tick(31_000);
         device.write(frame(DATA_COMPLETE));
 
@@ -87,6 +124,36 @@ describe('ZipConduitService', function () {
         t.mock.timers.tick(2_000);
         await assert.rejects(installation, /Timed out waiting for zip_conduit progress/);
         assert.equal(client.destroyed, true);
+      });
+    });
+  });
+
+  describe('install failure', function () {
+    it('drops and forgets the connection when the install times out', async function (t) {
+      await withConnectedService(async (service, client, device) => {
+        t.mock.timers.enable({apis: ['setTimeout']});
+        const {progress, reached} = progressReached(40);
+        const installation = installWithoutUpload(t, service, {timeoutMs: 45_000, progress});
+
+        device.write(frame(PROGRESS));
+        await reached;
+        t.mock.timers.tick(46_000);
+
+        await assert.rejects(installation, /Timed out waiting for zip_conduit progress/);
+        assert.equal(client.destroyed, true);
+        assert.equal((service as any).socket, null, 'a retried install() would reuse the dead socket');
+      });
+    });
+
+    it('drops and forgets the connection when the device reports an error', async function (t) {
+      await withConnectedService(async (service, client, device) => {
+        const installation = installWithoutUpload(t, service, {timeoutMs: 45_000});
+
+        device.write(frame({Error: 'ExtractionFailed'}));
+
+        await assert.rejects(installation, /ExtractionFailed/);
+        assert.equal(client.destroyed, true);
+        assert.equal((service as any).socket, null, 'a retried install() would reuse the dead socket');
       });
     });
   });
