@@ -11,6 +11,7 @@
 #import "XCUIElementDouble.h"
 #import "FBClassChainQueryParser.h"
 #import "FBElementTypeTransformer.h"
+#import "FBXCElementSnapshot.h"
 
 @interface FBClassChainTests : XCTestCase
 @end
@@ -572,6 +573,208 @@ static NSString *FBDescribeChain(FBClassChain *chain)
     XCTAssertNil([FBClassChainQueryParser parseQuery:query error:&error], @"%@", query);
     XCTAssertEqualObjects(error.localizedDescription, expectations[query], @"%@", query);
   }
+}
+
+@end
+
+
+// A snapshot tree with just enough behavior for the in-memory part of the class chain evaluation
+@interface FBTreeSnapshotDouble : NSObject
+@property (nonatomic, assign) XCUIElementType elementType;
+@property (nonatomic, copy) NSString *label;
+@property (nonatomic, weak) FBTreeSnapshotDouble *parent;
+@property (nonatomic, copy) NSArray<FBTreeSnapshotDouble *> *children;
+@end
+
+@implementation FBTreeSnapshotDouble
+
++ (instancetype)type:(XCUIElementType)type label:(NSString *)label children:(NSArray<FBTreeSnapshotDouble *> *)children
+{
+  FBTreeSnapshotDouble *result = [FBTreeSnapshotDouble new];
+  result.elementType = type;
+  result.label = label;
+  result.children = children;
+  for (FBTreeSnapshotDouble *child in children) {
+    child.parent = result;
+  }
+  return result;
+}
+
+- (NSArray *)_allDescendants
+{
+  NSMutableArray *result = [NSMutableArray array];
+  for (FBTreeSnapshotDouble *child in self.children) {
+    [result addObject:child];
+    [result addObjectsFromArray:child._allDescendants];
+  }
+  return result;
+}
+
+- (NSArray *)descendantsByFilteringWithBlock:(BOOL(^)(id snapshot))block
+{
+  NSMutableArray *result = [NSMutableArray array];
+  if (block(self)) {
+    [result addObject:self];
+  }
+  for (FBTreeSnapshotDouble *child in self.children) {
+    [result addObjectsFromArray:[child descendantsByFilteringWithBlock:block]];
+  }
+  return result;
+}
+
+@end
+
+@interface XCUIElement (FBClassChainTesting)
++ (NSUInteger)fb_indexOfFirstAxisItem:(NSArray<FBClassChainItem *> *)chainItems;
++ (NSArray<id<FBXCElementSnapshot>> *)fb_snapshotsMatchingChainItems:(NSArray<FBClassChainItem *> *)chainItems
+                                                           fromIndex:(NSUInteger)startIndex
+                                                               roots:(NSArray<id<FBXCElementSnapshot>> *)roots
+                                                             hasAxis:(BOOL)hasAxis
+                                         shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch;
+@end
+
+// Evaluates the queries over a snapshot tree the way the axis aware lookups do after the element is resolved
+@interface FBClassChainAxisEvaluationTests : XCTestCase
+@property (nonatomic) FBTreeSnapshotDouble *root;
+@end
+
+@implementation FBClassChainAxisEvaluationTests
+
+- (void)setUp
+{
+  [super setUp];
+  // app > window > [group g1 > [b1 b2 b3 b4], group g2 > [b5], v0 > v1 > v2 > v3]
+  FBTreeSnapshotDouble *(^button)(NSString *) = ^FBTreeSnapshotDouble *(NSString *label) {
+    return [FBTreeSnapshotDouble type:XCUIElementTypeButton label:label children:@[]];
+  };
+  FBTreeSnapshotDouble *group1 = [FBTreeSnapshotDouble type:XCUIElementTypeOther label:@"g1"
+                                                   children:@[button(@"b1"), button(@"b2"), button(@"b3"), button(@"b4")]];
+  FBTreeSnapshotDouble *group2 = [FBTreeSnapshotDouble type:XCUIElementTypeOther label:@"g2" children:@[button(@"b5")]];
+  FBTreeSnapshotDouble *nested = [FBTreeSnapshotDouble type:XCUIElementTypeOther label:@"v3" children:@[]];
+  for (NSString *label in @[@"v2", @"v1", @"v0"]) {
+    nested = [FBTreeSnapshotDouble type:XCUIElementTypeOther label:label children:@[nested]];
+  }
+  FBTreeSnapshotDouble *window = [FBTreeSnapshotDouble type:XCUIElementTypeWindow label:@"window" children:@[group1, group2, nested]];
+  self.root = [FBTreeSnapshotDouble type:XCUIElementTypeApplication label:@"app" children:@[window]];
+}
+
+- (NSArray<NSString *> *)labelsForQuery:(NSString *)query
+{
+  return [self labelsForQuery:query from:self.root firstMatch:NO];
+}
+
+- (NSArray<NSString *> *)labelsForQuery:(NSString *)query from:(FBTreeSnapshotDouble *)start firstMatch:(BOOL)firstMatch
+{
+  NSError *error;
+  FBClassChain *chain = [FBClassChainQueryParser parseQuery:query error:&error];
+  XCTAssertNotNil(chain, @"%@", error);
+  NSArray *matches = [XCUIElement fb_snapshotsMatchingChainItems:chain.elements
+                                                       fromIndex:0
+                                                           roots:@[(id)start]
+                                                         hasAxis:NSNotFound != [XCUIElement fb_indexOfFirstAxisItem:chain.elements]
+                                     shouldReturnAfterFirstMatch:firstMatch];
+  return [matches valueForKey:@"label"];
+}
+
+- (void)testParentAndAncestors
+{
+  NSString *prefix = @"**/XCUIElementTypeButton[`label == 'b2'`]/";
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@".."]], @[@"g1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"../.."]], @[@"window"]);
+  // Document order: the outermost ancestor comes first
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^*"]], (@[@"app", @"window", @"g1"]));
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^XCUIElementTypeOther[1]"]], @[@"g1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^*[2]"]], @[@"window"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^*[-1]"]], @[@"app"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^XCUIElementTypeWindow"]], @[@"window"]);
+}
+
+- (void)testSiblings
+{
+  NSString *prefix = @"**/XCUIElementTypeButton[`label == 'b2'`]/";
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@">XCUIElementTypeButton"]], (@[@"b3", @"b4"]));
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"<XCUIElementTypeButton"]], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton"]], (@[@"b1", @"b3", @"b4"]));
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@">XCUIElementTypeButton[1]"]], @[@"b3"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@">XCUIElementTypeButton[-1]"]], @[@"b4"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton[-1]"]], @[@"b4"]);
+  prefix = @"**/XCUIElementTypeButton[`label == 'b4'`]/";
+  // Preceding positions count backwards from the starting element
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"<XCUIElementTypeButton[1]"]], @[@"b3"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"<XCUIElementTypeButton[-1]"]], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"<XCUIElementTypeButton"]], (@[@"b1", @"b2", @"b3"]));
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton[`label != 'b2'`][2]"]], @[@"b3"]);
+}
+
+- (void)testPredicatesOnAxisSteps
+{
+  NSString *prefix = @"**/XCUIElementTypeButton[`label == 'b1'`]/";
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton[`label IN {'b2', 'b4'}`]"]], (@[@"b2", @"b4"]));
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"..[`label == 'g1'`]/XCUIElementTypeButton[1]"]], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"..[`label == 'nope'`]"]], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^*[`label == 'window'`]"]], @[@"window"]);
+}
+
+- (void)testPositionedStepsBeforeAxes
+{
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[3]/>XCUIElementTypeButton[1]"], @[@"b4"]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeOther[`label == 'g1'`][1]/XCUIElementTypeButton[2]/<XCUIElementTypeButton"], @[@"b1"]);
+}
+
+- (void)testChainedAxesAndLaterSteps
+{
+  NSString *prefix = @"**/XCUIElementTypeButton[`label == 'b2'`]/";
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"../XCUIElementTypeButton[`label == 'b4'`]"]], @[@"b4"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"../**/XCUIElementTypeButton[`label == 'b3'`]"]], @[@"b3"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@">XCUIElementTypeButton[2]/<XCUIElementTypeButton[1]"]], @[@"b3"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"^XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeButton"]], @[@"b5"]);
+}
+
+- (void)testSeveralStartingElements
+{
+  // Overlapping roots do not produce duplicates, the matches come in document order
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton/.."], (@[@"g1", @"g2"]));
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton/^XCUIElementTypeWindow"], @[@"window"]);
+  // Candidates of all the starting elements are merged in document order before the position is applied
+  NSString *prefix = @"**/XCUIElementTypeButton[`label IN {'b2', 'b4'}`]/";
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton[1]"]], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"~XCUIElementTypeButton[-1]"]], @[@"b4"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@">XCUIElementTypeButton[1]"]], @[@"b3"]);
+  XCTAssertEqualObjects([self labelsForQuery:[prefix stringByAppendingString:@"<XCUIElementTypeButton"]], (@[@"b1", @"b2", @"b3"]));
+}
+
+- (void)testNextStepFollowsAxisMatchesInDocumentOrder
+{
+  // The ancestors of v2 come before the ancestors of v3 in the candidates, but not in the document
+  NSString *query = @"**/XCUIElementTypeOther[`label IN {'v2', 'v3'}`]/^XCUIElementTypeOther[`label BEGINSWITH 'v'`]/XCUIElementTypeOther[1]";
+  XCTAssertEqualObjects([self labelsForQuery:query], @[@"v1"]);
+}
+
+- (void)testFirstMatch
+{
+  NSString *query = @"**/XCUIElementTypeButton[`label == 'b3'`]/~XCUIElementTypeButton";
+  XCTAssertEqualObjects([self labelsForQuery:query from:self.root firstMatch:YES], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton/.." from:self.root firstMatch:YES], @[@"g1"]);
+}
+
+- (void)testEmptyResults
+{
+  XCTAssertEqualObjects([self labelsForQuery:@".."], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[`label == 'nope'`]/.."], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[`label == 'b1'`]/<XCUIElementTypeButton"], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[`label == 'b1'`]/>XCUIElementTypeButton[20]"], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[`label == 'b1'`]/^XCUIElementTypeButton"], @[]);
+  XCTAssertEqualObjects([self labelsForQuery:@"**/XCUIElementTypeButton[`label == 'b5'`]/~XCUIElementTypeButton"], @[]);
+}
+
+- (void)testContextElement
+{
+  FBTreeSnapshotDouble *b3 = self.root.children.firstObject.children.firstObject.children[2];
+  XCTAssertEqualObjects([self labelsForQuery:@">XCUIElementTypeButton[1]" from:b3 firstMatch:NO], @[@"b4"]);
+  XCTAssertEqualObjects([self labelsForQuery:@"<XCUIElementTypeButton[1]" from:b3 firstMatch:NO], @[@"b2"]);
+  XCTAssertEqualObjects([self labelsForQuery:@".." from:b3 firstMatch:NO], @[@"g1"]);
+  XCTAssertEqualObjects([self labelsForQuery:@"../XCUIElementTypeButton[`label == 'b1'`]" from:b3 firstMatch:NO], @[@"b1"]);
+  XCTAssertEqualObjects([self labelsForQuery:@"^XCUIElementTypeOther[1]" from:b3 firstMatch:NO], @[@"g1"]);
 }
 
 @end

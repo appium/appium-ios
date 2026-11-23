@@ -191,9 +191,24 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
     shouldReturnAfterFirstMatch:shouldReturnAfterFirstMatch];
 }
 
-// Walks the items starting from the given index over the roots. Everything is resolved
-// in memory and the final matches are bound to elements at once.
+// Resolves the items in memory and binds the final matches to elements at once.
 - (NSArray<XCUIElement *> *)fb_walkChainItems:(NSArray<FBClassChainItem *> *)chainItems fromIndex:(NSUInteger)startIndex roots:(NSArray<id<FBXCElementSnapshot>> *)roots hasAxis:(BOOL)hasAxis shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
+{
+  NSArray<id<FBXCElementSnapshot>> *matchedSnapshots = [self.class fb_snapshotsMatchingChainItems:chainItems
+                                                                                         fromIndex:startIndex
+                                                                                             roots:roots
+                                                                                           hasAxis:hasAxis
+                                                                       shouldReturnAfterFirstMatch:shouldReturnAfterFirstMatch];
+  if (0 == matchedSnapshots.count) {
+    return @[];
+  }
+  // Axes may leave the receiver's subtree
+  return [(hasAxis ? self.application : self) fb_filterDescendantsWithSnapshots:matchedSnapshots onlyChildren:NO];
+}
+
+// Walks the items starting from the given index over the roots, entirely in memory.
+// Matches of axis chains are returned in document order, whatever the binding strategy is.
++ (NSArray<id<FBXCElementSnapshot>> *)fb_snapshotsMatchingChainItems:(NSArray<FBClassChainItem *> *)chainItems fromIndex:(NSUInteger)startIndex roots:(NSArray<id<FBXCElementSnapshot>> *)roots hasAxis:(BOOL)hasAxis shouldReturnAfterFirstMatch:(BOOL)shouldReturnAfterFirstMatch
 {
   // The positions of snapshots in the document are only needed with axes and are built at most once
   NSMapTable<id<FBXCElementSnapshot>, NSNumber *> *documentPositions = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
@@ -201,43 +216,38 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
   NSArray<id<FBXCElementSnapshot>> *currentRoots = roots;
   for (NSUInteger i = startIndex; i < chainItems.count; i++) {
     FBClassChainItem *chainItem = chainItems[i];
-    NSArray<id<FBXCElementSnapshot>> *candidates = [self.class fb_snapshotsMatchingItem:chainItem
-                                                                                                 inRoots:currentRoots
-                                                                                       documentPositions:documentPositions];
+    NSArray<id<FBXCElementSnapshot>> *candidates = [self fb_snapshotsMatchingItem:chainItem
+                                                                          inRoots:currentRoots
+                                                                documentPositions:documentPositions];
     if (i + 1 == chainItems.count) {
       if (!hasAxis) {
-        return [self fb_filterDescendantsWithSnapshots:[self.class fb_matchingSnapshotsWithItem:chainItem
-                                                                                     candidates:candidates
-                                                                    shouldReturnAfterFirstMatch:@(shouldReturnAfterFirstMatch)]
-                                          onlyChildren:NO];
+        return [self fb_matchingSnapshotsWithItem:chainItem
+                                       candidates:candidates
+                      shouldReturnAfterFirstMatch:@(shouldReturnAfterFirstMatch)];
       }
-      // Positions of axis items count along the axis, but the matches are always returned
-      // in document order, whatever the binding strategy is. Axes may leave the receiver's subtree.
-      NSArray<id<FBXCElementSnapshot>> *matchedSnapshots = [self.class fb_snapshotsInDocumentOrder:
-                                                            [self.class fb_matchingSnapshotsWithItem:chainItem
-                                                                                          candidates:candidates
-                                                                         shouldReturnAfterFirstMatch:nil]
-                                                                                           positions:documentPositions];
-      if (shouldReturnAfterFirstMatch && matchedSnapshots.count > 1) {
-        matchedSnapshots = @[matchedSnapshots.firstObject];
-      }
-      return [self.application fb_filterDescendantsWithSnapshots:matchedSnapshots onlyChildren:NO];
+      // Positions of axis items count along the axis, the matches are put in document order afterwards
+      NSArray<id<FBXCElementSnapshot>> *matchedSnapshots = [self fb_snapshotsInDocumentOrder:
+                                                            [self fb_matchingSnapshotsWithItem:chainItem
+                                                                                    candidates:candidates
+                                                                   shouldReturnAfterFirstMatch:nil]
+                                                                                   positions:documentPositions];
+      return shouldReturnAfterFirstMatch && matchedSnapshots.count > 1 ? @[matchedSnapshots.firstObject] : matchedSnapshots;
     }
     if (nil != chainItem.position) {
       // An explicit position always narrows the match set down to a single
       // element, which becomes the sole root for the rest of the chain, so
       // it has to be resolved now instead of being folded into `candidates`
       // like an unindexed segment would be
-      NSArray<id<FBXCElementSnapshot>> *currentRootMatch = [self.class fb_matchingSnapshotsWithItem:chainItem
-                                                                                           candidates:candidates
-                                                                          shouldReturnAfterFirstMatch:nil];
+      NSArray<id<FBXCElementSnapshot>> *currentRootMatch = [self fb_matchingSnapshotsWithItem:chainItem
+                                                                                   candidates:candidates
+                                                                  shouldReturnAfterFirstMatch:nil];
       if (0 == currentRootMatch.count) {
         return @[];
       }
       currentRoots = @[(id<FBXCElementSnapshot> _Nonnull)currentRootMatch.firstObject];
     } else {
       // Several matches of an axis step follow each other per matched element, the next step needs them in document order
-      currentRoots = FBIsAxisItem(chainItem) ? [self.class fb_snapshotsInDocumentOrder:candidates positions:documentPositions] : candidates;
+      currentRoots = FBIsAxisItem(chainItem) ? [self fb_snapshotsInDocumentOrder:candidates positions:documentPositions] : candidates;
     }
   }
   return @[];
@@ -248,7 +258,7 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
   NSMutableArray<id<FBXCElementSnapshot>> *typeMatches = [NSMutableArray array];
   for (id<FBXCElementSnapshot> root in roots) {
     if (FBIsAxisItem(item)) {
-      for (id<FBXCElementSnapshot> candidate in [self.class fb_axisSnapshotsOfRoot:root axis:item.axis]) {
+      for (id<FBXCElementSnapshot> candidate in [self fb_axisSnapshotsOfRoot:root axis:item.axis]) {
         if (item.type == XCUIElementTypeAny || candidate.elementType == item.type) {
           [typeMatches addObject:candidate];
         }
