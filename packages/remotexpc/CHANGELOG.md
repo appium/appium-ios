@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.5](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.4...appium-ios-remotexpc@6.1.5) (2026-11-23)
+
+### Bug Fixes
+
+* **remotexpc:** close the zipconduit socket and honour the install timeout ([#232](https://github.com/appium/appium-ios/issues/232)) ([7623793](https://github.com/appium/appium-ios/commit/7623793ba8919fdd7ee6412e6e21d3290d2885bf))
+
+
 ## [6.1.4](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.3...appium-ios-remotexpc@6.1.4) (2026-11-20)
 
 ### Bug Fixes
