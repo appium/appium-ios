@@ -78,8 +78,8 @@ static id<FBXCElementSnapshot> FBMatchingDisplaySnapshot(id<FBXCElementSnapshot>
 {
   id<FBAXDisplayElement> match = nil;
   for (id<FBAXDisplayElement> candidate in elements) {
-    if ([candidate respondsToSelector:@selector(windowDisplayId)] && candidate.windowDisplayId == displayID
-        && [candidate respondsToSelector:@selector(axIdentifier)] && [candidate.axIdentifier isEqualToString:original.identifier]
+    if ([candidate respondsToSelector:@selector(axIdentifier)] && [candidate.axIdentifier isEqualToString:original.identifier]
+        && [candidate respondsToSelector:@selector(windowDisplayId)] && candidate.windowDisplayId == displayID
         && [candidate respondsToSelector:@selector(label)] && [candidate.label isEqualToString:original.label]) {
       if (match != nil) {
         return nil;
