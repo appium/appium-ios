@@ -122,7 +122,7 @@ export class ProcessControl extends BaseInstrument {
     await this.initialize();
     const channel = this.requireChannel();
 
-    const launchOptions: Record<string, any> = {
+    const launchOptions: Record<string, unknown> = {
       StartSuspendedKey: options.startSuspended ?? false,
       KillExisting: options.killExisting ?? true,
       ...options.extraOptions,

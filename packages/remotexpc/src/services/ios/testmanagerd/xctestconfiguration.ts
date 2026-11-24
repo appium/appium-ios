@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 
 import {PlistUID} from '../../../lib/plist/index.js';
+import type {PlistValue} from '../../../lib/types.js';
+import {isPlainObject} from '../dvt/utils.js';
 import {TestmanagerdEncoder} from './testmanagerd-encoder.js';
 
 /**
@@ -68,17 +70,17 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return this.encode(configObj);
   }
 
-  protected override archiveObject(value: any): number {
+  protected override archiveObject(value: unknown): number {
     if (value === null || value === undefined) {
       return 0;
     }
 
-    if (value && typeof value === 'object') {
+    if (isPlainObject(value)) {
       if (value.__type === 'NSURL') {
-        return this.archiveNSURL(value.base, value.relative);
+        return this.archiveNSURL(value.base as string | null, value.relative as string);
       }
       if (value.__type === 'XCTestConfiguration') {
-        return this.archiveXCTestConfiguration(value.fields);
+        return this.archiveXCTestConfiguration(value.fields as Record<string, unknown>);
       }
     }
 
@@ -103,11 +105,11 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return index;
   }
 
-  private archiveXCTestConfiguration(fields: Record<string, any>): number {
+  private archiveXCTestConfiguration(fields: Record<string, unknown>): number {
     const index = this.objects.length;
     this.objects.push(null); // Placeholder
 
-    const archivedFields: Record<string, any> = {};
+    const archivedFields: Record<string, PlistValue> = {};
     for (const [key, value] of Object.entries(fields)) {
       if (value === undefined) {
         continue;
@@ -146,7 +148,7 @@ export class XCTestConfigurationEncoder extends TestmanagerdEncoder {
     return index;
   }
 
-  private buildConfigObject(config: XCTestConfigurationParams): Record<string, any> {
+  private buildConfigObject(config: XCTestConfigurationParams): Record<string, unknown> {
     const sessionId = config.sessionIdentifier || crypto.randomUUID();
 
     return {

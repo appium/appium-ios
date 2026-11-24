@@ -82,7 +82,7 @@ function throwIfNSErrorReply(result: unknown, context: string): void {
     const hasErr = objects.some((o) => hasNSErrorIndicators(o));
     if (hasErr) {
       const msg =
-        objects.find((o: any) => typeof o === 'string' && o.length > MIN_NSERROR_DESCRIPTION_LEN) ??
+        objects.find((o): o is string => typeof o === 'string' && o.length > MIN_NSERROR_DESCRIPTION_LEN) ??
         'NSError from testmanagerd';
       throw new Error(`${context}: ${msg}`);
     }

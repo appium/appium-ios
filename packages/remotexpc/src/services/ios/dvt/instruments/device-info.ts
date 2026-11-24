@@ -243,7 +243,7 @@ export class DeviceInfo extends BaseInstrument {
    * @returns The information object or value returned by the selector
    * @private
    */
-  private async requestInformation(selectorName: string, arg?: any): Promise<any> {
+  private async requestInformation(selectorName: string, arg?: unknown): Promise<any> {
     await this.initialize();
     const channel = this.requireChannel();
 
