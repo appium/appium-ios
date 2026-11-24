@@ -5,7 +5,11 @@ import {getTunnelForDevice} from '../tunnel/tunnel-availability.js';
 import {createUsbmux} from '../usbmux/index.js';
 import type {PortForwardingConnector} from './types.js';
 
-const connectViaUsbmuxImpl = async (udid: string, devicePort: number, connectTimeoutMs = 5000): Promise<Socket> => {
+/** Default budget for opening a forwarded connection, in milliseconds. */
+const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
+
+/** Omitting `connectTimeoutMs` lets usbmux apply its own default. */
+const connectViaUsbmuxImpl = async (udid: string, devicePort: number, connectTimeoutMs?: number): Promise<Socket> => {
   const usbmux = await createUsbmux();
   let remoteSocket: Socket | undefined;
   try {
@@ -31,7 +35,11 @@ export const connectViaUsbmux = connectViaUsbmuxImpl satisfies PortForwardingCon
 /**
  * Opens a TCP connection to a host on the tunnel, failing after `connectTimeoutMs`.
  */
-export const connectToTunnelHost = async (host: string, port: number, connectTimeoutMs = 5000): Promise<Socket> =>
+export const connectToTunnelHost = async (
+  host: string,
+  port: number,
+  connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
+): Promise<Socket> =>
   await new Promise<Socket>((resolve, reject) => {
     const socket = createConnection({host, port});
 
@@ -61,7 +69,11 @@ export const connectToTunnelHost = async (host: string, port: number, connectTim
     socket.once('connect', onConnect);
   });
 
-const connectViaTunnelImpl = async (udid: string, devicePort: number, connectTimeoutMs = 5000): Promise<Socket> => {
+const connectViaTunnelImpl = async (
+  udid: string,
+  devicePort: number,
+  connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
+): Promise<Socket> => {
   const deadline = performance.now() + connectTimeoutMs;
   const remainingMs = (): number => Math.max(0, Math.ceil(deadline - performance.now()));
 
