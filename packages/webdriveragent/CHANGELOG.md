@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.2...appium-webdriveragent@17.1.3) (2026-11-24)
+
+### Bug Fixes
+
+* **webdriveragent:** resolve window and SpringBoard element geometry on the selected display ([#239](https://github.com/appium/appium-ios/issues/239)) ([d839210](https://github.com/appium/appium-ios/commit/d839210986b78214afccd4cd26a12358b6b68b16))
+
+
 ## [17.1.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.1...appium-webdriveragent@17.1.2) (2026-11-23)
 
 **Note:** Version bump only for package appium-webdriveragent
