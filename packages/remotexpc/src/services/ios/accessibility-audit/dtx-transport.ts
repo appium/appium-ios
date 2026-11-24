@@ -47,7 +47,7 @@ const AUX_INT64_SIZE = 8;
 
 /** Options for {@link AxAuditDtxTransport.invoke}. */
 export interface InvokeOptions {
-  /** How long to wait for the reply, in milliseconds. Defaults to `DEFAULT_REPLY_TIMEOUT_MS`. */
+  /** How long to wait for the reply, in milliseconds. Defaults to 15000 (`DEFAULT_REPLY_TIMEOUT_MS`). */
   timeoutMs?: number;
 }
 

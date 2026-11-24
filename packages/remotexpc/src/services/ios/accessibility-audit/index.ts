@@ -739,7 +739,7 @@ export class AccessibilityAuditService {
 
 /** Options for {@link AccessibilityAuditService.getFocusedElement}. */
 export interface InspectOptions {
-  /** How long to wait for the device to push the element. Defaults to `DEFAULT_FOCUS_TIMEOUT_MS`. */
+  /** How long to wait for the device to push the element. Defaults to 15000 (`DEFAULT_FOCUS_TIMEOUT_MS`). */
   timeoutMs?: number;
   /** Draw the Inspector's highlight around the element on the device. */
   showVisuals?: boolean;
