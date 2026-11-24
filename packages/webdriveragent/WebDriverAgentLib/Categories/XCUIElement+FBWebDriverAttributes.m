@@ -9,6 +9,7 @@
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 #import "FBConfiguration.h"
+#import "FBDisplayGeometry.h"
 #import "FBElementTypeTransformer.h"
 #import "FBElementHelpers.h"
 #import "FBLogger.h"
@@ -36,19 +37,18 @@
   if ([name isEqualToString:FBStringify(XCUIElement, isWDHittable)]) {
     return [self fb_nativeSnapshot];
   }
-  // https://github.com/appium/WebDriverAgent/issues/1085
-  if (FBConfiguration.sharedInstance.enforceCustomSnapshots) {
-    return [self fb_customSnapshot];
-  }
-  // https://github.com/appium/appium-xcuitest-driver/issues/2552
+  // Application snapshots: https://github.com/appium/appium-xcuitest-driver/issues/2552
   BOOL isValueRequest = [name isEqualToString:FBStringify(XCUIElement, wdValue)];
-  if ([self isKindOfClass:XCUIApplication.class] && !isValueRequest) {
-    return [self fb_standardSnapshot];
+  // Custom snapshot override: https://github.com/appium/WebDriverAgent/issues/1085
+  BOOL isCustomSnapshot = FBConfiguration.sharedInstance.enforceCustomSnapshots
+    || isValueRequest
+    || (![self isKindOfClass:XCUIApplication.class]
+        && ([name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
+            || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
+            || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
+  if ([name isEqualToString:FBStringify(XCUIElement, wdRect)] || [name isEqualToString:FBStringify(XCUIElement, wdFrame)]) {
+    return FBSnapshotForDisplayGeometry(self, isCustomSnapshot);
   }
-  BOOL isCustomSnapshot = [name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
-    || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
-    || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]
-    || isValueRequest;
   return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];
 }
 
@@ -158,7 +158,7 @@
 
 - (CGRect)wdFrame
 {
-  CGRect frame = self.frame;
+  CGRect frame = FBFrameForDisplayGeometry(self.snapshot);
   // It is mandatory to replace all Infinity values with numbers to avoid JSON parsing
   // exceptions like https://github.com/facebook/WebDriverAgent/issues/639#issuecomment-314421206
   // caused by broken element dimensions returned by XCTest

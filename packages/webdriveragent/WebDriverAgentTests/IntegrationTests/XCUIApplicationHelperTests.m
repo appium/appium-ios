@@ -13,6 +13,9 @@
 
 #import "FBIntegrationTestCase.h"
 #import "FBElement.h"
+#import "FBDisplayGeometry.h"
+#import "XCUIElement+FBUtilities.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBSession.h"
 #import "FBSessionCommands.h"
 #import "FBMacros.h"
@@ -25,6 +28,13 @@
 #import "FBScreen.h"
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBHinge.h"
+
+@interface XCUIApplication (FBGeometrySerializationTests)
++ (NSDictionary *)dictionaryForElement:(id<FBXCElementSnapshot>)snapshot
+                      displaySnapshots:(FBDisplaySnapshotMap *)displaySnapshots
+                             recursive:(BOOL)recursive
+                    excludedAttributes:(NSSet<NSString *> *)excludedAttributes;
+@end
 
 // Exercise the session-start resume path without creating a second session.
 @interface FBSessionCommands (FBActivationTests)
@@ -82,6 +92,21 @@ void calculateMaxTreeDepth(NSDictionary *tree, NSNumber *currentDepth, NSNumber*
   calculateMaxTreeDepth(tree, @0, &maxDepth);
   XCTAssertGreaterThan(maxDepth.integerValue, 3);
   XCTAssertNotNil(self.testedApplication.fb_accessibilityTree);
+}
+
+- (void)testJSONGeometryUsesDisplayCounterpart
+{
+  id<FBXCElementSnapshot> button = [self.testedApplication.buttons[@"Alerts"] fb_standardSnapshot];
+  id<FBXCElementSnapshot> window = [self.testedApplication.windows.firstMatch fb_standardSnapshot];
+  XCTAssertFalse(CGRectEqualToRect(button.frame, window.frame));
+  FBDisplaySnapshotMap *matches = [NSMapTable strongToStrongObjectsMapTable];
+  [matches setObject:window forKey:button];
+
+  NSDictionary *node = [XCUIApplication dictionaryForElement:button displaySnapshots:matches recursive:NO excludedAttributes:nil];
+  FBXCElementSnapshotWrapper *geometry = [FBXCElementSnapshotWrapper ensureWrapped:window];
+  XCTAssertEqualObjects(node[@"rect"], geometry.wdRect);
+  XCTAssertEqualObjects(node[@"frame"], NSStringFromCGRect(geometry.wdFrame));
+  XCTAssertEqualObjects(node[@"nativeFrame"], NSStringFromCGRect(button.frame));
 }
 
 - (void)testApplicationTreeAttributesFiltering

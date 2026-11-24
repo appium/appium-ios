@@ -49,4 +49,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+/** First nonempty window on the display and its frame. Writes CGRectNull if no window matches. */
+XCUIElement *_Nullable FBWindowOnDisplay(XCUIElement *application, long long displayID, CGRect *frame);
+#endif
+
 NS_ASSUME_NONNULL_END

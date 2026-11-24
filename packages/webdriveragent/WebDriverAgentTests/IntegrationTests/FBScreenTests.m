@@ -7,6 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
@@ -14,19 +15,28 @@
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
+#import "XCUIApplication.h"
 #import "XCUIElement.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBActiveAppDetectionPoint.h"
 #import "FBExceptions.h"
 #import "FBScreenRecordingRequest.h"
 #import "FBScreenshot.h"
 #import "XCUIScreen.h"
 #import "FBCustomCommands.h"
-#import "FBRouteRequest.h"
+#import "FBElementCommands.h"
+#import "FBRouteRequest-Private.h"
+#import "FBSession.h"
 #import "FBResponsePayload.h"
 #import "RouteResponse.h"
 
 @interface FBCustomCommands (FBScreenInfoTesting)
 + (id<FBResponsePayload>)handleGetScreen:(FBRouteRequest *)request;
+@end
+
+@interface FBElementCommands (FBWindowGeometryTesting)
++ (id<FBResponsePayload>)handleGetWindowSize:(FBRouteRequest *)request;
++ (id<FBResponsePayload>)handleGetWindowRect:(FBRouteRequest *)request;
 @end
 
 @interface FBScreen (FBLookupTesting)
@@ -177,6 +187,48 @@
   }
 }
 
+- (void)testWindowGeometryWhenDisplayEnumerationFails
+{
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/"]
+                                                     parameters:@{} arguments:@{}];
+  request.session = [FBSession initWithApplication:self.testedApplication];
+  request.session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [request.session kill]; }];
+
+  NSNumber *mainDisplay = @([FBScreen displayID]);
+  NSDictionary *rect = self.testedApplication.wdRect;
+  NSDictionary *size = @{@"width": rect[@"width"], @"height": rect[@"height"]};
+  Method method = class_getClassMethod(FBScreen.class, @selector(hasMultipleScreensWithError:));
+  IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
+    if (error != NULL) {
+      *error = [NSError errorWithDomain:@"Test" code:1 userInfo:@{NSLocalizedDescriptionKey: @"No display list"}];
+    }
+    return nil;
+  });
+  IMP original = method_setImplementation(method, replacement);
+  @try {
+    for (NSNumber *explicit in @[@NO, @YES]) {
+      FBConfiguration.sharedInstance.currentDisplayId = explicit.boolValue ? mainDisplay : nil;
+      RouteResponse *sizeResponse = [RouteResponse new];
+      [[FBElementCommands handleGetWindowSize:request] dispatchWithResponse:sizeResponse];
+      RouteResponse *rectResponse = [RouteResponse new];
+      [[FBElementCommands handleGetWindowRect:request] dispatchWithResponse:rectResponse];
+      NSDictionary *actualSize = [NSJSONSerialization JSONObjectWithData:sizeResponse.responseData options:0 error:nil][@"value"];
+      NSDictionary *actualRect = [NSJSONSerialization JSONObjectWithData:rectResponse.responseData options:0 error:nil][@"value"];
+      if (explicit.boolValue) {
+        XCTAssertEqualObjects(actualSize[@"error"], @"invalid argument");
+        XCTAssertEqualObjects(actualRect[@"error"], @"invalid argument");
+      } else {
+        XCTAssertEqualObjects(actualSize, size);
+        XCTAssertEqualObjects(actualRect, rect);
+      }
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
+  }
+}
+
 - (void)testScreenInfoAcrossFoldStates
 {
   XCUIDevice *device = XCUIDevice.sharedDevice;
@@ -189,6 +241,11 @@
       [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
     }
   }];
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/"]
+                                                     parameters:@{} arguments:@{}];
+  request.session = [FBSession initWithApplication:nil];
+  request.session.defaultActiveApplication = @"com.apple.springboard";
+  [self addTeardownBlock:^{ [request.session kill]; }];
   for (NSNumber *angle in @[@0, @90, @180, @0]) {
     [self.testedApplication terminate];
     XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:&error], @"%@", error);
@@ -208,6 +265,20 @@
         && (barHeight == 0 || fabs([info[@"statusBarSize"][@"width"] doubleValue] - width) <= 1)
         && (angle.doubleValue == 0 || barHeight == 0);
     }], @"Unexpected screen metadata at hinge angle %@: %@", angle, info);
+
+    // SpringBoard exposes windows on both panels even when its root retains the cover frame.
+    RouteResponse *sizeResponse = [RouteResponse new];
+    [[FBElementCommands handleGetWindowSize:request] dispatchWithResponse:sizeResponse];
+    NSDictionary *size = [NSJSONSerialization JSONObjectWithData:sizeResponse.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(size, info[@"screenSize"]);
+    RouteResponse *rectResponse = [RouteResponse new];
+    [[FBElementCommands handleGetWindowRect:request] dispatchWithResponse:rectResponse];
+    NSDictionary *rect = [NSJSONSerialization JSONObjectWithData:rectResponse.responseData options:0 error:nil][@"value"];
+    NSDictionary *expectedRect = @{@"x": @0, @"y": @0, @"width": size[@"width"] ?: NSNull.null,
+                                   @"height": size[@"height"] ?: NSNull.null};
+    XCTAssertEqualObjects(rect, expectedRect);
+    XCTAssertEqualObjects(request.session.activeApplication.wdRect, expectedRect,
+                          @"Unexpected SpringBoard root rect at hinge angle %@", angle);
   }
 }
 
@@ -504,8 +575,5 @@
   XCTAssertEqualObjects(info[@"error"], @"invalid argument");
   XCTAssertTrue([info[@"message"] containsString:@"Available display ids"]);
 }
-
-
-
 
 @end
