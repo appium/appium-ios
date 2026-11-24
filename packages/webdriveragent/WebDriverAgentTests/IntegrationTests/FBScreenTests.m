@@ -11,6 +11,9 @@
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
+#import "FBGestureCoordinateContext.h"
+#import "XCUIApplication+FBHelpers.h"
+#import "XCUIDevice+FBHelpers.h"
 #import "FBScreen.h"
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBRotation.h"
@@ -137,7 +140,8 @@
 
 - (void)skipIfUnsupported
 {
-  XCTSkipIf([NSStringFromSelector(self.invocation.selector) isEqualToString:@"testScreenInfoAcrossFoldStates"]
+  XCTSkipIf((self.invocation.selector == @selector(testScreenInfoAcrossFoldStates)
+             || self.invocation.selector == @selector(testReadingControlCenterOnInnerDisplay))
             && !XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
 }
 
@@ -279,7 +283,49 @@
     XCTAssertEqualObjects(rect, expectedRect);
     XCTAssertEqualObjects(request.session.activeApplication.wdRect, expectedRect,
                           @"Unexpected SpringBoard root rect at hinge angle %@", angle);
+
+    FBConfiguration.sharedInstance.currentDisplayId = nil;
+    RouteResponse *mainWindow = [RouteResponse new];
+    [[FBElementCommands handleGetWindowRect:request] dispatchWithResponse:mainWindow];
+    NSDictionary *mainRect = [NSJSONSerialization JSONObjectWithData:mainWindow.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(request.session.activeApplication.wdRect, mainRect,
+                          @"SpringBoard root must follow the default window at hinge angle %@", angle);
   }
+}
+
+- (void)testReadingControlCenterOnInnerDisplay
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{
+    [device fb_goToHomescreenWithError:nil];
+    if (originalAngle != nil) {
+      [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+    }
+  }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
+  [self.testedApplication terminate];
+  [self launchApplication];
+  XCUIElement *window = self.testedApplication.windows.firstMatch;
+  (void)window.frame;
+  FBConfiguration.sharedInstance.currentDisplayId = @(window.screen.displayID);
+  XCTAssertTrue([device fb_goToHomescreenWithError:nil]);
+
+  XCUIApplication *springboard = XCUIApplication.fb_systemApplication;
+  FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:nil];
+  CGFloat x = [[self screenInfoResponse][@"screenSize"][@"width"] doubleValue] - 50;
+  XCUICoordinate *start = [context coordinateWithApplication:springboard offset:CGVectorMake(x, 2) error:nil];
+  XCUICoordinate *end = [context coordinateWithApplication:springboard offset:CGVectorMake(x, 240) error:nil];
+  [start pressForDuration:0.08 thenDragToCoordinate:end];
+  XCUIElement *addControls = springboard.buttons[@"Add Controls"].firstMatch;
+  XCTAssertTrue([addControls waitForExistenceWithTimeout:5]);
+  XCTAssertNil([self screenInfoResponse][@"error"]);
+  XCTAssertTrue(addControls.exists);
+  XCTAssertNotNil(springboard.fb_tree);
+  XCTAssertTrue(addControls.exists);
+  XCTAssertNotNil(springboard.fb_xmlRepresentation);
+  XCTAssertTrue(addControls.exists);
 }
 
 - (void)testScreenInfoIncludesTopStatusBarOnSingleDisplay

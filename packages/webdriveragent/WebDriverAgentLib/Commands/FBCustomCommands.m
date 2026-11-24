@@ -195,13 +195,13 @@
     // Resolve the element before reading its screen: displayID can be zero on
     // an unresolved query result even when the bar belongs to the main screen.
     CGRect frame = statusBar.frame;
-    if (statusBar.screen.displayID != screen.displayID || !statusBar.fb_isVisible) {
-      continue;
-    }
+    // A live visibility query can dismiss Control Center on Duo. Only ask for
+    // visibility after the frame and display qualify as a top status bar.
     if (fabs(CGRectGetMinY(frame)) <= 1 && fabs(CGRectGetMinX(frame)) <= 1
         && fabs(CGRectGetWidth(frame) - screenSize.width) <= 1
         && CGRectGetHeight(frame) > 0 && CGRectGetHeight(frame) < screenSize.height
-        && CGRectGetHeight(frame) < CGRectGetWidth(frame)) {
+        && CGRectGetHeight(frame) < CGRectGetWidth(frame)
+        && statusBar.screen.displayID == screen.displayID && statusBar.fb_isVisible) {
       statusBarSize = frame.size;
       break;
     }

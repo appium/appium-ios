@@ -19,6 +19,9 @@ typedef NSMapTable<id<FBXCElementSnapshot>, id<FBXCElementSnapshot>> FBDisplaySn
 /** Geometry counterparts for one source traversal, keyed by original snapshot identity. */
 FBDisplaySnapshotMap *_Nullable FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root);
 
+/** On hinged devices read SpringBoard visibility without dismissing its overlays. */
+NSNumber *_Nullable FBSpringBoardDisplayVisibility(id<FBXCElementSnapshot> snapshot);
+
 /** Return the resolved frame, falling back to the snapshot's own frame. */
 CGRect FBFrameForDisplayGeometry(id<FBXCElementSnapshot> snapshot);
 
