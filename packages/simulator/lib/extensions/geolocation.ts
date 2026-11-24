@@ -12,13 +12,20 @@ type CoreSimulatorWithGeolocation = CoreSimulator & SupportsGeolocation & HasNat
  *
  * @param latitude The latitude coordinate.
  * @param longitude The longitude coordinate.
+ * @param altitude The altitude in meters above sea level. If omitted, apps observe an altitude of
+ * zero, which CoreLocation itself reports as invalid (negative vertical accuracy).
  * @returns True if the geolocation was set successfully.
  */
 export async function setGeolocation(
   this: CoreSimulatorWithGeolocation,
   latitude: string | number,
   longitude: string | number,
+  altitude?: string | number | null,
 ): Promise<boolean> {
-  await this._native.setLocation(this.udid, Number(latitude), Number(longitude));
+  if (altitude === undefined || altitude === null) {
+    await this._native.setLocation(this.udid, Number(latitude), Number(longitude));
+  } else {
+    await this._native.setLocation(this.udid, Number(latitude), Number(longitude), Number(altitude));
+  }
   return true;
 }

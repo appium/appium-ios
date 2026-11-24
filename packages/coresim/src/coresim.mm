@@ -35,6 +35,7 @@
 #include "native/sim_duo.h"
 #include "native/sim_hid.h"
 #include "native/sim_jpeg_stream.h"
+#include "native/sim_location.h"
 #include "native/sim_orientation.h"
 #include "native/sim_pasteboard.h"
 #include "native/sim_process.h"
@@ -827,9 +828,21 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
     id device = device_;
     double latitude = info[0].As<Napi::Number>().DoubleValue();
     double longitude = info[1].As<Napi::Number>().DoubleValue();
-    return RunAsyncVoid(info.Env(), [device, latitude, longitude]() {
+    // The altitude is optional: without it the plain latitude/longitude API is used, which reports
+    // an altitude of 0 with an invalid vertical accuracy.
+    bool hasAltitude = info.Length() > 2 && !info[2].IsUndefined() && !info[2].IsNull();
+    double altitude = 0;
+    if (hasAltitude) {
+      if (!info[2].IsNumber() || !std::isfinite(info[2].As<Napi::Number>().DoubleValue())) {
+        throw Napi::TypeError::New(info.Env(), "altitude must be a finite number");
+      }
+      altitude = info[2].As<Napi::Number>().DoubleValue();
+    }
+    return RunAsyncVoid(info.Env(), [device, latitude, longitude, hasAltitude, altitude]() {
       NSError* error = nil;
-      ThrowIfFailed(coresim::SetLocation(device, latitude, longitude, &error), error);
+      BOOL ok = hasAltitude ? coresim::SetLocationWithAltitude(device, latitude, longitude, altitude, &error)
+                            : coresim::SetLocation(device, latitude, longitude, &error);
+      ThrowIfFailed(ok, error);
     });
   }
 

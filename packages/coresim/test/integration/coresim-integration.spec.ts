@@ -488,6 +488,9 @@ describe('NativeSimctl integration', () => {
 
       it('configures the booted device (location, Darwin notification)', async () => {
         await sim.setLocation(device!.udid, 37.7749, -122.4194);
+        await sim.setLocation(device!.udid, 46.5584, 8.561, 2106.5);
+        await sim.setLocation(device!.udid, 31.5, 35.5, -415.25);
+        await assert.rejects(sim.setLocation(device!.udid, 31.5, 35.5, Number.NaN), /altitude must be a finite number/);
         await sim.clearLocation(device!.udid);
         await sim.postDarwinNotification(device!.udid, 'io.appium.coresim.test');
       });
