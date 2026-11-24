@@ -315,14 +315,18 @@ static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, NSNumber *d
 // The same AX identity can occur below both panels. An application-wide
 // identity lookup can return the cover copy even for an inner-display query.
 static id<FBXCElementSnapshot> FBMemberOnDisplay(id<FBXCElementSnapshot> tree,
-                                                 id<FBXCElementSnapshot> snapshot, long long displayID)
+                                                 id<FBXCElementSnapshot> snapshot, long long displayID,
+                                                 id<FBXCElementSnapshot> *matchingWindow)
 {
+  *matchingWindow = nil;
   id<FBXCElementSnapshot> member = [tree elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
   id<FBXCElementSnapshot> parentWindow = [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
   if ([parentWindow respondsToSelector:@selector(displayID)] && parentWindow.displayID == displayID) {
+    *matchingWindow = parentWindow;
     return member;
   }
   id<FBXCElementSnapshot> result = nil;
+  id<FBXCElementSnapshot> resultWindow = nil;
   for (id<FBXCElementSnapshot> window in tree.children) {
     if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
         || window.displayID != displayID) {
@@ -336,8 +340,10 @@ static id<FBXCElementSnapshot> FBMemberOnDisplay(id<FBXCElementSnapshot> tree,
       return nil;
     }
     result = member;
+    resultWindow = window;
   }
   if (result != nil || snapshot.label.length == 0) {
+    *matchingWindow = resultWindow;
     return result;
   }
   // The other panel can also vend a distinct AX identity for the same control.
@@ -356,8 +362,10 @@ static id<FBXCElementSnapshot> FBMemberOnDisplay(id<FBXCElementSnapshot> tree,
         return nil;
       }
       result = candidate;
+      resultWindow = window;
     }
   }
+  *matchingWindow = resultWindow;
   return result;
 }
 
@@ -365,18 +373,19 @@ static id<FBXCElementSnapshot> FBResolveCrossDisplaySnapshot(XCUIElement *elemen
                                                              id<FBXCElementSnapshot> snapshot,
                                                              id<FBXCElementSnapshot> previousRoot,
                                                              id<FBXCElementSnapshot> currentRoot,
-                                                             long long displayID)
+                                                             long long displayID,
+                                                             id<FBXCElementSnapshot> *matchingWindow)
 {
   // Identity-bound queries resolve against a fresh application snapshot.
   // Only reuse the tree if this lookup replaced it and it contains our element.
   id<FBXCElementSnapshot> tree = currentRoot;
   id<FBXCElementSnapshot> member = nil;
   if (tree != previousRoot && tree.elementType == XCUIElementTypeApplication) {
-    member = FBMemberOnDisplay(tree, snapshot, displayID);
+    member = FBMemberOnDisplay(tree, snapshot, displayID, matchingWindow);
   }
   if (member == nil) {
     tree = [element.application fb_standardSnapshot];
-    member = FBMemberOnDisplay(tree, snapshot, displayID);
+    member = FBMemberOnDisplay(tree, snapshot, displayID, matchingWindow);
   }
   if ([member respondsToSelector:@selector(displayID)] && member.displayID == displayID) {
     return member;
@@ -385,8 +394,8 @@ static id<FBXCElementSnapshot> FBResolveCrossDisplaySnapshot(XCUIElement *elemen
     // An icon's frame is recovered through its accessible child.
     return [FBDisplaySnapshotsForTree(member) objectForKey:member] ?: member;
   }
-  id<FBXCElementSnapshot> window = [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
-  if ([window respondsToSelector:@selector(displayID)] && window.displayID == displayID) {
+  id<FBXCElementSnapshot> window = *matchingWindow;
+  if (window != nil) {
     id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(snapshot, FBWindowAccessibilityElements(window),
                                                              displayID);
     if (live != nil) {
@@ -440,12 +449,19 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
   if (display != nil && snapshot.elementType != XCUIElementTypeApplication && FBIsSystemApplicationSnapshot(snapshot)) {
     id<FBXCElementSnapshot> geometry = snapshot;
+    id<FBXCElementSnapshot> window = nil;
     if (FBHasOtherDisplay(snapshot, display) && FBCanMatchDisplayElement(snapshot)) {
-      geometry = FBResolveCrossDisplaySnapshot(element, snapshot, previousRoot, query.rootElementSnapshot, display.longLongValue);
+      geometry = FBResolveCrossDisplaySnapshot(element, snapshot, previousRoot, query.rootElementSnapshot, display.longLongValue, &window);
     }
     UIInterfaceOrientation orientation = FBGeometryOrientation();
     if (UIInterfaceOrientationIsLandscape(orientation) && ![(NSObject *)geometry isKindOfClass:FBOrientedSnapshot.class]) {
-      CGSize size = FBPortraitWindowSize(FBWindowForScope(geometry), display.longLongValue);
+      window = window ?: FBWindowForScope(geometry);
+      if (![window respondsToSelector:@selector(displayID)] || window.displayID != display.longLongValue) {
+        // Direct AX snapshots can be detached or point back into the cover tree.
+        id<FBXCElementSnapshot> tree = [element.application fb_standardSnapshot];
+        FBMemberOnDisplay(tree, geometry, display.longLongValue, &window);
+      }
+      CGSize size = FBPortraitWindowSize(window, display.longLongValue);
       return FBOrientedSnapshotForDisplay(geometry, display.longLongValue, size, orientation);
     }
     return geometry;
