@@ -491,6 +491,11 @@ describe('NativeSimctl integration', () => {
         await sim.setLocation(device!.udid, 46.5584, 8.561, 2106.5);
         await sim.setLocation(device!.udid, 31.5, 35.5, -415.25);
         await assert.rejects(sim.setLocation(device!.udid, 31.5, 35.5, Number.NaN), /altitude must be a finite number/);
+        await assert.rejects(sim.setLocation(device!.udid, Number.NaN, 35.5), /latitude must be a finite number/);
+        await assert.rejects(
+          sim.setLocation(device!.udid, 31.5, Number.POSITIVE_INFINITY, 100),
+          /longitude must be a finite number/,
+        );
         await sim.clearLocation(device!.udid);
         await sim.postDarwinNotification(device!.udid, 'io.appium.coresim.test');
       });

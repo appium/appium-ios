@@ -81,6 +81,16 @@ double HIDNumberArg(const Napi::CallbackInfo& info, size_t index, const char* na
   return value;
 }
 
+// A NaN or infinite coordinate is not rejected by CoreSimulator: it becomes the device's simulated
+// position, which apps then receive as an invalid location.
+double FiniteNumberArg(const Napi::CallbackInfo& info, size_t index, const char* name) {
+  if (index >= info.Length() || !info[index].IsNumber() ||
+      !std::isfinite(info[index].As<Napi::Number>().DoubleValue())) {
+    throw Napi::TypeError::New(info.Env(), std::string(name) + " must be a finite number");
+  }
+  return info[index].As<Napi::Number>().DoubleValue();
+}
+
 // Throws if `!ok && error`, for the common BOOL-returning NSError**-out-param shape — called from
 // inside a RunAsync/RunAsyncVoid work lambda (background thread), never from the main thread.
 void ThrowIfFailed(BOOL ok, NSError* error) {
@@ -826,18 +836,12 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
 
   Napi::Value SetLocation(const Napi::CallbackInfo& info) {
     id device = device_;
-    double latitude = info[0].As<Napi::Number>().DoubleValue();
-    double longitude = info[1].As<Napi::Number>().DoubleValue();
+    double latitude = FiniteNumberArg(info, 0, "latitude");
+    double longitude = FiniteNumberArg(info, 1, "longitude");
     // The altitude is optional: without it the plain latitude/longitude API is used, which reports
     // an altitude of 0 with an invalid vertical accuracy.
     bool hasAltitude = info.Length() > 2 && !info[2].IsUndefined() && !info[2].IsNull();
-    double altitude = 0;
-    if (hasAltitude) {
-      if (!info[2].IsNumber() || !std::isfinite(info[2].As<Napi::Number>().DoubleValue())) {
-        throw Napi::TypeError::New(info.Env(), "altitude must be a finite number");
-      }
-      altitude = info[2].As<Napi::Number>().DoubleValue();
-    }
+    double altitude = hasAltitude ? FiniteNumberArg(info, 2, "altitude") : 0;
     return RunAsyncVoid(info.Env(), [device, latitude, longitude, hasAltitude, altitude]() {
       NSError* error = nil;
       BOOL ok = hasAltitude ? coresim::SetLocationWithAltitude(device, latitude, longitude, altitude, &error)
