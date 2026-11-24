@@ -26,7 +26,7 @@ import {
   parseKeyValueNullList,
   writeUInt64LE,
 } from './codec.js';
-import {AFC_FOPEN_TEXTUAL_MODES, AFC_OPERATION_TIMEOUT_MS, MAXIMUM_WRITE_SIZE} from './constants.js';
+import {AFC_CONNECT_TIMEOUT_MS, AFC_FOPEN_TEXTUAL_MODES, MAXIMUM_WRITE_SIZE} from './constants.js';
 import {AfcPacketDemux} from './demux.js';
 import {AfcError, AfcFileMode, AfcOpcode} from './enums.js';
 import {AfcConnectionError} from './errors.js';
@@ -781,7 +781,7 @@ export class AfcService {
     }
 
     if (this.transport instanceof UsbmuxServiceTransport) {
-      this.socket = await this.transport.openSocket(this.rsdServiceName, {timeoutMs: AFC_OPERATION_TIMEOUT_MS});
+      this.socket = await this.transport.openSocket(this.rsdServiceName, {timeoutMs: AFC_CONNECT_TIMEOUT_MS});
       this._getDemux().ensureReaderStarted(this.socket);
       log.debug('Lockdown service started over usbmux; switching to raw AFC');
       return this.socket;
@@ -792,7 +792,7 @@ export class AfcService {
     });
 
     this.socket = await createRawServiceSocket(resolved.host, resolved.port, this.rsdServiceName, {
-      timeoutMs: AFC_OPERATION_TIMEOUT_MS,
+      timeoutMs: AFC_CONNECT_TIMEOUT_MS,
     });
     this._getDemux().ensureReaderStarted(this.socket);
     log.debug('RSD handshake complete; switching to raw AFC');
