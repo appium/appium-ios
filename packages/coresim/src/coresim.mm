@@ -91,6 +91,17 @@ double FiniteNumberArg(const Napi::CallbackInfo& info, size_t index, const char*
   return info[index].As<Napi::Number>().DoubleValue();
 }
 
+// An out-of-range coordinate is not rejected by CoreSimulator either, but locationd then silently
+// drops it, so apps keep receiving the previous location.
+double CoordinateArg(const Napi::CallbackInfo& info, size_t index, const char* name, int limit) {
+  double value = FiniteNumberArg(info, index, name);
+  if (value < -limit || value > limit) {
+    throw Napi::TypeError::New(
+        info.Env(), std::string(name) + " must be between -" + std::to_string(limit) + " and " + std::to_string(limit));
+  }
+  return value;
+}
+
 // Throws if `!ok && error`, for the common BOOL-returning NSError**-out-param shape — called from
 // inside a RunAsync/RunAsyncVoid work lambda (background thread), never from the main thread.
 void ThrowIfFailed(BOOL ok, NSError* error) {
@@ -836,8 +847,8 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
 
   Napi::Value SetLocation(const Napi::CallbackInfo& info) {
     id device = device_;
-    double latitude = FiniteNumberArg(info, 0, "latitude");
-    double longitude = FiniteNumberArg(info, 1, "longitude");
+    double latitude = CoordinateArg(info, 0, "latitude", 90);
+    double longitude = CoordinateArg(info, 1, "longitude", 180);
     // The altitude is optional: without it the plain latitude/longitude API is used, which reports
     // an altitude of 0 with an invalid vertical accuracy.
     bool hasAltitude = info.Length() > 2 && !info[2].IsUndefined() && !info[2].IsNull();

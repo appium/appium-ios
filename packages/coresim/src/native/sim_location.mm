@@ -48,17 +48,28 @@ NSError* MakeLocationError(NSString* message, NSError* underlying) {
 // The file must outlive the call: nothing guarantees that the simulator's locationd has finished
 // reading the scenario by the time the request returns. So it is kept at a fixed per-device path
 // and overwritten by each call instead of being deleted afterwards. It lives in the device's own
-// data container, which is always readable from inside the simulator and is discarded together
-// with the device.
-NSString* ScenarioPath(id device) {
+// `data/tmp`, which is always readable from inside the simulator and is discarded together with
+// the device. CoreSimulator creates that directory along with the device; it is only recreated
+// here in case something removed it.
+NSString* ScenarioPath(id device, NSError** error) {
   NSString* dataPath = coresim::DeviceDataPath(device);
-  BOOL isDirectory = NO;
+  if (dataPath.length == 0) {
+    if (error != nullptr) {
+      *error = MakeLocationError(@"Cannot determine the data directory of the device", nil);
+    }
+    return nil;
+  }
   NSString* directory = [dataPath stringByAppendingPathComponent:@"tmp"];
-  if (dataPath.length == 0 || ![NSFileManager.defaultManager fileExistsAtPath:directory isDirectory:&isDirectory] ||
-      !isDirectory) {
-    NSString* udid = coresim::DeviceUDID(device).UUIDString ?: @"unknown";
-    return [NSTemporaryDirectory()
-        stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", udid, kScenarioFileName]];
+  NSError* ioError = nil;
+  if (![NSFileManager.defaultManager createDirectoryAtPath:directory
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:&ioError]) {
+    if (error != nullptr) {
+      *error = MakeLocationError(
+          [NSString stringWithFormat:@"Cannot create the location scenario directory '%@'", directory], ioError);
+    }
+    return nil;
   }
   return [directory stringByAppendingPathComponent:kScenarioFileName];
 }
@@ -116,6 +127,10 @@ BOOL SetLocationWithAltitude(id device, double latitude, double longitude, doubl
   RequireSelector(device, kSelectorName);
   SEL selector = SelectorNamed(kSelectorName);
 
+  NSString* scenarioPath = ScenarioPath(device, error);
+  if (scenarioPath == nil) {
+    return NO;
+  }
   NSData* archivedLocation = ArchiveLocation(latitude, longitude, altitude, error);
   if (archivedLocation == nil) {
     return NO;
@@ -129,7 +144,6 @@ BOOL SetLocationWithAltitude(id device, double latitude, double longitude, doubl
                                                                     format:NSPropertyListBinaryFormat_v1_0
                                                                    options:0
                                                                      error:&ioError];
-  NSString* scenarioPath = ScenarioPath(device);
   if (scenarioData == nil || ![scenarioData writeToFile:scenarioPath options:NSDataWritingAtomic error:&ioError]) {
     if (error != nullptr) {
       *error = MakeLocationError(

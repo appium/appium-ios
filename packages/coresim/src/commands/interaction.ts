@@ -50,13 +50,7 @@ export async function setLocation(
   longitude: number,
   altitude?: number,
 ): Promise<void> {
-  return runCatchingAsync(async () => {
-    const device = await this._findDevice(udid);
-    // The argument is only forwarded when given, so the call shape stays unchanged otherwise.
-    return altitude === undefined || altitude === null
-      ? device.setLocation(latitude, longitude)
-      : device.setLocation(latitude, longitude, altitude);
-  });
+  return runCatchingAsync(async () => (await this._findDevice(udid)).setLocation(latitude, longitude, altitude));
 }
 
 /**
