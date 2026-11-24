@@ -2179,7 +2179,7 @@ export interface TestmanagerdService extends BaseService {
    * @param timeoutMs Timeout in milliseconds
    * @returns Tuple of [decoded data, auxiliary values], or null on timeout
    */
-  recvPlistWithTimeout(channel?: number, timeoutMs?: number): Promise<[unknown, PlistValue[]] | null>;
+  recvPlistWithTimeout(channel?: number, timeoutMs?: number): Promise<[any, any[]] | null>;
 
   /**
    * Send a DTX reply message for the last received message on a channel.

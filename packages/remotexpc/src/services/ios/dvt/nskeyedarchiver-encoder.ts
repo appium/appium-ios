@@ -1,6 +1,5 @@
 import {getLogger} from '../../../lib/logger.js';
 import {PlistUID} from '../../../lib/plist/index.js';
-import type {PlistValue} from '../../../lib/types.js';
 
 const log = getLogger('NSKeyedArchiverEncoder');
 
@@ -9,8 +8,8 @@ const log = getLogger('NSKeyedArchiverEncoder');
  * capable of satisfying NSSecureCoding requirements.
  */
 export class NSKeyedArchiverEncoder {
-  protected objects: PlistValue[] = ['$null'];
-  protected objectCache = new Map<object, number>(); // Cache for object identity/deduplication
+  protected objects: any[] = ['$null'];
+  protected objectCache = new Map<any, number>(); // Cache for object identity/deduplication
   protected classes = new Map<string, number>(); // Cache for class definitions
 
   /**

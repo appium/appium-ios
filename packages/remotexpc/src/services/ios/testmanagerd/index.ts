@@ -320,7 +320,7 @@ export class DvtTestmanagedProxyService extends BaseService {
   async recvPlistWithTimeout(
     channel: number = DvtTestmanagedProxyService.BROADCAST_CHANNEL,
     timeoutMs: number = 2000,
-  ): Promise<[unknown, PlistValue[]] | null> {
+  ): Promise<[any, any[]] | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
