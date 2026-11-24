@@ -17,7 +17,6 @@
 #import "XCUIElement+FBClassChain.h"
 #import "FBXCodeCompatibility.h"
 
-
 @interface FBScrollingTests : FBIntegrationTestCase
 @property (nonatomic, strong) XCUIElement *scrollView;
 @end
@@ -76,16 +75,7 @@
   FBAssertVisibleCell(cellName);
 }
 
-- (void)testFarScrollToVisible
-{
-  NSString *cellName = @"80";
-  NSError *error;
-  FBAssertInvisibleCell(cellName);
-  XCTAssertTrue([FBCellElementWithLabel(cellName) fb_scrollToVisibleWithError:&error]);
-  XCTAssertNil(error);
-  FBAssertVisibleCell(cellName);
-}
-
+// The far (multi-swipe) variant is covered by testAttributeWithNullScrollToVisible
 - (void)testNativeFarScrollToVisible
 {
   if (SYSTEM_VERSION_LESS_THAN(@"16.0")) {

@@ -19,6 +19,12 @@
 
 @implementation FBKeyboardTests
 
+// iPad dismisses the keyboard differently
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
 - (void)setUp
 {
   [super setUp];

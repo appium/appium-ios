@@ -34,10 +34,10 @@ typedef NS_ENUM(NSUInteger, FBRawGroupKind) {
 /*! A step that passed the syntax check, but is not resolved yet */
 @interface FBRawStep : NSObject
 
-@property (nonatomic) BOOL isDescendant;
+@property (nonatomic) FBClassChainAxis axis;
 /*! YES if the step is preceded by more than one descendant marker */
 @property (nonatomic) BOOL hasDuplicatedMarker;
-/*! nil stands for the star */
+/*! nil stands for the star and for the parent axis */
 @property (nonatomic, nullable, copy) NSString *className;
 @property (nonatomic, readonly) NSMutableArray<FBRawGroup *> *groups;
 
@@ -216,17 +216,53 @@ static BOOL FBIsPositionCharacter(unichar character)
 
 - (BOOL)scanGroupIntoStep:(FBRawStep *)step
 {
+  BOOL allowsPosition = FBClassChainAxisParent != step.axis;
   if ([self isNext:'`']) {
     return [self scanPredicateWithMarker:'`' intoStep:step];
   }
   if ([self isNext:'$']) {
     return [self scanPredicateWithMarker:'$' intoStep:step];
   }
-  if (_pos + 1 < _query.length && FBIsPositionCharacter([_query characterAtIndex:_pos + 1])) {
+  if (allowsPosition && _pos + 1 < _query.length && FBIsPositionCharacter([_query characterAtIndex:_pos + 1])) {
     return [self scanPositionIntoStep:step];
   }
   ++_pos;
   return [self fail];
+}
+
+// The axis marker comes first in a step. Axes are relative to the previous element,
+// so they cannot follow the descendant marker.
+- (BOOL)scanAxisIntoStep:(FBRawStep *)step afterDescendantMarker:(BOOL)isAfterMarker
+{
+  if (![self hasMore]) {
+    return YES;
+  }
+  FBClassChainAxis axis;
+  switch ([self current]) {
+    case '.':
+      axis = FBClassChainAxisParent;
+      break;
+    case '^':
+      axis = FBClassChainAxisAncestor;
+      break;
+    case '>':
+      axis = FBClassChainAxisFollowingSibling;
+      break;
+    case '<':
+      axis = FBClassChainAxisPrecedingSibling;
+      break;
+    case '~':
+      axis = FBClassChainAxisSibling;
+      break;
+    default:
+      return YES;
+  }
+  if (isAfterMarker || (FBClassChainAxisParent == axis && ![self isNext:'.'])) {
+    return [self fail];
+  }
+  step.axis = axis;
+  _pos += FBClassChainAxisParent == axis ? 2 : 1;
+  return YES;
 }
 
 - (nullable NSArray<FBRawStep *> *)scan
@@ -235,11 +271,20 @@ static BOOL FBIsPositionCharacter(unichar character)
   BOOL isDescendant = [self consumeDescendantMarker];
   while (YES) {
     FBRawStep *step = [FBRawStep new];
-    step.isDescendant = isDescendant;
+    step.axis = isDescendant ? FBClassChainAxisDescendant : FBClassChainAxisChild;
     while ([self consumeDescendantMarker]) {
       step.hasDuplicatedMarker = YES;
     }
-    if (![self scanTypeIntoStep:step]) {
+    if (![self scanAxisIntoStep:step afterDescendantMarker:isDescendant]) {
+      return nil;
+    }
+    if (FBClassChainAxisParent == step.axis) {
+      // The parent has no type, only the end of the step may follow
+      if ([self hasMore] && ![self isCurrent:'/'] && ![self isCurrent:'[']) {
+        [self fail];
+        return nil;
+      }
+    } else if (![self scanTypeIntoStep:step]) {
       return nil;
     }
     while ([self isCurrent:'[']) {
@@ -267,14 +312,27 @@ static BOOL FBIsPositionCharacter(unichar character)
 
 - (instancetype)initWithType:(XCUIElementType)type position:(NSNumber *)position predicates:(NSArray<FBAbstractPredicateItem *> *)predicates isDescendant:(BOOL)isDescendant
 {
+  return [self initWithType:type
+                   position:position
+                 predicates:predicates
+                       axis:isDescendant ? FBClassChainAxisDescendant : FBClassChainAxisChild];
+}
+
+- (instancetype)initWithType:(XCUIElementType)type position:(NSNumber *)position predicates:(NSArray<FBAbstractPredicateItem *> *)predicates axis:(FBClassChainAxis)axis
+{
   self = [super init];
   if (self) {
     _type = type;
     _position = position;
     _predicates = predicates;
-    _isDescendant = isDescendant;
+    _axis = axis;
   }
   return self;
+}
+
+- (BOOL)isDescendant
+{
+  return FBClassChainAxisDescendant == self.axis;
 }
 
 @end
@@ -403,7 +461,7 @@ static BOOL FBIsPositionCharacter(unichar character)
     [result addObject:[[FBClassChainItem alloc] initWithType:type
                                                     position:position
                                                   predicates:predicates.copy
-                                                isDescendant:rawStep.isDescendant]];
+                                                        axis:rawStep.axis]];
   }
   return [[FBClassChain alloc] initWithElements:result.copy];
 }

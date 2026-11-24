@@ -34,12 +34,32 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+/*! The way a chain item is related to the elements matched by the previous item */
+typedef NS_ENUM(NSUInteger, FBClassChainAxis) {
+  /*! Direct children, `T` */
+  FBClassChainAxisChild,
+  /*! All descendants, selected with the double star marker */
+  FBClassChainAxisDescendant,
+  /*! The parent, `..` */
+  FBClassChainAxisParent,
+  /*! All ancestors, nearest first, `^T` */
+  FBClassChainAxisAncestor,
+  /*! Siblings after the element, in document order, `>T` */
+  FBClassChainAxisFollowingSibling,
+  /*! Siblings before the element, nearest first, `<T` */
+  FBClassChainAxisPrecedingSibling,
+  /*! All siblings except the element, in document order, `~T` */
+  FBClassChainAxisSibling,
+};
+
 @interface FBClassChainItem : NSObject
 
 /*! Element's position */
 @property (readonly, nonatomic, nullable) NSNumber *position;
 /*! Element's type */
 @property (readonly, nonatomic) XCUIElementType type;
+/*! The relation of the element to the previous element in the chain */
+@property (readonly, nonatomic) FBClassChainAxis axis;
 /*! Whether an element is a descendant of the previos element */
 @property (readonly, nonatomic) BOOL isDescendant;
 /*! The ordered list of matching predicates for the current element */
@@ -61,6 +81,16 @@ NS_ASSUME_NONNULL_BEGIN
  @return FBClassChainElement instance
  */
 - (instancetype)initWithType:(XCUIElementType)type position:(nullable NSNumber *)position predicates:(NSArray<FBAbstractPredicateItem *> *)predicates isDescendant:(BOOL)isDescendant;
+
+/**
+ Same as above, but sets the relation to the previous element explicitly.
+ Positions of axis items count along the axis: from the nearest element for the parent,
+ ancestor and preceding sibling axes, in document order otherwise.
+
+ @param axis the relation of the element to the previous element in the chain
+ @return FBClassChainElement instance
+ */
+- (instancetype)initWithType:(XCUIElementType)type position:(nullable NSNumber *)position predicates:(NSArray<FBAbstractPredicateItem *> *)predicates axis:(FBClassChainAxis)axis;
 
 @end
 

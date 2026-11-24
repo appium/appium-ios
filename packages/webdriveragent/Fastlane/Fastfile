@@ -1,17 +1,22 @@
 XC_PROJECT = File.absolute_path('../WebDriverAgent.xcodeproj')
 
 lane :test do
+  # Prebuilt .xctestrun (see Scripts/build.sh build_for_testing): skips the build
+  xctestrun = ENV['XCTESTRUN'].to_s.empty? ? nil : ENV['XCTESTRUN']
+  only_testing = ENV['ONLY_TESTING'].to_s.empty? ? nil : ENV['ONLY_TESTING'].split(',')
   # https://docs.fastlane.tools/actions/scan/
   run_tests(
+    xctestrun: xctestrun,
+    only_testing: only_testing,
+    # The prebuilt products already resolved packages; skips a slow xcodebuild call
+    skip_package_dependencies_resolution: !xctestrun.nil?,
     project: XC_PROJECT,
     fail_build: true,
     scheme: ENV['SCHEME'],
     sdk: ENV['SDK'],
     device: ENV['DEVICE'],
-    number_of_retries: 3,
-    skip_testing: ENV.fetch('SKIP_TESTING', '')
-      .split(',')
-      .reject(&:empty?),
+    # Retries only re-run the failed tests; each extra attempt of a stuck test costs minutes
+    number_of_retries: 2,
     # Forwarded into the on-simulator test process via each scheme's CI
     # LaunchAction environment variable, since xcodebuild does not propagate
     # the calling shell's environment to the app under test on its own.

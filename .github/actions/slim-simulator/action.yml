@@ -1,0 +1,26 @@
+name: 'Slim down simulator'
+description: >
+  Disables non-essential launchd jobs (Siri, Health, Maps, widgets, ...) of a simulator and the
+  host diagnosticd so an idle simulator stops saturating the 3-core runner. Run it before the
+  simulator boots; a background watcher boots out whatever still starts.
+
+inputs:
+  platform:
+    description: 'Simulator platform, e.g. iOS'
+    required: true
+  model:
+    description: 'Simulator model name, e.g. iPhone 17'
+    required: true
+  version:
+    description: 'Runtime version, e.g. 26.5'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - run: bash "$GITHUB_ACTION_PATH/slim.sh" "$PLATFORM" "$MODEL" "$VERSION"
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        MODEL: ${{ inputs.model }}
+        VERSION: ${{ inputs.version }}

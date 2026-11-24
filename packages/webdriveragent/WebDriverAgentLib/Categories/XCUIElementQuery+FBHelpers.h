@@ -14,6 +14,15 @@ NS_ASSUME_NONNULL_BEGIN
 @interface XCUIElementQuery (FBHelpers)
 
 /**
+ Extracts the cached snapshots of all elements matching the query, with their
+ parent and children links. No requests to the accessibility framework are made.
+ It is only safe to use this call right after the query has been resolved.
+
+ @return Either the cached snapshots or nil
+ */
+- (nullable NSOrderedSet<id<FBXCElementSnapshot>> *)fb_cachedSnapshots;
+
+/**
  Extracts the cached element snapshot from its query.
  No requests to the accessiblity framework is made.
  It is only safe to use this call right after element lookup query

@@ -23,6 +23,11 @@
 
 @implementation FBAutoAlertsHandlerTests
 
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(FBIntegrationTestCase.isRunningInCI, @"Flaky on slow CI machines");
+}
+
 - (void)setUp
 {
   [super setUp];
@@ -35,6 +40,9 @@
 
 - (void)tearDown
 {
+  if (nil == self.testedApplication) {
+    return;  // skipped in setUp
+  }
   [self clearAlert];
 
   if (self.session) {
@@ -46,10 +54,6 @@
 
 - (void)testAutoAcceptingOfAlerts
 {
-  if (FBIntegrationTestCase.isRunningInCI) {
-    XCTSkip(@"Flaky on slow CI machines");
-  }
-
   self.session = [FBSession
                   initWithApplication:XCUIApplication.fb_activeApplication
                   defaultAlertAction:@"accept"];
@@ -62,10 +66,6 @@
 
 - (void)testAutoDismissingOfAlerts
 {
-  if (FBIntegrationTestCase.isRunningInCI) {
-    XCTSkip(@"Flaky on slow CI machines");
-  }
-
   self.session = [FBSession
                   initWithApplication:XCUIApplication.fb_activeApplication
                   defaultAlertAction:@"dismiss"];

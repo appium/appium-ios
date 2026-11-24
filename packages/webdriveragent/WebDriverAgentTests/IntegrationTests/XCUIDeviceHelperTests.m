@@ -25,6 +25,18 @@
 
 @implementation XCUIDeviceHelperTests
 
+// Screenshot orientation on iPad
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"testLandscapeScreenshot"];
+}
+
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(self.class.isRunningInCI && [NSStringFromSelector(self.invocation.selector) isEqualToString:@"testRepeatedLockUnlockAcrossHingePoses"],
+            @"Repeated lock/unlock is unreliable on slow CI hosts");
+}
+
 - (void)restorePortraitOrientation
 {
   if ([XCUIDevice sharedDevice].orientation != UIDeviceOrientationPortrait) {
@@ -167,7 +179,6 @@
 
 - (void)testRepeatedLockUnlockAcrossHingePoses
 {
-  XCTSkipIf(self.class.isRunningInCI, @"Repeated lock/unlock is unreliable on slow CI hosts");
   XCUIDevice *device = XCUIDevice.sharedDevice;
   BOOL hasHinge = NO;
 #if TARGET_OS_SIMULATOR

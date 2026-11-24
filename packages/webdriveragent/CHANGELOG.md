@@ -3,6 +3,29 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.1...appium-webdriveragent@17.1.2) (2026-11-23)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.0...appium-webdriveragent@17.1.1) (2026-11-23)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.14...appium-webdriveragent@17.1.0) (2026-11-23)
+
+### Features
+
+* **webdriveragent:** add axis steps to class chain queries ([#235](https://github.com/appium/appium-ios/issues/235)) ([abb6910](https://github.com/appium/appium-ios/commit/abb691075e278de7eeb49fec797d7c6c1ada2588))
+
+
 ## [17.0.14](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.13...appium-webdriveragent@17.0.14) (2026-11-22)
 
 ### Code Refactoring

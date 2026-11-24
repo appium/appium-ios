@@ -47,18 +47,24 @@
   [self launchApplication];
 
   NSTimeInterval previousDeadline = FBConfiguration.sharedInstance.accessibilityDeadline;
-  // Also bounds any snapshot-based wait -tap itself may perform once the app is stuck.
   FBConfiguration.sharedInstance.accessibilityDeadline = 3.0;
+  dispatch_group_t snapshotGroup = dispatch_group_create();
+  __block id snapshot = nil;
+  __block NSError *error = nil;
+  __block NSTimeInterval elapsed = 0;
   @try {
     XCUIElement *deadlockButton = self.testedApplication.buttons[@"Deadlock app"];
     FBAssertWaitTillBecomesTrue(deadlockButton.fb_isVisible);
-    // Freezes the app's main thread for 20s - see -[ViewController deadlockApp:].
+    // -tap must run on the main thread and blocks in XCTest's idle waits past the
+    // app's 20s freeze (see -[ViewController deadlockApp:]), so snapshot meanwhile.
+    dispatch_group_async(snapshotGroup, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      [NSThread sleepForTimeInterval:2.0];
+      NSDate *start = [NSDate date];
+      snapshot = [self.testedApplication snapshotWithError:&error];
+      elapsed = -start.timeIntervalSinceNow;
+    });
     [deadlockButton tap];
-
-    NSError *error;
-    NSDate *start = [NSDate date];
-    id snapshot = [self.testedApplication snapshotWithError:&error];
-    NSTimeInterval elapsed = -start.timeIntervalSinceNow;
+    dispatch_group_wait(snapshotGroup, DISPATCH_TIME_FOREVER);
 
     XCTAssertNil(snapshot);
     XCTAssertNotNil(error);

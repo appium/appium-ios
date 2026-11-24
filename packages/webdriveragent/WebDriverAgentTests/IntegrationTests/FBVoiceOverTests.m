@@ -18,6 +18,13 @@
 
 @implementation FBVoiceOverTests
 
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(FBIntegrationTestCase.isRunningInCI
+            && ![NSStringFromSelector(self.invocation.selector) isEqualToString:@"testVoiceOverUnavailableOnOlderSDK"],
+            @"VoiceOver produces no utterances on the CI simulators (iOS 27)");
+}
+
 - (void)tearDown
 {
   if ([XCUIDevice.sharedDevice fb_isVoiceOverServiceAvailable]) {
