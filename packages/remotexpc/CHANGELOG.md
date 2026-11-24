@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.7...appium-ios-remotexpc@6.1.8) (2026-11-24)
+
+### Code Refactoring
+
+* **remotexpc:** name repeated timeout defaults ([#240](https://github.com/appium/appium-ios/issues/240)) ([8906681](https://github.com/appium/appium-ios/commit/890668180b8e87ba801c56035997a98582a793dc))
+
+
 ## [6.1.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.6...appium-ios-remotexpc@6.1.7) (2026-11-24)
 
 ### Code Refactoring
