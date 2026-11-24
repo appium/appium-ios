@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @protocol FBXCElementSnapshot <NSObject, XCUIElementAttributes>
 
+@property (nonatomic, readonly) long long displayID;
 @property BOOL hasFocus; // @synthesize hasFocus=_hasFocus;
 @property BOOL hasKeyboardFocus; // @synthesize hasKeyboardFocus=_hasKeyboardFocus;
 @property(copy) NSDictionary *additionalAttributes; // @synthesize additionalAttributes=_additionalAttributes;

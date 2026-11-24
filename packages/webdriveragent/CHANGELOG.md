@@ -3,6 +3,43 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.2...appium-webdriveragent@17.1.3) (2026-11-24)
+
+### Bug Fixes
+
+* **webdriveragent:** resolve window and SpringBoard element geometry on the selected display ([#239](https://github.com/appium/appium-ios/issues/239)) ([d839210](https://github.com/appium/appium-ios/commit/d839210986b78214afccd4cd26a12358b6b68b16))
+
+
+## [17.1.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.1...appium-webdriveragent@17.1.2) (2026-11-23)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.1](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.0...appium-webdriveragent@17.1.1) (2026-11-23)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.0](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.14...appium-webdriveragent@17.1.0) (2026-11-23)
+
+### Features
+
+* **webdriveragent:** add axis steps to class chain queries ([#235](https://github.com/appium/appium-ios/issues/235)) ([abb6910](https://github.com/appium/appium-ios/commit/abb691075e278de7eeb49fec797d7c6c1ada2588))
+
+
+## [17.0.14](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.13...appium-webdriveragent@17.0.14) (2026-11-22)
+
+### Code Refactoring
+
+* **webdriveragent:** replace the class chain tokenizer with a recursive-descent parser ([#234](https://github.com/appium/appium-ios/issues/234)) ([23e77cb](https://github.com/appium/appium-ios/commit/23e77cbf250a5edc100a147fe3a7e3ac4a1adb29))
+
+
 ## [17.0.13](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.0.12...appium-webdriveragent@17.0.13) (2026-11-21)
 
 **Note:** Version bump only for package appium-webdriveragent

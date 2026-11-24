@@ -4,7 +4,7 @@ import {runInBackground} from '../../../lib/background.js';
 import {formatValue} from '../../../lib/format-error.js';
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
-import type {PlistDictionary, SendMessageOptions} from '../../../lib/types.js';
+import type {PlistDictionary, PlistValue, SendMessageOptions} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
 import {BaseService, stripSSL} from '../base-service.js';
 import {ChannelFragmenter, type MessageFilter, isReplyTo} from './channel-fragmenter.js';
@@ -220,10 +220,10 @@ export class DVTSecureSocketProxyService extends BaseService {
     channel: number,
     signal?: AbortSignal,
     filter?: MessageFilter,
-  ): Promise<[any, any[]]> {
+  ): Promise<[unknown, PlistValue[]]> {
     const [data, aux] = await this.recvMessage(channel, signal, filter);
 
-    let decodedData = null;
+    let decodedData: unknown = null;
     if (data?.length) {
       try {
         decodedData = parseBinaryPlist(data);
@@ -246,7 +246,7 @@ export class DVTSecureSocketProxyService extends BaseService {
     channel: number = DVTSecureSocketProxyService.BROADCAST_CHANNEL,
     signal?: AbortSignal,
     filter?: MessageFilter,
-  ): Promise<[Buffer | null, any[]]> {
+  ): Promise<[Buffer | null, PlistValue[]]> {
     const packetData = await this.recvPacketFragments(channel, signal, filter);
 
     const payloadHeader = DTXMessage.parsePayloadHeader(packetData);
@@ -262,7 +262,7 @@ export class DVTSecureSocketProxyService extends BaseService {
     let offset = 0;
 
     // Parse auxiliary data if present
-    let aux: any[] = [];
+    let aux: PlistValue[] = [];
     if (payloadHeader.auxiliaryLength > 0) {
       const auxBuffer = payload.subarray(0, payloadHeader.auxiliaryLength);
       aux = this.parseAuxiliaryData(auxBuffer);
@@ -434,22 +434,23 @@ export class DVTSecureSocketProxyService extends BaseService {
     await this.drainBufferedMessages();
   }
 
-  private extractSelectorFromResponse(ret: any): string {
+  private extractSelectorFromResponse(ret: PlistValue): string {
     if (typeof ret === 'string') {
       return ret;
     }
     const objects = extractNSKeyedArchiverObjects(ret);
     if (objects) {
-      return objects[1];
+      // performHandshake rejects a selector that is not the expected string
+      return objects[1] as string;
     }
 
     throw new Error('Invalid handshake response');
   }
 
-  private extractCapabilitiesFromAuxData(capabilitiesData: any): PlistDictionary {
+  private extractCapabilitiesFromAuxData(capabilitiesData: PlistValue): PlistDictionary {
     const objects = extractNSKeyedArchiverObjects(capabilitiesData);
     if (!objects) {
-      return capabilitiesData || {};
+      return (capabilitiesData || {}) as PlistDictionary;
     }
 
     const dictObj = objects[1];
@@ -674,7 +675,7 @@ export class DVTSecureSocketProxyService extends BaseService {
   /**
    * Check if response contains an NSError and throw if present
    */
-  private checkForNSError(response: any, context: string): void {
+  private checkForNSError(response: unknown, context: string): void {
     if (!response || typeof response !== 'object') {
       return;
     }
@@ -687,7 +688,8 @@ export class DVTSecureSocketProxyService extends BaseService {
 
       if (hasNSError) {
         const errorMsg =
-          objects.find((o: any) => typeof o === 'string' && o.length > MIN_ERROR_DESCRIPTION_LENGTH) || 'Unknown error';
+          objects.find((o): o is string => typeof o === 'string' && o.length > MIN_ERROR_DESCRIPTION_LENGTH) ||
+          'Unknown error';
         throw new Error(`${context}: ${errorMsg}`);
       }
     }
@@ -701,7 +703,7 @@ export class DVTSecureSocketProxyService extends BaseService {
   /**
    * Archive a value using NSKeyedArchiver format for DTX protocol
    */
-  private archiveValue(value: any): Buffer {
+  private archiveValue(value: unknown): Buffer {
     const encoder = new NSKeyedArchiverEncoder();
     const archived = encoder.encode(value);
 
@@ -763,8 +765,10 @@ export class DVTSecureSocketProxyService extends BaseService {
           break;
         }
 
-        default:
-          throw new Error(`Unsupported auxiliary type: ${auxValue.type}`);
+        default: {
+          const unsupported: never = auxValue;
+          throw new Error(`Unsupported auxiliary type: ${(unsupported as {type: number}).type}`);
+        }
       }
     }
 
@@ -785,7 +789,7 @@ export class DVTSecureSocketProxyService extends BaseService {
    * 1. Standard format: [magic:8][size:8][items...]
    * 2. NSKeyedArchiver bplist format (for handshake responses)
    */
-  private parseAuxiliaryData(buffer: Buffer): any[] {
+  private parseAuxiliaryData(buffer: Buffer): PlistValue[] {
     if (buffer.length < 16) {
       return [];
     }
@@ -804,7 +808,7 @@ export class DVTSecureSocketProxyService extends BaseService {
   /**
    * Parse auxiliary data in NSKeyedArchiver bplist format
    */
-  private parseAuxiliaryAsBplist(buffer: Buffer): any[] {
+  private parseAuxiliaryAsBplist(buffer: Buffer): PlistValue[] {
     // Find bplist header in buffer
     const bplistMagic = 'bplist00';
     for (let i = 0; i < Math.min(100, buffer.length - 8); i++) {
@@ -825,8 +829,8 @@ export class DVTSecureSocketProxyService extends BaseService {
   /**
    * Parse auxiliary data in standard DTX format
    */
-  private parseAuxiliaryStandard(buffer: Buffer): any[] {
-    const values: any[] = [];
+  private parseAuxiliaryStandard(buffer: Buffer): PlistValue[] {
+    const values: PlistValue[] = [];
     let offset = 16; // Skip magic (8) + size (8)
 
     const totalSize = buffer.readBigUInt64LE(8);
@@ -862,7 +866,7 @@ export class DVTSecureSocketProxyService extends BaseService {
   /**
    * Parse a single auxiliary value
    */
-  private parseAuxiliaryValue(buffer: Buffer, type: number, offset: number): {data: any; newOffset: number} {
+  private parseAuxiliaryValue(buffer: Buffer, type: number, offset: number): {data: PlistValue; newOffset: number} {
     switch (type) {
       case DTX_CONSTANTS.AUX_TYPE_INT32:
         return {
@@ -880,7 +884,7 @@ export class DVTSecureSocketProxyService extends BaseService {
         const length = buffer.readUInt32LE(offset);
         const plistData = buffer.subarray(offset + 4, offset + 4 + length);
 
-        let parsed: any;
+        let parsed: PlistValue;
         try {
           parsed = parseBinaryPlist(plistData);
         } catch (error) {

@@ -1,0 +1,79 @@
+{
+  "_comment": "iPhone chunks must cover every test class exactly once (checked by check-integration-test-plan.mjs). The iPad job's tests are declared by the +iPadTests class methods in the test sources.",
+  "iphone": [
+    {
+      "IntegrationTests_1": ["FBIntegrationAppTests"],
+      "IntegrationTests_2": [
+        "FBConfigurationTests",
+        "XCElementSnapshotHelperTests",
+        "XCElementSnapshotHitPoint",
+        "XCUIElementFBFindTests_IdentifierSemantics",
+        "XCUIElementHelperIntegrationTests"
+      ],
+      "IntegrationTests_3": [
+        "FBDisplayGestureTests",
+        "FBForceTouchTests",
+        "FBScreenLookupTests",
+        "FBTypingTest",
+        "FBW3CMultiTouchActionsIntegrationTests",
+        "FBW3CTouchActionsIntegrationTestsPart1"
+      ]
+    },
+    {
+      "IntegrationTests_1": [
+        "FBElementVisibilityTests",
+        "FBImageProcessorTests",
+        "FBImageRendererScalingTests",
+        "FBPickerWheelSelectTests"
+      ],
+      "IntegrationTests_2": [
+        "XCElementSnapshotHelperTests_ScrollViewCells",
+        "XCUIDeviceDuoRotationTests",
+        "XCUIDeviceHelperTests",
+        "XCUIDeviceRotationLogicTests",
+        "XCUIElementAttributesTests",
+        "XCUIElementFBFindTests",
+        "XCUIElementFBFindTests_DeepHierarchyPage"
+      ],
+      "IntegrationTests_3": [
+        "FBElementOffsetTapTest",
+        "FBElementSwipingApplicationTests",
+        "FBPasteboardTests",
+        "FBPressAndDragTests",
+        "FBVideoRecordingTests"
+      ]
+    },
+    {
+      "IntegrationTests_1": [
+        "FBAlertTests",
+        "FBApplicationLaunchTests",
+        "FBElementAttributeTests",
+        "FBKeyboardTests",
+        "FBSafariAlertIntegrationTests",
+        "FBSessionIntegrationTests"
+      ],
+      "IntegrationTests_2": [
+        "FBXPathIntegrationTests",
+        "XCUIDeviceRotationTests",
+        "XCUIElementFBFindTests_AttributesPage",
+        "XCUIElementFBFindTests_ResponseFields",
+        "XCUIElementFBFindTests_ScrollPage"
+      ],
+      "IntegrationTests_3": ["FBScreenTests", "FBVoiceOverTests", "FBW3CTouchActionsIntegrationTestsPart2"]
+    },
+    {
+      "IntegrationTests_1": ["FBFailureProofTestCaseTests", "FBScrollingTests"],
+      "IntegrationTests_2": [
+        "FBW3CTypeActionsTests",
+        "XCElementSnapshotHelperTests_AttributePage",
+        "XCElementSnapshotHelperTests_ScrollView",
+        "XCUIApplicationHelperTests",
+        "XCUIDeviceHealthCheckTests",
+        "XCUIElementFBFindTests_ClassChainAxes",
+        "XCUIElementFBFindTests_CompactResponses",
+        "XCUIElementFBFindTests_StaleAppSnapshot"
+      ],
+      "IntegrationTests_3": ["FBAutoAlertsHandlerTests", "FBElementSwipingTests", "FBTapTest"]
+    }
+  ]
+}

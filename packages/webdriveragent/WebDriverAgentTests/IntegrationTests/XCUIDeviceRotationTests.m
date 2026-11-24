@@ -39,99 +39,11 @@
 @implementation FBRotationScreenDouble
 @end
 
-@interface XCUIDeviceRotationTests : FBIntegrationTestCase
-@property (nonatomic, strong) FBSession *session;
-
+/** Rotation resolution logic on doubles; does not need the app, so it skips the app launch. */
+@interface XCUIDeviceRotationLogicTests : FBIntegrationTestCase
 @end
 
-@implementation XCUIDeviceRotationTests
-
-- (void)setUp
-{
-  [super setUp];
-  [self launchApplication];
-  self.session = [FBSession initWithApplication:self.testedApplication];
-}
-
-- (void)tearDown
-{
-  [self resetOrientation];
-  [self.session kill];
-  [super tearDown];
-}
-
-- (void)testLandscapeRightOrientation
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationLandscapeRight];
-  XCTAssertTrue(success, @"Device should support LandscapeRight");
-  // Device rotation gives opposite interface rotation
-  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeLeft"].exists);
-}
-
-- (void)testLandscapeLeftOrientation
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationLandscapeLeft];
-  XCTAssertTrue(success, @"Device should support LandscapeLeft");
-  // Device rotation gives opposite interface rotation
-  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeRight"].exists);
-}
-
-- (void)testLandscapeRightRotation
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceRotation:@{
-    @"x" : @(0),
-    @"y" : @(0),
-    @"z" : @(90)
-  }];
-  XCTAssertTrue(success, @"Device should support LandscapeRight");
-  // Device rotation gives opposite interface rotation
-  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeLeft"].exists);
-}
-
-- (void)testLandscapeLeftRotation
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceRotation:@{
-    @"x" : @(0),
-    @"y" : @(0),
-    @"z" : @(270)
-  }];
-  XCTAssertTrue(success, @"Device should support LandscapeLeft");
-  // Device rotation gives opposite interface rotation
-  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeRight"].exists);
-}
-
-- (void)testGetDeviceOrientationInPortrait
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationPortrait];
-  XCTAssertTrue(success, @"Device should support Portrait");
-  XCTAssertEqualObjects([XCUIDevice sharedDevice].fb_deviceOrientation, @"UIDeviceOrientationPortrait");
-}
-
-- (void)testGetDeviceOrientationInLandscapeLeft
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationLandscapeLeft];
-  XCTAssertTrue(success, @"Device should support LandscapeLeft");
-  XCTAssertEqualObjects([XCUIDevice sharedDevice].fb_deviceOrientation, @"UIDeviceOrientationLandscapeLeft");
-}
-
-- (void)testGetDeviceOrientationInLandscapeRight
-{
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:UIDeviceOrientationLandscapeRight];
-  XCTAssertTrue(success, @"Device should support LandscapeRight");
-  XCTAssertEqualObjects([XCUIDevice sharedDevice].fb_deviceOrientation, @"UIDeviceOrientationLandscapeRight");
-}
-
-- (void)testRotationTiltRotation
-{
-  UIDeviceOrientation currentRotation = [XCUIDevice sharedDevice].orientation;
-  BOOL success = [[XCUIDevice sharedDevice] fb_setDeviceRotation:@{
-    @"x" : @(15),
-    @"y" : @(0),
-    @"z" : @(0)}
-  ];
-  XCTAssertFalse(success, @"Device should not support tilt");
-  XCTAssertEqual(currentRotation, [XCUIDevice sharedDevice].orientation, @"Device doesnt support tilt, should be at previous orientation");
-}
+@implementation XCUIDeviceRotationLogicTests
 
 - (void)assertRotationRejectedWithoutOrientationChange
 {
@@ -225,6 +137,89 @@
   XCTAssertNil([FBHIDOperations isInnerDuoDisplay:(id)screen displays:@[display]]);
 }
 
+@end
+
+@interface XCUIDeviceRotationTests : FBIntegrationTestCase
+@property (nonatomic, strong) FBSession *session;
+
+@end
+
+@implementation XCUIDeviceRotationTests
+
+// iPad orientation changes
++ (NSArray<NSString *> *)iPadTests
+{
+  return @[@"*"];
+}
+
+- (void)setUp
+{
+  [super setUp];
+  [self launchApplication];
+  self.session = [FBSession initWithApplication:self.testedApplication];
+}
+
+- (void)tearDown
+{
+  [self resetOrientation];
+  [self.session kill];
+  [super tearDown];
+}
+
+- (void)testInterfaceOrientation
+{
+  // Device rotation gives opposite interface rotation
+  NSArray<NSDictionary *> *cases = @[
+    @{@"orientation": @(UIDeviceOrientationLandscapeRight), @"label": @"LandscapeLeft",
+      @"name": @"UIDeviceOrientationLandscapeRight"},
+    @{@"orientation": @(UIDeviceOrientationLandscapeLeft), @"label": @"LandscapeRight",
+      @"name": @"UIDeviceOrientationLandscapeLeft"},
+    @{@"orientation": @(UIDeviceOrientationPortrait), @"name": @"UIDeviceOrientationPortrait"},
+  ];
+  for (NSDictionary *testCase in cases) {
+    UIDeviceOrientation orientation = [testCase[@"orientation"] integerValue];
+    XCTAssertTrue([[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation],
+                  @"Device should support %@", testCase[@"name"]);
+    if (nil != testCase[@"label"]) {
+      XCTAssertTrue(self.testedApplication.staticTexts[testCase[@"label"]].exists);
+    }
+    XCTAssertEqualObjects([XCUIDevice sharedDevice].fb_deviceOrientation, testCase[@"name"]);
+  }
+}
+
+- (void)testDeviceRotation
+{
+  XCUIDevice *device = [XCUIDevice sharedDevice];
+  // Device rotation gives opposite interface rotation
+  BOOL success = [device fb_setDeviceRotation:@{@"x": @(0), @"y": @(0), @"z": @(90)}];
+  XCTAssertTrue(success, @"Device should support LandscapeRight");
+  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeLeft"].exists);
+  success = [device fb_setDeviceRotation:@{@"x": @(0), @"y": @(0), @"z": @(270)}];
+  XCTAssertTrue(success, @"Device should support LandscapeLeft");
+  XCTAssertTrue(self.testedApplication.staticTexts[@"LandscapeRight"].exists);
+
+  UIDeviceOrientation currentRotation = device.orientation;
+  success = [device fb_setDeviceRotation:@{@"x": @(15), @"y": @(0), @"z": @(0)}];
+  XCTAssertFalse(success, @"Device should not support tilt");
+  XCTAssertEqual(currentRotation, device.orientation, @"Device doesnt support tilt, should be at previous orientation");
+}
+
+@end
+
+/** Needs a foldable simulator: skips before launching the app elsewhere. */
+@interface XCUIDeviceDuoRotationTests : FBIntegrationTestCase
+@property (nonatomic, strong, nullable) FBSession *session;
+@end
+
+@implementation XCUIDeviceDuoRotationTests
+
+- (void)tearDown
+{
+  [self resetOrientation];
+  [self.session kill];
+  [super tearDown];
+}
+
 - (void)assertDevice:(XCUIDevice *)device hasOrientation:(UIDeviceOrientation)orientation name:(NSString *)name
 {
   XCTAssertEqual(device.orientation, orientation);
@@ -237,6 +232,9 @@
   XCUIDevice *device = XCUIDevice.sharedDevice;
   XCTSkipIf(!device.fb_supportsHingeAngleReading || !device.fb_canAttemptSimulatedHingeAngleInjection,
             @"Requires hinge angle reading and injection support");
+  // Launched after the skip check above so non-foldable devices don't pay for it
+  [self launchApplication];
+  self.session = [FBSession initWithApplication:self.testedApplication];
   NSNumber *originalDisplay = FBConfiguration.sharedInstance.currentDisplayId;
   NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
   XCTAssertNotNil(originalAngle);

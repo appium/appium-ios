@@ -247,17 +247,15 @@ typedef NS_ENUM(NSInteger, FBConfigurationKeyboardPreference) {
  */
 @property (atomic, assign) NSTimeInterval accessibilityDeadline;
 
-/**
- Custom class chain locator for accept alert button location.
- This might be useful if the default buttons detection algorithm fails to determine alert buttons properly
- when defaultAlertAction is set.
-
- Setting this value to nil or an empty string (the default
- value) will enforce WDA to apply the default algorithm for alert buttons location.
- If an invalid/non-parseable locator is set then the lookup will fallback to the default algorithm and print a
- warning into the log.
- Example: ** /XCUIElementTypeButton[`label CONTAINS[c] 'accept'`]
- */
+/// Custom class chain locator for accept alert button location.
+/// This might be useful if the default buttons detection algorithm fails to determine alert buttons properly
+/// when defaultAlertAction is set.
+///
+/// Setting this value to nil or an empty string (the default
+/// value) will enforce WDA to apply the default algorithm for alert buttons location.
+/// If an invalid/non-parseable locator is set then the lookup will fallback to the default algorithm and print a
+/// warning into the log.
+/// Example: **/XCUIElementTypeButton[`label CONTAINS[c] 'accept'`]
 @property (atomic, copy, nullable) NSString *acceptAlertButtonSelector;
 /**
  Custom class chain locator for dismiss alert button location. See `acceptAlertButtonSelector` for details.

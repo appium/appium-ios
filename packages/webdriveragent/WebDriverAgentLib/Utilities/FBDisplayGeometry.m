@@ -1,0 +1,349 @@
+/**
+ * Copyright (c) 2015-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#import "FBDisplayGeometry.h"
+
+#import "FBConfiguration.h"
+#import "XCUIElement+FBUtilities.h"
+
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+#import "FBLogger.h"
+#import "FBScreen.h"
+#import "FBMathUtils.h"
+#import "FBXCAccessibilityElement.h"
+#import "FBXCAXClientProxy.h"
+#import "FBXCElementSnapshotWrapper+Helpers.h"
+#import "XCUIApplication.h"
+#import "XCUIApplication+FBHelpers.h"
+#import "XCUIElement.h"
+#import "XCUIElementQuery.h"
+
+@protocol FBAXUIElementRef <NSObject>
+@property (nonatomic, readonly) struct __AXUIElement *axElement;
+@end
+
+@protocol FBAXDisplayElement <NSObject>
++ (instancetype)elementWithAXUIElement:(const struct __AXUIElement *)element;
+@property (nonatomic, readonly) NSArray<id<FBAXDisplayElement>> *accessibleDescendants;
+@property (nonatomic, readonly) unsigned int windowDisplayId;
+@property (nonatomic, readonly) NSString *axIdentifier;
+@property (nonatomic, readonly) NSString *label;
+@property (nonatomic, readonly) id<FBAXUIElementRef> uiElement;
+@end
+
+static BOOL FBIsSystemApplicationSnapshot(id<FBXCElementSnapshot> snapshot)
+{
+  return snapshot.accessibilityElement.processIdentifier == FBXCAXClientProxy.sharedClient.systemApplication.processIdentifier;
+}
+
+static BOOL FBHasOtherDisplay(id<FBXCElementSnapshot> snapshot, NSNumber *display)
+{
+  return [snapshot respondsToSelector:@selector(displayID)]
+    && snapshot.displayID != 0 && snapshot.displayID != display.longLongValue;
+}
+
+// XCTest may attach a Control Center module from the cover to the inner window.
+// Read that window's accessibility hierarchy before serializing any other windows.
+static NSArray<id<FBAXDisplayElement>> *FBWindowAccessibilityElements(id<FBXCElementSnapshot> window)
+{
+  Class<FBAXDisplayElement> axClass = NSClassFromString(@"AXElement");
+  if (![axClass respondsToSelector:@selector(elementWithAXUIElement:)]
+      || ![window.accessibilityElement respondsToSelector:@selector(AXUIElement)]) {
+    [FBLogger verboseLog:@"Display geometry: cannot access the AX window (elementWithAXUIElement: or AXUIElement unavailable)"];
+    return @[];
+  }
+  const struct __AXUIElement *ref = window.accessibilityElement.AXUIElement;
+  id<FBAXDisplayElement> axWindow = ref == NULL ? nil : [axClass elementWithAXUIElement:ref];
+  if (![axWindow respondsToSelector:@selector(accessibleDescendants)]) {
+    [FBLogger verboseLog:@"Display geometry: missing AX window or accessibleDescendants selector"];
+    return @[];
+  }
+  return axWindow.accessibleDescendants;
+}
+
+static id<FBAXDisplayElement> FBUniqueDisplayElement(id<FBXCElementSnapshot> original,
+                                                     NSArray<id<FBAXDisplayElement>> *elements,
+                                                     long long displayID)
+{
+  id<FBAXDisplayElement> match = nil;
+  NSString *reason = @"no identifier and label match";
+  for (id<FBAXDisplayElement> candidate in elements) {
+    if (![candidate respondsToSelector:@selector(axIdentifier)]) {
+      reason = @"candidate has no axIdentifier selector";
+      continue;
+    }
+    if (![candidate.axIdentifier isEqualToString:original.identifier]) {
+      continue;
+    }
+    if (![candidate respondsToSelector:@selector(windowDisplayId)] || ![candidate respondsToSelector:@selector(label)]) {
+      reason = @"candidate has no windowDisplayId or label selector";
+      continue;
+    }
+    if (candidate.windowDisplayId == displayID && [candidate.label isEqualToString:original.label]) {
+      if (match != nil) {
+        [FBLogger verboseLogFmt:@"Display geometry: multiple matches for '%@' on display %lld", original.identifier, displayID];
+        return nil;
+      }
+      match = candidate;
+    }
+  }
+  if (match == nil) {
+    [FBLogger verboseLogFmt:@"Display geometry: cannot resolve '%@' on display %lld (%@)", original.identifier, displayID, reason];
+  }
+  return match;
+}
+
+static id<FBXCElementSnapshot> FBMatchingDisplaySnapshot(id<FBXCElementSnapshot> original,
+                                                         NSArray<id<FBAXDisplayElement>> *elements,
+                                                         long long displayID)
+{
+  id<FBAXDisplayElement> match = FBUniqueDisplayElement(original, elements, displayID);
+  if (match == nil) {
+    return nil;
+  }
+  Class<FBXCAccessibilityElement> xcClass = NSClassFromString(@"XCAccessibilityElement");
+  if (![match respondsToSelector:@selector(uiElement)] || ![match.uiElement respondsToSelector:@selector(axElement)]
+      || ![xcClass respondsToSelector:@selector(elementWithAXUIElement:)]) {
+    [FBLogger verboseLogFmt:@"Display geometry: AX bridge unavailable for '%@' on display %lld (uiElement, axElement or elementWithAXUIElement:)", original.identifier, displayID];
+    return nil;
+  }
+  struct __AXUIElement *ref = match.uiElement.axElement;
+  if (ref == NULL) {
+    [FBLogger verboseLogFmt:@"Display geometry: missing AX element reference for '%@' on display %lld", original.identifier, displayID];
+    return nil;
+  }
+  id<FBXCAccessibilityElement> ax = [xcClass elementWithAXUIElement:ref];
+  id<FBXCElementSnapshot> live = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
+  if (live.displayID != displayID || live.elementType != original.elementType
+      || ![live.identifier isEqualToString:original.identifier] || CGRectIsEmpty(live.frame)) {
+    [FBLogger verboseLogFmt:@"Display geometry: missing or mismatched live snapshot or empty frame for '%@' on display %lld", original.identifier, displayID];
+    return nil;
+  }
+  return live;
+}
+
+// The accessible control is a descendant of the module icon. The latter is
+// absent from accessibleDescendants, but its own frame is available on the live AX parent chain.
+static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElementSnapshot> live, FBDisplaySnapshotMap *matches)
+{
+  id<FBXCElementSnapshot> icon = [[FBXCElementSnapshotWrapper ensureWrapped:original] fb_parentMatchingType:XCUIElementTypeIcon];
+  if (icon.identifier.length == 0 || icon.displayID != original.displayID || [matches objectForKey:icon] != nil) {
+    return;
+  }
+  NSString *parentKey = @"XC_kAXXCAttributeParent";
+  NSString *identifierKey = @"XC_kAXXCAttributeIdentifier";
+  NSString *displayKey = @"XC_kAXXCAttributeWindowDisplayId";
+  id<FBXCAccessibilityElement> ax = live.accessibilityElement;
+  NSMutableSet *visited = [NSMutableSet set];
+  while (ax != nil && ![visited containsObject:ax]) {
+    [visited addObject:ax];
+    NSDictionary *attrs = [FBXCAXClientProxy.sharedClient attributesForElement:ax
+                                attributes:@[parentKey, identifierKey, displayKey] error:nil];
+    if ([attrs[displayKey] longLongValue] != live.displayID) {
+      return;
+    }
+    if ([attrs[identifierKey] isEqual:icon.identifier]) {
+      id<FBXCElementSnapshot> counterpart = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
+      if (counterpart.elementType == icon.elementType && counterpart.displayID == live.displayID
+          && [counterpart.label isEqual:icon.label] && !CGRectIsEmpty(counterpart.frame)) {
+        [matches setObject:counterpart forKey:icon];
+      }
+      return;
+    }
+    ax = attrs[parentKey];
+  }
+}
+
+// A scoped XPath snapshot can be detached from its containing window. Use the
+// application tree only to recover window identity; keep the original XPath scope.
+static id<FBXCElementSnapshot> FBWindowForScope(id<FBXCElementSnapshot> scope)
+{
+  if (scope.elementType == XCUIElementTypeWindow) {
+    return scope;
+  }
+  id<FBXCElementSnapshot> window = [[FBXCElementSnapshotWrapper ensureWrapped:scope] fb_parentMatchingType:XCUIElementTypeWindow];
+  if (window != nil) {
+    return window;
+  }
+  id<FBXCElementSnapshot> app = [XCUIApplication.fb_systemApplication fb_standardSnapshot];
+  id<FBXCElementSnapshot> member = [app elementSnapshotMatchingAccessibilityElement:scope.accessibilityElement];
+  return [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
+}
+
+static NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *FBAccessibilityElementsByIdentifier(id<FBXCElementSnapshot> window)
+{
+  NSMutableDictionary<NSString *, NSMutableArray<id<FBAXDisplayElement>> *> *index = [NSMutableDictionary dictionary];
+  for (id<FBAXDisplayElement> element in FBWindowAccessibilityElements(window)) {
+    if (![element respondsToSelector:@selector(axIdentifier)]) {
+      [FBLogger verboseLog:@"Display geometry: skipping AX descendant without axIdentifier while indexing the window"];
+      continue;
+    }
+    NSString *identifier = element.axIdentifier;
+    if (identifier.length == 0) {
+      continue;
+    }
+    NSMutableArray<id<FBAXDisplayElement>> *candidates = index[identifier];
+    if (candidates == nil) {
+      candidates = [NSMutableArray array];
+      index[identifier] = candidates;
+    }
+    [candidates addObject:element];
+  }
+  return index;
+}
+
+static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, NSNumber *display, FBDisplaySnapshotMap *matches)
+{
+  NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *byIdentifier = nil;
+  NSArray *nodes = scope._allDescendants;
+  if (scope.elementType != XCUIElementTypeWindow) {
+    nodes = [@[scope] arrayByAddingObjectsFromArray:nodes ?: @[]];
+  }
+  for (id<FBXCElementSnapshot> node in nodes) {
+    if (node.identifier.length == 0 || !FBHasOtherDisplay(node, display)) {
+      continue;
+    }
+    if (byIdentifier == nil) {
+      id<FBXCElementSnapshot> window = FBWindowForScope(scope);
+      if (![window respondsToSelector:@selector(displayID)] || window.displayID != display.longLongValue) {
+        return;
+      }
+      byIdentifier = FBAccessibilityElementsByIdentifier(window);
+    }
+    id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(node, byIdentifier[node.identifier], display.longLongValue);
+    if (live != nil) {
+      [matches setObject:live forKey:node];
+      FBResolveModuleIcon(node, live, matches);
+    }
+  }
+}
+
+static id<FBXCElementSnapshot> FBResolveCrossDisplaySnapshot(XCUIElement *element,
+                                                             id<FBXCElementSnapshot> snapshot,
+                                                             id<FBXCElementSnapshot> previousRoot,
+                                                             id<FBXCElementSnapshot> currentRoot,
+                                                             long long displayID)
+{
+  // Identity-bound queries resolve against a fresh application snapshot.
+  // Only reuse the tree if this lookup replaced it and it contains our element.
+  id<FBXCElementSnapshot> tree = currentRoot;
+  id<FBXCElementSnapshot> member = nil;
+  if (tree != previousRoot && tree.elementType == XCUIElementTypeApplication) {
+    member = [tree elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
+  }
+  if (member == nil) {
+    tree = [element.application fb_standardSnapshot];
+    member = [tree elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
+  }
+  if (member.elementType == XCUIElementTypeIcon) {
+    // An icon's frame is recovered through its accessible child.
+    return [FBDisplaySnapshotsForTree(member) objectForKey:member] ?: member;
+  }
+  id<FBXCElementSnapshot> window = [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
+  if ([window respondsToSelector:@selector(displayID)] && window.displayID == displayID) {
+    id<FBXCElementSnapshot> live = FBMatchingDisplaySnapshot(snapshot, FBWindowAccessibilityElements(window),
+                                                             displayID);
+    if (live != nil) {
+      return live;
+    }
+  }
+  return snapshot;
+}
+
+static CGRect FBWindowFrameInSnapshot(id<FBXCElementSnapshot> root, long long displayID)
+{
+  for (id<FBXCElementSnapshot> window in root.children) {
+    if (window.elementType != XCUIElementTypeWindow) {
+      continue;
+    }
+    if (![window respondsToSelector:@selector(displayID)] || window.displayID == 0) {
+      // Resolve the live windows if an earlier window's display is unknown.
+      break;
+    }
+    if (window.displayID == displayID && !CGRectIsEmpty(window.frame)) {
+      return CGRectIntegral(window.frame);
+    }
+  }
+  return CGRectNull;
+}
+
+#endif
+
+id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL useCustomSnapshot)
+{
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  NSNumber *display = FBConfiguration.sharedInstance.currentDisplayId;
+  XCUIElementQuery *query = display != nil && ![element isKindOfClass:XCUIApplication.class] ? element.query : nil;
+  id<FBXCElementSnapshot> previousRoot = query.rootElementSnapshot;
+#endif
+  id<FBXCElementSnapshot> snapshot = useCustomSnapshot ? [element fb_customSnapshot] : [element fb_standardSnapshot];
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  if (display != nil && snapshot.identifier.length > 0 && FBHasOtherDisplay(snapshot, display)
+      && FBIsSystemApplicationSnapshot(snapshot)) {
+    return FBResolveCrossDisplaySnapshot(element, snapshot, previousRoot, query.rootElementSnapshot, display.longLongValue);
+  }
+#endif
+  return snapshot;
+}
+
+FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root)
+{
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  NSNumber *display = FBConfiguration.sharedInstance.currentDisplayId;
+  if (display == nil || !FBIsSystemApplicationSnapshot(root)) {
+    return nil;
+  }
+  if ([(NSObject *)root isKindOfClass:FBXCElementSnapshotWrapper.class]) {
+    root = ((FBXCElementSnapshotWrapper *)root).snapshot;
+  }
+  // The caller owns this map for one traversal. XCTest can reuse the underlying snapshots.
+  FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
+                                                        valueOptions:NSPointerFunctionsStrongMemory];
+  if (root.elementType == XCUIElementTypeApplication) {
+    for (id<FBXCElementSnapshot> window in root.children) {
+      if (window.elementType == XCUIElementTypeWindow && [window respondsToSelector:@selector(displayID)]
+          && window.displayID == display.longLongValue) {
+        FBCollectDisplaySnapshots(window, display, matches);
+      }
+    }
+  } else {
+    FBCollectDisplaySnapshots(root, display, matches);
+  }
+  return matches;
+#else
+  return nil;
+#endif
+}
+
+CGRect FBFrameForDisplayGeometry(id<FBXCElementSnapshot> snapshot)
+{
+#if !TARGET_OS_TV && !TARGET_OS_WATCH
+  NSNumber *display = FBConfiguration.sharedInstance.currentDisplayId;
+  if (display == nil) {
+    return snapshot.frame;
+  }
+  if (snapshot.elementType != XCUIElementTypeApplication || !FBIsSystemApplicationSnapshot(snapshot)) {
+    return snapshot.frame;
+  }
+  if ([FBScreen currentScreenWithError:nil] == nil || ![FBScreen hasMultipleScreensWithError:nil].boolValue) {
+    return snapshot.frame;
+  }
+
+  XCUIApplication *application = XCUIApplication.fb_systemApplication;
+  CGRect frame = FBWindowFrameInSnapshot(snapshot, display.longLongValue);
+  if (CGRectIsNull(frame)) {
+    FBWindowOnDisplay(application, display.longLongValue, &frame);
+  }
+  if (!CGRectIsEmpty(frame)) {
+    // Use the oriented window dimensions reported by /window/rect.
+    frame.size = FBAdjustDimensionsForApplication(frame.size, application.interfaceOrientation);
+    return frame;
+  }
+#endif
+  return snapshot.frame;
+}

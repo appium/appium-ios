@@ -26,6 +26,11 @@
 
 @implementation FBSafariAlertIntegrationTests
 
+- (void)skipIfUnsupported
+{
+  XCTSkipIf(FBIntegrationTestCase.isRunningInCI, @"Depends on an external website (w3schools.com), unreliable on CI");
+}
+
 - (void)setUp
 {
   [super setUp];
@@ -44,10 +49,6 @@
 
 - (void)testCanHandleSafariInputPrompt
 {
-  if (FBIntegrationTestCase.isRunningInCI) {
-    XCTSkip(@"Depends on an external website (w3schools.com), unreliable on CI");
-  }
-
   XCUIElement *urlInput = [[self.safariApp
                             descendantsMatchingType:XCUIElementTypeTextField]
                            matchingPredicate:[

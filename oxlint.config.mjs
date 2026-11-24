@@ -48,6 +48,11 @@ export default defineConfig({
       },
     },
     {
+      // CI helper CLI: stdout/stderr is its interface.
+      files: ['packages/webdriveragent/Scripts/ci/**'],
+      rules: {'no-console': 'off'},
+    },
+    {
       // These tests deliberately exercise thenable handling.
       files: ['packages/remote-debugger/test/unit/atoms.spec.ts'],
       rules: {'unicorn/no-thenable': 'off'},

@@ -9,6 +9,7 @@
 #import "XCUIApplication+FBHelpers.h"
 
 #import "FBActiveAppDetectionPoint.h"
+#import "FBDisplayGeometry.h"
 #import "FBElementTypeTransformer.h"
 #import "FBKeyboard.h"
 #import "FBLogger.h"
@@ -221,6 +222,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
   return [self.class dictionaryForElement:snapshot
+                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot)
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
 }
@@ -231,7 +233,8 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   return [self.class accessibilityInfoForElement:snapshot];
 }
 
-+ (NSDictionary *)dictionaryForElement:(id<FBXCElementSnapshot>)snapshot 
++ (NSDictionary *)dictionaryForElement:(id<FBXCElementSnapshot>)snapshot
+                      displaySnapshots:(nullable FBDisplaySnapshotMap *)displaySnapshots
                              recursive:(BOOL)recursive
                     excludedAttributes:(nullable NSSet<NSString *> *)excludedAttributes
 {
@@ -242,12 +245,16 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   info[@"name"] = FBValueOrNull(wrappedSnapshot.wdName);
   info[@"value"] = FBValueOrNull(wrappedSnapshot.wdValue);
   info[@"label"] = FBValueOrNull(wrappedSnapshot.wdLabel);
-  info[@"rect"] = wrappedSnapshot.wdRect;
+  id<FBXCElementSnapshot> counterpart = [displaySnapshots objectForKey:snapshot];
+  FBXCElementSnapshotWrapper *geometry = counterpart == nil ? wrappedSnapshot : [FBXCElementSnapshotWrapper ensureWrapped:counterpart];
+  info[@"rect"] = geometry.wdRect;
+  if (![excludedAttributes containsObject:FBExclusionAttributeFrame]) {
+    info[FBExclusionAttributeFrame] = NSStringFromCGRect(geometry.wdFrame);
+  }
   
   NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
   NSSet *nonPrefixedKeys = [NSSet setWithObjects:
-                            FBExclusionAttributeFrame,
                             FBExclusionAttributePlaceholderValue,
                             FBExclusionAttributeNativeFrame,
                             FBExclusionAttributeTraits,
@@ -277,6 +284,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
     for (id<FBXCElementSnapshot> childSnapshot in childElements) {
       @autoreleasepool {
         [info[@"children"] addObject:[self dictionaryForElement:childSnapshot
+                                               displaySnapshots:displaySnapshots
                                                       recursive:YES
                                              excludedAttributes:excludedAttributes]];
       }
@@ -288,14 +296,10 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 // Helper used by `dictionaryForElement:` to assemble attribute value blocks,
 // including both common attributes and conditionally included ones like placeholderValue.
 + (NSDictionary<NSString *, NSString *(^)(void)> *)fb_attributeBlockMapForWrappedSnapshot:(FBXCElementSnapshotWrapper *)wrappedSnapshot
-
 {
   // Base attributes common to every element
   NSMutableDictionary<NSString *, id(^)(void)> *blocks =
   [@{
-    FBExclusionAttributeFrame: ^{
-    return NSStringFromCGRect(wrappedSnapshot.wdFrame);
-  },
     FBExclusionAttributeNativeFrame: ^{
     return NSStringFromCGRect(wrappedSnapshot.wdNativeFrame);
   },
@@ -535,6 +539,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
       id<FBXCElementSnapshot> elementSnapshot = [extractedElement fb_cachedSnapshot] ?: [extractedElement fb_standardSnapshot];
       NSDictionary *elementAttributes = elementSnapshot
       ? [self.class dictionaryForElement:elementSnapshot
+                        displaySnapshots:nil
                                recursive:NO
                       excludedAttributes:customAttributesToExclude]
       : @{};

@@ -194,7 +194,7 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
               this.finishedDeferred?.resolve(status);
               break;
             }
-          } catch (err: any) {
+          } catch (err) {
             if (signal.aborted) {
               break;
             }
@@ -394,7 +394,7 @@ export class XCUITestService extends EventEmitter<XCUITestServiceEvents> {
     return createBinaryPlist(archived);
   }
 
-  private handleCallback(selector: any, auxiliaries: any[]): void {
+  private handleCallback(selector: unknown, auxiliaries: unknown[]): void {
     if (typeof selector !== 'string') {
       return;
     }
