@@ -105,6 +105,15 @@ id<FBResponsePayload> FBResponseWithStatus(FBCommandStatus *status)
                                             httpStatusCode:status.statusCode];
 }
 
+id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequired)
+{
+  if (FBIsValidBundleId(bundleId, isRequired)) {
+    return nil;
+  }
+  NSString *message = [NSString stringWithFormat:@"'bundleId' must be %@", FBBundleIdRule];
+  return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:message traceback:nil]);
+}
+
 inline NSDictionary *FBDictionaryResponseWithElement(XCUIElement *element, BOOL compact)
 {
   __block NSDictionary *elementResponse = nil;

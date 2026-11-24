@@ -10,11 +10,13 @@
 #import <objc/runtime.h>
 
 #import "FBCapabilities.h"
+#import "FBCustomCommands.h"
 #import "FBReflectionUtils.h"
 #import "FBRouteRequest-Private.h"
 #import "FBResponsePayload.h"
 #import "FBSession.h"
 #import "FBSessionCommands.h"
+#import "FBUnattachedAppLauncher.h"
 #import "RouteResponse.h"
 #import "XCUIDevice+FBHelpers.h"
 
@@ -26,6 +28,10 @@
 + (id<FBResponsePayload>)handleSessionAppTerminate:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleSessionAppState:(FBRouteRequest *)request;
 + (NSDictionary *)currentCapabilities;
+@end
+
+@interface FBCustomCommands (FBSessionCommandsTests)
++ (id<FBResponsePayload>)handleLaunchUnattachedApp:(FBRouteRequest *)request;
 @end
 
 @implementation FBSessionCommands (FBSessionCommandsTests)
@@ -102,6 +108,19 @@ static NSMutableArray<NSArray<NSString *> *> *FBOpenedUrls;
 
 @end
 
+// What the /wda/apps/launchUnattached stub below got (NSNull for nil)
+static NSMutableArray *FBUnattachedLaunches;
+
+@implementation FBUnattachedAppLauncher (FBSessionCommandsTests)
+
++ (BOOL)fbtest_launchAppWithBundleId:(NSString *)bundleId
+{
+  [FBUnattachedLaunches addObject:bundleId ?: NSNull.null];
+  return YES;
+}
+
+@end
+
 // -[NSNumber isEqual:] treats false and 0 as equal, so only the CF type tells a JSON boolean from a number
 static BOOL FBIsBoolean(id value)
 {
@@ -117,13 +136,21 @@ static BOOL FBIsBoolean(id value)
                     arguments:(NSDictionary *)arguments
                       session:(nullable FBAppsSessionDouble *)session
 {
+  return [self responseOf:handler ofClass:FBSessionCommands.class arguments:arguments session:session];
+}
+
+- (RouteResponse *)responseOf:(SEL)handler
+                      ofClass:(Class)handlerClass
+                    arguments:(NSDictionary *)arguments
+                      session:(nullable FBAppsSessionDouble *)session
+{
   FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/"]
                                                   parameters:@{}
                                                    arguments:arguments];
   request.session = (FBSession *)session;
-  id<FBResponsePayload> (*invoke)(id, SEL, FBRouteRequest *) = (void *)[FBSessionCommands methodForSelector:handler];
+  id<FBResponsePayload> (*invoke)(id, SEL, FBRouteRequest *) = (void *)[handlerClass methodForSelector:handler];
   RouteResponse *response = [RouteResponse new];
-  [invoke(FBSessionCommands.class, handler, request) dispatchWithResponse:response];
+  [invoke(handlerClass, handler, request) dispatchWithResponse:response];
   return response;
 }
 
@@ -163,6 +190,18 @@ static BOOL FBIsBoolean(id value)
   FBOpenedUrls = [NSMutableArray array];
 }
 
+// Puts the stub above in place of the launcher /wda/apps/launchUnattached calls, until the test ends.
+- (void)stubUnattachedLaunch
+{
+  Class metaClass = object_getClass(FBUnattachedAppLauncher.class);
+  void (^swapMethods)(void) = ^{
+    FBReplaceMethod(metaClass, @selector(launchAppWithBundleId:), @selector(fbtest_launchAppWithBundleId:));
+  };
+  swapMethods();
+  [self addTeardownBlock:swapMethods];
+  FBUnattachedLaunches = [NSMutableArray array];
+}
+
 // Maps each /wda/apps handler to its expected response value when using FBAppsSessionDouble
 - (NSDictionary<NSString *, id> *)appHandlers
 {
@@ -178,6 +217,11 @@ static BOOL FBIsBoolean(id value)
 - (NSArray *)invalidBundleIds
 {
   return @[NSNull.null, @42, @[@"com.apple.Preferences"], @"", @"com.example app", @"com.example/app", @"com.exämple.app"];
+}
+
+- (NSArray<NSString *> *)validBundleIds
+{
+  return @[@"com.apple.Preferences", @"io.appium.Test-App2", @"com.example.wda_underscore_test"];
 }
 
 - (void)testAppCommandsRejectMissingOrInvalidBundleId
@@ -202,7 +246,7 @@ static BOOL FBIsBoolean(id value)
   NSDictionary<NSString *, id> *handlers = self.appHandlers;
   for (NSString *handler in handlers) {
     id expectedValue = handlers[handler];
-    for (NSString *bundleId in @[@"com.apple.Preferences", @"io.appium.Test-App2", @"com.example.wda_underscore_test"]) {
+    for (NSString *bundleId in self.validBundleIds) {
       FBAppsSessionDouble *session = [FBAppsSessionDouble new];
       RouteResponse *response = [self responseOf:NSSelectorFromString(handler)
                                        arguments:@{@"bundleId": bundleId}
@@ -214,6 +258,38 @@ static BOOL FBIsBoolean(id value)
       XCTAssertEqualObjects(session.receivedBundleIds, @[bundleId], @"%@", message);
     }
   }
+}
+
+- (void)testLaunchUnattachedRejectsMissingOrInvalidBundleId
+{
+  [self stubUnattachedLaunch];
+  NSMutableArray<NSDictionary *> *argumentsList = [NSMutableArray arrayWithObject:@{}];
+  for (id bundleId in self.invalidBundleIds) {
+    [argumentsList addObject:@{@"bundleId": bundleId}];
+  }
+  for (NSDictionary *arguments in argumentsList) {
+    RouteResponse *response = [self responseOf:@selector(handleLaunchUnattachedApp:)
+                                       ofClass:FBCustomCommands.class
+                                     arguments:arguments
+                                       session:nil];
+    [self assertInvalidBundleIdResponse:response
+                                message:[NSString stringWithFormat:@"launchUnattached with %@", arguments]];
+  }
+  XCTAssertEqual(FBUnattachedLaunches.count, 0);
+}
+
+- (void)testLaunchUnattachedPassesValidBundleIdToLauncher
+{
+  [self stubUnattachedLaunch];
+  for (NSString *bundleId in self.validBundleIds) {
+    RouteResponse *response = [self responseOf:@selector(handleLaunchUnattachedApp:)
+                                       ofClass:FBCustomCommands.class
+                                     arguments:@{@"bundleId": bundleId}
+                                       session:nil];
+    NSString *message = [NSString stringWithFormat:@"launchUnattached with '%@'", bundleId];
+    XCTAssertEqualObjects([self valueOfSuccessfulResponse:response message:message], NSNull.null, @"%@", message);
+  }
+  XCTAssertEqualObjects(FBUnattachedLaunches, self.validBundleIds);
 }
 
 - (void)testOpenURLRejectsInvalidBundleId
