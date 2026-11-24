@@ -448,12 +448,25 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
   id<FBXCElementSnapshot> snapshot = useCustomSnapshot ? [element fb_customSnapshot] : [element fb_standardSnapshot];
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
   if (display != nil && snapshot.elementType != XCUIElementTypeApplication && FBIsSystemApplicationSnapshot(snapshot)) {
+    UIInterfaceOrientation orientation = FBGeometryOrientation();
     id<FBXCElementSnapshot> geometry = snapshot;
     id<FBXCElementSnapshot> window = nil;
     if (FBHasOtherDisplay(snapshot, display) && FBCanMatchDisplayElement(snapshot)) {
+      if (UIInterfaceOrientationIsLandscape(orientation)) {
+        // An identity-bound query can give its window an oriented frame while
+        // the matched AX element still carries portrait coordinates. Use the
+        // same standard window snapshot as page source for this conversion.
+        id<FBXCElementSnapshot> tree = [element.application fb_standardSnapshot];
+        id<FBXCElementSnapshot> member = FBMemberOnDisplay(tree, snapshot, display.longLongValue, &window);
+        if (member != nil && window != nil) {
+          FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
+                                                                valueOptions:NSPointerFunctionsStrongMemory];
+          FBCollectDisplaySnapshots(window, display, matches, orientation);
+          return [matches objectForKey:member] ?: member;
+        }
+      }
       geometry = FBResolveCrossDisplaySnapshot(element, snapshot, previousRoot, query.rootElementSnapshot, display.longLongValue, &window);
     }
-    UIInterfaceOrientation orientation = FBGeometryOrientation();
     if (UIInterfaceOrientationIsLandscape(orientation) && ![(NSObject *)geometry isKindOfClass:FBOrientedSnapshot.class]) {
       window = window ?: FBWindowForScope(geometry);
       if (![window respondsToSelector:@selector(displayID)] || window.displayID != display.longLongValue) {
