@@ -9,6 +9,7 @@
 #import <XCTest/XCTest.h>
 
 #import "FBImageProcessor.h"
+#import "FBConfiguration.h"
 @import UniformTypeIdentifiers;
 #import "FBIntegrationTestCase.h"
 
@@ -88,6 +89,25 @@
 @end
 
 @implementation FBImageRendererScalingTests
+
+- (void)testExplicitOrientationOverridesUprightImageMetadataAtFullSize
+{
+  FBConfiguration *configuration = FBConfiguration.sharedInstance;
+  NSString *previous = configuration.humanReadableScreenshotOrientation;
+  [self addTeardownBlock:^{ [configuration setScreenshotOrientation:previous error:nil]; }];
+  XCTAssertTrue([configuration setScreenshotOrientation:@"landscapeRight" error:nil]);
+
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat new];
+  format.scale = 1;
+  UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 60) format:format];
+  NSData *input = [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext *context) {
+    [context fillRect:CGRectMake(0, 0, 20, 30)];
+  }];
+  NSData *output = [[FBImageProcessor new] scaledImageWithData:input uti:UTTypePNG scalingFactor:1
+                                            compressionQuality:1 error:nil];
+  UIImage *image = [UIImage imageWithData:output];
+  XCTAssertTrue(CGSizeEqualToSize(image.size, CGSizeMake(60, 40)));
+}
 
 - (void)testOrientationFixDoesNotApplyScalingTwice
 {

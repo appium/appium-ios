@@ -121,12 +121,13 @@ const CGFloat FBMaxCompressionQuality = 1.0f;
   
     UIImage *image = [UIImage imageWithData:imageData];
     if (nil == image
-        || ((image.imageOrientation == UIImageOrientationUp || !fixOrientation) && !usesScaling)) {
+        || (!usesScaling && image.imageOrientation == UIImageOrientationUp
+            && (orientation == nil || orientation.integerValue == UIImageOrientationUp))) {
       return [uti conformsToType:UTTypePNG] ? FBToPngData(imageData) : FBToJpegData(imageData, compressionQuality);
     }
     
-    CGSize scaledSize = CGSizeMake(image.size.width * scalingFactor, image.size.height * scalingFactor);
     if (!fixOrientation && usesScaling) {
+      CGSize scaledSize = CGSizeMake(image.size.width * scalingFactor, image.size.height * scalingFactor);
       dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
       __block UIImage *result = nil;
       [image prepareThumbnailOfSize:scaledSize
@@ -143,18 +144,19 @@ const CGFloat FBMaxCompressionQuality = 1.0f;
         : UIImageJPEGRepresentation(result, compressionQuality);
     }
   
-    UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
-    // scaledSize already applies the requested factor in points. Preserve the
-    // image's pixels-per-point scale instead of applying that factor twice.
-    format.scale = image.scale;
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize
-                                                                               format:format];
     UIImageOrientation desiredOrientation = orientation == nil
       ? image.imageOrientation
       : (UIImageOrientation)orientation.integerValue;
     UIImage *uiImage = [UIImage imageWithCGImage:(CGImageRef)image.CGImage
                                            scale:image.scale
                                      orientation:desiredOrientation];
+    CGSize scaledSize = CGSizeMake(uiImage.size.width * scalingFactor, uiImage.size.height * scalingFactor);
+    UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
+    // scaledSize already applies the requested factor in points. Preserve the
+    // image's pixels-per-point scale instead of applying that factor twice.
+    format.scale = image.scale;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize
+                                                                               format:format];
     return [uti conformsToType:UTTypePNG]
       ? [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
         [uiImage drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
