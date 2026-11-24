@@ -12,6 +12,7 @@
 #import "XCUIElement+FBUtilities.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+#import "FBLogger.h"
 #import "FBScreen.h"
 #import "FBMathUtils.h"
 #import "FBXCAccessibilityElement.h"
@@ -53,11 +54,16 @@ static NSArray<id<FBAXDisplayElement>> *FBWindowAccessibilityElements(id<FBXCEle
   Class<FBAXDisplayElement> axClass = NSClassFromString(@"AXElement");
   if (![axClass respondsToSelector:@selector(elementWithAXUIElement:)]
       || ![window.accessibilityElement respondsToSelector:@selector(AXUIElement)]) {
+    [FBLogger verboseLog:@"Display geometry: cannot access the AX window (elementWithAXUIElement: or AXUIElement unavailable)"];
     return @[];
   }
   const struct __AXUIElement *ref = window.accessibilityElement.AXUIElement;
   id<FBAXDisplayElement> axWindow = ref == NULL ? nil : [axClass elementWithAXUIElement:ref];
-  return [axWindow respondsToSelector:@selector(accessibleDescendants)] ? axWindow.accessibleDescendants : @[];
+  if (![axWindow respondsToSelector:@selector(accessibleDescendants)]) {
+    [FBLogger verboseLog:@"Display geometry: missing AX window or accessibleDescendants selector"];
+    return @[];
+  }
+  return axWindow.accessibleDescendants;
 }
 
 static id<FBAXDisplayElement> FBUniqueDisplayElement(id<FBXCElementSnapshot> original,
@@ -65,15 +71,29 @@ static id<FBAXDisplayElement> FBUniqueDisplayElement(id<FBXCElementSnapshot> ori
                                                      long long displayID)
 {
   id<FBAXDisplayElement> match = nil;
+  NSString *reason = @"no identifier and label match";
   for (id<FBAXDisplayElement> candidate in elements) {
-    if ([candidate respondsToSelector:@selector(axIdentifier)] && [candidate.axIdentifier isEqualToString:original.identifier]
-        && [candidate respondsToSelector:@selector(windowDisplayId)] && candidate.windowDisplayId == displayID
-        && [candidate respondsToSelector:@selector(label)] && [candidate.label isEqualToString:original.label]) {
+    if (![candidate respondsToSelector:@selector(axIdentifier)]) {
+      reason = @"candidate has no axIdentifier selector";
+      continue;
+    }
+    if (![candidate.axIdentifier isEqualToString:original.identifier]) {
+      continue;
+    }
+    if (![candidate respondsToSelector:@selector(windowDisplayId)] || ![candidate respondsToSelector:@selector(label)]) {
+      reason = @"candidate has no windowDisplayId or label selector";
+      continue;
+    }
+    if (candidate.windowDisplayId == displayID && [candidate.label isEqualToString:original.label]) {
       if (match != nil) {
+        [FBLogger verboseLogFmt:@"Display geometry: multiple matches for '%@' on display %lld", original.identifier, displayID];
         return nil;
       }
       match = candidate;
     }
+  }
+  if (match == nil) {
+    [FBLogger verboseLogFmt:@"Display geometry: cannot resolve '%@' on display %lld (%@)", original.identifier, displayID, reason];
   }
   return match;
 }
@@ -83,19 +103,25 @@ static id<FBXCElementSnapshot> FBMatchingDisplaySnapshot(id<FBXCElementSnapshot>
                                                          long long displayID)
 {
   id<FBAXDisplayElement> match = FBUniqueDisplayElement(original, elements, displayID);
+  if (match == nil) {
+    return nil;
+  }
   Class<FBXCAccessibilityElement> xcClass = NSClassFromString(@"XCAccessibilityElement");
   if (![match respondsToSelector:@selector(uiElement)] || ![match.uiElement respondsToSelector:@selector(axElement)]
       || ![xcClass respondsToSelector:@selector(elementWithAXUIElement:)]) {
+    [FBLogger verboseLogFmt:@"Display geometry: AX bridge unavailable for '%@' on display %lld (uiElement, axElement or elementWithAXUIElement:)", original.identifier, displayID];
     return nil;
   }
   struct __AXUIElement *ref = match.uiElement.axElement;
   if (ref == NULL) {
+    [FBLogger verboseLogFmt:@"Display geometry: missing AX element reference for '%@' on display %lld", original.identifier, displayID];
     return nil;
   }
   id<FBXCAccessibilityElement> ax = [xcClass elementWithAXUIElement:ref];
   id<FBXCElementSnapshot> live = [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
   if (live.displayID != displayID || live.elementType != original.elementType
       || ![live.identifier isEqualToString:original.identifier] || CGRectIsEmpty(live.frame)) {
+    [FBLogger verboseLogFmt:@"Display geometry: missing or mismatched live snapshot or empty frame for '%@' on display %lld", original.identifier, displayID];
     return nil;
   }
   return live;
@@ -153,7 +179,11 @@ static NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *FBAccessibil
 {
   NSMutableDictionary<NSString *, NSMutableArray<id<FBAXDisplayElement>> *> *index = [NSMutableDictionary dictionary];
   for (id<FBAXDisplayElement> element in FBWindowAccessibilityElements(window)) {
-    NSString *identifier = [element respondsToSelector:@selector(axIdentifier)] ? element.axIdentifier : nil;
+    if (![element respondsToSelector:@selector(axIdentifier)]) {
+      [FBLogger verboseLog:@"Display geometry: skipping AX descendant without axIdentifier while indexing the window"];
+      continue;
+    }
+    NSString *identifier = element.axIdentifier;
     if (identifier.length == 0) {
       continue;
     }
