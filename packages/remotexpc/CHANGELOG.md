@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.6...appium-ios-remotexpc@6.1.7) (2026-11-24)
+
+### Code Refactoring
+
+* **remotexpc:** replace internal any types in DVT and testmanagerd ([#241](https://github.com/appium/appium-ios/issues/241)) ([bfba251](https://github.com/appium/appium-ios/commit/bfba251edb51af1e89f34d8ac6982b9f57f52635))
+
+
 ## [6.1.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.5...appium-ios-remotexpc@6.1.6) (2026-11-23)
 
 ### Code Refactoring
