@@ -96,7 +96,7 @@ NSString *formatTimeInterval(NSTimeInterval interval) {
 + (BOOL)requestInOriginalResolutionWithScreenID:(long long)screenID
                               compressionQuality:(CGFloat)compressionQuality
                                              uti:(UTType *)uti
-                                      completion:(void (^)(NSData * _Nullable, NSError * _Nullable))completion
+                                        onResult:(void (^)(NSData * _Nullable, NSError * _Nullable))onResult
                                            error:(NSError **)error
 {
   id screenshotRequest = [self.class screenshotRequestWithScreenID:screenID
@@ -110,7 +110,7 @@ NSString *formatTimeInterval(NSTimeInterval interval) {
   id<XCTMessagingChannel_RunnerToDaemon> proxy = [FBXCTestDaemonsProxy testRunnerProxy];
   [proxy _XCT_requestScreenshot:screenshotRequest
                       withReply:^(id image, NSError *err) {
-    completion(nil == err ? [image data] : nil, err);
+    onResult(nil == err ? [image data] : nil, err);
   }];
   return YES;
 }
@@ -127,7 +127,7 @@ NSString *formatTimeInterval(NSTimeInterval interval) {
   BOOL isRequested = [self.class requestInOriginalResolutionWithScreenID:screenID
                                                       compressionQuality:compressionQuality
                                                                      uti:uti
-                                                              completion:^(NSData *data, NSError *err) {
+                                                                onResult:^(NSData *data, NSError *err) {
     screenshotData = data;
     innerError = err;
     dispatch_semaphore_signal(sem);

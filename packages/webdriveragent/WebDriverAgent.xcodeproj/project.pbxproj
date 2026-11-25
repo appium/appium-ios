@@ -5223,6 +5223,8 @@
 					"-Wno-objc-messaging-id",
 					"-Wno-direct-ivar-access",
 					"-Wno-cast-qual",
+					"-Wno-deprecated-declarations",
+					"-Wno-reserved-identifier",
 					"-Wno-declaration-after-statement",
 				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
@@ -5780,6 +5782,8 @@
 					"-Wno-objc-messaging-id",
 					"-Wno-direct-ivar-access",
 					"-Wno-cast-qual",
+					"-Wno-deprecated-declarations",
+					"-Wno-reserved-identifier",
 					"-Wno-declaration-after-statement",
 				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
@@ -5929,6 +5933,8 @@
 					"-Wno-double-promotion",
 					"-Wno-partial-availability",
 					"-Wno-cast-qual",
+					"-Wno-deprecated-declarations",
+					"-Wno-reserved-identifier",
 				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
@@ -6475,6 +6481,8 @@
 					"-Wno-double-promotion",
 					"-Wno-partial-availability",
 					"-Wno-cast-qual",
+					"-Wno-deprecated-declarations",
+					"-Wno-reserved-identifier",
 				);
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};

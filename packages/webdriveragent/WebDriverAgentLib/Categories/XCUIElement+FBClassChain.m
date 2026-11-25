@@ -231,7 +231,9 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
                                                                                     candidates:candidates
                                                                    shouldReturnAfterFirstMatch:nil]
                                                                                    positions:documentPositions];
-      return shouldReturnAfterFirstMatch && matchedSnapshots.count > 1 ? @[matchedSnapshots.firstObject] : matchedSnapshots;
+      return shouldReturnAfterFirstMatch && matchedSnapshots.count > 1
+        ? @[(id<FBXCElementSnapshot> _Nonnull)matchedSnapshots.firstObject]
+        : matchedSnapshots;
     }
     if (nil != chainItem.position) {
       // An explicit position always narrows the match set down to a single
@@ -384,6 +386,7 @@ static BOOL FBIsAxisItem(FBClassChainItem *item)
     }
     case FBClassChainAxisChild:
     case FBClassChainAxisDescendant:
+    default:
       return @[];
   }
 }

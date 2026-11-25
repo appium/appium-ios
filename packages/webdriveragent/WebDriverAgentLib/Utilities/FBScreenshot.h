@@ -45,14 +45,14 @@ NS_ASSUME_NONNULL_BEGIN
  @param screenID The screen identifier to take the screenshot from
  @param compressionQuality Normalized screenshot quality value in range 0..1, where 1 is the best quality
  @param uti UTType... constant, which defines the type of the returned screenshot image
- @param completion Called once, on an arbitrary queue and at any time later, with either the image data or the error
+ @param onResult Called once, on an arbitrary queue and at any time later, with either the image data or the error
  @param error If the request cannot be made, upon return contains an NSError object that describes the problem.
- @return YES if the request has been sent, in which case the completion will be called
+ @return YES if the request has been sent, in which case onResult will be called
  */
 + (BOOL)requestInOriginalResolutionWithScreenID:(long long)screenID
                              compressionQuality:(CGFloat)compressionQuality
                                             uti:(UTType *)uti
-                                     completion:(void (^)(NSData * _Nullable data, NSError * _Nullable error))completion
+                                       onResult:(void (^)(NSData * _Nullable data, NSError * _Nullable error))onResult
                                           error:(NSError **)error;
 
 @end

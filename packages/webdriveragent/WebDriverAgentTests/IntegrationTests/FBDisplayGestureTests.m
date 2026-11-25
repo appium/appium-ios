@@ -611,7 +611,8 @@
 - (void)testW3CApplicationOriginAcrossOrientations
 {
   XCTSkipIf(XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Covered by fold states");
-  [self addTeardownBlock:^{ [self resetOrientation]; }];
+  __weak typeof(self) weakSelf = self;
+  [self addTeardownBlock:^{ [weakSelf resetOrientation]; }];
   for (NSNumber *orientation in @[@(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
     [self resetOrientation];
     XCTAssertTrue([[XCUIDevice sharedDevice] fb_setDeviceInterfaceOrientation:orientation.integerValue]);

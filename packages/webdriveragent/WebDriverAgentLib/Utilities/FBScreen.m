@@ -17,6 +17,10 @@
 #import "XCUIScreen.h"
 #import <objc/message.h>
 
+// objc_msgSend is declared as void(*)(void), so casting it to the real signature is intentional
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-function-type-strict"
+
 static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
 {
   SEL selector = NSSelectorFromString(@"screensOrError:");
@@ -147,6 +151,8 @@ static NSArray<XCUIScreen *> *FBScreensForDevice(id device, NSError **error)
 }
 
 @end
+
+#pragma clang diagnostic pop
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 XCUIElement *FBWindowOnDisplay(XCUIElement *application, long long displayID, CGRect *frame)

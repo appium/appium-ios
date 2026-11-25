@@ -164,7 +164,7 @@ static bool fb_isLocked;
   @try {
     [self pressButton:XCUIDeviceButtonHome];
   } @catch (NSException *exception) {
-    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason ?: exception.name] buildError:error];
   }
   return [[[[FBRunLoopSpinner new] timeout:5]
            timeoutErrorMessage:@"Timed out while waiting for the home screen"]
@@ -185,7 +185,7 @@ static bool fb_isLocked;
   @try {
     [XCUIRemote.sharedRemote pressButton:XCUIRemoteButtonHome];
   } @catch (NSException *exception) {
-    return [[[FBErrorBuilder alloc] withDescription:exception.reason] buildError:error];
+    return [[[FBErrorBuilder alloc] withDescription:exception.reason ?: exception.name] buildError:error];
   }
   return [[[[FBRunLoopSpinner new] timeout:5]
            timeoutErrorMessage:@"Timed out while waiting for the home screen"]

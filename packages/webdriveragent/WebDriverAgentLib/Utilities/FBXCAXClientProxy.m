@@ -179,7 +179,7 @@ static NSRecursiveLock *FBApplicationStateTimeoutLock(void)
       // which takes WDA down with it, so it is safe to cache it forever.
       self.cachedSystemApplication = [FBAXClient systemApplication];
     }
-    return self.cachedSystemApplication;
+    return (id<FBXCAccessibilityElement> _Nonnull)self.cachedSystemApplication;
   }
 }
 
