@@ -5,9 +5,9 @@
 
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parseArgs} from 'node:util';
 
 import {fs, logger, net, tempDir, zip} from '@appium/support';
-import {Command} from 'commander';
 
 const log = logger.getLogger('refresh-wintun');
 
@@ -58,13 +58,29 @@ async function refreshWintun(version) {
   }
 }
 
-const program = new Command();
-program
-  .name('refresh-wintun')
-  .description('Refresh the bundled WinTun binaries under vendor/wintun/')
-  .option('-v, --version <semver>', 'WinTun release version to download', DEFAULT_WINTUN_VERSION)
-  .action(async (options) => {
-    await refreshWintun(options.version);
-  });
+const USAGE = `Usage: refresh-wintun [options]
 
-await program.parseAsync(process.argv);
+Refresh the bundled WinTun binaries under vendor/wintun/
+
+Options:
+  -v, --version <semver>  WinTun release version to download (default: ${DEFAULT_WINTUN_VERSION})
+  -h, --help              display help for command`;
+
+let values;
+try {
+  ({values} = parseArgs({
+    options: {
+      version: {type: 'string', short: 'v', default: DEFAULT_WINTUN_VERSION},
+      help: {type: 'boolean', short: 'h'},
+    },
+  }));
+} catch (err) {
+  process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
+  process.exit(1);
+}
+
+if (values.help) {
+  process.stdout.write(`${USAGE}\n`);
+} else {
+  await refreshWintun(values.version);
+}
