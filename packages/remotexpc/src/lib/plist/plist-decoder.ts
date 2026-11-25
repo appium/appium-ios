@@ -2,7 +2,7 @@ import {Transform, type TransformCallback} from 'node:stream';
 
 import {getLogger} from '../logger.js';
 import {isBinaryPlist} from './binary-plist-parser.js';
-import {UTF8_ENCODING} from './constants.js';
+import {UTF8_ENCODING, XML_DECLARATION_SCAN_LENGTH} from './constants.js';
 import {parsePlist} from './unified-plist-parser.js';
 import {ensureString, fixMultipleXmlDeclarations} from './utils.js';
 
@@ -34,7 +34,7 @@ export class PlistServiceDecoder extends Transform {
       }
 
       // Check if this is XML data with potential binary header and trim content before XML declaration
-      const dataStr = plistData.toString(UTF8_ENCODING, 0, Math.min(100, plistData.length));
+      const dataStr = plistData.toString(UTF8_ENCODING, 0, Math.min(XML_DECLARATION_SCAN_LENGTH, plistData.length));
       const xmlIndex = dataStr.indexOf('<?xml');
 
       if (xmlIndex > 0) {

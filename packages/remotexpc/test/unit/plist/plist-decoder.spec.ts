@@ -4,14 +4,12 @@ import {PassThrough} from 'node:stream';
 import {describe, it} from 'node:test';
 
 import {createBinaryPlist} from '../../../src/lib/plist/binary-plist-creator.js';
+import {BinaryPlistError} from '../../../src/lib/plist/binary-plist-parser.js';
+import {BPLIST_TRAILER_SIZE, XML_DECLARATION, XML_DECLARATION_SCAN_LENGTH} from '../../../src/lib/plist/constants.js';
 import {createPlist} from '../../../src/lib/plist/plist-creator.js';
 import {PlistServiceDecoder} from '../../../src/lib/plist/plist-decoder.js';
 import {PlistService} from '../../../src/lib/plist/plist-service.js';
 import type {PlistDictionary, PlistValue} from '../../../src/lib/types.js';
-
-const XML_DECLARATION = '<?xml';
-/** How far into a message the decoder looks for an XML declaration to trim up to. */
-const DECLARATION_SCAN_BYTES = 100;
 
 function xmlDocument(body: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><note>${body}</note>`;
@@ -65,7 +63,7 @@ describe('PlistServiceDecoder', function () {
       const payload = createBinaryPlist(message);
       const declarationAt = payload.indexOf(XML_DECLARATION);
       assert.ok(
-        declarationAt > 0 && declarationAt < DECLARATION_SCAN_BYTES,
+        declarationAt > 0 && declarationAt < XML_DECLARATION_SCAN_LENGTH,
         `the XML declaration must sit inside the scanned prefix, got offset ${declarationAt}`,
       );
 
@@ -74,17 +72,24 @@ describe('PlistServiceDecoder', function () {
 
     it('decodes a binary plist that carries several XML documents as data', async function () {
       const message: PlistDictionary = {
-        Padding: 'x'.repeat(2 * DECLARATION_SCAN_BYTES),
+        Padding: 'x'.repeat(2 * XML_DECLARATION_SCAN_LENGTH),
         Profiles: [Buffer.from(xmlDocument('one')), Buffer.from(xmlDocument('two'))],
       };
       const payload = createBinaryPlist(message);
       const declarationAt = payload.indexOf(XML_DECLARATION);
       assert.ok(
-        declarationAt > DECLARATION_SCAN_BYTES,
+        declarationAt > XML_DECLARATION_SCAN_LENGTH,
         `the XML declarations must sit past the scanned prefix, got offset ${declarationAt}`,
       );
 
       assert.deepEqual(await decode(payload), message);
+    });
+
+    it('fails with the binary parser error on a binary plist cut short of its trailer', async function () {
+      const payload = createBinaryPlist({Status: 'Success', Value: 42});
+      const truncated = payload.subarray(0, payload.length - BPLIST_TRAILER_SIZE);
+
+      await assert.rejects(decode(truncated), BinaryPlistError);
     });
 
     it('delivers a binary plist with an XML document in it to a PlistService receiver', async function () {
