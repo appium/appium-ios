@@ -15,6 +15,7 @@
 #import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
 #import "FBResponsePayload.h"
+#import "FBSession.h"
 #import "FBTestMacros.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBFind.h"
@@ -492,6 +493,30 @@
       XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);
     }
   } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testAccessibilityBoundMatchesStayStableWithoutNativeCaching
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  FBSession *session = [FBSession initWithApplication:self.testedApplication];
+  session.useNativeCachingStrategy = NO;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(matches.count, 1u);
+    FBElementCache *cache = [FBElementCache new];
+    FBResponseWithCachedElements(matches, cache, YES);
+    for (XCUIElement *match in matches) {
+      // AX-bound matches are cached as is, without being resolved again
+      XCTAssertNotNil(match.fb_boundAccessibilityElement);
+      XCTAssertNil(match.lastSnapshot);
+      XCTAssertEqual([cache elementForUUID:match.fb_cacheId], match);
+    }
+  } @finally {
+    [session kill];
     FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
   }
 }
