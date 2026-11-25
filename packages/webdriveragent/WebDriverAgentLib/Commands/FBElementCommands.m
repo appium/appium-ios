@@ -247,7 +247,16 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 {
   FBElementCache *elementCache = request.session.elementCache;
   XCUIElement *element = [elementCache elementForUUID:(NSString *)request.parameters[@"uuid"] checkStaleness:YES];
-#if TARGET_OS_IOS || TARGET_OS_WATCH
+#if TARGET_OS_IOS
+  NSError *error = nil;
+  NSNumber *hostedTap = [FBGestureCoordinateContext tapHostedElement:element offset:nil error:&error];
+  if (nil != hostedTap && !hostedTap.boolValue) {
+    return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
+  }
+  if (nil == hostedTap) {
+    [element tap];
+  }
+#elif TARGET_OS_WATCH
   [element tap];
 #elif TARGET_OS_TV
   NSError *error = nil;
@@ -500,7 +509,22 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 
 + (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request
 {
-  NSError *error;
+  NSError *error = nil;
+#if !TARGET_OS_WATCH
+  NSNumber *x = request.arguments[@"x"];
+  NSNumber *y = request.arguments[@"y"];
+  // Preserve the existing validation of partially specified coordinates.
+  if ((nil == x) == (nil == y)) {
+    NSValue *offset = nil == x ? nil : [NSValue valueWithCGPoint:CGPointMake(x.doubleValue, y.doubleValue)];
+    NSNumber *hostedTap = [FBGestureCoordinateContext tapHostedElement:[self targetFromRequest:request]
+                                                              offset:offset
+                                                               error:&error];
+    if (nil != hostedTap) {
+      return hostedTap.boolValue ? FBResponseWithOK()
+        : FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
+    }
+  }
+#endif
   id target = [self targetWithXyCoordinatesFromRequest:request error:&error];
   if (nil == target) {
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
