@@ -403,12 +403,10 @@ export class CrashReportsService {
         try {
           notification = await notificationProxy.expectNotification(remainingMs);
         } catch (error) {
-          throw new Error(
-            `Timed out after ${timeoutMs}ms waiting for sysdiagnose completion: ${(error as Error).message}`,
-            {
-              cause: error,
-            },
-          );
+          // Not every failure is a timeout: a closed connection rejects the receive at once
+          throw new Error(`Failed to wait for sysdiagnose completion: ${(error as Error).message}`, {
+            cause: error,
+          });
         }
 
         if (notification.Name === SYSDIAGNOSE_STOPPED_NOTIFICATION) {

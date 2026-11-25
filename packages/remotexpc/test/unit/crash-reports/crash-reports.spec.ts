@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import {describe, it} from 'node:test';
+import {performance} from 'node:perf_hooks';
+import {afterEach, describe, it} from 'node:test';
 
-import {extractSavedReportFileName, parseCrashReportMetadata} from '../../../src/services/ios/crash-reports/index.js';
+import sinon from 'sinon';
+
+import {
+  CrashReportsService,
+  extractSavedReportFileName,
+  parseCrashReportMetadata,
+} from '../../../src/services/ios/crash-reports/index.js';
+import {NotificationProxyService} from '../../../src/services/ios/notification-proxy/index.js';
 import type {SyslogEntry} from '../../../src/services/ios/syslog-service/syslog-entry-parser.js';
 
 function createSyslogEntry(overrides: Partial<SyslogEntry> = {}): SyslogEntry {
@@ -101,5 +109,29 @@ describe('extractSavedReportFileName', function () {
       message: "Saved type '298' report at /var/mobile/Library/Logs/CrashReporter/log.txt",
     });
     assert.strictEqual(extractSavedReportFileName(entry), undefined);
+  });
+});
+
+describe('CrashReportsService waiting for sysdiagnose completion', function () {
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it('does not report a dropped notification connection as a timeout', async function () {
+    const dropped = new Error('Connection closed while waiting for plist response');
+    sinon.stub(NotificationProxyService.prototype, 'observe').resolves({});
+    sinon.stub(NotificationProxyService.prototype, 'expectNotification').rejects(dropped);
+    sinon.stub(NotificationProxyService.prototype, 'close');
+    const service = new CrashReportsService('udid');
+
+    await assert.rejects(
+      (service as any).waitForSysdiagnoseToStop(performance.now() + 600_000, 600_000),
+      (err: Error) => {
+        assert.doesNotMatch(err.message, /Timed out/);
+        assert.match(err.message, /Connection closed while waiting for plist response/);
+        assert.strictEqual(err.cause, dropped);
+        return true;
+      },
+    );
   });
 });
