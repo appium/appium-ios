@@ -309,7 +309,11 @@ export interface SupportsBiometric {
 }
 
 export interface SupportsGeolocation {
-  setGeolocation(latitude: string | number, longitude: string | number): Promise<boolean>;
+  setGeolocation(
+    latitude: string | number,
+    longitude: string | number,
+    altitude?: string | number | null,
+  ): Promise<boolean>;
 }
 
 export interface InteractsWithKeychain {

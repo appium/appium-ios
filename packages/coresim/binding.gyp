@@ -10,6 +10,7 @@
         "src/native/sim_service_context.mm",
         "src/native/sim_device_set.mm",
         "src/native/sim_device.mm",
+        "src/native/sim_location.mm",
         "src/native/sim_orientation.mm",
         "src/native/sim_hid.mm",
         "src/native/sim_duo.mm",

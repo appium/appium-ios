@@ -6,7 +6,7 @@ declare module '../native-simctl.js' {
   interface NativeSimctl {
     getEnv(udid: string, name: string): Promise<string>;
     openUrl(udid: string, url: string): Promise<void>;
-    setLocation(udid: string, latitude: number, longitude: number): Promise<void>;
+    setLocation(udid: string, latitude: number, longitude: number, altitude?: number): Promise<void>;
     clearLocation(udid: string): Promise<void>;
     pushNotification(udid: string, bundleId: string, payload: PushNotificationPayload): Promise<void>;
   }
@@ -34,17 +34,23 @@ export async function openUrl(this: NativeSimctl, udid: string, url: string): Pr
 /**
  * Sets the given device's simulated GPS location.
  *
+ * Without `altitude` apps observe an altitude of `0` whose vertical accuracy is negative, i.e. one
+ * CoreLocation itself considers invalid. With `altitude` the device is pinned to a single-location
+ * simulation scenario instead, so apps observe that altitude along with a valid vertical accuracy.
+ *
  * @param udid — UDID of the target device
  * @param latitude — location latitude
  * @param longitude — location longitude
+ * @param altitude — location altitude in meters above sea level; may be negative
  */
 export async function setLocation(
   this: NativeSimctl,
   udid: string,
   latitude: number,
   longitude: number,
+  altitude?: number,
 ): Promise<void> {
-  return runCatchingAsync(async () => (await this._findDevice(udid)).setLocation(latitude, longitude));
+  return runCatchingAsync(async () => (await this._findDevice(udid)).setLocation(latitude, longitude, altitude));
 }
 
 /**
