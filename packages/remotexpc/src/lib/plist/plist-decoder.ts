@@ -1,6 +1,7 @@
 import {Transform, type TransformCallback} from 'node:stream';
 
 import {getLogger} from '../logger.js';
+import {isBinaryPlist} from './binary-plist-parser.js';
 import {UTF8_ENCODING} from './constants.js';
 import {parsePlist} from './unified-plist-parser.js';
 import {ensureString, fixMultipleXmlDeclarations} from './utils.js';
@@ -25,6 +26,11 @@ export class PlistServiceDecoder extends Transform {
       // Skip empty data
       if (plistData.length === 0) {
         return callback();
+      }
+
+      // Binary plists are parsed as they are: the cleanup below is only meaningful for XML text
+      if (isBinaryPlist(plistData)) {
+        return this._parseAndProcess(plistData, callback);
       }
 
       // Check if this is XML data with potential binary header and trim content before XML declaration
