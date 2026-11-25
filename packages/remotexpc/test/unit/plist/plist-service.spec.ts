@@ -95,6 +95,91 @@ describe('PlistService event-driven receive', function () {
   });
 });
 
+describe('PlistService when the socket goes away', function () {
+  /** The rejection of `receive`, or `undefined` if it is still pending after `ms`. */
+  async function rejectionWithin(receive: Promise<unknown>, ms: number): Promise<Error | undefined> {
+    let timer: NodeJS.Timeout | undefined;
+    const pending = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), ms);
+    });
+    try {
+      return await Promise.race([
+        receive.then(
+          () => assert.fail('expected the receive to reject'),
+          (err: Error) => err,
+        ),
+        pending,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  it('rejects a waiting receive when the socket closes', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any);
+    const receive = service.receivePlist(5000);
+
+    socket.destroy();
+
+    const err = await rejectionWithin(receive, 500);
+    service.close();
+    assert.ok(err, 'the receive was still pending 500ms after the socket closed');
+    assert.doesNotMatch(err.message, /Timed out/);
+  });
+
+  it('rejects a waiting receive with the socket error', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any);
+    const receive = service.receivePlist(5000);
+
+    socket.destroy(Object.assign(new Error('read ECONNRESET'), {code: 'ECONNRESET'}));
+
+    const err = await rejectionWithin(receive, 500);
+    service.close();
+    assert.ok(err, 'the receive was still pending 500ms after the socket failed');
+    assert.match(err.message, /ECONNRESET/);
+  });
+
+  it('rejects a receive started after the socket closed', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any);
+    socket.destroy();
+    await once(socket, 'close');
+
+    const err = await rejectionWithin(service.receivePlist(5000), 500);
+    service.close();
+    assert.ok(err, 'the receive was still pending 500ms after it started on a closed socket');
+    assert.doesNotMatch(err.message, /Timed out/);
+  });
+
+  it('delivers a message queued before the socket closed, then rejects the next receive', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any);
+    socket.write(framePlist({Status: 'Complete'}));
+    await new Promise((r) => setImmediate(r));
+    socket.destroy();
+    await once(socket, 'close');
+
+    assert.deepStrictEqual(await service.receivePlist(5000), {Status: 'Complete'});
+    await assert.rejects(service.receivePlist(5000), /Connection closed while waiting for plist response/);
+  });
+
+  it('rejects every receive with its own error', async function () {
+    const socket = new PassThrough();
+    const service = new PlistService(socket as any);
+    const waiting = [service.receivePlist(5000), service.receivePlist(5000)];
+    socket.destroy();
+    await once(socket, 'close');
+
+    const errors = await Promise.all(
+      [...waiting, service.receivePlist(5000)].map((receive) => receive.catch((err: Error) => err)),
+    );
+    assert.ok(errors.every((err) => err instanceof Error));
+    assert.strictEqual(new Set(errors).size, 3);
+  });
+});
+
 function afcLikePacket(payloadLength: number): Buffer {
   const header = Buffer.alloc(40);
   header.write('CFA6LPAA', 0, 'ascii');
@@ -191,5 +276,15 @@ describe('PlistService.detachSocket', function () {
     service.detachSocket();
 
     await assert.rejects(pending, /detached while waiting for a plist response/);
+  });
+
+  it('takes its close listener off the detached socket', function () {
+    const socket = new PassThrough();
+    const closeListeners = socket.listenerCount('close');
+    const service = new PlistService(socket as any);
+
+    service.detachSocket();
+
+    assert.strictEqual(socket.listenerCount('close'), closeListeners);
   });
 });
