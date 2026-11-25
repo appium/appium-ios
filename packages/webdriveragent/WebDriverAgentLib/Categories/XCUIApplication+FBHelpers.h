@@ -80,13 +80,6 @@ NS_ASSUME_NONNULL_BEGIN
 #endif
 
 /**
- Waits until the current on-screen accessbility element belongs to the current application instance
- @param timeout The maximum time to wait for the element to appear
- @returns Either YES or NO
- */
-- (BOOL)fb_waitForAppElement:(NSTimeInterval)timeout;
-
-/**
  Retrieves the information about the applications the given accessiblity elements
  belong to
 

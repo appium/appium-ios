@@ -27,14 +27,6 @@ NSDictionary<NSString *, id> *FBToElementDict(id element);
 id _Nullable FBExtractElement(NSDictionary *src);
 
 /**
- Cleanup items having element keys from the dictionary
- 
- @param src The source dictionary
- @returns The resulting dictionary
- */
-NSDictionary *FBCleanupElements(NSDictionary *src);
-
-/**
  Parses key/value pairs of valid W3C capabilities
 
  @param caps The source capabilitites dictionary

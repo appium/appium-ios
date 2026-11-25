@@ -52,27 +52,3 @@ void *FBRetrieveXCTestSymbol(const char *name);
 
 /*! Loads XCTest private symbols. Safe to call multiple times. */
 void FBLoadXCTestSymbols(void);
-
-/**
- Method is used to tranform attribute names into the format, which
- is acceptable for the internal XCTest snpshoting API
-
- @param attributeNames set of attribute names. Must be on of FB_..Name constants above
- @returns The array of tranformed values. Unknown values are silently skipped
- */
-NSArray *FBCreateAXAttributes(NSSet<NSString *> *attributeNames);
-
-/**
- Retrives the set of standard attribute names
-
- @returns Array of FB_..Name constants above, which represent standard element attributes
- */
-NSArray<NSString*> *FBStandardAttributeNames(void);
-
-/**
-Retrives the set of custom attribute names. These attributes are normally not accessible
- by public XCTest calls, but are still available in the accessibility framework
-
-@returns Array of FB_..Name constants above, which represent custom element attributes
-*/
-NSArray<NSString*> *FBCustomAttributeNames(void);
