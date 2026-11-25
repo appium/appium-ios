@@ -320,6 +320,7 @@
   [start pressForDuration:0.08 thenDragToCoordinate:end];
   XCUIElement *addControls = springboard.buttons[@"Add Controls"].firstMatch;
   XCTAssertTrue([addControls waitForExistenceWithTimeout:5]);
+  XCTAssertTrue(addControls.isWDVisible);
   XCTAssertNil([self screenInfoResponse][@"error"]);
   XCTAssertTrue(addControls.exists);
   XCTAssertNotNil(springboard.fb_tree);

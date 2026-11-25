@@ -47,7 +47,10 @@
             || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
             || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
   if ([name isEqualToString:FBStringify(XCUIElement, wdRect)] || [name isEqualToString:FBStringify(XCUIElement, wdFrame)]
-      || [name isEqualToString:FBStringify(XCUIElement, isWDVisible)]) {
+#if TARGET_OS_SIMULATOR
+      || [name isEqualToString:FBStringify(XCUIElement, isWDVisible)]
+#endif
+      ) {
     return FBSnapshotForDisplayGeometry(self, isCustomSnapshot);
   }
   return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];
