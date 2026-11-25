@@ -115,6 +115,25 @@
   [self assertLookupSnapshotsWithIndexBinding:YES];
 }
 
+// Index binding resolves the matches with a query, which must not change the XPath order
+- (void)testXPathMatchesKeepOrderWithIndexBinding
+{
+  NSString *query = @"//XCUIElementTypeButton | //XCUIElementTypeStaticText";
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+    NSArray<XCUIElement *> *expected = [self.testedView fb_descendantsMatchingXPathQuery:query
+                                                              shouldReturnAfterFirstMatch:NO];
+    FBConfiguration.sharedInstance.boundElementsByIndex = YES;
+    NSArray<XCUIElement *> *actual = [self.testedView fb_descendantsMatchingXPathQuery:query
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(expected.count, 1u);
+    XCTAssertEqualObjects([actual valueForKey:@"label"], [expected valueForKey:@"label"]);
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
 - (void)testDescendantsWithClassName
 {
   NSSet<NSString *> *expectedLabels = [NSSet setWithArray:FBMainViewButtonLabels];
