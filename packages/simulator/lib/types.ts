@@ -58,6 +58,16 @@ export interface SpawnedProcess extends EventEmitter {
 /** Port UUID string or unsigned 32-bit guest screen ID (XCTest/WDA displayID). */
 export type DisplayId = string | number;
 
+/** A renderable Simulator display, as returned by {@link SupportsDisplays.getDisplays}. */
+export interface DisplayInfo {
+  /** Port UUID identifying the display — pass it as `displayId` to screenshot/recording/stream APIs. */
+  id: string;
+  /** Raw `SimDisplayDescriptorState.displayClass` — 0 is always the primary display. */
+  displayClass: number;
+  /** Whether this is the primary display (`displayClass === 0`). */
+  isMain: boolean;
+}
+
 /** Options for {@link SupportsScreenshot.getScreenshot}. */
 export interface ScreenshotOptions {
   /**
@@ -411,6 +421,15 @@ export interface SupportsScreenshot {
   getScreenshot(options?: ScreenshotOptions): Promise<Buffer>;
 }
 
+export interface SupportsDisplays {
+  /**
+   * Lists the Simulator's renderable displays. The Simulator must be booted.
+   * Use a display's `id` as the `displayId` of the screenshot/recording/stream APIs,
+   * e.g. to pick the primary (`isMain`) or an external display.
+   */
+  getDisplays(): Promise<DisplayInfo[]>;
+}
+
 /** Options for {@link SupportsScreenRecording.startVideoRecording}. Requires Xcode 26+. */
 export interface VideoRecordingOptions {
   /**
@@ -713,6 +732,7 @@ export type Simulator = CoreSimulator &
   HasMiscFeatures &
   SupportsPasteboard &
   SupportsScreenshot &
+  SupportsDisplays &
   SupportsScreenRecording &
   SupportsScreenStreaming &
   SupportsOrientation &
