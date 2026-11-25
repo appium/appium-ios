@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.2.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.2...appium-ios-simulator@11.2.0) (2026-11-25)
+
+### Features
+
+* **coresim:** support altitude when setting the simulated location ([#245](https://github.com/appium/appium-ios/issues/245)) ([31cc046](https://github.com/appium/appium-ios/commit/31cc046edc41bad1f1368ccd6bf7d384d0d472fa))
+
+
 ## [11.1.2](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.1...appium-ios-simulator@11.1.2) (2026-11-21)
 
 **Note:** Version bump only for package appium-ios-simulator

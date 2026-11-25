@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.0](https://github.com/appium/appium-ios/compare/@appium/coresim@2.1.1...@appium/coresim@2.2.0) (2026-11-25)
+
+### Features
+
+* **coresim:** support altitude when setting the simulated location ([#245](https://github.com/appium/appium-ios/issues/245)) ([31cc046](https://github.com/appium/appium-ios/commit/31cc046edc41bad1f1368ccd6bf7d384d0d472fa))
+
+
 ## [2.1.1](https://github.com/appium/appium-ios/compare/@appium/coresim@2.1.0...@appium/coresim@2.1.1) (2026-11-21)
 
 ### Performance Improvements
