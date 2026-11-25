@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.8...appium-ios-remotexpc@6.1.9) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** reject pending plist receives when the socket closes ([#248](https://github.com/appium/appium-ios/issues/248)) ([43f295e](https://github.com/appium/appium-ios/commit/43f295e8a4f40caf3adba6b1d1f0765135951617))
+
+
 ## [6.1.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.7...appium-ios-remotexpc@6.1.8) (2026-11-24)
 
 ### Code Refactoring
