@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import net from 'node:net';
 import {PassThrough, type Readable} from 'node:stream';
 import {describe, it} from 'node:test';
 
@@ -93,6 +94,27 @@ describe('PlistService event-driven receive', function () {
     await assert.rejects(p1, /Connection closed while waiting for plist response/);
     await assert.rejects(p2, /Connection closed while waiting for plist response/);
   });
+
+  it('should reject a receive started after close() while the peer keeps its side open', async function () {
+    const peers: net.Socket[] = [];
+    const server = net.createServer({allowHalfOpen: true}, (peer) => peers.push(peer)).listen(0);
+    await once(server, 'listening');
+    const socket = net.connect((server.address() as net.AddressInfo).port);
+    await once(socket, 'connect');
+    const service = new PlistService(socket);
+
+    try {
+      service.close();
+
+      await assert.rejects(service.receivePlist(2000), /Connection closed while waiting for plist response/);
+    } finally {
+      socket.destroy();
+      for (const peer of peers) {
+        peer.destroy();
+      }
+      server.close();
+    }
+  });
 });
 
 describe('PlistService when the socket goes away', function () {
@@ -150,6 +172,18 @@ describe('PlistService when the socket goes away', function () {
     const err = await rejectionWithin(service.receivePlist(5000), 500);
     service.close();
     assert.ok(err, 'the receive was still pending 500ms after it started on a closed socket');
+    assert.doesNotMatch(err.message, /Timed out/);
+  });
+
+  it('rejects a receive on a socket destroyed before the service was created', async function () {
+    const socket = new PassThrough();
+    socket.destroy();
+    await once(socket, 'close');
+    const service = new PlistService(socket as any);
+
+    const err = await rejectionWithin(service.receivePlist(5000), 500);
+    service.close();
+    assert.ok(err, 'the receive was still pending 500ms after it started on a destroyed socket');
     assert.doesNotMatch(err.message, /Timed out/);
   });
 

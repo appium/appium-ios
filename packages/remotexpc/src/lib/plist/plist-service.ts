@@ -77,11 +77,10 @@ export class PlistService {
   private _encoder: PlistServiceEncoder;
   private _messageQueue: PlistMessage[];
   private _waiters: PlistWaiter[];
-  /** Set once the socket has closed: no more messages can arrive, so receives reject */
-  private _socketClosed = false;
+  /** Set by close(): later receives reject, even while the peer keeps its side of the socket open */
+  private _closed = false;
   private readonly _onSocketClose = (): void => {
-    this._socketClosed = true;
-    this.rejectWaiters(() => this.createSocketClosedError());
+    this.rejectWaiters(() => this.createConnectionClosedError());
   };
 
   /**
@@ -156,8 +155,10 @@ export class PlistService {
       if (message) {
         return resolve(message);
       }
-      if (this._socketClosed) {
-        return reject(this.createSocketClosedError());
+      // No message can arrive any more. This also covers a socket that was destroyed before
+      // this service was created, which never emits 'close' for it.
+      if (this._closed || this._socket.destroyed) {
+        return reject(this.createConnectionClosedError());
       }
 
       const waiter: PlistWaiter = {
@@ -215,6 +216,7 @@ export class PlistService {
    * Close the connection and clean up resources
    */
   public close(): void {
+    this._closed = true;
     try {
       // Remove all data listeners to prevent parsing during close
       this._splitter.removeAllListeners();
@@ -277,10 +279,10 @@ export class PlistService {
   }
 
   /**
-   * The error of a receive that the closed socket can no longer answer, with the socket's own
-   * error as its cause when it failed
+   * The error of a receive that the closed connection can no longer answer, with the socket's
+   * own error as its cause when it failed
    */
-  private createSocketClosedError(): Error {
+  private createConnectionClosedError(): Error {
     const cause = this._socket.errored;
     return cause
       ? new Error(`Connection failed while waiting for plist response: ${cause.message}`, {cause})
