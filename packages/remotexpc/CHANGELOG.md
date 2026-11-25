@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.9...appium-ios-remotexpc@6.1.10) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t run XML cleanup on binary plists ([#251](https://github.com/appium/appium-ios/issues/251)) ([ebe3b84](https://github.com/appium/appium-ios/commit/ebe3b841c375df3925dc469f08a282e4b140700d))
+
+
 ## [6.1.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.8...appium-ios-remotexpc@6.1.9) (2026-11-25)
 
 ### Bug Fixes
