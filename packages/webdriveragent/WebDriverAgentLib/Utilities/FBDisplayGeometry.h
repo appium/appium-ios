@@ -19,12 +19,6 @@ typedef NSMapTable<id<FBXCElementSnapshot>, id<FBXCElementSnapshot>> FBDisplaySn
 /** Geometry counterparts for one source traversal, keyed by original snapshot identity. */
 FBDisplaySnapshotMap *_Nullable FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BOOL includeVisibility);
 
-#if !TARGET_OS_TV && !TARGET_OS_WATCH
-/** Horizontal translations confirmed by a unique module hit in the selected folder. */
-NSDictionary<NSNumber *, NSNumber *> *FBControlCenterOffsets(NSArray<NSValue *> *frames, CGRect folder,
-                                                             NSIndexSet *requested, BOOL (^hitTest)(NSUInteger, CGPoint));
-#endif
-
 /** On hinged devices read SpringBoard visibility without dismissing its overlays. */
 NSNumber *_Nullable FBSpringBoardDisplayVisibility(id<FBXCElementSnapshot> snapshot);
 

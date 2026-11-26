@@ -13,7 +13,6 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 #import "FBLogger.h"
-#import "FBActiveAppDetectionPoint.h"
 #import "XCTestPrivateSymbols.h"
 #import "XCUIDevice+FBHinge.h"
 #import "FBScreen.h"
@@ -296,187 +295,6 @@ static NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *FBAccessibil
   return index;
 }
 
-// XCTest may vend a different AX identity for the on-screen copy. In that
-// case both the point and a unique control in this page must identify it.
-static BOOL FBHitBelongsToModule(id<FBXCElementSnapshot> hit, CGPoint point,
-                                 id<FBXCElementSnapshot> page, id<FBXCElementSnapshot> icon)
-{
-  if (hit == nil || hit.displayID != XCUIScreen.mainScreen.displayID) {
-    return NO;
-  }
-  if ([icon.accessibilityElement isEqual:hit.accessibilityElement]
-      || [icon elementSnapshotMatchingAccessibilityElement:hit.accessibilityElement] != nil) {
-    return YES;
-  }
-  if (hit.label.length == 0 || !CGRectContainsPoint(hit.frame, point)) {
-    return NO;
-  }
-  id<FBXCElementSnapshot> owner = nil;
-  for (id<FBXCElementSnapshot> module in page.children) {
-    for (id<FBXCElementSnapshot> control in module._allDescendants) {
-      if (control.elementType == hit.elementType && [control.label isEqualToString:hit.label]
-          && [(control.identifier ?: @"") isEqualToString:(hit.identifier ?: @"")]) {
-        if (owner != nil && owner != module) {
-          return NO;
-        }
-        owner = module;
-        break;
-      }
-    }
-  }
-  return owner == icon;
-}
-
-// Derive possible column origins from the page instead of assuming a fixed
-// device inset or a particular user's arrangement of modules.
-static NSArray<NSNumber *> *FBControlCenterColumns(NSArray<NSValue *> *frames, CGRect folder, CGFloat *unitWidth)
-{
-  CGFloat width = CGFLOAT_MAX;
-  for (NSValue *value in frames) {
-    CGRect frame = value.CGRectValue;
-    if (CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) {
-      return @[];
-    }
-    width = MIN(width, CGRectGetWidth(frame));
-  }
-  if (width < 1 || width >= CGRectGetWidth(folder) || CGRectIsInfinite(folder)) {
-    return @[];
-  }
-  CGFloat first = INFINITY;
-  CGFloat pitch = 0;
-  for (NSValue *value in frames) {
-    CGRect frame = value.CGRectValue;
-    CGFloat x = CGRectGetMinX(frame);
-    if (x >= CGRectGetMinX(folder) && x - CGRectGetMinX(folder) < width / 2) {
-      first = MIN(first, x);
-    }
-    for (NSValue *other in frames) {
-      CGRect peer = other.CGRectValue;
-      CGFloat step = CGRectGetMinX(peer) - x;
-      if (fabs(CGRectGetMinY(peer) - CGRectGetMinY(frame)) < 1 && fabs(CGRectGetWidth(frame) - width) < 1
-          && step > width && step < 1.5 * width) {
-        if (pitch > 0 && fabs(step - pitch) > 1) {
-          return @[];
-        }
-        pitch = step;
-      }
-    }
-  }
-  NSMutableArray *columns = [NSMutableArray array];
-  if (isfinite(first) && pitch > 0) {
-    for (CGFloat x = first; x + width <= CGRectGetMaxX(folder); x += pitch) {
-      [columns addObject:@(x)];
-    }
-  }
-  *unitWidth = width;
-  return columns;
-}
-
-NSDictionary<NSNumber *, NSNumber *> *FBControlCenterOffsets(NSArray<NSValue *> *frames, CGRect folder,
-                                                             NSIndexSet *requested, BOOL (^hitTest)(NSUInteger, CGPoint))
-{
-  CGFloat width = 0;
-  NSArray<NSNumber *> *columns = FBControlCenterColumns(frames, folder, &width);
-  if (columns.count == 0) {
-    return @{};
-  }
-  NSMutableIndexSet *alignedIcons = [NSMutableIndexSet indexSet];
-  for (NSUInteger i = 0; i < frames.count; i++) {
-    CGRect frame = frames[i].CGRectValue;
-    for (NSNumber *x in columns) {
-      if (fabs(x.doubleValue - frame.origin.x) < 1 && CGRectContainsRect(folder, frame)) {
-        [alignedIcons addIndex:i];
-        break;
-      }
-    }
-  }
-  NSMutableDictionary *offsets = [NSMutableDictionary dictionary];
-  [requested enumerateIndexesUsingBlock:^(NSUInteger index, BOOL *stop) {
-    if (index >= frames.count) {
-      return;
-    }
-    CGRect frame = frames[index].CGRectValue;
-    if (fabs(frame.size.width - width) >= 1 || fabs(frame.size.height - width) >= 1) {
-      return;
-    }
-    if ([alignedIcons containsIndex:index]) {
-      return;
-    }
-    // A different vertical layout needs independent evidence for the row too.
-    NSUInteger peer = [alignedIcons indexPassingTest:^BOOL(NSUInteger idx, BOOL *stopSearch) {
-      return fabs(frames[idx].CGRectValue.origin.y - frame.origin.y) < 1;
-    }];
-    if (peer == NSNotFound) {
-      return;
-    }
-    CGFloat offset = NAN;
-    for (NSNumber *column in columns) {
-      CGFloat x = column.doubleValue;
-      CGPoint center = CGPointMake(x + width / 2, CGRectGetMidY(frame));
-      if (!CGRectContainsPoint(folder, center)) {
-        continue;
-      }
-      if (hitTest(index, center)) {
-        if (isfinite(offset)) {
-          offset = NAN;
-          break;
-        }
-        offset = x - frame.origin.x;
-      }
-    }
-    if (isfinite(offset)) {
-      offsets[@(index)] = @(offset);
-    }
-  }];
-  return offsets;
-}
-
-static void FBResolveControlCenterPage(id<FBXCElementSnapshot> page, CGRect folder,
-                                       FBDisplaySnapshotMap *matches, id<FBXCElementSnapshot> requestedIcon)
-{
-  NSArray<id<FBXCElementSnapshot>> *icons = page.children;
-  NSMutableArray *frames = [NSMutableArray arrayWithCapacity:icons.count];
-  for (id<FBXCElementSnapshot> icon in icons) {
-    if (icon.elementType != XCUIElementTypeIcon) {
-      return;
-    }
-    [frames addObject:[NSValue valueWithCGRect:icon.frame]];
-  }
-  NSIndexSet *requested = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, icons.count)];
-  if (requestedIcon != nil) {
-    NSUInteger index = [icons indexOfObjectIdenticalTo:requestedIcon];
-    if (index == NSNotFound) {
-      return;
-    }
-    requested = [NSIndexSet indexSetWithIndex:index];
-  }
-  NSMutableDictionary<NSValue *, id> *hits = [NSMutableDictionary dictionary];
-  NSDictionary *offsets = FBControlCenterOffsets(frames, folder, requested, ^BOOL(NSUInteger index, CGPoint center) {
-    NSValue *key = [NSValue valueWithCGPoint:center];
-    id hit = hits[key];
-    if (hit == nil) {
-      id<FBXCAccessibilityElement> ax = [FBActiveAppDetectionPoint axElementWithPoint:center];
-      hit = ax == nil ? nil : [FBXCAXClientProxy.sharedClient snapshotForElement:ax attributes:nil inDepth:NO error:nil];
-      hits[key] = hit ?: NSNull.null;
-    }
-    return hit != NSNull.null && FBHitBelongsToModule(hit, center, page, icons[index]);
-  });
-  for (NSNumber *index in offsets) {
-    id<FBXCElementSnapshot> icon = icons[index.unsignedIntegerValue];
-    CGFloat offset = [offsets[index] doubleValue];
-    CGRect frame = icon.frame;
-    [FBLogger verboseLogFmt:@"Display geometry: hit-tested Control Center module '%@', column offset %.2f", icon.identifier, offset];
-    for (id<FBXCElementSnapshot> node in [@[icon] arrayByAddingObjectsFromArray:icon._allDescendants ?: @[]]) {
-      if (CGRectIsEmpty(node.frame) || !CGRectContainsRect(frame, node.frame) || [matches objectForKey:node] != nil) {
-        continue;
-      }
-      FBOrientedSnapshot *resolved = [[FBOrientedSnapshot alloc] initWithSnapshot:node];
-      resolved.wdFrame = CGRectIntegral(CGRectOffset(node.frame, offset, 0));
-      [matches setObject:resolved forKey:node];
-    }
-  }
-}
-
 static BOOL FBIsControlCenterFolder(id<FBXCElementSnapshot> node)
 {
   return [node.identifier isEqualToString:@"cc-root-folder-view"];
@@ -505,17 +323,6 @@ static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, NSNumber *d
     if (live != nil) {
       [matches setObject:live forKey:node];
       FBResolveModuleIcon(node, live, matches);
-    }
-  }
-  if (orientation == UIInterfaceOrientationPortrait && display.longLongValue == XCUIScreen.mainScreen.displayID) {
-    for (id<FBXCElementSnapshot> node in nodes) {
-      if (FBIsControlCenterFolder(node)) {
-        for (id<FBXCElementSnapshot> page in node.children) {
-          if (page.elementType == XCUIElementTypeIcon) {
-            FBResolveControlCenterPage(page, node.frame, matches, nil);
-          }
-        }
-      }
     }
   }
   if (UIInterfaceOrientationIsLandscape(orientation)) {
@@ -654,19 +461,6 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
          NSStringFromCGRect(snapshot.frame), NSStringFromCGRect(member.frame)];
         if (member.displayID == display.longLongValue && member.elementType != XCUIElementTypeIcon
             && !UIInterfaceOrientationIsLandscape(orientation)) {
-          if (orientation == UIInterfaceOrientationPortrait && display.longLongValue == XCUIScreen.mainScreen.displayID) {
-            id<FBXCElementSnapshot> icon = member;
-            while (icon != nil && icon.elementType != XCUIElementTypeIcon) {
-              icon = icon.parent;
-            }
-            id<FBXCElementSnapshot> page = icon.parent;
-            if (page.elementType == XCUIElementTypeIcon && FBIsControlCenterFolder(page.parent)) {
-              FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
-                                                                    valueOptions:NSPointerFunctionsStrongMemory];
-              FBResolveControlCenterPage(page, page.parent.frame, matches, icon);
-              return [matches objectForKey:member] ?: member;
-            }
-          }
           return member;
         }
         FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
