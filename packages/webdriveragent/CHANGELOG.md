@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.6...appium-webdriveragent@17.1.7) (2026-11-26)
+
+### Bug Fixes
+
+* **webdriveragent:** reject an invalid bundleId before it reaches XCTest ([#146](https://github.com/appium/appium-ios/issues/146)) ([332cce1](https://github.com/appium/appium-ios/commit/332cce150008515768af7f1e5d0ac88460226b83))
+
+
 ## [17.1.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.5...appium-webdriveragent@17.1.6) (2026-11-26)
 
 ### Bug Fixes
