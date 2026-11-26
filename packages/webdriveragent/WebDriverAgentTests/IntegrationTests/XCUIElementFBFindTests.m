@@ -115,6 +115,27 @@
   [self assertLookupSnapshotsWithIndexBinding:YES];
 }
 
+// Index binding resolves the matches with a query, which must not change the XPath order
+- (void)testXPathMatchesKeepOrderWithIndexBinding
+{
+  NSString *query = @"//XCUIElementTypeButton | //XCUIElementTypeStaticText";
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = YES;
+    // The expected order comes straight from the XPath matches, not from the lookup under test
+    NSMutableArray<NSString *> *expectedUids = [NSMutableArray array];
+    for (id<FBXCElementSnapshot> snapshot in [FBXPath matchesWithRootElement:self.testedView forQuery:query]) {
+      [expectedUids addObject:[FBXCElementSnapshotWrapper ensureWrapped:snapshot].fb_uid];
+    }
+    NSArray<XCUIElement *> *actual = [self.testedView fb_descendantsMatchingXPathQuery:query
+                                                           shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(expectedUids.count, 1u);
+    XCTAssertEqualObjects([actual valueForKey:@"fb_uid"], expectedUids);
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
 - (void)testDescendantsWithClassName
 {
   NSSet<NSString *> *expectedLabels = [NSSet setWithArray:FBMainViewButtonLabels];

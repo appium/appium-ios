@@ -78,6 +78,45 @@ static NSArray<XCUIElement *> *FBBindSnapshotsToElements(XCUIElement *scope,
   return result.copy;
 }
 
+// The query yields elements in XCTest order, so restore the order of the given uids.
+// Returns the elements as is if their uids cannot be determined without extra snapshots.
+static NSArray<XCUIElement *> *FBSortElementsByUidOrder(NSArray<XCUIElement *> *elements,
+                                                        NSArray<NSString *> *uids)
+{
+  if (elements.count < 2) {
+    return elements;
+  }
+  NSMutableDictionary<NSString *, NSNumber *> *uidRanks = [NSMutableDictionary dictionaryWithCapacity:uids.count];
+  [uids enumerateObjectsUsingBlock:^(NSString *uid, NSUInteger idx, BOOL *stop) {
+    if (nil == uidRanks[uid]) {
+      uidRanks[uid] = @(idx);
+    }
+  }];
+  NSMutableArray<NSNumber *> *ranks = [NSMutableArray arrayWithCapacity:elements.count];
+  for (XCUIElement *element in elements) {
+    id<FBXCElementSnapshot> snapshot = element.lastSnapshot;
+    NSNumber *rank = nil == snapshot
+      ? nil
+      : uidRanks[[FBXCElementSnapshotWrapper ensureWrapped:snapshot].fb_uid];
+    if (nil == rank) {
+      return elements;
+    }
+    [ranks addObject:rank];
+  }
+  NSMutableArray<NSNumber *> *indexes = [NSMutableArray arrayWithCapacity:elements.count];
+  for (NSUInteger i = 0; i < elements.count; ++i) {
+    [indexes addObject:@(i)];
+  }
+  [indexes sortWithOptions:NSSortStable usingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+    return [ranks[a.unsignedIntegerValue] compare:ranks[b.unsignedIntegerValue]];
+  }];
+  NSMutableArray<XCUIElement *> *result = [NSMutableArray arrayWithCapacity:elements.count];
+  for (NSNumber *index in indexes) {
+    [result addObject:elements[index.unsignedIntegerValue]];
+  }
+  return result.copy;
+}
+
 // Resolves the elements by their uids with a query over the scope's tree
 static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQuery,
                                                        NSArray<id<FBXCElementSnapshot>> *snapshots,
@@ -93,7 +132,8 @@ static NSArray<XCUIElement *> *FBQueryElementsWithUids(XCUIElementQuery *scopeQu
     ? [scopeQuery childrenMatchingType:type]
     : [scopeQuery descendantsMatchingType:type];
   NSPredicate *predicate = [NSPredicate predicateWithFormat:@"%K IN %@", FBStringify(FBXCElementSnapshotWrapper, fb_uid), uids];
-  return [[query matchingPredicate:predicate] fb_allMatchesWithSnapshotsBoundByIndex:YES];
+  NSArray<XCUIElement *> *matches = [[query matchingPredicate:predicate] fb_allMatchesWithSnapshotsBoundByIndex:YES];
+  return FBSortElementsByUidOrder(matches, uids);
 }
 
 @implementation XCUIElement (FBUtilities)
