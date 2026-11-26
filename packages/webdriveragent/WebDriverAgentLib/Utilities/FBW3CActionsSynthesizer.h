@@ -13,6 +13,12 @@ NS_ASSUME_NONNULL_BEGIN
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 @interface FBW3CActionsSynthesizer : FBBaseActionsSynthesizer
 
+/*! YES if the actions are a single key source with modifiers or special keys, which plain text cannot express */
+@property (readonly, nonatomic) BOOL requiresKeyRecords;
+
+/*! Performs the actions as single-key records that keep modifiers pressed. Requires `requiresKeyRecords` */
+- (BOOL)performKeyActionsWithError:(NSError **)error;
+
 @end
 #endif
 

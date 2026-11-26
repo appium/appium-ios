@@ -82,17 +82,11 @@ static BOOL FBIsFinitePoint(CGPoint point)
   return NO;
 }
 
-- (BOOL)fb_performActionsWithSynthesizerType:(Class)synthesizerType
-                                     actions:(NSArray *)actions
-                                elementCache:(FBElementCache *)elementCache
-                                       error:(NSError **)error
+- (BOOL)fb_performActionsWithSynthesizer:(FBW3CActionsSynthesizer *)synthesizer
+                                   error:(NSError **)error
 {
-  FBBaseActionsSynthesizer *synthesizer = [[synthesizerType alloc] initWithActions:actions
-                                                                    forApplication:self
-                                                                      elementCache:elementCache
-                                                                             error:error];
-  if (nil == synthesizer) {
-    return NO;
+  if (synthesizer.requiresKeyRecords) {
+    return [synthesizer performKeyActionsWithError:error];
   }
   XCSynthesizedEventRecord *eventRecord = [synthesizer synthesizeWithError:error];
   if (nil == eventRecord) {
@@ -105,10 +99,11 @@ static BOOL FBIsFinitePoint(CGPoint point)
                 elementCache:(FBElementCache *)elementCache
                        error:(NSError **)error
 {
-  if (![self fb_performActionsWithSynthesizerType:FBW3CActionsSynthesizer.class
-                                          actions:actions
-                                     elementCache:elementCache
-                                            error:error]) {
+  FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc] initWithActions:actions
+                                                                           forApplication:self
+                                                                             elementCache:elementCache
+                                                                                    error:error];
+  if (nil == synthesizer || ![self fb_performActionsWithSynthesizer:synthesizer error:error]) {
     return NO;
   }
   [self fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
