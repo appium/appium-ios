@@ -16,8 +16,8 @@ import {
   startTunnelRegistryServer,
   watchTunnelRegistryOnDead,
 } from 'appium-ios-remotexpc';
-import {Command} from 'commander';
 
+import {parseCliArgs} from './lib/cli.mjs';
 import {DEFAULT_TUNNEL_REGISTRY_PORT} from './lib/constants.mjs';
 import {formatError} from './lib/format-error.mjs';
 import {parseNonNegativeIntegerOption, parsePortOption} from './lib/options.mjs';
@@ -680,37 +680,49 @@ class DeviceWatcher {
   }
 }
 
+const USAGE = `Usage: tunnel-creation [options] [udid]
+
+Create tunnels for connected USB devices (lockdown + CoreDeviceProxy)
+
+Arguments:
+  udid                             Optional device UDID (omit for all devices)
+
+Options:
+  --udid <udid>                    UDID of the device to create tunnel for
+  -k, --keep-open                  Keep connections open for lsof inspection
+  --tunnel-registry-port <port>    Port for tunnel registry API (default: ${DEFAULT_TUNNEL_REGISTRY_PORT})
+  --reconnect-retries <count>      Reconnect retries after unexpected tunnel drop (0 = unlimited)
+  --watch-devices                  Keep watching usbmuxd after startup: create tunnels for newly attached devices
+                                   and remove detached ones (usbmux-visible devices only). With --udid, only that
+                                   UDID is watched, and startup no longer requires it to already be connected.
+                                   Tunnels created after startup use the same --reconnect-retries policy.
+                                   Independent of --keep-open.
+  -h, --help                       Show this help`;
+
 /**
  * @returns {Promise<void>}
  */
 async function main() {
   setupCleanupHandlers();
 
-  const program = new Command();
-  program
-    .name('tunnel-creation')
-    .description('Create tunnels for connected USB devices (lockdown + CoreDeviceProxy)')
-    .argument('[udid]', 'Optional device UDID (omit for all devices)')
-    .option('--udid <udid>', 'UDID of the device to create tunnel for')
-    .option('-k, --keep-open', 'Keep connections open for lsof inspection')
-    .option(
-      '--tunnel-registry-port <port>',
-      `Port for tunnel registry API (default: ${DEFAULT_TUNNEL_REGISTRY_PORT})`,
-      (value) => parsePortOption(value, 'tunnel registry port'),
-    )
-    .option('--reconnect-retries <count>', 'Reconnect retries after unexpected tunnel drop (0 = unlimited)', (value) =>
-      parseNonNegativeIntegerOption(value, 'retry count'),
-    )
-    .option(
-      '--watch-devices',
-      'Keep watching usbmuxd after startup: create tunnels for newly attached devices and remove detached ones (usbmux-visible devices only). ' +
-        'With --udid, only that UDID is watched, and startup no longer requires it to already be connected. ' +
-        'Tunnels created after startup use the same --reconnect-retries policy as the initial ones. Independent of --keep-open.',
-    );
-
-  program.parse(process.argv);
-  const options = program.opts();
-  const specificUdid = options.udid ?? program.args[0] ?? undefined;
+  const {values: options, positionals} = parseCliArgs(
+    USAGE,
+    {
+      udid: {type: 'string'},
+      'keep-open': {type: 'boolean', short: 'k'},
+      'tunnel-registry-port': {type: 'string'},
+      'reconnect-retries': {type: 'string'},
+      'watch-devices': {type: 'boolean'},
+    },
+    {
+      maxPositionals: 1,
+      converters: {
+        'tunnel-registry-port': (value) => parsePortOption(value, 'tunnel registry port'),
+        'reconnect-retries': (value) => parseNonNegativeIntegerOption(value, 'retry count'),
+      },
+    },
+  );
+  const specificUdid = options.udid ?? positionals[0];
 
   await assertRoot(path.join('scripts', path.basename(fileURLToPath(import.meta.url))));
 

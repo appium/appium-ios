@@ -8,8 +8,8 @@
 
 import {logger, util} from '@appium/support';
 import {AppleTVPairingService, UserInputService} from 'appium-ios-remotexpc';
-import {Command} from 'commander';
 
+import {parseCliArgs} from './lib/cli.mjs';
 import {DEFAULT_APPLETV_PAIRING_DISCOVERY_TIMEOUT_MS} from './lib/constants.mjs';
 import {parsePositiveIntegerOption} from './lib/options.mjs';
 import {startTimeoutProgressLogger} from './lib/progress.mjs';
@@ -88,18 +88,24 @@ function getNoAppleTVPairingDevicesMessage() {
   return 'No Apple TV pairing devices found. Please ensure your Apple TV is on the same network and in pairing mode.';
 }
 
-async function main() {
-  const program = new Command();
-  program
-    .name('pair-appletv')
-    .description('Pair Apple TV / tvOS devices over WiFi for Remote XPC tunnels')
-    .option('-d, --device <selector>', 'Device selector: name, identifier (e.g. AA:BB:CC:DD:EE:FF), or index (0, 1, …)')
-    .option('--discovery-timeout <ms>', 'Apple TV pairing discovery timeout in milliseconds', (value) =>
-      parsePositiveIntegerOption(value, 'discovery timeout'),
-    );
+const USAGE = `Usage: pair-appletv [options]
 
-  program.parse(process.argv);
-  const options = program.opts();
+Pair Apple TV / tvOS devices over WiFi for Remote XPC tunnels
+
+Options:
+  -d, --device <selector>    Device selector: name, identifier (e.g. AA:BB:CC:DD:EE:FF), or index (0, 1, …)
+  --discovery-timeout <ms>   Apple TV pairing discovery timeout in milliseconds
+  -h, --help                 Show this help`;
+
+async function main() {
+  const {values: options} = parseCliArgs(
+    USAGE,
+    {
+      device: {type: 'string', short: 'd'},
+      'discovery-timeout': {type: 'string'},
+    },
+    {converters: {'discovery-timeout': (value) => parsePositiveIntegerOption(value, 'discovery timeout')}},
+  );
   const discoveryTimeoutMs = options.discoveryTimeout ?? DEFAULT_APPLETV_PAIRING_DISCOVERY_TIMEOUT_MS;
 
   const userInput = new UserInputService();
