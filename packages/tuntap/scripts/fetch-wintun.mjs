@@ -66,21 +66,26 @@ Options:
   -v, --version <semver>  WinTun release version to download (default: ${DEFAULT_WINTUN_VERSION})
   -h, --help              display help for command`;
 
-let values;
-try {
-  ({values} = parseArgs({
-    options: {
-      version: {type: 'string', short: 'v', default: DEFAULT_WINTUN_VERSION},
-      help: {type: 'boolean', short: 'h'},
-    },
-  }));
-} catch (err) {
-  process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
-  process.exit(1);
+/**
+ * @returns {{version: string, help?: boolean}}
+ */
+function parseCliArgs() {
+  try {
+    return parseArgs({
+      options: {
+        version: {type: 'string', short: 'v', default: DEFAULT_WINTUN_VERSION},
+        help: {type: 'boolean', short: 'h'},
+      },
+    }).values;
+  } catch (err) {
+    process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}\n`);
+    process.exit(1);
+  }
 }
 
+const values = parseCliArgs();
 if (values.help) {
   process.stdout.write(`${USAGE}\n`);
-} else {
-  await refreshWintun(values.version);
+  process.exit(0);
 }
+await refreshWintun(values.version);

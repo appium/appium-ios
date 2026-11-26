@@ -722,7 +722,7 @@ async function main() {
       },
     },
   );
-  const specificUdid = options.udid ?? positionals[0] ?? undefined;
+  const specificUdid = options.udid ?? positionals[0];
 
   await assertRoot(path.join('scripts', path.basename(fileURLToPath(import.meta.url))));
 
