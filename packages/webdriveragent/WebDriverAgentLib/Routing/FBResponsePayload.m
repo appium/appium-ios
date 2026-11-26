@@ -43,6 +43,11 @@ XCUIElement *maybeStable(XCUIElement *element)
     return element;
   }
 
+  // Elements bound to their AX element are already stable, no snapshot or app query needed
+  if (nil != element.fb_boundAccessibilityElement) {
+    return element;
+  }
+
   XCUIElement *result = element;
   id<FBXCElementSnapshot> snapshot = element.lastSnapshot
     ?: element.fb_cachedSnapshot

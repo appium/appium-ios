@@ -15,10 +15,12 @@
 #import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
 #import "FBResponsePayload.h"
+#import "FBSession.h"
 #import "FBTestMacros.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBFind.h"
 #import "XCUIElement+FBUID.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBXCElementSnapshotWrapper+Helpers.h"
 #import "XCUIElement+FBIsVisible.h"
 #import "XCUIElement+FBClassChain.h"
@@ -517,6 +519,30 @@
   }
 }
 
+- (void)testAccessibilityBoundMatchesStayStableWithoutNativeCaching
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  FBSession *session = [FBSession initWithApplication:nil];
+  session.useNativeCachingStrategy = NO;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(matches.count, 1u);
+    FBElementCache *cache = [FBElementCache new];
+    FBResponseWithCachedElements(matches, cache, YES);
+    for (XCUIElement *match in matches) {
+      // AX-bound matches are cached as is, without being resolved again
+      XCTAssertNotNil(match.fb_boundAccessibilityElement);
+      XCTAssertNil(match.lastSnapshot);
+      XCTAssertEqual([cache elementForUUID:match.fb_cacheId], match);
+    }
+  } @finally {
+    [session kill];
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
 - (void)testElementResponsesMatchSnapshotUids
 {
   BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
@@ -604,6 +630,45 @@
     [self launchApplication];
     [self goToAttributesPage];
   });
+}
+
+- (void)testCachedMatchResolvesAfterLookupValueChanges
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  // nil app keeps [session kill] from terminating the app shared by the tests
+  FBSession *session = [FBSession initWithApplication:nil];
+  session.useNativeCachingStrategy = NO;
+  XCUIElement *toggle = self.testedApplication.switches.firstMatch;
+  NSString *initialValue = toggle.wdValue;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedApplication fb_descendantsMatchingProperty:@"value"
+                                                                                       value:initialValue
+                                                                               partialSearch:NO];
+    XCUIElement *match = nil;
+    for (XCUIElement *candidate in matches) {
+      if (candidate.elementType == XCUIElementTypeSwitch) {
+        match = candidate;
+        break;
+      }
+    }
+    XCTAssertNotNil(match);
+    FBElementCache *cache = [FBElementCache new];
+    FBResponseWithCachedElements(@[match], cache, YES);
+    NSString *cacheId = match.fb_cacheId;
+
+    [toggle tap];
+    XCUIElement *resolved = [cache elementForUUID:cacheId checkStaleness:YES];
+    XCTAssertNotNil(resolved);
+    XCTAssertNotEqualObjects(resolved.wdValue, initialValue);
+    XCTAssertEqualObjects(resolved.wdValue, toggle.wdValue);
+  } @finally {
+    if (![toggle.wdValue isEqual:initialValue]) {
+      [toggle tap];
+    }
+    [session kill];
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
 }
 
 - (void)testNestedQueryWithClassChain
