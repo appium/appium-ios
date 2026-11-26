@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.11](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.10...appium-ios-remotexpc@6.1.11) (2026-11-26)
+
+### Miscellaneous Chores
+
+* replace commander with util.parseArgs ([#252](https://github.com/appium/appium-ios/issues/252)) ([73ecec5](https://github.com/appium/appium-ios/commit/73ecec507d62547c5220686c920accd1cfdcbc36))
+
+
 ## [6.1.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.9...appium-ios-remotexpc@6.1.10) (2026-11-25)
 
 ### Bug Fixes
