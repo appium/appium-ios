@@ -35,4 +35,22 @@ id _Nullable FBExtractElement(NSDictionary *src);
  */
 NSDictionary<NSString *, id> *_Nullable FBParseCapabilities(NSDictionary<NSString *, id> *caps, NSError **error);
 
+/**
+ The bundle identifiers FBIsValidBundleId accepts, in words, for error messages
+ */
+extern NSString *const FBBundleIdRule;
+
+/**
+ Checks whether the value is a bundle identifier, or is absent where it is optional.
+
+ Commands check a 'bundleId' argument with this before passing it on. XCTest passes the identifier to
+ testmanagerd over XPC, which only accepts NSString there: a JSON null (NSNull) makes testmanagerd drop
+ the whole test session and turn Automation Mode off.
+
+ @param bundleId The value to check
+ @param isRequired Whether a missing value (nil) is invalid
+ @returns YES if the value is a bundle identifier (see FBBundleIdRule), or is nil and not required
+ */
+BOOL FBIsValidBundleId(id _Nullable bundleId, BOOL isRequired);
+
 NS_ASSUME_NONNULL_END

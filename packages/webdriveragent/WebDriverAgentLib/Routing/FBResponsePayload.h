@@ -53,6 +53,12 @@ id<FBResponsePayload> FBResponseWithUnknownErrorFormat(NSString *errorFormat, ..
 id<FBResponsePayload> FBResponseWithStatus(FBCommandStatus *status);
 
 /**
+ Returns an 'invalid argument' response payload if the given 'bundleId' argument is not a bundle identifier
+ (see FBIsValidBundleId), or nil if it is
+ */
+id<FBResponsePayload> _Nullable FBInvalidBundleIdResponse(id _Nullable bundleId, BOOL isRequired);
+
+/**
  Returns a response payload as a NSDictionary for given element.
  Set compact=NO to include further attributes (defined by FBConfiguration.elementResponseAttributes)
  */
