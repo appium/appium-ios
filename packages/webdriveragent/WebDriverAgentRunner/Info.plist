@@ -21,10 +21,10 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Location access is used for automated testing.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string></string>
+	<string>Location access is used for automated testing.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Location access is used for automated testing.</string>
 </dict>
 </plist>

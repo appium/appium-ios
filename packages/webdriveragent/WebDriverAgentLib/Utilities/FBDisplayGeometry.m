@@ -341,8 +341,8 @@ CGRect FBFrameForDisplayGeometry(id<FBXCElementSnapshot> snapshot)
   }
   if (!CGRectIsEmpty(frame)) {
     // Use the oriented window dimensions reported by /window/rect.
-    frame.size = FBAdjustDimensionsForApplication(frame.size, application.interfaceOrientation);
-    return frame;
+    CGSize size = FBAdjustDimensionsForApplication(frame.size, application.interfaceOrientation);
+    return CGRectMake(frame.origin.x, frame.origin.y, size.width, size.height);
   }
 #endif
   return snapshot.frame;
