@@ -32,16 +32,6 @@
 */
 #define FBStringify(class, property) ({if(NO){[((class *)nil) property];} @#property;})
 
-/*! Creates weak type for given 'arg' */
-#define FBWeakify(arg) typeof(arg) __weak wda_weak_##arg = arg
-
-/*! Creates strong type for FBWeakify-ed 'arg' */
-#define FBStrongify(arg) \
-  _Pragma("clang diagnostic push") \
-  _Pragma("clang diagnostic ignored \"-Wshadow\"") \
-  typeof(arg) arg = wda_weak_##arg \
-  _Pragma("clang diagnostic pop")
-
 /*! Current OS version as a dotted string, e.g. "17.4". UIDevice.systemVersion is unavailable on
     watchOS, so this is sourced from NSProcessInfo, which works identically on every platform. */
 NS_INLINE NSString *FBSystemVersion(void) {
