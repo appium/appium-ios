@@ -15,6 +15,10 @@
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIDevice+FBHelpers.h"
 #import "FBScreen.h"
+#import "XCUIElement+FBUtilities.h"
+#import "FBXCAXClientProxy.h"
+#import "FBXCAccessibilityElement.h"
+#import "FBDisplayGeometry.h"
 #import "FBRunLoopSpinner.h"
 #import "XCUIDevice+FBRotation.h"
 #import "XCUIDevice+FBHinge.h"
@@ -141,7 +145,8 @@
 - (void)skipIfUnsupported
 {
   XCTSkipIf((self.invocation.selector == @selector(testScreenInfoAcrossFoldStates)
-             || self.invocation.selector == @selector(testReadingControlCenterOnInnerDisplay))
+             || self.invocation.selector == @selector(testReadingControlCenterOnInnerDisplay)
+             || self.invocation.selector == @selector(testReadingControlCenterOnCover))
             && !XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
 }
 
@@ -295,6 +300,16 @@
 
 - (void)testReadingControlCenterOnInnerDisplay
 {
+  [self checkControlCenterAtHingeAngle:180];
+}
+
+- (void)testReadingControlCenterOnCover
+{
+  [self checkControlCenterAtHingeAngle:0];
+}
+
+- (void)checkControlCenterAtHingeAngle:(CGFloat)angle
+{
   XCUIDevice *device = XCUIDevice.sharedDevice;
   NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
   XCTAssertNotNil(originalAngle);
@@ -304,7 +319,7 @@
       [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
     }
   }];
-  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:angle error:nil]);
   [self.testedApplication terminate];
   [self launchApplication];
   XCUIElement *window = self.testedApplication.windows.firstMatch;
@@ -321,6 +336,20 @@
   XCUIElement *addControls = springboard.buttons[@"Add Controls"].firstMatch;
   XCTAssertTrue([addControls waitForExistenceWithTimeout:5]);
   XCTAssertTrue(addControls.isWDVisible);
+  id<FBXCElementSnapshot> app = [springboard fb_standardSnapshot];
+  id<FBXCElementSnapshot> button = [app elementSnapshotMatchingAccessibilityElement:[addControls fb_standardSnapshot].accessibilityElement];
+  FBDisplaySnapshotMap *source = FBDisplaySnapshotsForTree(app, YES);
+  FBXCElementSnapshotWrapper *sourceButton = [FBXCElementSnapshotWrapper ensureWrapped:[source objectForKey:button]];
+  XCTAssertNotNil(sourceButton);
+  XCTAssertTrue(sourceButton.isWDVisible);
+  if (angle == 0) {
+    CGRect frame = button.frame;
+    CGPoint point = CGPointMake(CGRectGetMidX(frame), CGRectGetMidY(frame));
+    id hit = [FBActiveAppDetectionPoint axElementWithPoint:point];
+    id<FBXCElementSnapshot> live = hit == nil ? nil : [FBXCAXClientProxy.sharedClient snapshotForElement:hit attributes:nil inDepth:NO error:nil];
+    XCTAssertEqualObjects(live.label, button.label);
+    XCTAssertEqualObjects(hit, button.accessibilityElement);
+  }
   XCTAssertNil([self screenInfoResponse][@"error"]);
   XCTAssertTrue(addControls.exists);
   XCTAssertNotNil(springboard.fb_tree);
@@ -343,6 +372,40 @@
 @end
 
 @implementation FBScreenLookupTests
+
+// The module frames are identical in both physical-device dumps from #237.
+- (void)testControlCenterOffsetsAcrossFoldStates
+{
+  NSArray *frames = @[
+    [NSValue valueWithCGRect:CGRectMake(27.67, 446, 72, 72)],
+    [NSValue valueWithCGRect:CGRectMake(335.42, 446, 72, 72)],
+    [NSValue valueWithCGRect:CGRectMake(419.42, 446, 72, 72)],
+    [NSValue valueWithCGRect:CGRectMake(279.67, 446, 72, 72)],
+    [NSValue valueWithCGRect:CGRectMake(251.42, 530, 72, 72)],
+    [NSValue valueWithCGRect:CGRectMake(111.67, 530, 72, 72)],
+  ];
+  NSIndexSet *all = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 5)];
+  for (NSNumber *left in @[@0, @223.83]) {
+    BOOL unfolded = left.doubleValue > 0;
+    CGRect folder = unfolded ? CGRectMake(left.doubleValue, 0, 445.17, 951) : CGRectMake(0, 0, 466, 678);
+    // Control origins in the reporter's screenshots, in the same order as the modules above.
+    NSArray *drawnX = unfolded ? @[@253, @337, @421, @505, @253] : @[@29, @113, @197, @281, @29];
+    NSDictionary *offsets = FBControlCenterOffsets(frames, folder, all, ^BOOL(NSUInteger index, CGPoint center) {
+      CGRect control = CGRectMake([drawnX[index] doubleValue], index == 4 ? 532 : 448, 69, 68);
+      return CGRectContainsPoint(control, center);
+    });
+    XCTAssertEqual(offsets.count, unfolded ? 2UL : 3UL);
+    for (NSUInteger i = 0; i < drawnX.count; i++) {
+      CGFloat origin = [frames[i] CGRectValue].origin.x + 2 + [offsets[@(i)] doubleValue];
+      XCTAssertEqualWithAccuracy(floor(origin), [drawnX[i] doubleValue], 0.01);
+    }
+    for (NSNumber *ambiguous in @[@YES, @NO]) {
+      XCTAssertEqual(FBControlCenterOffsets(frames, folder, all, ^BOOL(NSUInteger index, CGPoint point) {
+        return ambiguous.boolValue;
+      }).count, 0UL);
+    }
+  }
+}
 
 - (void)testDisplayID
 {

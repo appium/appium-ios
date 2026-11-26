@@ -222,7 +222,7 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
   return [self.class dictionaryForElement:snapshot
-                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot)
+                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot, ![excludedAttributes containsObject:FBExclusionAttributeVisible])
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
 }

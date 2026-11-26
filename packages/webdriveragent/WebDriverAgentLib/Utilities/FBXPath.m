@@ -467,7 +467,7 @@ static NSString *const topNodeIndexPath = @"top";
   FBDisplaySnapshotMap *displaySnapshots = nil;
   for (Class attribute in includedAttributes) {
     if ([attribute isSubclassOfClass:FBDimensionAttribute.class] || attribute == FBVisibleAttribute.class) {
-      displaySnapshots = FBDisplaySnapshotsForTree(root);
+      displaySnapshots = FBDisplaySnapshotsForTree(root, [includedAttributes containsObject:FBVisibleAttribute.class]);
       break;
     }
   }
