@@ -12,6 +12,7 @@
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBGestureCoordinateContext.h"
+#import "FBMathUtils.h"
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIDevice+FBHelpers.h"
 #import "FBScreen.h"
@@ -203,8 +204,11 @@
   [self addTeardownBlock:^{ [request.session kill]; }];
 
   NSNumber *mainDisplay = @([FBScreen displayID]);
-  NSDictionary *rect = self.testedApplication.wdRect;
-  NSDictionary *size = @{@"width": rect[@"width"], @"height": rect[@"height"]};
+  CGRect frame = self.testedApplication.wdFrame;
+  CGSize orientedSize = FBAdjustDimensionsForApplication(frame.size, self.testedApplication.interfaceOrientation);
+  NSDictionary *size = @{@"width": @(orientedSize.width), @"height": @(orientedSize.height)};
+  NSDictionary *rect = @{@"x": @(frame.origin.x), @"y": @(frame.origin.y),
+                         @"width": size[@"width"], @"height": size[@"height"]};
   Method method = class_getClassMethod(FBScreen.class, @selector(hasMultipleScreensWithError:));
   IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
     if (error != NULL) {

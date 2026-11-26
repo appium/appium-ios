@@ -120,13 +120,16 @@ const CGFloat FBMaxCompressionQuality = 1.0f;
     }
   
     UIImage *image = [UIImage imageWithData:imageData];
+    UIImageOrientation desiredOrientation = orientation == nil
+      ? image.imageOrientation
+      : (UIImageOrientation)orientation.integerValue;
     if (nil == image
         || (!usesScaling && image.imageOrientation == UIImageOrientationUp
-            && (orientation == nil || orientation.integerValue == UIImageOrientationUp))) {
+            && desiredOrientation == UIImageOrientationUp)) {
       return [uti conformsToType:UTTypePNG] ? FBToPngData(imageData) : FBToJpegData(imageData, compressionQuality);
     }
     
-    if (!fixOrientation && usesScaling) {
+    if (!fixOrientation) {
       CGSize scaledSize = CGSizeMake(image.size.width * scalingFactor, image.size.height * scalingFactor);
       dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
       __block UIImage *result = nil;
@@ -144,9 +147,6 @@ const CGFloat FBMaxCompressionQuality = 1.0f;
         : UIImageJPEGRepresentation(result, compressionQuality);
     }
   
-    UIImageOrientation desiredOrientation = orientation == nil
-      ? image.imageOrientation
-      : (UIImageOrientation)orientation.integerValue;
     UIImage *uiImage = [UIImage imageWithCGImage:(CGImageRef)image.CGImage
                                            scale:image.scale
                                      orientation:desiredOrientation];

@@ -221,8 +221,9 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *)excludedAttributes
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
+  BOOL includeVisibility = ![excludedAttributes containsObject:FBExclusionAttributeVisible];
   return [self.class dictionaryForElement:snapshot
-                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot, ![excludedAttributes containsObject:FBExclusionAttributeVisible])
+                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot, includeVisibility)
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
 }
@@ -252,8 +253,11 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
     info[FBExclusionAttributeFrame] = NSStringFromCGRect(geometry.wdFrame);
   }
   
-  NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot
-                                                                                                      geometry:geometry];
+  if (![excludedAttributes containsObject:FBExclusionAttributeVisible]) {
+    info[FBJsonPrefixedAttributeKey(FBExclusionAttributeVisible)] = @(geometry.wdVisible).stringValue;
+  }
+
+  NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
   NSSet *nonPrefixedKeys = [NSSet setWithObjects:
                             FBExclusionAttributePlaceholderValue,
@@ -297,7 +301,6 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 // Helper used by `dictionaryForElement:` to assemble attribute value blocks,
 // including both common attributes and conditionally included ones like placeholderValue.
 + (NSDictionary<NSString *, NSString *(^)(void)> *)fb_attributeBlockMapForWrappedSnapshot:(FBXCElementSnapshotWrapper *)wrappedSnapshot
-                                                                                 geometry:(FBXCElementSnapshotWrapper *)geometry
 {
   // Base attributes common to every element
   NSMutableDictionary<NSString *, id(^)(void)> *blocks =
@@ -307,9 +310,6 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   },
     FBExclusionAttributeEnabled: ^{
     return [@([wrappedSnapshot isWDEnabled]) stringValue];
-  },
-    FBExclusionAttributeVisible: ^{
-    return [@(geometry.wdVisible) stringValue];
   },
     FBExclusionAttributeAccessible: ^{
     return [@([wrappedSnapshot isWDAccessible]) stringValue];

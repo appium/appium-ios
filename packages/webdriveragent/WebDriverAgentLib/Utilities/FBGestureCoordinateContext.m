@@ -39,6 +39,40 @@
 - (id)_transformPointWithRequest:(id)request error:(NSError **)error;
 @end
 
+// Element offsets use the accessibility frame. A tap without an offset uses
+// XCTest's hit point, which may require scrolling the element into view first.
+static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSError **error)
+{
+  id<FBXCElementSnapshot> snapshot = element.fb_standardSnapshot;
+  if (offset != nil) {
+    CGRect frame = snapshot.frame;
+    if (CGRectIsEmpty(frame)) {
+      [[[FBErrorBuilder builder] withDescription:@"The hosted element has an empty frame"] buildError:error];
+      return nil;
+    }
+    return [NSValue valueWithCGPoint:CGPointMake(frame.origin.x + offset.CGPointValue.x,
+                                                 frame.origin.y + offset.CGPointValue.y)];
+  }
+  XCUIHitPointResult *hitPoint = [snapshot hitPoint:error];
+  if (!hitPoint.isHittable) {
+    if (![element fb_scrollToVisibleWithError:error]) {
+      return nil;
+    }
+    hitPoint = [element.fb_standardSnapshot hitPoint:error];
+  }
+  if (!hitPoint.isHittable) {
+    [[[FBErrorBuilder builder] withDescription:@"The hosted element has no hittable point"] buildError:error];
+    return nil;
+  }
+  return [NSValue valueWithCGPoint:hitPoint.hitPoint];
+}
+
+static XCUICoordinate *FBCoordinateInWindow(XCUIElement *window, CGRect frame, CGPoint point)
+{
+  return [window coordinateWithNormalizedOffset:CGVectorMake((point.x - frame.origin.x) / frame.size.width,
+                                                            (point.y - frame.origin.y) / frame.size.height)];
+}
+
 @interface FBWindowCoordinateAnchor : NSObject
 @property (nonatomic) XCUIElement *window;
 @property (nonatomic) CGRect frame;
@@ -47,10 +81,7 @@
 @implementation FBWindowCoordinateAnchor
 - (XCUICoordinate *)coordinateWithOffset:(CGVector)offset
 {
-  // Use the captured frame; FBCoordinateWithAnchorOffset would query it again.
-  return [self.window coordinateWithNormalizedOffset:CGVectorMake(
-    (offset.dx - self.frame.origin.x) / self.frame.size.width,
-    (offset.dy - self.frame.origin.y) / self.frame.size.height)];
+  return FBCoordinateInWindow(self.window, self.frame, CGPointMake(offset.dx, offset.dy));
 }
 @end
 
@@ -72,8 +103,8 @@
   // Resolve affinity before testing it. Regular windows retain XCTest's native
   // scrolling, hit testing, and tap behavior.
   (void)element.frame;
-  if (element.screen.displayID == selectedDisplay.longLongValue
-      || element.screen.displayID != XCUIScreen.mainScreen.displayID) {
+  long long elementDisplayID = element.screen.displayID;
+  if (elementDisplayID == selectedDisplay.longLongValue || elementDisplayID != XCUIScreen.mainScreen.displayID) {
     return nil;
   }
   XCUIApplication *application = element.application;
@@ -81,20 +112,20 @@
   if (nil != FBWindowOnDisplay(application, selectedDisplay.longLongValue, &windowFrame)) {
     return nil;
   }
-  Class parametersClass = NSClassFromString(@"XCUITransformParameters");
-  Class requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
+  Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
+  Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
   if (![parametersClass respondsToSelector:@selector(transformParametersWithWindowID:displayID:)]
       || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
     return nil;
   }
-  FBGestureCoordinateContext *context = [self contextWithDisplayRequired:YES error:error];
-  if (nil == context) {
+  XCUIScreen *screen = [FBScreen screenWithDisplayID:selectedDisplay.longLongValue error:error];
+  if (nil == screen) {
     return @NO;
   }
   // Require a system window on the destination before overriding the app
   // window's reported display. It also supplies the viewport coordinate anchor.
   XCUIElement *systemWindow = FBWindowOnDisplay(XCUIApplication.fb_systemApplication,
-                                               context.screen.displayID, &windowFrame);
+                                               screen.displayID, &windowFrame);
   if (nil == systemWindow) {
     [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
     return @NO;
@@ -109,35 +140,11 @@
       [[[FBErrorBuilder builder] withDescription:@"The selected system window has an empty frame"] buildError:error];
       return @NO;
     }
-    CGPoint requestedPoint = offset.CGPointValue;
-    XCUICoordinate *coordinate = [systemWindow coordinateWithNormalizedOffset:CGVectorMake(
-      (requestedPoint.x - nativeFrame.origin.x) / nativeFrame.size.width,
-      (requestedPoint.y - nativeFrame.origin.y) / nativeFrame.size.height)];
-    point = coordinate.screenPoint;
+    point = FBCoordinateInWindow(systemWindow, nativeFrame, offset.CGPointValue).screenPoint;
   } else {
-    id<FBXCElementSnapshot> rawSnapshot = element.fb_standardSnapshot;
-    CGPoint rawPoint;
-    if (nil == offset) {
-      XCUIHitPointResult *hitPoint = [rawSnapshot hitPoint:error];
-      if (nil == hitPoint || !hitPoint.isHittable) {
-        if (![element fb_scrollToVisibleWithError:error]) {
-          return @NO;
-        }
-        rawSnapshot = element.fb_standardSnapshot;
-        hitPoint = [rawSnapshot hitPoint:error];
-      }
-      if (nil == hitPoint || !hitPoint.isHittable) {
-        [[[FBErrorBuilder builder] withDescription:@"The hosted element has no hittable point"] buildError:error];
-        return @NO;
-      }
-      rawPoint = hitPoint.hitPoint;
-    } else {
-      CGRect frame = rawSnapshot.frame;
-      if (CGRectIsEmpty(frame)) {
-        [[[FBErrorBuilder builder] withDescription:@"The hosted element has an empty frame"] buildError:error];
-        return @NO;
-      }
-      rawPoint = CGPointMake(frame.origin.x + offset.CGPointValue.x, frame.origin.y + offset.CGPointValue.y);
+    NSValue *rawPoint = FBHostedElementPoint(element, offset, error);
+    if (rawPoint == nil) {
+      return @NO;
     }
     id<FBHostedViewTransform> snapshot = (id)element.fb_nativeSnapshot;
     if (![snapshot respondsToSelector:@selector(_transformParametersOrError:)]
@@ -148,9 +155,9 @@
     if (nil == originalParameters) {
       return @NO;
     }
-    id parameters = [(id<FBHostedViewTransform>)parametersClass transformParametersWithWindowID:originalParameters.windowID
-                                                                                    displayID:context.screen.displayID];
-    id request = [(id<FBHostedViewTransform>)requestClass pointTransformationRequestWithPoint:rawPoint parameters:parameters];
+    id parameters = [parametersClass transformParametersWithWindowID:originalParameters.windowID
+                                                                displayID:screen.displayID];
+    id request = [requestClass pointTransformationRequestWithPoint:rawPoint.CGPointValue parameters:parameters];
     id<FBHostedViewTransform> transformed = [snapshot _transformPointWithRequest:request error:error];
     if (nil == transformed) {
       return @NO;
@@ -164,8 +171,8 @@
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];
   [path liftUpAtOffset:0.05];
   XCSynthesizedEventRecord *event = [[XCSynthesizedEventRecord alloc] initWithName:@"Hosted window tap"
-                                                                                    displayID:context.screen.displayID
-                                                                         interfaceOrientation:application.interfaceOrientation];
+                                                                         displayID:screen.displayID
+                                                              interfaceOrientation:application.interfaceOrientation];
   [event addPointerEventPath:path];
   if (![FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:error]) {
     return @NO;

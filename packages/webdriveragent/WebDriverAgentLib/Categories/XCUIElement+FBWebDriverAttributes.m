@@ -46,11 +46,12 @@
         && ([name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
             || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
             || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
-  if ([name isEqualToString:FBStringify(XCUIElement, wdRect)] || [name isEqualToString:FBStringify(XCUIElement, wdFrame)]
+  BOOL needsDisplaySnapshot = [name isEqualToString:FBStringify(XCUIElement, wdRect)]
+    || [name isEqualToString:FBStringify(XCUIElement, wdFrame)];
 #if TARGET_OS_SIMULATOR
-      || [name isEqualToString:FBStringify(XCUIElement, isWDVisible)]
+  needsDisplaySnapshot |= [name isEqualToString:FBStringify(XCUIElement, isWDVisible)];
 #endif
-      ) {
+  if (needsDisplaySnapshot) {
     return FBSnapshotForDisplayGeometry(self, isCustomSnapshot);
   }
   return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];

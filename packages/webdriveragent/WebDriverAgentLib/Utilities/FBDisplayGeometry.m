@@ -103,17 +103,9 @@ static id<FBAXDisplayElement> FBUniqueDisplayElement(id<FBXCElementSnapshot> ori
                                                      long long displayID)
 {
   id<FBAXDisplayElement> match = nil;
-  NSString *reason = @"no identifier and label match";
+  // The window index has already matched these candidates by identifier.
   for (id<FBAXDisplayElement> candidate in elements) {
-    if (![candidate respondsToSelector:@selector(axIdentifier)]) {
-      reason = @"candidate has no axIdentifier selector";
-      continue;
-    }
-    if (![(candidate.axIdentifier ?: @"") isEqualToString:(original.identifier ?: @"")]) {
-      continue;
-    }
     if (![candidate respondsToSelector:@selector(windowDisplayId)] || ![candidate respondsToSelector:@selector(label)]) {
-      reason = @"candidate has no windowDisplayId or label selector";
       continue;
     }
     if (candidate.windowDisplayId == displayID && [candidate.label isEqualToString:original.label]) {
@@ -125,7 +117,7 @@ static id<FBAXDisplayElement> FBUniqueDisplayElement(id<FBXCElementSnapshot> ori
     }
   }
   if (match == nil) {
-    [FBLogger verboseLogFmt:@"Display geometry: cannot resolve '%@' on display %lld (%@)", original.identifier, displayID, reason];
+    [FBLogger verboseLogFmt:@"Display geometry: cannot resolve '%@' on display %lld", original.identifier, displayID];
   }
   return match;
 }
@@ -296,25 +288,31 @@ static NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *FBAccessibil
   return index;
 }
 
-static BOOL FBIsControlCenterFolder(id<FBXCElementSnapshot> node)
+static BOOL FBControlCenterNeedsSnapshotVisibility(id<FBXCElementSnapshot> window, long long displayID)
 {
-  return [node.identifier isEqualToString:@"cc-root-folder-view"];
+  if (![window hasDescendantMatchingFilter:^BOOL(id<FBXCElementSnapshot> node) {
+    return [node.identifier isEqualToString:@"cc-root-folder-view"] && !CGRectIsEmpty(node.frame);
+  }]) {
+    return NO;
+  }
+  // A confirmed cover supports live visibility reads. On the inner panel or
+  // an unidentified panel, those reads can dismiss Control Center.
+  XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
+  return screen == nil || screen.displayID != displayID || ![[FBHIDOperations isInnerDuoDisplay:screen] isEqual:@NO];
 }
 
 static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, NSNumber *display, FBDisplaySnapshotMap *matches,
                                       UIInterfaceOrientation orientation)
 {
   NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *byIdentifier = nil;
-  NSArray *nodes = scope._allDescendants;
-  if (scope.elementType != XCUIElementTypeWindow) {
-    nodes = [@[scope] arrayByAddingObjectsFromArray:nodes ?: @[]];
-  }
+  NSArray *nodes = [@[scope] arrayByAddingObjectsFromArray:scope._allDescendants ?: @[]];
+  id<FBXCElementSnapshot> window = nil;
   for (id<FBXCElementSnapshot> node in nodes) {
     if (!FBHasOtherDisplay(node, display) || !FBCanMatchDisplayElement(node)) {
       continue;
     }
     if (byIdentifier == nil) {
-      id<FBXCElementSnapshot> window = FBWindowForScope(scope);
+      window = FBWindowForScope(scope);
       if (![window respondsToSelector:@selector(displayID)] || window.displayID != display.longLongValue) {
         return;
       }
@@ -326,21 +324,33 @@ static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, NSNumber *d
       FBResolveModuleIcon(node, live, matches);
     }
   }
-  if (UIInterfaceOrientationIsLandscape(orientation)) {
-    CGSize size = FBPortraitWindowSize(FBWindowForScope(scope), display.longLongValue);
-    if (!CGSizeEqualToSize(size, CGSizeZero)) {
-      if (scope.elementType == XCUIElementTypeWindow) {
-        [matches setObject:FBOrientedSnapshotForDisplay(scope, display.longLongValue, size, orientation) forKey:scope];
-      }
-      for (id<FBXCElementSnapshot> node in nodes) {
-        id<FBXCElementSnapshot> geometry = [matches objectForKey:node] ?: node;
-        id<FBXCElementSnapshot> oriented = FBOrientedSnapshotForDisplay(geometry, display.longLongValue, size, orientation);
-        if (oriented != geometry) {
-          [matches setObject:oriented forKey:node];
-        }
-      }
+  if (!UIInterfaceOrientationIsLandscape(orientation)) {
+    return;
+  }
+  CGSize size = FBPortraitWindowSize(window ?: FBWindowForScope(scope), display.longLongValue);
+  if (CGSizeEqualToSize(size, CGSizeZero)) {
+    return;
+  }
+  for (id<FBXCElementSnapshot> node in nodes) {
+    id<FBXCElementSnapshot> geometry = [matches objectForKey:node] ?: node;
+    id<FBXCElementSnapshot> oriented = FBOrientedSnapshotForDisplay(geometry, display.longLongValue, size, orientation);
+    if (oriented != geometry) {
+      [matches setObject:oriented forKey:node];
     }
   }
+}
+
+static NSArray<id<FBXCElementSnapshot>> *FBWindowsOnDisplay(id<FBXCElementSnapshot> tree, long long displayID)
+{
+  NSMutableArray<id<FBXCElementSnapshot>> *windows = [NSMutableArray array];
+  for (id<FBXCElementSnapshot> window in tree.children) {
+    if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
+        || window.displayID != displayID) {
+      continue;
+    }
+    [windows addObject:window];
+  }
+  return windows;
 }
 
 // The same AX identity can occur below both panels. An application-wide
@@ -350,20 +360,11 @@ static id<FBXCElementSnapshot> FBMemberOnDisplay(id<FBXCElementSnapshot> tree,
                                                  id<FBXCElementSnapshot> *matchingWindow)
 {
   *matchingWindow = nil;
-  id<FBXCElementSnapshot> member = [tree elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
-  id<FBXCElementSnapshot> parentWindow = [[FBXCElementSnapshotWrapper ensureWrapped:member] fb_parentMatchingType:XCUIElementTypeWindow];
-  if ([parentWindow respondsToSelector:@selector(displayID)] && parentWindow.displayID == displayID) {
-    *matchingWindow = parentWindow;
-    return member;
-  }
   id<FBXCElementSnapshot> result = nil;
   id<FBXCElementSnapshot> resultWindow = nil;
-  for (id<FBXCElementSnapshot> window in tree.children) {
-    if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
-        || window.displayID != displayID) {
-      continue;
-    }
-    member = [window elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
+  NSArray *windows = FBWindowsOnDisplay(tree, displayID);
+  for (id<FBXCElementSnapshot> window in windows) {
+    id<FBXCElementSnapshot> member = [window elementSnapshotMatchingAccessibilityElement:snapshot.accessibilityElement];
     if (member == nil) {
       continue;
     }
@@ -379,11 +380,7 @@ static id<FBXCElementSnapshot> FBMemberOnDisplay(id<FBXCElementSnapshot> tree,
   }
   // The other panel can also vend a distinct AX identity for the same control.
   // Accept only a unique type/identifier/label match across the target windows.
-  for (id<FBXCElementSnapshot> window in tree.children) {
-    if (window.elementType != XCUIElementTypeWindow || ![window respondsToSelector:@selector(displayID)]
-        || window.displayID != displayID) {
-      continue;
-    }
+  for (id<FBXCElementSnapshot> window in windows) {
     for (id<FBXCElementSnapshot> candidate in window._allDescendants) {
       if (candidate.elementType != snapshot.elementType || ![candidate.label isEqualToString:snapshot.label]
           || ![(candidate.identifier ?: @"") isEqualToString:(snapshot.identifier ?: @"")]) {
@@ -456,7 +453,7 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
       // and its geometry together in the window used by page source.
       id<FBXCElementSnapshot> tree = [element.application fb_standardSnapshot];
       id<FBXCElementSnapshot> member = FBMemberOnDisplay(tree, snapshot, display.longLongValue, &window);
-      if (member != nil && window != nil) {
+      if (member != nil) {
         [FBLogger verboseLogFmt:@"Display geometry: '%@' on display %@, query frame %@, window member frame %@",
          snapshot.identifier.length > 0 ? snapshot.identifier : snapshot.label, display,
          NSStringFromCGRect(snapshot.frame), NSStringFromCGRect(member.frame)];
@@ -501,33 +498,21 @@ FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BO
   FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
                                                         valueOptions:NSPointerFunctionsStrongMemory];
   UIInterfaceOrientation orientation = FBGeometryOrientation();
-  if (root.elementType == XCUIElementTypeApplication) {
-    for (id<FBXCElementSnapshot> window in root.children) {
-      if (window.elementType == XCUIElementTypeWindow && [window respondsToSelector:@selector(displayID)]
-          && window.displayID == display.longLongValue) {
-        FBCollectDisplaySnapshots(window, display, matches, orientation);
-      }
-    }
-  } else {
+  if (root.elementType != XCUIElementTypeApplication) {
     FBCollectDisplaySnapshots(root, display, matches, orientation);
+    return matches;
   }
-  if (includeVisibility && FBDeviceHasHinge() && root.elementType == XCUIElementTypeApplication) {
-    for (id<FBXCElementSnapshot> window in root.children) {
-      if (window.elementType == XCUIElementTypeWindow && window.displayID == display.longLongValue
-          && [window hasDescendantMatchingFilter:^BOOL(id<FBXCElementSnapshot> node) {
-            return FBIsControlCenterFolder(node) && !CGRectIsEmpty(node.frame);
-          }]) {
-        // The cover supports normal visibility reads with Control Center open.
-        // Preserve passive reads when the selected panel cannot be identified.
-        XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
-        NSNumber *inner = screen != nil && screen.displayID == display.longLongValue
-          ? [FBHIDOperations isInnerDuoDisplay:screen] : nil;
-        if (![inner isEqualToNumber:@NO]) {
-          FBCollectSourceVisibility(root, display.longLongValue, matches);
-        }
-        break;
-      }
+
+  BOOL checkVisibility = includeVisibility && FBDeviceHasHinge();
+  BOOL useSnapshotVisibility = NO;
+  for (id<FBXCElementSnapshot> window in FBWindowsOnDisplay(root, display.longLongValue)) {
+    FBCollectDisplaySnapshots(window, display, matches, orientation);
+    if (checkVisibility && !useSnapshotVisibility) {
+      useSnapshotVisibility = FBControlCenterNeedsSnapshotVisibility(window, display.longLongValue);
     }
+  }
+  if (useSnapshotVisibility) {
+    FBCollectSourceVisibility(root, display.longLongValue, matches);
   }
   return matches;
 #else
