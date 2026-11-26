@@ -337,8 +337,15 @@
   id<FBXCElementSnapshot> app = [springboard fb_standardSnapshot];
   id<FBXCElementSnapshot> button = [app elementSnapshotMatchingAccessibilityElement:[addControls fb_standardSnapshot].accessibilityElement];
   FBDisplaySnapshotMap *source = FBDisplaySnapshotsForTree(app, YES);
-  FBXCElementSnapshotWrapper *sourceButton = [FBXCElementSnapshotWrapper ensureWrapped:[source objectForKey:button]];
-  XCTAssertNotNil(sourceButton);
+  XCTAssertNotNil(button);
+  id<FBXCElementSnapshot> sourceSnapshot = [source objectForKey:button];
+  if (angle == 0) {
+    // This button needs neither geometry correction nor passive visibility on the cover.
+    XCTAssertNil(sourceSnapshot);
+  } else {
+    XCTAssertNotNil(sourceSnapshot);
+  }
+  FBXCElementSnapshotWrapper *sourceButton = [FBXCElementSnapshotWrapper ensureWrapped:sourceSnapshot ?: button];
   XCTAssertTrue(sourceButton.isWDVisible);
   XCTAssertNil([self screenInfoResponse][@"error"]);
   XCTAssertTrue(addControls.exists);

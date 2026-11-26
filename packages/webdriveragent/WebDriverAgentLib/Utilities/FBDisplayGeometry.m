@@ -13,6 +13,7 @@
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 #import "FBLogger.h"
+#import "FBHIDOperations+DuoRotation.h"
 #import "XCTestPrivateSymbols.h"
 #import "XCUIDevice+FBHinge.h"
 #import "FBScreen.h"
@@ -516,7 +517,14 @@ FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BO
           && [window hasDescendantMatchingFilter:^BOOL(id<FBXCElementSnapshot> node) {
             return FBIsControlCenterFolder(node) && !CGRectIsEmpty(node.frame);
           }]) {
-        FBCollectSourceVisibility(root, display.longLongValue, matches);
+        // The cover supports normal visibility reads with Control Center open.
+        // Preserve passive reads when the selected panel cannot be identified.
+        XCUIScreen *screen = [FBScreen currentScreenWithError:nil];
+        NSNumber *inner = screen != nil && screen.displayID == display.longLongValue
+          ? [FBHIDOperations isInnerDuoDisplay:screen] : nil;
+        if (![inner isEqualToNumber:@NO]) {
+          FBCollectSourceVisibility(root, display.longLongValue, matches);
+        }
         break;
       }
     }
