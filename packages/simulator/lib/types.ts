@@ -62,9 +62,18 @@ export type DisplayId = string | number;
 export interface DisplayInfo {
   /** Port UUID identifying the display — pass it as `displayId` to screenshot/recording/stream APIs. */
   id: string;
-  /** Raw `SimDisplayDescriptorState.displayClass` — 0 is always the primary display. */
+  /**
+   * Guest screen ID, when available. Matches XCTest's displayID, so it can be used to associate
+   * a display with the one WDA reports, and is also accepted as a numeric `displayId` by `getScreenshot`.
+   */
+  screenId?: number;
+  /** Raw `SimDisplayDescriptorState.displayClass` — 0 is always a built-in display. */
   displayClass: number;
-  /** Whether this is the primary display (`displayClass === 0`). */
+  /**
+   * Whether `displayClass === 0`. This does not identify a unique primary display: multiple
+   * integrated displays can have class 0 (e.g. both iPhone Duo panels report `true`), and it is
+   * not interchangeable with XCTest's `isMainScreen`. Use `screenId` to tell such displays apart.
+   */
   isMain: boolean;
 }
 
@@ -424,8 +433,8 @@ export interface SupportsScreenshot {
 export interface SupportsDisplays {
   /**
    * Lists the Simulator's renderable displays. The Simulator must be booted.
-   * Use a display's `id` as the `displayId` of the screenshot/recording/stream APIs,
-   * e.g. to pick the primary (`isMain`) or an external display.
+   * Use a display's `id` as the `displayId` of the screenshot/recording/stream APIs.
+   * On multi-display devices such as iPhone Duo, tell the displays apart by `screenId`.
    */
   getDisplays(): Promise<DisplayInfo[]>;
 }

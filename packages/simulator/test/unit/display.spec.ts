@@ -8,8 +8,8 @@ import {getDisplays} from '../../lib/extensions/display.js';
 describe('simulator displays', function () {
   it('lists the displays of the device', async function () {
     const displays = [
-      {id: 'main-port', displayClass: 0, isMain: true},
-      {id: 'external-port', displayClass: 1, isMain: false},
+      {id: 'main-port', screenId: 1, displayClass: 0, isMain: true},
+      {id: 'second-port', screenId: 2, displayClass: 0, isMain: true},
     ];
     const list = sinon.stub().resolves(displays);
     const simulator = {udid: 'sim-1', _native: {getDisplays: list}} as any;
