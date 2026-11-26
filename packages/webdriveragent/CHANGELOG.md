@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.5...appium-webdriveragent@17.1.6) (2026-11-26)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve XPath match order when resolving elements by query ([#250](https://github.com/appium/appium-ios/issues/250)) ([97ad200](https://github.com/appium/appium-ios/commit/97ad200e85dc175c5b7daf502f1941aad47a610e))
+
+### Performance Improvements
+
+* **webdriveragent:** skip re-resolving AX-bound matches when native caching is off ([#246](https://github.com/appium/appium-ios/issues/246)) ([620e233](https://github.com/appium/appium-ios/commit/620e23360aed8e043f6a4dea85f44daa45d59960))
+
+
 ## [17.1.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.4...appium-webdriveragent@17.1.5) (2026-11-26)
 
 ### Bug Fixes
