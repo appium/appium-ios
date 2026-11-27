@@ -81,10 +81,12 @@ it is a known limitation observed in the Apple compatibility-layout/XCTest path,
 although the failing internal component has not been identified. Physical devices
 and other SDK/runtime combinations remain unverified.
 
-Select the app's `currentDisplayId` explicitly, but be aware that selecting the
-correct display does not resolve this issue. WDA does not apply a compatibility
-coordinate correction. Rebuilding with SDK 27.2 avoided the failure in the tested
-app; for diagnosis, compare direct XCTest taps with app-recorded input.
+Select the app's `currentDisplayId` explicitly. For element clicks and mobile taps,
+WDA can correct the case where XCTest assigns the hosted app to the main display
+and reports no application window on the selected display. Before sending the
+corrected tap, WDA checks that the app owns the tap point on the selected display.
+A SpringBoard window alone is insufficient. The ordinary application-window
+requirement above still applies to other coordinate gestures.
 
 ## XCTest recording on the Duo simulator
 

@@ -16,6 +16,7 @@
 #import "XCUIApplication+FBHelpers.h"
 #import "XCUIDevice+FBHelpers.h"
 #import "FBScreen.h"
+#import "XCUIElement+FBFind.h"
 #import "XCUIElement+FBUtilities.h"
 #import "FBDisplayGeometry.h"
 #import "FBRunLoopSpinner.h"
@@ -349,6 +350,12 @@
   } else {
     XCTAssertNotNil(sourceSnapshot);
   }
+  id<FBXCElementSnapshot> scopedButton = [addControls fb_standardSnapshot];
+  FBDisplaySnapshotMap *scoped = FBDisplaySnapshotsForTree(scopedButton, YES);
+  XCTAssertEqual([scoped objectForKey:scopedButton] != nil, angle != 0);
+  XCTAssertEqual([addControls fb_descendantsMatchingXPathQuery:@"self::*[@visible='true']"
+                                  shouldReturnAfterFirstMatch:YES].count, 1u);
+  XCTAssertTrue(addControls.exists);
   FBXCElementSnapshotWrapper *sourceButton = [FBXCElementSnapshotWrapper ensureWrapped:sourceSnapshot ?: button];
   XCTAssertTrue(sourceButton.isWDVisible);
   XCTAssertNil([self screenInfoResponse][@"error"]);

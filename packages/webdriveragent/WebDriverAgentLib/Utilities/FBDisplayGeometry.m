@@ -184,14 +184,17 @@ static void FBResolveModuleIcon(id<FBXCElementSnapshot> original, id<FBXCElement
   }
 }
 
+static id<FBXCElementSnapshot> FBContainingWindow(id<FBXCElementSnapshot> scope)
+{
+  return scope.elementType == XCUIElementTypeWindow
+    ? scope : [[FBXCElementSnapshotWrapper ensureWrapped:scope] fb_parentMatchingType:XCUIElementTypeWindow];
+}
+
 // A scoped XPath snapshot can be detached from its containing window. Use the
 // application tree only to recover window identity; keep the original XPath scope.
 static id<FBXCElementSnapshot> FBWindowForScope(id<FBXCElementSnapshot> scope)
 {
-  if (scope.elementType == XCUIElementTypeWindow) {
-    return scope;
-  }
-  id<FBXCElementSnapshot> window = [[FBXCElementSnapshotWrapper ensureWrapped:scope] fb_parentMatchingType:XCUIElementTypeWindow];
+  id<FBXCElementSnapshot> window = FBContainingWindow(scope);
   if (window != nil) {
     return window;
   }
@@ -503,12 +506,25 @@ FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BO
   FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
                                                         valueOptions:NSPointerFunctionsStrongMemory];
   UIInterfaceOrientation orientation = FBGeometryOrientation();
+  BOOL checkVisibility = includeVisibility && FBDeviceHasHinge();
   if (root.elementType != XCUIElementTypeApplication) {
     FBCollectDisplaySnapshots(root, display, matches, orientation);
+    if (checkVisibility) {
+      id<FBXCElementSnapshot> window = FBContainingWindow(root);
+      if (window == nil) {
+        // XCTest can detach a scoped XPath snapshot. Recover its containing window
+        // on the selected display, but keep visibility collection inside the scope.
+        id<FBXCElementSnapshot> tree = [XCUIApplication.fb_systemApplication fb_standardSnapshot];
+        FBMemberOnDisplay(tree, root, display.longLongValue, &window);
+      }
+      if ([window respondsToSelector:@selector(displayID)] && window.displayID == display.longLongValue
+          && FBControlCenterNeedsSnapshotVisibility(window, display.longLongValue)) {
+        FBCollectSourceVisibility(root, display.longLongValue, matches);
+      }
+    }
     return matches;
   }
 
-  BOOL checkVisibility = includeVisibility && FBDeviceHasHinge();
   BOOL useSnapshotVisibility = NO;
   for (id<FBXCElementSnapshot> window in FBWindowsOnDisplay(root, display.longLongValue)) {
     FBCollectDisplaySnapshots(window, display, matches, orientation);

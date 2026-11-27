@@ -26,6 +26,11 @@
 #import "XCPointerEventPath.h"
 #import "XCSynthesizedEventRecord.h"
 
+@protocol FBDisplayHitTestApplication <NSObject>
++ (instancetype)uiApplicationAtCoordinate:(CGPoint)point displayId:(unsigned int)displayID;
+@property (nonatomic, readonly) pid_t pid;
+@end
+
 // The hosted-view transform API is optional on older XCTest versions. Keep the
 // original window context and substitute only the selected display, without
 // changing XCTest's shared snapshots.
@@ -106,8 +111,9 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
     [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
     return @NO;
   }
+  BOOL isViewportTap = element.elementType == XCUIElementTypeApplication && nil != offset;
   CGPoint point;
-  if (element.elementType == XCUIElementTypeApplication && nil != offset) {
+  if (isViewportTap) {
     // These offsets are already viewport points. Normalize against XCTest's
     // native frame (not the app-space accessibility frame) so it applies only
     // the selected window's event-synthesis orientation transform.
@@ -142,6 +148,19 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   }
   if (!isfinite(point.x) || !isfinite(point.y)) {
     [[[FBErrorBuilder builder] withDescription:@"The hosted tap coordinate is not finite"] buildError:error];
+    return @NO;
+  }
+  // SpringBoard can have a window even on the inactive panel. Before sending a
+  // hosted tap, verify that the app owns the hit point on the destination display.
+  Class<FBDisplayHitTestApplication> axClass = NSClassFromString(@"AXUIElement");
+  id<FBDisplayHitTestApplication> hit = [axClass respondsToSelector:@selector(uiApplicationAtCoordinate:displayId:)]
+    ? [axClass uiApplicationAtCoordinate:point displayId:(unsigned int)screen.displayID] : nil;
+  if (![hit respondsToSelector:@selector(pid)] || hit.pid <= 0 || hit.pid != application.processID) {
+    if (isViewportTap) {
+      return nil; // Let the normal viewport path report the missing application window.
+    }
+    [[[FBErrorBuilder builder] withDescription:@"Cannot verify the target application at the tap point on the selected display"]
+      buildError:error];
     return @NO;
   }
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];

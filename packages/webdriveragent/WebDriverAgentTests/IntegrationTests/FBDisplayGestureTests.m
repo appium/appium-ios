@@ -16,6 +16,10 @@
 #import "FBRunLoopSpinner.h"
 #import "FBExceptions.h"
 #import "FBElementCommands.h"
+#import "FBRouteRequest-Private.h"
+#import "FBSession.h"
+#import "FBResponsePayload.h"
+#import "RouteResponse.h"
 #import "FBElementCache.h"
 #import "FBBaseActionsSynthesizer.h"
 #import "FBW3CActionsSynthesizer.h"
@@ -23,6 +27,7 @@
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBElementCommands (CoordinateTests)
++ (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request;
 + (nullable XCUICoordinate *)gestureCoordinateWithOffset:(CGVector)offset element:(XCUIElement *)element error:(NSError **)error;
 + (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets element:(XCUIElement *)element error:(NSError **)error;
 @end
@@ -288,6 +293,37 @@
     XCTAssertNotNil(error);
   }
   XCTSkipIf(!checkedSecondaryDisplay, @"Requires an available secondary display without the fixture");
+}
+
+- (void)testViewportTapRejectsInactiveInnerDisplay
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:0 error:nil]);
+  [self.testedApplication terminate];
+  [self launchApplication];
+
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/tap"]
+                                                     parameters:@{} arguments:@{@"x": @40, @"y": @100}];
+  request.session = [FBSession initWithApplication:self.testedApplication];
+  request.session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [request.session kill]; }];
+  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+    if ([screen[@"isMain"] boolValue]) {
+      continue;
+    }
+    FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
+    RouteResponse *response = [RouteResponse new];
+    [[FBElementCommands handleTap:request] dispatchWithResponse:response];
+    NSDictionary *value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(value[@"error"], @"invalid argument");
+    XCTAssertTrue([value[@"message"] containsString:@"No non-empty application window"]);
+    return;
+  }
+  XCTFail(@"Expected an inner display in the folded Duo's screen list");
 }
 
 - (void)testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp
