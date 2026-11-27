@@ -15,21 +15,32 @@ const notFoundError = () =>
     EncodedError: {ErrorCode: 7000, NSUnderlyingError: {ErrorCode: 2, ErrorDomain: 'NSPOSIXErrorDomain'}},
   });
 
+/** Error the device reports for a directory outside the container access policy. */
+const accessRestrictedError = () =>
+  new CoreDeviceError('access restricted', {
+    EncodedError: {ErrorCode: 11007, ErrorDomain: 'com.apple.dt.remoteservices.error'},
+  });
+
 interface Options {
   /** Directory contents; a directory that is absent does not exist on the device. */
   files?: Record<string, string[]>;
+  /** Directories the device refuses to list. */
+  restricted?: string[];
   startError?: Error;
   listError?: Error;
   rmError?: Error;
 }
 
-async function setup(t: TestContext, {files = {}, startError, listError, rmError}: Options = {}) {
+async function setup(t: TestContext, {files = {}, restricted = [], startError, listError, rmError}: Options = {}) {
   const removed: string[] = [];
   const state = {started: 0, closed: false};
   const fileService = {
     listFilePaths: async (dir: string) => {
       if (listError) {
         throw listError;
+      }
+      if (restricted.includes(dir)) {
+        throw accessRestrictedError();
       }
       if (!(dir in files)) {
         throw notFoundError();
@@ -85,6 +96,15 @@ describe('XCTestAttachment.delete', function () {
     const {XCTestAttachment, removed} = await setup(t, {files: {Attachments: [UUID]}});
     await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, [`Attachments/${UUID}`]);
+  });
+
+  it('skips a directory the device does not allow access to', async function (t) {
+    const {XCTestAttachment, removed} = await setup(t, {
+      files: {'tmp/Attachments': [UUID]},
+      restricted: ['Attachments'],
+    });
+    await new XCTestAttachment(UDID).delete([UUID]);
+    assert.deepEqual(removed, [`tmp/Attachments/${UUID}`]);
   });
 
   it('removes the attachment from both directories', async function (t) {

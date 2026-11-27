@@ -27,6 +27,7 @@ import {
   DEFAULT_PUSHED_FILE_PERMISSIONS,
   DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
   DEVICE_ENOENT,
+  FILE_SERVICE_ACCESS_RESTRICTED,
   DEVICE_ENOTEMPTY,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
@@ -1120,6 +1121,17 @@ function isDirectoryNotEmptyError(err: unknown): boolean {
  */
 export function isFileNotFoundError(err: unknown): boolean {
   return hasDevicePosixError(err, DEVICE_ENOENT);
+}
+
+/**
+ * Whether the device refused a path that is outside the directories the container access
+ * policy allows (for an app container: `Library`, `Documents` and `tmp`).
+ */
+export function isAccessRestrictedError(err: unknown): boolean {
+  return (
+    err instanceof CoreDeviceError &&
+    asNumber(asDictionary(err.response?.EncodedError)?.ErrorCode) === FILE_SERVICE_ACCESS_RESTRICTED
+  );
 }
 
 function hasDevicePosixError(err: unknown, code: number): boolean {

@@ -1,5 +1,5 @@
 import * as Services from '../../../services.js';
-import {isFileNotFoundError} from '../file-service/index.js';
+import {isAccessRestrictedError, isFileNotFoundError} from '../file-service/index.js';
 import {canonicalizeUuidString} from './uuid.js';
 
 /** Bundle id of the data container testmanagerd stores attachments in. */
@@ -51,7 +51,8 @@ export class XCTestAttachment {
         try {
           present = await fileService.listFilePaths(directory);
         } catch (err) {
-          if (isFileNotFoundError(err)) {
+          // A missing directory, or one outside the container access policy (iOS 27: only tmp)
+          if (isFileNotFoundError(err) || isAccessRestrictedError(err)) {
             continue;
           }
           throw err;
