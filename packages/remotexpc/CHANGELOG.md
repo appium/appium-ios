@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.13](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.12...appium-ios-remotexpc@6.1.13) (2026-11-27)
+
+### Bug Fixes
+
+* **remotexpc:** remove XCTest attachments via the file service ([#259](https://github.com/appium/appium-ios/issues/259)) ([ef17126](https://github.com/appium/appium-ios/commit/ef17126696a21bbbc6309df002eee1c1b403e6ff))
+
+
 ## [6.1.12](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.11...appium-ios-remotexpc@6.1.12) (2026-11-27)
 
 **Note:** Version bump only for package appium-ios-remotexpc
