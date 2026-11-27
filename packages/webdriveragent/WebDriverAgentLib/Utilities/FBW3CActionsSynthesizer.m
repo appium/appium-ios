@@ -691,6 +691,11 @@ static BOOL FBIsZeroPause(FBW3CKeyItem *item)
 @end
 
 
+@implementation FBKeyAction
+
+@end
+
+
 @interface FBKeyActionStep : NSObject
 
 /*! The record to perform. A delay is performed instead if the record is nil */
@@ -1053,27 +1058,20 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
   return step;
 }
 
-// Types the accumulated text (if any) into a single record
-- (BOOL)flushText:(NSMutableString *)text intoSteps:(NSMutableArray<FBKeyActionStep *> *)steps error:(NSError **)error
+// Plans the accumulated text (if any) as a single action
+static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *actions)
 {
   if (0 == text.length) {
-    return YES;
+    return;
   }
-  XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTextInput];
-  [path typeText:text.copy
-        atOffset:0
-     typingSpeed:FBConfiguration.sharedInstance.maxTypingFrequency
-    shouldRedact:YES];
+  FBKeyAction *action = [FBKeyAction new];
+  action.kind = FBKeyActionKindText;
+  action.value = text.copy;
+  [actions addObject:action];
   [text setString:@""];
-  FBKeyActionStep *step = [self keyStepWithPath:path beginsPersistentState:NO endsPersistentState:NO error:error];
-  if (nil == step) {
-    return NO;
-  }
-  [steps addObject:step];
-  return YES;
 }
 
-- (nullable NSArray<FBKeyActionStep *> *)keyActionStepsWithError:(NSError **)error
+- (nullable NSArray<FBKeyAction *> *)keyActionsWithError:(NSError **)error
 {
   NSDictionary<NSString *, id> *action = [self singleKeyAction];
   NSString *actionId = [action objectForKey:FB_KEY_ID];
@@ -1087,9 +1085,7 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
     return nil;
   }
 
-  // XCTest calculates modifier key events for a whole record upfront, so keys typed under a modifier
-  // go to their own records. The modifiers survive between the records thanks to the persistent state.
-  NSMutableArray<FBKeyActionStep *> *result = [NSMutableArray array];
+  NSMutableArray<FBKeyAction *> *result = [NSMutableArray array];
   NSCountedSet<NSString *> *heldKeys = [NSCountedSet set];
   NSMutableString *pendingText = [NSMutableString string];
   for (FBW3CKeyItem *item in chain.items) {
@@ -1098,12 +1094,11 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
       if (durationMs <= 0) {
         continue;
       }
-      if (![self flushText:pendingText intoSteps:result error:error]) {
-        return nil;
-      }
-      FBKeyActionStep *step = [FBKeyActionStep new];
-      step.delay = durationMs / 1000.0;
-      [result addObject:step];
+      FBFlushText(pendingText, result);
+      FBKeyAction *delay = [FBKeyAction new];
+      delay.kind = FBKeyActionKindDelay;
+      delay.delay = durationMs / 1000.0;
+      [result addObject:delay];
       continue;
     }
 
@@ -1124,17 +1119,11 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
       if (newFlags == oldFlags) {
         continue;
       }
-      if (![self flushText:pendingText intoSteps:result error:error]) {
-        return nil;
-      }
-      FBKeyActionStep *step = [self keyStepWithPath:[self.class modifiersPathWithFlags:newFlags]
-                              beginsPersistentState:0 == oldFlags
-                                endsPersistentState:0 == newFlags
-                                              error:error];
-      if (nil == step) {
-        return nil;
-      }
-      [result addObject:step];
+      FBFlushText(pendingText, result);
+      FBKeyAction *modifiers = [FBKeyAction new];
+      modifiers.kind = FBKeyActionKindModifiers;
+      modifiers.modifierFlags = newFlags;
+      [result addObject:modifiers];
       continue;
     }
     if (isKeyDown) {
@@ -1161,18 +1150,64 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
       [pendingText appendString:text];
       continue;
     }
-    if (![self flushText:pendingText intoSteps:result error:error]) {
-      return nil;
+    FBFlushText(pendingText, result);
+    FBKeyAction *keyAction = [FBKeyAction new];
+    keyAction.kind = FBKeyActionKindKey;
+    keyAction.value = key ?: text;
+    keyAction.modifierFlags = flags;
+    [result addObject:keyAction];
+  }
+  FBFlushText(pendingText, result);
+  return result.copy;
+}
+
+// XCTest calculates modifier key events for a whole record upfront, so keys typed under a modifier
+// go to their own records. The modifiers survive between the records thanks to the persistent state.
+- (nullable NSArray<FBKeyActionStep *> *)keyActionStepsWithError:(NSError **)error
+{
+  NSArray<FBKeyAction *> *actions = [self keyActionsWithError:error];
+  if (nil == actions) {
+    return nil;
+  }
+
+  NSMutableArray<FBKeyActionStep *> *result = [NSMutableArray array];
+  NSUInteger heldFlags = 0;
+  for (FBKeyAction *action in actions) {
+    if (FBKeyActionKindDelay == action.kind) {
+      FBKeyActionStep *step = [FBKeyActionStep new];
+      step.delay = action.delay;
+      [result addObject:step];
+      continue;
     }
-    XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTextInput];
-    [path typeKey:key ?: text modifiers:flags atOffset:0];
-    FBKeyActionStep *step = [self keyStepWithPath:path beginsPersistentState:NO endsPersistentState:NO error:error];
+
+    XCPointerEventPath *path;
+    BOOL begins = NO, ends = NO;
+    switch (action.kind) {
+      case FBKeyActionKindModifiers:
+        path = [self.class modifiersPathWithFlags:action.modifierFlags];
+        begins = 0 == heldFlags;
+        ends = 0 == action.modifierFlags;
+        heldFlags = action.modifierFlags;
+        break;
+      case FBKeyActionKindText:
+        path = [[XCPointerEventPath alloc] initForTextInput];
+        [path typeText:action.value
+              atOffset:0
+           typingSpeed:FBConfiguration.sharedInstance.maxTypingFrequency
+          shouldRedact:YES];
+        break;
+      default:
+        path = [[XCPointerEventPath alloc] initForTextInput];
+        [path typeKey:action.value modifiers:action.modifierFlags atOffset:0];
+        break;
+    }
+    FBKeyActionStep *step = [self keyStepWithPath:path beginsPersistentState:begins endsPersistentState:ends error:error];
     if (nil == step) {
       return nil;
     }
     [result addObject:step];
   }
-  return [self flushText:pendingText intoSteps:result error:error] ? result.copy : nil;
+  return result.copy;
 }
 
 - (BOOL)performKeyActionsWithError:(NSError **)error
