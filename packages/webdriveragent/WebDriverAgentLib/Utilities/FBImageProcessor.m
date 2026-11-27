@@ -157,14 +157,12 @@ const CGFloat FBMaxCompressionQuality = 1.0f;
     format.scale = image.scale;
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize
                                                                                format:format];
+    UIGraphicsImageDrawingActions drawImage = ^(UIGraphicsImageRendererContext *context) {
+      [uiImage drawInRect:(CGRect){CGPointZero, scaledSize}];
+    };
     return [uti conformsToType:UTTypePNG]
-      ? [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
-        [uiImage drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
-      }]
-      : [renderer JPEGDataWithCompressionQuality:compressionQuality
-                                         actions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
-        [uiImage drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
-      }];
+      ? [renderer PNGDataWithActions:drawImage]
+      : [renderer JPEGDataWithCompressionQuality:compressionQuality actions:drawImage];
 #endif
   }
 }

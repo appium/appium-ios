@@ -344,15 +344,12 @@
   FBDisplaySnapshotMap *source = FBDisplaySnapshotsForTree(app, YES);
   XCTAssertNotNil(button);
   id<FBXCElementSnapshot> sourceSnapshot = [source objectForKey:button];
-  if (angle == 0) {
-    // This button needs neither geometry correction nor passive visibility on the cover.
-    XCTAssertNil(sourceSnapshot);
-  } else {
-    XCTAssertNotNil(sourceSnapshot);
-  }
+  // Only the inner panel needs passive visibility for this button.
+  BOOL expectsOverride = angle != 0;
+  XCTAssertEqual(sourceSnapshot != nil, expectsOverride);
   id<FBXCElementSnapshot> scopedButton = [addControls fb_standardSnapshot];
   FBDisplaySnapshotMap *scoped = FBDisplaySnapshotsForTree(scopedButton, YES);
-  XCTAssertEqual([scoped objectForKey:scopedButton] != nil, angle != 0);
+  XCTAssertEqual([scoped objectForKey:scopedButton] != nil, expectsOverride);
   XCTAssertEqual([addControls fb_descendantsMatchingXPathQuery:@"self::*[@visible='true']"
                                   shouldReturnAfterFirstMatch:YES].count, 1u);
   XCTAssertTrue(addControls.exists);

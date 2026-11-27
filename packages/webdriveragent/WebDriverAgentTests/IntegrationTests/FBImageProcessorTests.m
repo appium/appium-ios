@@ -104,32 +104,26 @@
   }];
   // Only the top-left quadrant is opaque. Its destination distinguishes the
   // two landscape rotations and also detects a skipped upside-down rotation.
-  NSDictionary<NSString *, NSValue *> *expectedCenters = @{
-    @"landscapeRight": [NSValue valueWithCGPoint:CGPointMake(15, 30)],
-    @"landscapeLeft": [NSValue valueWithCGPoint:CGPointMake(45, 10)],
-    @"portraitUpsideDown": [NSValue valueWithCGPoint:CGPointMake(30, 45)],
+  // Expected alpha values in reading order: top-left, top-right, bottom-left, bottom-right.
+  NSDictionary *expectedQuadrants = @{
+    @"landscapeRight": @[@0, @0, @255, @0],
+    @"landscapeLeft": @[@0, @255, @0, @0],
+    @"portraitUpsideDown": @[@0, @0, @0, @255],
   };
-  for (NSString *orientation in expectedCenters) {
+  for (NSString *orientation in expectedQuadrants) {
     XCTAssertTrue([configuration setScreenshotOrientation:orientation error:nil]);
     NSData *output = [[FBImageProcessor new] scaledImageWithData:input uti:UTTypePNG scalingFactor:1
                                               compressionQuality:1 error:nil];
     UIImage *image = [UIImage imageWithData:output];
     CGSize expectedSize = [orientation isEqualToString:@"portraitUpsideDown"] ? CGSizeMake(40, 60) : CGSizeMake(60, 40);
     XCTAssertTrue(CGSizeEqualToSize(image.size, expectedSize), @"%@", orientation);
-    for (NSUInteger row = 0; row < 2; row++) {
-      for (NSUInteger column = 0; column < 2; column++) {
-        CGPoint point = CGPointMake(expectedSize.width * (0.25 + 0.5 * column),
-                                    expectedSize.height * (0.25 + 0.5 * row));
-        CGImageRef pixel = CGImageCreateWithImageInRect(image.CGImage, (CGRect){point, {1, 1}});
-        uint8_t alpha = 0;
-        CGContextRef context = CGBitmapContextCreate(&alpha, 1, 1, 8, 1, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
-        CGContextDrawImage(context, CGRectMake(0, 0, 1, 1), pixel);
-        CGContextRelease(context);
-        CGImageRelease(pixel);
-        BOOL isMarker = CGPointEqualToPoint(point, expectedCenters[orientation].CGPointValue);
-        XCTAssertEqual(alpha, isMarker ? 255 : 0, @"%@ at %@", orientation, NSStringFromCGPoint(point));
-      }
-    }
+    uint8_t alpha[4] = {};
+    CGContextRef context = CGBitmapContextCreate(alpha, 2, 2, 8, 2, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
+    CGContextSetInterpolationQuality(context, kCGInterpolationNone);
+    CGContextDrawImage(context, CGRectMake(0, 0, 2, 2), image.CGImage);
+    CGContextRelease(context);
+    NSArray *quadrants = @[@(alpha[0]), @(alpha[1]), @(alpha[2]), @(alpha[3])];
+    XCTAssertEqualObjects(quadrants, expectedQuadrants[orientation], @"%@", orientation);
   }
 }
 

@@ -297,22 +297,29 @@
   XCTSkipIf(!checkedSecondaryDisplay, @"Requires an available secondary display without the fixture");
 }
 
-- (void)testViewportTapRejectsInactiveInnerDisplay
+- (FBSession *)launchSessionAtHingeAngle:(CGFloat)angle
 {
   XCUIDevice *device = XCUIDevice.sharedDevice;
-  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
   NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
   XCTAssertNotNil(originalAngle);
   [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
-  XCTAssertTrue([device fb_setSimulatedHingeAngle:0 error:nil]);
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:angle error:nil]);
   [self.testedApplication terminate];
   [self launchApplication];
 
+  FBSession *session = [FBSession initWithApplication:self.testedApplication];
+  session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+  return session;
+}
+
+- (void)testViewportTapRejectsInactiveInnerDisplay
+{
+  XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  FBSession *session = [self launchSessionAtHingeAngle:0];
   FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/tap"]
                                                      parameters:@{} arguments:@{@"x": @40, @"y": @100}];
-  request.session = [FBSession initWithApplication:self.testedApplication];
-  request.session.defaultActiveApplication = self.testedApplication.bundleID;
-  [self addTeardownBlock:^{ [request.session kill]; }];
+  request.session = session;
   for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
     if ([screen[@"isMain"] boolValue]) {
       continue;
@@ -330,18 +337,8 @@
 
 - (void)testTapsRejectInactiveCoverDisplay
 {
-  XCUIDevice *device = XCUIDevice.sharedDevice;
-  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
-  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
-  XCTAssertNotNil(originalAngle);
-  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
-  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
-  [self.testedApplication terminate];
-  [self launchApplication];
-
-  FBSession *session = [FBSession initWithApplication:self.testedApplication];
-  session.defaultActiveApplication = self.testedApplication.bundleID;
-  [self addTeardownBlock:^{ [session kill]; }];
+  XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  FBSession *session = [self launchSessionAtHingeAngle:180];
   NSNumber *cover = nil;
   for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
     NSNumber *displayID = screen[@"displayId"];

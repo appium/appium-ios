@@ -82,7 +82,8 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   if (nil == selectedDisplay || !XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
     return nil;
   }
-  if ([FBHIDOperations isInactiveDuoCover:selectedDisplay.longLongValue]) {
+  long long displayID = selectedDisplay.longLongValue;
+  if ([FBHIDOperations isInactiveDuoCover:displayID]) {
     [[[FBErrorBuilder builder] withDescription:@"The selected Duo cover display is inactive"] buildError:error];
     return @NO;
   }
@@ -90,14 +91,14 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   // scrolling, hit testing, and tap behavior.
   (void)element.frame;
   long long elementDisplayID = element.screen.displayID;
-  if (elementDisplayID == selectedDisplay.longLongValue) {
+  if (elementDisplayID == displayID) {
     return nil;
   }
   XCUIApplication *application = element.application;
   CGRect windowFrame;
   BOOL isViewportTap = element.elementType == XCUIElementTypeApplication && nil != offset;
   if (elementDisplayID != XCUIScreen.mainScreen.displayID
-      || nil != FBWindowOnDisplay(application, selectedDisplay.longLongValue, &windowFrame)) {
+      || nil != FBWindowOnDisplay(application, displayID, &windowFrame)) {
     if (isViewportTap) {
       return nil; // The viewport path resolves the app's window on the selected display.
     }
@@ -110,7 +111,7 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
       || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
     return nil;
   }
-  XCUIScreen *screen = [FBScreen screenWithDisplayID:selectedDisplay.longLongValue error:error];
+  XCUIScreen *screen = [FBScreen screenWithDisplayID:displayID error:error];
   if (nil == screen) {
     return @NO;
   }
