@@ -71,7 +71,7 @@
     "@angular/platform-browser": "^22.2.3",
     "@appium/coresim": "^2.2.0",
     "@appium/tsconfig": "^2.0.0-beta.2",
-    "@appium/types": "^2.0.0-beta.6",
+    "@appium/types": "^3.0.0",
     "@types/jsdom": "^30.0.0",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^26.6.5",
