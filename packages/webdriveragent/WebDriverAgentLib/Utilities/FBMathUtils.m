@@ -71,6 +71,12 @@ CGRect FBRectFromPortraitCoordinates(CGRect frame, CGSize screenSize, UIInterfac
   }
 }
 
+XCUICoordinate *FBCoordinateInWindow(XCUIElement *window, CGRect frame, CGPoint point)
+{
+  return [window coordinateWithNormalizedOffset:CGVectorMake((point.x - frame.origin.x) / frame.size.width,
+                                                            (point.y - frame.origin.y) / frame.size.height)];
+}
+
 CGSize FBAdjustDimensionsForApplication(CGSize actualSize, UIInterfaceOrientation orientation)
 {
   if (orientation == UIInterfaceOrientationLandscapeLeft || orientation == UIInterfaceOrientationLandscapeRight) {

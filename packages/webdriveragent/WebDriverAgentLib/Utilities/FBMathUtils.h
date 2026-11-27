@@ -35,6 +35,9 @@ BOOL FBSizeFuzzyEqualToSize(CGSize size1, CGSize size2, CGFloat threshold);
 BOOL FBRectFuzzyEqualToRect(CGRect rect1, CGRect rect2, CGFloat threshold);
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
+/*! Resolves a screen point relative to the supplied non-empty window frame. */
+XCUICoordinate *FBCoordinateInWindow(XCUIElement *window, CGRect frame, CGPoint point);
+
 /*! Converts a portrait-screen rect into the application's orientation, preserving its clipping. */
 CGRect FBRectFromPortraitCoordinates(CGRect frame, CGSize screenSize, UIInterfaceOrientation orientation);
 

@@ -19,16 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
 
-/**
- Taps a hosted window whose XCTest display affinity differs from the selected display.
- Returns nil if the native tap path should be used, otherwise the synthesis result.
- offset is relative to an element, or in selected-screen coordinates for an application.
- A nil offset requests the element's hit point.
- */
-+ (nullable NSNumber *)tapHostedElement:(XCUIElement *)element
-                                 offset:(nullable NSValue *)offset
-                                  error:(NSError **)error;
-
 /** Keyboard/pause-only actions use the main screen without selected-display lookup. */
 + (nullable instancetype)contextWithDisplayRequired:(BOOL)requiresDisplay error:(NSError **)error;
 

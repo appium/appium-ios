@@ -10,6 +10,7 @@
 
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "FBDuoElementTap.h"
 #import "FBGestureCoordinateContext.h"
 #import "XCUIScreen.h"
 #import "FBRoute.h"
@@ -512,7 +513,7 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 {
   NSError *error = nil;
 #if !TARGET_OS_WATCH
-  NSNumber *hostedTap = [FBGestureCoordinateContext tapHostedElement:element offset:offset error:&error];
+  NSNumber *hostedTap = [FBDuoElementTap tapHostedElement:element offset:offset error:&error];
   if (hostedTap != nil) {
     return hostedTap.boolValue ? FBResponseWithOK()
       : FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
