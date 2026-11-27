@@ -12,6 +12,7 @@
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "XCUIScreen.h"
 #import "FBGestureCoordinateContext.h"
 #import "FBHIDOperations+DuoRotation.h"
 #import "FBRunLoopSpinner.h"
@@ -351,20 +352,86 @@
   XCTAssertNotNil(cover);
   FBConfiguration.sharedInstance.currentDisplayId = cover;
   XCUIElement *button = self.testedApplication.buttons[@"coordinate-probe"];
-  NSString *uuid = [session.elementCache storeElement:button];
-  NSDictionary *offset = @{@"x": @10, @"y": @10};
-  for (NSString *path in @[@"/element/:uuid/click", @"/wda/element/:uuid/tap", @"/wda/tap"]) {
-    BOOL click = [path hasSuffix:@"/click"];
-    FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:path]
-                                                       parameters:[path containsString:@":uuid"] ? @{@"uuid": uuid} : @{}
-                                                        arguments:click ? @{} : offset];
+  [self performTapsInSession:session button:button viewportCenter:CGPointMake(10, 10) checkResponse:^(id value) {
+    XCTAssertEqualObjects(value[@"error"], @"invalid element state");
+    XCTAssertTrue(button.exists, @"A rejected tap unexpectedly opened the probe");
+  }];
+}
+
+- (void)performTapsInSession:(FBSession *)session
+                      button:(XCUIElement *)button
+              viewportCenter:(CGPoint)center
+               checkResponse:(void (^)(id value))checkResponse
+{
+  NSDictionary *element = @{@"uuid": [session.elementCache storeElement:button]};
+  FBRouteRequest *click = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/element/:uuid/click"]
+                                                   parameters:element arguments:@{}];
+  FBRouteRequest *relative = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/element/:uuid/tap"]
+                                                      parameters:element arguments:@{@"x": @20, @"y": @20}];
+  FBRouteRequest *viewport = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/tap"]
+                                                      parameters:@{} arguments:@{@"x": @(center.x), @"y": @(center.y)}];
+  for (FBRouteRequest *request in @[click, relative, viewport]) {
     request.session = session;
     RouteResponse *response = [RouteResponse new];
-    id<FBResponsePayload> payload = click ? [FBElementCommands handleClick:request] : [FBElementCommands handleTap:request];
+    id<FBResponsePayload> payload = request == click ? [FBElementCommands handleClick:request]
+                                                    : [FBElementCommands handleTap:request];
     [payload dispatchWithResponse:response];
-    NSDictionary *value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
-    XCTAssertEqualObjects(value[@"error"], @"invalid element state", @"%@", path);
-    XCTAssertTrue(button.exists, @"%@ unexpectedly opened the probe", path);
+    id value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+    checkResponse(value);
+  }
+}
+
+- (void)testHostedCompatibilityTapsAcrossFoldStates
+{
+  XCTSkipUnless(TARGET_OS_SIMULATOR, @"The compatibility fixture is built for the simulator");
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
+
+  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:@"io.appium.test.DuoHostedApp"];
+  // Install the compatibility fixture from WebDriverAgentTests/Fixtures/DuoHostedApp.
+  [app launch];
+  FBSession *session = [FBSession initWithApplication:app];
+  session.defaultActiveApplication = app.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+
+  for (NSNumber *angle in @[@180, @0, @180]) {
+    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
+    [app activate];
+    NSNumber *inner = @(angle.integerValue != 0);
+    XCUIScreen *selected = nil;
+    for (NSDictionary *info in [FBScreen screensWithError:nil]) {
+      XCUIScreen *screen = [FBScreen screenWithDisplayID:[info[@"displayId"] longLongValue] error:nil];
+      if ([[FBHIDOperations isInnerDuoDisplay:screen] isEqual:inner]) {
+        selected = screen;
+        break;
+      }
+    }
+    XCTAssertNotNil(selected);
+    FBConfiguration.sharedInstance.currentDisplayId = @(selected.displayID);
+    XCUIElement *button = app.buttons[@"touch-counter"];
+    XCTAssertTrue([button waitForExistenceWithTimeout:5]);
+    (void)button.frame;
+    // The folded case uses native XCTest. Unfolded, the same button reports
+    // the cover while its compatibility window is hosted on the inner display.
+    XCTAssertEqual(button.screen.displayID == selected.displayID, !inner.boolValue);
+    CGSize size = CGSizeMake(selected.bounds.size.width / selected.scale, selected.bounds.size.height / selected.scale);
+    size = FBAdjustDimensionsForApplication(size, app.interfaceOrientation);
+    CGPoint center = CGPointMake(size.width / 2, size.height / 2);
+    __block NSInteger count = button.label.integerValue;
+    [self performTapsInSession:session button:button viewportCenter:center checkResponse:^(id value) {
+      XCTAssertEqualObjects(value, NSNull.null);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count);
+    }];
+    if (inner.boolValue) {
+      FBConfiguration.sharedInstance.currentDisplayId = @(button.screen.displayID);
+      [self performTapsInSession:session button:button viewportCenter:center checkResponse:^(id value) {
+        XCTAssertEqualObjects(value[@"error"], @"invalid element state");
+        XCTAssertEqual(button.label.integerValue, count);
+      }];
+    }
   }
 }
 
