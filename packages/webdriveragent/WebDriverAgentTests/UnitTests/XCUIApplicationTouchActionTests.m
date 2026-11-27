@@ -9,15 +9,11 @@
 #import <XCTest/XCTest.h>
 
 #import "FBExceptions.h"
+#import "FBW3CActionDoubles.h"
 #import "XCSynthesizedEventRecord.h"
 #import "XCUIApplication+FBTouchAction.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-
-// Implemented in FBW3CActionsSynthesizerTests.m
-@interface FBW3CPointCoordinate : XCUICoordinate
-+ (instancetype)coordinateWithPoint:(CGPoint)point;
-@end
 
 /** Application that was never launched: it only needs a bundle id for error messages. */
 @interface FBTouchActionApplicationDouble : XCUIApplication

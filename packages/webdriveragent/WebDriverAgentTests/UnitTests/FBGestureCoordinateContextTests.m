@@ -12,23 +12,13 @@
 #import "FBConfiguration.h"
 #import "FBElementCommands.h"
 #import "FBGestureCoordinateContext.h"
+#import "FBW3CActionDoubles.h"
 #import "FBScreen.h"
 #import "FBW3CActionsSynthesizer.h"
 #import "XCUIElement.h"
 #import "XCUIScreen.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-
-// Implemented in FBW3CActionsSynthesizerTests.m
-@interface FBW3CPointCoordinate : XCUICoordinate
-+ (instancetype)coordinateWithPoint:(CGPoint)point;
-@end
-
-@interface FBW3CElementDouble : XCUIElement
-@property (nonatomic) XCUIElementType stubType;
-@property (nonatomic) CGRect stubFrame;
-+ (instancetype)doubleWithType:(XCUIElementType)type frame:(CGRect)frame;
-@end
 
 @interface FBElementCommands (GestureContextTestable)
 + (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets

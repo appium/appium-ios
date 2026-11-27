@@ -17,7 +17,8 @@
                               expected:(BOOL)expected;
 @end
 
-// Runs as a regular test: it only passes if the failing assertion is swallowed
+// Runs as a regular test: it only passes if the failing assertion is swallowed.
+// The "Enqueue Failure" log line it produces is expected (nested test runs crash XCTest).
 @interface FBFailureProofAssertionProbe : FBFailureProofTestCase
 @end
 

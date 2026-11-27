@@ -64,6 +64,8 @@
   NSNumber *originalDisplay = FBConfiguration.sharedInstance.currentDisplayId;
   @try {
     FBConfiguration.sharedInstance.currentDisplayId = @(LLONG_MAX);
+    // The rejection must come from display resolution, the first step of the rotation
+    XCTAssertNil([FBHIDOperations duoOrientationValue:UIDeviceOrientationLandscapeLeft]);
     [self assertRotationRejectedWithoutOrientationChange];
   } @finally {
     FBConfiguration.sharedInstance.currentDisplayId = originalDisplay;

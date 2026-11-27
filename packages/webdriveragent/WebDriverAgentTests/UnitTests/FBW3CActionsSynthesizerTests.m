@@ -10,6 +10,7 @@
 #import <objc/runtime.h>
 
 #import "FBConfiguration.h"
+#import "FBW3CActionDoubles.h"
 #import "FBScreen.h"
 #import "FBW3CActionsSynthesizer.h"
 #import "FBXCodeCompatibility.h"
@@ -20,117 +21,6 @@
 #import "XCUIScreen.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-
-// Shared with FBGestureCoordinateContextTests.m, which redeclares these interfaces.
-/** Coordinate that resolves to a fixed screen point and composes offsets without touching XCTest. */
-@interface FBW3CPointCoordinate : XCUICoordinate
-+ (instancetype)coordinateWithPoint:(CGPoint)point;
-@end
-
-@implementation FBW3CPointCoordinate {
-  CGPoint _point;
-}
-
-+ (instancetype)coordinateWithPoint:(CGPoint)point
-{
-  // Skips XCUICoordinate's initializer, which needs a live element
-  FBW3CPointCoordinate *coordinate = [self alloc];
-  coordinate->_point = point;
-  return coordinate;
-}
-
-- (CGPoint)screenPoint
-{
-  return _point;
-}
-
-- (XCUICoordinate *)coordinateWithOffset:(CGVector)offset
-{
-  return [FBW3CPointCoordinate coordinateWithPoint:CGPointMake(_point.x + offset.dx, _point.y + offset.dy)];
-}
-
-@end
-
-/** Minimal display stand-in: only the identifier is read from an element's screen. */
-@interface FBW3CScreenDouble : NSObject
-@property (nonatomic) long long displayID;
-@end
-
-@implementation FBW3CScreenDouble
-@end
-
-/** Element/application stand-in with a fixed frame, type and screen. */
-@interface FBW3CElementDouble : XCUIElement
-@property (nonatomic) XCUIElementType stubType;
-@property (nonatomic) CGRect stubFrame;
-/** The main screen when nil. */
-@property (nonatomic, nullable) FBW3CScreenDouble *stubScreen;
-+ (instancetype)doubleWithType:(XCUIElementType)type frame:(CGRect)frame;
-@end
-
-@implementation FBW3CElementDouble
-
-+ (instancetype)doubleWithType:(XCUIElementType)type frame:(CGRect)frame
-{
-  // Skips XCUIElement's initializer, which needs a live application
-  FBW3CElementDouble *element = [self alloc];
-  element.stubType = type;
-  element.stubFrame = frame;
-  return element;
-}
-
-- (XCUIElementType)elementType
-{
-  return self.stubType;
-}
-
-- (BOOL)exists
-{
-  return YES;
-}
-
-- (CGRect)frame
-{
-  return self.stubFrame;
-}
-
-- (CGRect)wdFrame
-{
-  return self.stubFrame;
-}
-
-- (XCUIScreen *)screen
-{
-  return nil == self.stubScreen ? XCUIScreen.mainScreen : (XCUIScreen *)self.stubScreen;
-}
-
-- (UIInterfaceOrientation)interfaceOrientation
-{
-  return UIInterfaceOrientationPortrait;
-}
-
-- (XCUICoordinate *)coordinateWithNormalizedOffset:(CGVector)normalizedOffset
-{
-  return [FBW3CPointCoordinate coordinateWithPoint:CGPointMake(self.stubFrame.origin.x + normalizedOffset.dx * self.stubFrame.size.width,
-                                                               self.stubFrame.origin.y + normalizedOffset.dy * self.stubFrame.size.height)];
-}
-
-- (NSString *)description
-{
-  return @"FBW3CElementDouble";
-}
-
-- (NSUInteger)hash
-{
-  return (NSUInteger)(__bridge void *)self;
-}
-
-- (BOOL)isEqual:(id)object
-{
-  return self == object;
-}
-
-@end
 
 static NSDictionary<NSString *, id> *FBTouchSequence(NSString *sequenceId, NSArray<NSDictionary<NSString *, id> *> *actions)
 {
@@ -327,11 +217,8 @@ static NSDictionary<NSString *, id> *FBMove(NSInteger x, NSInteger y)
 
 - (void)testUnavailableDisplaySettingIsRejected
 {
-  long long maxID = 0;
-  for (NSDictionary<NSString *, id> *screen in [FBScreen screensWithError:nil]) {
-    maxID = MAX(maxID, [screen[@"displayId"] longLongValue]);
-  }
-  FBConfiguration.sharedInstance.currentDisplayId = @(maxID + 1);
+  // A display id no device can have, independent of the simulator's real screens
+  FBConfiguration.sharedInstance.currentDisplayId = @(LLONG_MAX);
   NSError *error = nil;
   XCTAssertNil([self synthesizeActions:@[FBTouchSequence(@"finger", @[FBMove(100, 100),
                                                                      @{@"type": @"pointerDown", @"button": @0},

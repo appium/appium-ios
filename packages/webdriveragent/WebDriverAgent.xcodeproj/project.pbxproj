@@ -605,6 +605,7 @@
 		8EB95DF348A9438BBEAB4501 /* FBDisplayGestureTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 8EB95DF348A9438BBEAB4502 /* FBDisplayGestureTests.m */; };
 		715D554B2229891B00524509 /* FBExceptionHandlerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 715D554A2229891B00524509 /* FBExceptionHandlerTests.m */; };
 		185A00000000000000000002 /* FBAlertSnapshotTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 185A00000000000000000001 /* FBAlertSnapshotTests.m */; };
+		E40EF10F227C44BA1E85BBB8 /* FBW3CActionDoubles.m in Sources */ = {isa = PBXBuildFile; fileRef = 249751F08F0CB9F8183332A4 /* FBW3CActionDoubles.m */; };
 		22E5DA296E688F2FEE8BD857 /* XCUIElementScrollingTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 5353F27B287D52C5113E2EA8 /* XCUIElementScrollingTests.m */; };
 		58308203101AE047FE15CAD3 /* XCUIApplicationTouchActionTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 733489603E35E977168967D2 /* XCUIApplicationTouchActionTests.m */; };
 		DB95E4C9EAC76F21686382A3 /* FBGestureCoordinateContextTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 5707F16F26C1B062C0E49AB8 /* FBGestureCoordinateContextTests.m */; };
@@ -1673,6 +1674,8 @@
 		8EB95DF348A9438BBEAB4502 /* FBDisplayGestureTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBDisplayGestureTests.m; sourceTree = "<group>"; };
 		715D554A2229891B00524509 /* FBExceptionHandlerTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBExceptionHandlerTests.m; sourceTree = "<group>"; };
 		185A00000000000000000001 /* FBAlertSnapshotTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBAlertSnapshotTests.m; sourceTree = "<group>"; };
+		249751F08F0CB9F8183332A4 /* FBW3CActionDoubles.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBW3CActionDoubles.m; sourceTree = "<group>"; };
+		C6BEC19C73B8821C4A523051 /* FBW3CActionDoubles.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBW3CActionDoubles.h; sourceTree = "<group>"; };
 		5353F27B287D52C5113E2EA8 /* XCUIElementScrollingTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = XCUIElementScrollingTests.m; sourceTree = "<group>"; };
 		733489603E35E977168967D2 /* XCUIApplicationTouchActionTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = XCUIApplicationTouchActionTests.m; sourceTree = "<group>"; };
 		5707F16F26C1B062C0E49AB8 /* FBGestureCoordinateContextTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBGestureCoordinateContextTests.m; sourceTree = "<group>"; };
@@ -2401,6 +2404,8 @@
 			children = (
 				13FFF2F0287DBEE600E561E4 /* XCElementSnapshotDouble.h */,
 				13FFF2F1287DBEE600E561E4 /* XCElementSnapshotDouble.m */,
+				249751F08F0CB9F8183332A4 /* FBW3CActionDoubles.m */,
+				C6BEC19C73B8821C4A523051 /* FBW3CActionDoubles.h */,
 				1C4C858168425064A9924243 /* FBSnapshotTreeDouble.m */,
 				6EC533ED51A408996D4CBA8D /* FBSnapshotTreeDouble.h */,
 				ADBC39961D07842800327304 /* XCUIElementDouble.h */,
@@ -5020,6 +5025,7 @@
 				ADBC39941D0782CD00327304 /* FBElementCacheTests.m in Sources */,
 				715D554B2229891B00524509 /* FBExceptionHandlerTests.m in Sources */,
 				185A00000000000000000002 /* FBAlertSnapshotTests.m in Sources */,
+				E40EF10F227C44BA1E85BBB8 /* FBW3CActionDoubles.m in Sources */,
 				22E5DA296E688F2FEE8BD857 /* XCUIElementScrollingTests.m in Sources */,
 				58308203101AE047FE15CAD3 /* XCUIApplicationTouchActionTests.m in Sources */,
 				DB95E4C9EAC76F21686382A3 /* FBGestureCoordinateContextTests.m in Sources */,

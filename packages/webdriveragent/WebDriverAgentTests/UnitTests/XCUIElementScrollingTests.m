@@ -10,6 +10,7 @@
 
 #import "FBConfiguration.h"
 #import "FBExceptions.h"
+#import "FBW3CActionDoubles.h"
 #import "FBXCElementSnapshotWrapper+Helpers.h"
 #import "XCUIElement+FBScrolling.h"
 #import "XCElementSnapshotDouble.h"
@@ -22,11 +23,6 @@
 - (BOOL)fb_scrollDownByNormalizedDistance:(CGFloat)distance anchorElement:(nullable XCUIElement *)anchorElement;
 - (BOOL)fb_scrollLeftByNormalizedDistance:(CGFloat)distance anchorElement:(nullable XCUIElement *)anchorElement;
 - (BOOL)fb_scrollRightByNormalizedDistance:(CGFloat)distance anchorElement:(nullable XCUIElement *)anchorElement;
-@end
-
-// Implemented in FBW3CActionsSynthesizerTests.m
-@interface FBW3CElementDouble : XCUIElement
-+ (instancetype)doubleWithType:(XCUIElementType)type frame:(CGRect)frame;
 @end
 
 @interface XCUIElementScrollingTests : XCTestCase
