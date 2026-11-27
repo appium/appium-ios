@@ -77,6 +77,14 @@ const int ELEMENT_CACHE_SIZE = 1024;
     } @catch (NSException *exception) {
       //  if the snapshot method threw FBStaleElementException (implying the element is stale) we need to explicitly remove it from the cache, PR: https://github.com/appium/WebDriverAgent/pull/985
       if ([exception.name isEqualToString:FBStaleElementException]) {
+        // AX identity may change with the element state, so retry by uid before giving up
+        XCUIElement *stable = nil == element.fb_boundAccessibilityElement ? nil : [element fb_stableInstanceWithUid:uuid];
+        if (nil != stable && stable != element) {
+          @synchronized (self.elementCache) {
+            [self.elementCache setObject:stable forKey:uuid];
+          }
+          return stable;
+        }
         @synchronized (self.elementCache) {
           [self.elementCache removeObjectForKey:uuid];
         }
