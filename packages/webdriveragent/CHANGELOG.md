@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.7...appium-webdriveragent@17.1.8) (2026-11-27)
+
+### Bug Fixes
+
+* **webdriveragent:** re-resolve stale AX-bound cached elements by uid ([#256](https://github.com/appium/appium-ios/issues/256)) ([a68102a](https://github.com/appium/appium-ios/commit/a68102a33b69d902e6ea7990711d56a78b5c0be8))
+
+
 ## [17.1.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.6...appium-webdriveragent@17.1.7) (2026-11-26)
 
 ### Bug Fixes
