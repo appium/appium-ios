@@ -101,8 +101,7 @@ export class XCTestAttachment {
         let present: string[];
         try {
           present = await fileService.listFilePaths(directory);
-        } catch (err) {
-          log.debug(`Cannot list '${directory}': ${(err as Error).message}`);
+        } catch {
           continue;
         }
         for (const name of present.filter((n) => names.has(n.toUpperCase()))) {
