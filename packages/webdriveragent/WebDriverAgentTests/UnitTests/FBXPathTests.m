@@ -9,6 +9,8 @@
 #import <XCTest/XCTest.h>
 
 #import "FBMacros.h"
+#import "FBControlCenterVisibility.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBXPath.h"
 #import "FBXPath-Private.h"
 #import "XCUIElementDouble.h"
@@ -48,6 +50,7 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
 @property (nonatomic, weak) FBTraversalSnapshot *parentSnapshot;
 @property (nonatomic) NSUInteger childrenReads;
 @property (nonatomic) NSUInteger frameReads;
+@property (nonatomic) long long displayID;
 @end
 @implementation FBTraversalSnapshot
 - (NSArray *)children { self.childrenReads++; return self.childSnapshots ?: @[]; }
@@ -59,6 +62,28 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
 @end
 
 @implementation FBXPathTests
+
+- (void)testControlCenterVisibilityInheritsOnlyUnresolvedDisplayIDs
+{
+  FBTraversalSnapshot *innerWindow = [FBTraversalSnapshot new];
+  innerWindow.displayID = 3;
+  FBTraversalSnapshot *visible = [FBTraversalSnapshot new];
+  FBTraversalSnapshot *hidden = [FBTraversalSnapshot new];
+  FBTraversalSnapshot *coverWindow = [FBTraversalSnapshot new];
+  coverWindow.displayID = 1;
+  FBTraversalSnapshot *offscreen = [FBTraversalSnapshot new];
+  innerWindow.childSnapshots = @[visible, hidden, coverWindow];
+  coverWindow.childSnapshots = @[offscreen];
+  visible.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @YES;
+  hidden.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @NO;
+  offscreen.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @YES;
+
+  FBDisplaySnapshotMap *matches = [NSMapTable strongToStrongObjectsMapTable];
+  FBCollectSourceVisibility((id)innerWindow, 3, 0, matches);
+  XCTAssertTrue([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)visible]].wdVisible);
+  XCTAssertFalse([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)hidden]].wdVisible);
+  XCTAssertFalse([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)offscreen]].wdVisible);
+}
 
 - (void)testSerializationVisitsSiblingListAndFrameOnce
 {

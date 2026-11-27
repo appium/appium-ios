@@ -72,6 +72,81 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   return [NSValue valueWithCGPoint:hitPoint.hitPoint];
 }
 
+static NSValue *FBHostedTapPoint(XCUIElement *element, NSValue *offset, BOOL isViewportTap,
+                                 long long displayID, NSError **error)
+{
+  CGRect windowFrame;
+  XCUIScreen *screen = [FBScreen screenWithDisplayID:displayID error:error];
+  if (nil == screen) {
+    return nil;
+  }
+  // Require a system window on the destination before overriding the app
+  // window's reported display. It also supplies the viewport coordinate anchor.
+  XCUIElement *systemWindow = FBWindowOnDisplay(XCUIApplication.fb_systemApplication,
+                                               screen.displayID, &windowFrame);
+  if (nil == systemWindow) {
+    [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
+    return nil;
+  }
+  CGPoint point;
+  if (isViewportTap) {
+    // These offsets are already viewport points. Normalize against XCTest's
+    // native frame (not the app-space accessibility frame) so it applies only
+    // the selected window's event-synthesis orientation transform.
+    CGRect nativeFrame = systemWindow.frame;
+    if (CGRectIsEmpty(nativeFrame)) {
+      [[[FBErrorBuilder builder] withDescription:@"The selected system window has an empty frame"] buildError:error];
+      return nil;
+    }
+    point = FBCoordinateInWindow(systemWindow, nativeFrame, offset.CGPointValue).screenPoint;
+  } else {
+    Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
+    Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
+    if (![parametersClass respondsToSelector:@selector(transformParametersWithWindowID:displayID:)]
+        || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
+      [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
+      return nil;
+    }
+    NSValue *rawPoint = FBHostedElementPoint(element, offset, error);
+    if (rawPoint == nil) {
+      return nil;
+    }
+    id<FBHostedViewTransform> snapshot = (id)element.fb_nativeSnapshot;
+    if (![snapshot respondsToSelector:@selector(_transformParametersOrError:)]
+        || ![snapshot respondsToSelector:@selector(_transformPointWithRequest:error:)]) {
+      [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
+      return nil;
+    }
+    id<FBHostedViewTransform> originalParameters = [snapshot _transformParametersOrError:error];
+    if (nil == originalParameters) {
+      return nil;
+    }
+    id parameters = [parametersClass transformParametersWithWindowID:originalParameters.windowID
+                                                                displayID:screen.displayID];
+    id request = [requestClass pointTransformationRequestWithPoint:rawPoint.CGPointValue parameters:parameters];
+    id<FBHostedViewTransform> transformed = [snapshot _transformPointWithRequest:request error:error];
+    if (nil == transformed) {
+      return nil;
+    }
+    point = transformed.point;
+  }
+  if (!isfinite(point.x) || !isfinite(point.y)) {
+    [[[FBErrorBuilder builder] withDescription:@"The hosted tap coordinate is not finite"] buildError:error];
+    return nil;
+  }
+  return [NSValue valueWithCGPoint:point];
+}
+
+static BOOL FBApplicationOwnsPoint(XCUIApplication *application, CGPoint point, long long displayID)
+{
+  // SpringBoard can have a window even on the inactive panel. Before sending a
+  // hosted tap, verify that the app owns the hit point on the destination display.
+  Class<FBDisplayHitTestApplication> axClass = NSClassFromString(@"AXUIElement");
+  id<FBDisplayHitTestApplication> hit = [axClass respondsToSelector:@selector(uiApplicationAtCoordinate:displayId:)]
+    ? [axClass uiApplicationAtCoordinate:point displayId:(unsigned int)displayID] : nil;
+  return [hit respondsToSelector:@selector(pid)] && hit.pid > 0 && hit.pid == application.processID;
+}
+
 @implementation FBDuoElementTap
 
 + (nullable NSNumber *)tapHostedElement:(XCUIElement *)element
@@ -102,71 +177,16 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
     if (isViewportTap) {
       return nil; // The viewport path resolves the app's window on the selected display.
     }
+    // A native element tap would follow XCTest onto the wrong panel.
     [[[FBErrorBuilder builder] withDescription:@"The element belongs to a different display"] buildError:error];
     return @NO;
   }
-  Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
-  Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
-  if (![parametersClass respondsToSelector:@selector(transformParametersWithWindowID:displayID:)]
-      || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
-    return nil;
-  }
-  XCUIScreen *screen = [FBScreen screenWithDisplayID:displayID error:error];
-  if (nil == screen) {
+  NSValue *tapPoint = FBHostedTapPoint(element, offset, isViewportTap, displayID, error);
+  if (tapPoint == nil) {
     return @NO;
   }
-  // Require a system window on the destination before overriding the app
-  // window's reported display. It also supplies the viewport coordinate anchor.
-  XCUIElement *systemWindow = FBWindowOnDisplay(XCUIApplication.fb_systemApplication,
-                                               screen.displayID, &windowFrame);
-  if (nil == systemWindow) {
-    [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
-    return @NO;
-  }
-  CGPoint point;
-  if (isViewportTap) {
-    // These offsets are already viewport points. Normalize against XCTest's
-    // native frame (not the app-space accessibility frame) so it applies only
-    // the selected window's event-synthesis orientation transform.
-    CGRect nativeFrame = systemWindow.frame;
-    if (CGRectIsEmpty(nativeFrame)) {
-      [[[FBErrorBuilder builder] withDescription:@"The selected system window has an empty frame"] buildError:error];
-      return @NO;
-    }
-    point = FBCoordinateInWindow(systemWindow, nativeFrame, offset.CGPointValue).screenPoint;
-  } else {
-    NSValue *rawPoint = FBHostedElementPoint(element, offset, error);
-    if (rawPoint == nil) {
-      return @NO;
-    }
-    id<FBHostedViewTransform> snapshot = (id)element.fb_nativeSnapshot;
-    if (![snapshot respondsToSelector:@selector(_transformParametersOrError:)]
-        || ![snapshot respondsToSelector:@selector(_transformPointWithRequest:error:)]) {
-      return nil;
-    }
-    id<FBHostedViewTransform> originalParameters = [snapshot _transformParametersOrError:error];
-    if (nil == originalParameters) {
-      return @NO;
-    }
-    id parameters = [parametersClass transformParametersWithWindowID:originalParameters.windowID
-                                                                displayID:screen.displayID];
-    id request = [requestClass pointTransformationRequestWithPoint:rawPoint.CGPointValue parameters:parameters];
-    id<FBHostedViewTransform> transformed = [snapshot _transformPointWithRequest:request error:error];
-    if (nil == transformed) {
-      return @NO;
-    }
-    point = transformed.point;
-  }
-  if (!isfinite(point.x) || !isfinite(point.y)) {
-    [[[FBErrorBuilder builder] withDescription:@"The hosted tap coordinate is not finite"] buildError:error];
-    return @NO;
-  }
-  // SpringBoard can have a window even on the inactive panel. Before sending a
-  // hosted tap, verify that the app owns the hit point on the destination display.
-  Class<FBDisplayHitTestApplication> axClass = NSClassFromString(@"AXUIElement");
-  id<FBDisplayHitTestApplication> hit = [axClass respondsToSelector:@selector(uiApplicationAtCoordinate:displayId:)]
-    ? [axClass uiApplicationAtCoordinate:point displayId:(unsigned int)screen.displayID] : nil;
-  if (![hit respondsToSelector:@selector(pid)] || hit.pid <= 0 || hit.pid != application.processID) {
+  CGPoint point = tapPoint.CGPointValue;
+  if (!FBApplicationOwnsPoint(application, point, displayID)) {
     if (isViewportTap) {
       return nil; // Let the normal viewport path report the missing application window.
     }
@@ -177,7 +197,7 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];
   [path liftUpAtOffset:0.05];
   XCSynthesizedEventRecord *event = [[XCSynthesizedEventRecord alloc] initWithName:@"Hosted window tap"
-                                                                         displayID:screen.displayID
+                                                                         displayID:displayID
                                                               interfaceOrientation:application.interfaceOrientation];
   [event addPointerEventPath:path];
   if (![FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:error]) {

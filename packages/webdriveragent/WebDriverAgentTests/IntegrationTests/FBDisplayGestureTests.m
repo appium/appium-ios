@@ -13,6 +13,7 @@
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "XCUIScreen.h"
+#import "LSApplicationWorkspace.h"
 #import "FBGestureCoordinateContext.h"
 #import "FBHIDOperations+DuoRotation.h"
 #import "FBRunLoopSpinner.h"
@@ -49,6 +50,8 @@
 @property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 @end
 
+static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
+
 @interface FBDisplayGestureTests : FBIntegrationTestCase
 @property (nonatomic) NSNumber *previousDisplayId;
 @property (nonatomic) XCUIElement *canvas;
@@ -67,6 +70,12 @@
 - (void)skipIfUnsupported
 {
   NSString *name = NSStringFromSelector(self.invocation.selector);
+  if (self.invocation.selector == @selector(testHostedCompatibilityTapsAcrossFoldStates)) {
+    XCTSkipUnless(TARGET_OS_SIMULATOR && XCUIDevice.sharedDevice.fb_supportsHingeAngleReading,
+                  @"Requires a Duo simulator");
+    XCTSkipUnless([[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] applicationIsInstalled:FBHostedAppBundleID],
+                  @"Install the DuoHostedApp test fixture");
+  }
   if ([name containsString:@"FoldStates"]) {
     XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
   }
@@ -383,14 +392,12 @@
 
 - (void)testHostedCompatibilityTapsAcrossFoldStates
 {
-  XCTSkipUnless(TARGET_OS_SIMULATOR, @"The compatibility fixture is built for the simulator");
   XCUIDevice *device = XCUIDevice.sharedDevice;
   NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
   XCTAssertNotNil(originalAngle);
   [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
 
-  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:@"io.appium.test.DuoHostedApp"];
-  // Install the compatibility fixture from WebDriverAgentTests/Fixtures/DuoHostedApp.
+  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:FBHostedAppBundleID];
   [app launch];
   FBSession *session = [FBSession initWithApplication:app];
   session.defaultActiveApplication = app.bundleID;
