@@ -19,31 +19,12 @@
 #import "XCUIApplication+FBHelpers.h"
 #import "FBXCTestDaemonsProxy.h"
 #import "XCUICoordinate.h"
+#import "XCUIDevice+FBHinge.h"
 #import "XCUIElement+FBUtilities.h"
 #import "XCUIElement+FBScrolling.h"
 #import "XCUIHitPointResult.h"
 #import "XCPointerEventPath.h"
 #import "XCSynthesizedEventRecord.h"
-
-#include <string.h>
-#include <sys/utsname.h>
-
-// This workaround was verified on iPhone19,4 (appium-xcuitest-driver#3161).
-static BOOL FBIsIPhoneDuo(void)
-{
-  static BOOL isDuo;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-#if TARGET_OS_SIMULATOR
-    // uname reports the host architecture inside a simulator.
-    isDuo = [NSProcessInfo.processInfo.environment[@"SIMULATOR_MODEL_IDENTIFIER"] isEqualToString:@"iPhone19,4"];
-#else
-    struct utsname device;
-    isDuo = uname(&device) == 0 && strcmp(device.machine, "iPhone19,4") == 0;
-#endif
-  });
-  return isDuo;
-}
 
 // The hosted-view transform API is optional on older XCTest versions. Keep the
 // original window context and substitute only the selected display, without
@@ -92,7 +73,7 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
                                   error:(NSError **)error
 {
   NSNumber *selectedDisplay = FBConfiguration.sharedInstance.currentDisplayId;
-  if (nil == selectedDisplay || !FBIsIPhoneDuo()) {
+  if (nil == selectedDisplay || !XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
     return nil;
   }
   // Resolve affinity before testing it. Regular windows retain XCTest's native

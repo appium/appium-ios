@@ -418,10 +418,11 @@ static CGRect FBWindowFrameInSnapshot(id<FBXCElementSnapshot> root, long long di
 
 NSNumber *FBSpringBoardDisplayVisibility(id<FBXCElementSnapshot> snapshot)
 {
-  // On the Duo simulator, reading AX visibility directly avoids an XCTest query that
-  // can dismiss Control Center. On Duo hardware, direct AX reads produced permission
-  // error 1100 (issue #237). Return nil there so individual /displayed requests use
-  // XCTest. Page source handles Control Center visibility during traversal.
+  // Use direct AX visibility for SpringBoard on hinge-capable iOS simulators.
+  // Other iOS simulators fall through to XCTest. On the Duo simulator, this avoids
+  // a query that can dismiss Control Center. On Duo hardware, direct AX reads
+  // produced permission error 1100 (issue #237), so individual /displayed requests
+  // use XCTest. Page source handles Control Center visibility during traversal.
 #if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
   if (FBDeviceHasHinge() && FBIsSystemApplicationSnapshot(snapshot)) {
     id<FBAXDisplayElement> ax = FBAXElementForSnapshot(snapshot);
