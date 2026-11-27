@@ -46,20 +46,10 @@ static BOOL FBIsSystemApplicationSnapshot(id<FBXCElementSnapshot> snapshot)
   return snapshot.accessibilityElement.processIdentifier == FBXCAXClientProxy.sharedClient.systemApplication.processIdentifier;
 }
 
-static BOOL FBDeviceHasHinge(void)
-{
-  static BOOL hasHinge;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    hasHinge = XCUIDevice.sharedDevice.fb_supportsHingeAngleReading;
-  });
-  return hasHinge;
-}
-
 static NSNumber *FBGeometryDisplayID(void)
 {
   NSNumber *selected = FBConfiguration.sharedInstance.currentDisplayId;
-  return selected ?: (FBDeviceHasHinge() ? @([FBScreen displayID]) : nil);
+  return selected ?: (XCUIDevice.sharedDevice.fb_supportsHingeAngleReading ? @([FBScreen displayID]) : nil);
 }
 
 static BOOL FBCanMatchDisplayElement(id<FBXCElementSnapshot> snapshot)
@@ -245,7 +235,7 @@ static void FBCollectSourceVisibility(id<FBXCElementSnapshot> node, long long di
 
 static UIInterfaceOrientation FBGeometryOrientation(void)
 {
-  return FBDeviceHasHinge()
+  return XCUIDevice.sharedDevice.fb_supportsHingeAngleReading
     ? XCUIApplication.fb_systemApplication.interfaceOrientation : UIInterfaceOrientationUnknown;
 }
 
@@ -431,7 +421,7 @@ NSNumber *FBSpringBoardDisplayVisibility(id<FBXCElementSnapshot> snapshot)
   // produced permission error 1100 (issue #237), so individual /displayed requests
   // use XCTest. Page source handles Control Center visibility during traversal.
 #if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
-  if (FBDeviceHasHinge() && FBIsSystemApplicationSnapshot(snapshot)) {
+  if (XCUIDevice.sharedDevice.fb_supportsHingeAngleReading && FBIsSystemApplicationSnapshot(snapshot)) {
     id<FBAXDisplayElement> ax = FBAXElementForSnapshot(snapshot);
     if ([ax respondsToSelector:@selector(isVisible)]) {
       return @(ax.isVisible);
@@ -457,7 +447,7 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
   // On Duo hardware, a direct query could report the selected display but return
   // a control at one third of its size in page source (issue #237). Resolve these
   // controls in the same window as page source even when the display IDs match.
-  resolveFromWindow |= FBDeviceHasHinge() && (snapshot.elementType == XCUIElementTypeButton
+  resolveFromWindow |= XCUIDevice.sharedDevice.fb_supportsHingeAngleReading && (snapshot.elementType == XCUIElementTypeButton
       || snapshot.elementType == XCUIElementTypeSwitch || snapshot.elementType == XCUIElementTypeIcon);
 #endif
   if (resolveFromWindow && FBCanMatchDisplayElement(snapshot)) {
@@ -511,7 +501,7 @@ FBDisplaySnapshotMap *FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BO
   FBDisplaySnapshotMap *matches = [NSMapTable mapTableWithKeyOptions:NSPointerFunctionsObjectPointerPersonality
                                                         valueOptions:NSPointerFunctionsStrongMemory];
   UIInterfaceOrientation orientation = FBGeometryOrientation();
-  BOOL checkVisibility = includeVisibility && FBDeviceHasHinge();
+  BOOL checkVisibility = includeVisibility && XCUIDevice.sharedDevice.fb_supportsHingeAngleReading;
   BOOL useSnapshotVisibility = NO;
   if (root.elementType != XCUIElementTypeApplication) {
     FBCollectDisplaySnapshots(root, displayID, matches, orientation);
