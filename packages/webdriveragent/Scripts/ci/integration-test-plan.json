@@ -64,7 +64,7 @@
         "XCUIElementFBFindTests_ClassChainAxes",
         "XCUIElementFBFindTests_StaleAppSnapshot"
       ],
-      "IntegrationTests_3": ["FBElementSwipingTests", "FBTapTest"]
+      "IntegrationTests_3": ["FBAutoAlertsHandlerTests", "FBElementSwipingTests", "FBTapTest"]
     }
   ]
 }

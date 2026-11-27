@@ -654,6 +654,7 @@
 		719CD8F92126C78F00C7D0C2 /* FBAlertsMonitor.m in Sources */ = {isa = PBXBuildFile; fileRef = 719CD8F72126C78F00C7D0C2 /* FBAlertsMonitor.m */; };
 		719CD8FC2126C88B00C7D0C2 /* XCUIApplication+FBAlert.h in Headers */ = {isa = PBXBuildFile; fileRef = 719CD8FA2126C88B00C7D0C2 /* XCUIApplication+FBAlert.h */; };
 		719CD8FD2126C88B00C7D0C2 /* XCUIApplication+FBAlert.m in Sources */ = {isa = PBXBuildFile; fileRef = 719CD8FB2126C88B00C7D0C2 /* XCUIApplication+FBAlert.m */; };
+		719CD8FF2126C90200C7D0C2 /* FBAutoAlertsHandlerTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 719CD8FE2126C90200C7D0C2 /* FBAutoAlertsHandlerTests.m */; };
 		719DCF152601EAFB000E765F /* FBNotificationsHelper.h in Headers */ = {isa = PBXBuildFile; fileRef = 719DCF132601EAFB000E765F /* FBNotificationsHelper.h */; };
 		719DCF162601EAFB000E765F /* FBNotificationsHelper.h in Headers */ = {isa = PBXBuildFile; fileRef = 719DCF132601EAFB000E765F /* FBNotificationsHelper.h */; };
 		719DCF172601EAFB000E765F /* FBNotificationsHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = 719DCF142601EAFB000E765F /* FBNotificationsHelper.m */; };
@@ -1719,6 +1720,7 @@
 		719CD8F72126C78F00C7D0C2 /* FBAlertsMonitor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBAlertsMonitor.m; sourceTree = "<group>"; };
 		719CD8FA2126C88B00C7D0C2 /* XCUIApplication+FBAlert.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "XCUIApplication+FBAlert.h"; sourceTree = "<group>"; };
 		719CD8FB2126C88B00C7D0C2 /* XCUIApplication+FBAlert.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "XCUIApplication+FBAlert.m"; sourceTree = "<group>"; };
+		719CD8FE2126C90200C7D0C2 /* FBAutoAlertsHandlerTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBAutoAlertsHandlerTests.m; sourceTree = "<group>"; };
 		719DCF132601EAFB000E765F /* FBNotificationsHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBNotificationsHelper.h; sourceTree = "<group>"; };
 		719DCF142601EAFB000E765F /* FBNotificationsHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBNotificationsHelper.m; sourceTree = "<group>"; };
 		719FF5B81DAD21F5008E0099 /* FBElementUtilitiesTests.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FBElementUtilitiesTests.m; sourceTree = "<group>"; };
@@ -2769,6 +2771,7 @@
 			children = (
 				27B518E261C14E29B943AB9B /* FBIntegrationAppTests.m */,
 				EE9B76991CF799F400275851 /* FBAlertTests.m */,
+				719CD8FE2126C90200C7D0C2 /* FBAutoAlertsHandlerTests.m */,
 				EE26409C1D0EBA25009BE6B0 /* FBElementAttributeTests.m */,
 				71F5BE33252E5B2200EE9EBA /* FBElementSwipingTests.m */,
 				EE006EAC1EB99B15006900A4 /* FBElementVisibilityTests.m */,
@@ -4974,6 +4977,7 @@
 				71BB58DE2B9631B700CB9BFE /* FBVideoRecordingTests.m in Sources */,
 				A1B2C3D41F001A00A1B0008 /* FBVoiceOverTests.m in Sources */,
 				71241D7E1FAF084E00B9559F /* FBW3CTouchActionsIntegrationTests.m in Sources */,
+				719CD8FF2126C90200C7D0C2 /* FBAutoAlertsHandlerTests.m in Sources */,
 				EE2202131ECC612200A29571 /* FBIntegrationTestCase.m in Sources */,
 				715AFAC41FFA2AAF0053896D /* FBScreenTests.m in Sources */,
 				8EB95DF348A9438BBEAB4501 /* FBDisplayGestureTests.m in Sources */,

@@ -88,6 +88,33 @@ static NSString *const SETTINGS_BUNDLE_ID = @"com.apple.Preferences";
   FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:testedApp.bundleID]);
 }
 
+// DELETE /session racing a launch as the application under test on another queue: the app
+// must not outlive the session. Needs a real launch, which takes long enough to overlap.
+- (void)testApplicationLaunchedAsApplicationUnderTestDoesNotOutliveConcurrentSessionDeletion
+{
+  [self.testedApplication terminate];
+  FBAssertWaitTillBecomesTrue(self.testedApplication.state == XCUIApplicationStateNotRunning);
+  self.session = [FBSession initWithApplication:nil];
+  XCUIApplication *settingsApp = [[XCUIApplication alloc] initWithBundleIdentifier:SETTINGS_BUNDLE_ID];
+  [settingsApp terminate];
+  FBAssertWaitTillBecomesTrue(settingsApp.state == XCUIApplicationStateNotRunning);
+  FBSession *session = self.session;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                 dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    [session kill];
+  });
+  @try {
+    [session launchApplicationWithBundleId:SETTINGS_BUNDLE_ID
+                   shouldWaitForQuiescence:nil
+                                 arguments:nil
+                               environment:nil
+                    asApplicationUnderTest:YES];
+  } @catch (NSException *e) {
+    XCTAssertEqualObjects(e.name, FBSessionDoesNotExistException);
+  }
+  FBAssertWaitTillBecomesTrue(settingsApp.state == XCUIApplicationStateNotRunning);
+}
+
 @end
 
 /** App lookup/launch helpers that need neither the fixture app nor a session, so no app launch. */
