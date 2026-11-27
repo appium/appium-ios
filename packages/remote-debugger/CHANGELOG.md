@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.33](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.32...appium-remote-debugger@19.1.33) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
 ## [19.1.32](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.31...appium-remote-debugger@19.1.32) (2026-11-26)
 
 **Note:** Version bump only for package appium-remote-debugger

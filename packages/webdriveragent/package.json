@@ -1,6 +1,6 @@
 {
   "name": "appium-webdriveragent",
-  "version": "17.1.8",
+  "version": "17.1.9",
   "description": "Package bundling WebDriverAgent",
   "keywords": [
     "Appium",
@@ -75,7 +75,7 @@
     "@appium/types": "^3.0.0",
     "@types/node": "^26.0.0",
     "@types/sinon": "^22.0.2",
-    "appium-xcode": "^8.0.4",
+    "appium-xcode": "^8.0.5",
     "semver": "^7.3.7",
     "sinon": "^22.0.0"
   },
