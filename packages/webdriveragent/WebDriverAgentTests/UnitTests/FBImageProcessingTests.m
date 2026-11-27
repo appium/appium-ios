@@ -86,7 +86,8 @@
     XCTAssertEqualWithAccuracy(scaledSize.height, expectedSize.height, 1.0);
     [expScaled fulfill];
   }];
-  [self waitForExpectations:@[expScaled] timeout:2];
+  // Only a ceiling: cold image codecs on a loaded CI runner can take seconds
+  [self waitForExpectations:@[expScaled] timeout:30];
 }
 
 + (CGSize)scaledSizeFromImage:(UIImage *)image
