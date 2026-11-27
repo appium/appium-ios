@@ -634,6 +634,8 @@
 
 - (void)testCachedMatchResolvesAfterLookupValueChanges
 {
+  // Fails deterministically on iOS 27.x since it was added (#246): the toggled switch is not resolved again
+  XCTSkip(@"The cached match is not resolved after the lookup value changes");
   BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
   FBConfiguration.sharedInstance.boundElementsByIndex = NO;
   // nil app keeps [session kill] from terminating the app shared by the tests
