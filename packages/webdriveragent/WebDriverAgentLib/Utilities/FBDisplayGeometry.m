@@ -418,9 +418,12 @@ static CGRect FBWindowFrameInSnapshot(id<FBXCElementSnapshot> root, long long di
 
 NSNumber *FBSpringBoardDisplayVisibility(id<FBXCElementSnapshot> snapshot)
 {
+  // On the Duo simulator, reading AX visibility directly avoids an XCTest query that
+  // can dismiss Control Center. On Duo hardware, direct AX reads produced permission
+  // error 1100 (issue #237). Return nil there so individual /displayed requests use
+  // XCTest. Page source handles Control Center visibility during traversal.
 #if TARGET_OS_SIMULATOR && !TARGET_OS_TV && !TARGET_OS_WATCH
   if (FBDeviceHasHinge() && FBIsSystemApplicationSnapshot(snapshot)) {
-    // XCTest's live isVisible attribute query can dismiss Control Center.
     id<FBAXDisplayElement> ax = FBAXElementForSnapshot(snapshot);
     if ([ax respondsToSelector:@selector(isVisible)]) {
       return @(ax.isVisible);
@@ -442,8 +445,9 @@ id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL 
     id<FBXCElementSnapshot> window = nil;
     BOOL resolveFromWindow = FBHasOtherDisplay(snapshot, display);
 #if !TARGET_OS_SIMULATOR
-    // On hardware even a control reporting the selected display can have a
-    // different frame in the identity-bound query and in the application tree.
+    // On Duo hardware, a direct query could report the selected display but return
+    // a control at one third of its size in page source (issue #237). Resolve these
+    // controls in the same window as page source even when the display IDs match.
     resolveFromWindow |= FBDeviceHasHinge() && (snapshot.elementType == XCUIElementTypeButton
         || snapshot.elementType == XCUIElementTypeSwitch || snapshot.elementType == XCUIElementTypeIcon);
 #endif

@@ -49,6 +49,8 @@
   BOOL needsDisplaySnapshot = [name isEqualToString:FBStringify(XCUIElement, wdRect)]
     || [name isEqualToString:FBStringify(XCUIElement, wdFrame)];
 #if TARGET_OS_SIMULATOR
+  // On the Duo simulator, resolve the selected display's SpringBoard element before
+  // reading its AX visibility. Individual /displayed requests on hardware use XCTest.
   needsDisplaySnapshot |= [name isEqualToString:FBStringify(XCUIElement, isWDVisible)];
 #endif
   if (needsDisplaySnapshot) {
