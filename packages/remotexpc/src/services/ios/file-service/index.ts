@@ -26,6 +26,7 @@ import {
   DEFAULT_FILE_SERVICE_USERNAME,
   DEFAULT_PUSHED_FILE_PERMISSIONS,
   DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
+  DEVICE_ENOENT,
   DEVICE_ENOTEMPTY,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
@@ -1111,11 +1112,22 @@ function truncateUtf8(value: string, maxBytes: number): string {
  * Whether the device failed to remove a directory because it is not empty.
  */
 function isDirectoryNotEmptyError(err: unknown): boolean {
+  return hasDevicePosixError(err, DEVICE_ENOTEMPTY);
+}
+
+/**
+ * Whether the device failed an operation because the file or directory does not exist.
+ */
+export function isFileNotFoundError(err: unknown): boolean {
+  return hasDevicePosixError(err, DEVICE_ENOENT);
+}
+
+function hasDevicePosixError(err: unknown, code: number): boolean {
   const underlying = asDictionary(asDictionary((err as CoreDeviceError)?.response?.EncodedError)?.NSUnderlyingError);
   return (
     err instanceof CoreDeviceError &&
     asString(underlying?.ErrorDomain) === POSIX_ERROR_DOMAIN &&
-    asNumber(underlying?.ErrorCode) === DEVICE_ENOTEMPTY
+    asNumber(underlying?.ErrorCode) === code
   );
 }
 

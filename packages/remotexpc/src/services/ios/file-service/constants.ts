@@ -106,5 +106,8 @@ export const MAX_TEMPORARY_NAME_PREFIX_BYTES = 100;
 /** Error domain of the POSIX errors the device reports as the underlying error. */
 export const POSIX_ERROR_DOMAIN = 'NSPOSIXErrorDomain';
 
+/** `ENOENT` on the device (Darwin). */
+export const DEVICE_ENOENT = 2;
+
 /** `ENOTEMPTY` on the device (Darwin); the host's `os.constants.errno` may differ. */
 export const DEVICE_ENOTEMPTY = 66;

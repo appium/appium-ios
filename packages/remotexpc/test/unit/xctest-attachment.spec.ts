@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {describe, it} from 'node:test';
+import {type TestContext, describe, it} from 'node:test';
 
+import {CoreDeviceError} from '../../src/services/ios/core-device/core-device-service.js';
 import type {XCTestAttachment as XCTestAttachmentType} from '../../src/services/ios/testmanagerd/xctest-attachment.js';
 import {mockImport} from '../helpers/mock-module.js';
 
@@ -8,36 +9,36 @@ const UDID = '00008030-000A49391460202E';
 const UUID = 'BE70429E-74DD-4849-898D-DD587214BA96';
 const OTHER = '956233E5-1A74-48C9-92C1-818E511CEF26';
 
-interface Setup {
-  XCTestAttachment: typeof XCTestAttachmentType;
-  removed: string[];
-  state: State;
-}
+/** Error the device reports when a file or directory does not exist. */
+const notFoundError = () =>
+  new CoreDeviceError('not found', {
+    EncodedError: {ErrorCode: 7000, NSUnderlyingError: {ErrorCode: 2, ErrorDomain: 'NSPOSIXErrorDomain'}},
+  });
 
-interface State {
-  fileServiceError?: Error;
+interface Options {
+  /** Directory contents; a directory that is absent does not exist on the device. */
+  files?: Record<string, string[]>;
+  startError?: Error;
+  listError?: Error;
   rmError?: Error;
-  closed: boolean;
 }
 
-async function setup(t: any, files: Record<string, string[]>, state: State = {closed: false}): Promise<Setup> {
+async function setup(t: TestContext, {files = {}, startError, listError, rmError}: Options = {}) {
   const removed: string[] = [];
-  const testmanagerd = {
-    makeChannel: async () => ({getCode: () => 1}),
-    sendMessage: async () => {},
-    recvPlist: async () => [[true, []]],
-    close: async () => {},
-  };
+  const state = {started: 0, closed: false};
   const fileService = {
     listFilePaths: async (dir: string) => {
+      if (listError) {
+        throw listError;
+      }
       if (!(dir in files)) {
-        throw new Error('no such directory');
+        throw notFoundError();
       }
       return files[dir];
     },
     rm: async (p: string) => {
-      if (state.rmError) {
-        throw state.rmError;
+      if (rmError) {
+        throw rmError;
       }
       removed.push(p);
     },
@@ -51,10 +52,10 @@ async function setup(t: any, files: Record<string, string[]>, state: State = {cl
     import.meta.url,
     {
       '../../src/services.js': {
-        startTestmanagerdService: async () => testmanagerd,
         startCoreDeviceFileService: async () => {
-          if (state.fileServiceError) {
-            throw state.fileServiceError;
+          state.started++;
+          if (startError) {
+            throw startError;
           }
           return fileService;
         },
@@ -65,53 +66,62 @@ async function setup(t: any, files: Record<string, string[]>, state: State = {cl
 }
 
 describe('XCTestAttachment.delete', function () {
-  it('removes the files testmanagerd kept', async function (t) {
+  it('removes the attachment', async function (t) {
     const {XCTestAttachment, removed, state} = await setup(t, {
-      'tmp/Attachments': [OTHER, UUID.toLowerCase()],
+      files: {'tmp/Attachments': [OTHER, UUID.toLowerCase()]},
     });
-    const result = await new XCTestAttachment(UDID).delete([UUID]);
-    assert.deepEqual(result, [true, []]);
+    await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, [`tmp/Attachments/${UUID.toLowerCase()}`]);
     assert.ok(state.closed);
   });
 
-  it('removes nothing if testmanagerd deleted the files', async function (t) {
-    const {XCTestAttachment, removed} = await setup(t, {'tmp/Attachments': [OTHER]});
+  it('removes nothing if the attachment does not exist', async function (t) {
+    const {XCTestAttachment, removed} = await setup(t, {files: {'tmp/Attachments': [OTHER]}});
     await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, []);
   });
 
-  it('also checks the legacy directory', async function (t) {
-    const {XCTestAttachment, removed} = await setup(t, {Attachments: [UUID]});
+  it('removes the attachment from the legacy directory', async function (t) {
+    const {XCTestAttachment, removed} = await setup(t, {files: {Attachments: [UUID]}});
     await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, [`Attachments/${UUID}`]);
   });
 
-  it('does not fail if the file service is unavailable', async function (t) {
-    const {XCTestAttachment, removed} = await setup(t, {}, {closed: false, fileServiceError: new Error('no tunnel')});
-    await new XCTestAttachment(UDID).delete([UUID]);
-    assert.deepEqual(removed, []);
-  });
-
-  it('removes the file from both directories', async function (t) {
-    const {XCTestAttachment, removed} = await setup(t, {'tmp/Attachments': [UUID], Attachments: [UUID]});
+  it('removes the attachment from both directories', async function (t) {
+    const {XCTestAttachment, removed} = await setup(t, {files: {'tmp/Attachments': [UUID], Attachments: [UUID]}});
     await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, [`tmp/Attachments/${UUID}`, `Attachments/${UUID}`]);
   });
 
-  it('fails and closes the file service if the removal fails', async function (t) {
-    const {XCTestAttachment, state} = await setup(
-      t,
-      {'tmp/Attachments': [UUID]},
-      {closed: false, rmError: new Error('permission denied')},
-    );
+  it('ignores an attachment removed in the meantime', async function (t) {
+    const {XCTestAttachment, state} = await setup(t, {files: {'tmp/Attachments': [UUID]}, rmError: notFoundError()});
+    await new XCTestAttachment(UDID).delete([UUID]);
+    assert.ok(state.closed);
+  });
+
+  it('fails if the listing fails for another reason than a missing directory', async function (t) {
+    const {XCTestAttachment, state} = await setup(t, {listError: new Error('permission denied')});
     await assert.rejects(new XCTestAttachment(UDID).delete([UUID]), /permission denied/);
     assert.ok(state.closed);
   });
 
-  it('fails before opening the file service for an invalid UUID', async function (t) {
-    const {XCTestAttachment, state} = await setup(t, {'tmp/Attachments': [UUID]});
-    await assert.rejects(new XCTestAttachment(UDID).delete(['not-a-uuid']));
-    assert.ok(!state.closed);
+  it('fails and closes the file service if the removal fails', async function (t) {
+    const {XCTestAttachment, state} = await setup(t, {
+      files: {'tmp/Attachments': [UUID]},
+      rmError: new Error('permission denied'),
+    });
+    await assert.rejects(new XCTestAttachment(UDID).delete([UUID]), /permission denied/);
+    assert.ok(state.closed);
+  });
+
+  it('fails if the file service is unavailable', async function (t) {
+    const {XCTestAttachment} = await setup(t, {startError: new Error('no tunnel')});
+    await assert.rejects(new XCTestAttachment(UDID).delete([UUID]), /no tunnel/);
+  });
+
+  it('fails without opening the file service for an invalid UUID', async function (t) {
+    const {XCTestAttachment, state} = await setup(t);
+    await assert.rejects(new XCTestAttachment(UDID).delete(['not-a-uuid']), /UUID/);
+    assert.equal(state.started, 0);
   });
 });
