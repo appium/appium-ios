@@ -712,16 +712,18 @@ static BOOL FBIsZeroPause(FBW3CKeyItem *item)
 @end
 
 
-// The flags of the held modifier keys (the NULL key has no flags)
-static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
+// The flags of the pressed modifier keys (the NULL key has no flags)
+static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
 {
   NSUInteger result = 0;
-  for (NSString *key in heldKeys) {
+  for (NSString *key in pressedKeys) {
     result |= [FBToMetaModifier(key) unsignedIntegerValue];
   }
   return result;
 }
 
+// XCUIKeyModifierShift
+#define FBKeyModifierShift 2
 #define MAX_KEY_ACTIONS_PAUSES_MS 300000
 
 @implementation FBW3CActionsSynthesizer
@@ -980,7 +982,9 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
                   forActionId:(NSString *)actionId
                         error:(NSError **)error
 {
-  NSMutableDictionary<NSString *, NSMutableArray<FBKeyDownItem *> *> *openItems = [NSMutableDictionary dictionary];
+  // A repeated key down of a pressed key does not press it again
+  NSMutableOrderedSet<FBKeyDownItem *> *pressedItems = [NSMutableOrderedSet orderedSet];
+  NSMutableDictionary<NSString *, FBKeyDownItem *> *pressedByValue = [NSMutableDictionary dictionary];
   double totalPausesMs = 0;
   for (FBW3CKeyItem *item in chain.items) {
     if ([item isKindOfClass:FBKeyPauseItem.class]) {
@@ -991,26 +995,26 @@ static NSUInteger FBHeldModifierFlags(NSCountedSet<NSString *> *heldKeys)
         return [[FBErrorBuilder.builder withDescription:description] buildError:error];
       }
     } else if ([item isKindOfClass:FBKeyDownItem.class]) {
-      NSString *value = ((FBKeyDownItem *)item).value;
-      NSMutableArray<FBKeyDownItem *> *stack = openItems[value] ?: [NSMutableArray array];
-      [stack addObject:(FBKeyDownItem *)item];
-      openItems[value] = stack;
+      FBKeyDownItem *downItem = (FBKeyDownItem *)item;
+      if (nil == pressedByValue[downItem.value]) {
+        pressedByValue[downItem.value] = downItem;
+        [pressedItems addObject:downItem];
+      }
     } else if ([item isKindOfClass:FBKeyUpItem.class]) {
       FBKeyUpItem *upItem = (FBKeyUpItem *)item;
-      NSMutableArray *stack = openItems[upItem.value];
-      if (0 == stack.count) {
+      FBKeyDownItem *downItem = pressedByValue[upItem.value];
+      if (nil == downItem) {
         NSString *description = [NSString stringWithFormat:@"Key Up action '%@' is not balanced with a preceding Key Down one in '%@'", upItem.value, upItem.actionItem];
         return [[FBErrorBuilder.builder withDescription:description] buildError:error];
       }
-      [stack removeLastObject];
+      [pressedByValue removeObjectForKey:upItem.value];
+      [pressedItems removeObject:downItem];
     }
   }
-  for (NSArray<FBKeyDownItem *> *stack in openItems.allValues) {
-    if (stack.count > 0) {
-      FBKeyDownItem *downItem = stack.firstObject;
-      NSString *description = [NSString stringWithFormat:@"Key Down action '%@' must have a closing Key Up successor in '%@'", downItem.value, downItem.actionItem];
-      return [[FBErrorBuilder.builder withDescription:description] buildError:error];
-    }
+  if (pressedItems.count > 0) {
+    FBKeyDownItem *downItem = pressedItems.firstObject;
+    NSString *description = [NSString stringWithFormat:@"Key Down action '%@' must have a closing Key Up successor in '%@'", downItem.value, downItem.actionItem];
+    return [[FBErrorBuilder.builder withDescription:description] buildError:error];
   }
   return YES;
 }
@@ -1085,8 +1089,10 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
     return nil;
   }
 
+  // Every physical key is either pressed or released. Regular keys are typed when they go down,
+  // so the modifiers pressed at that moment apply regardless of the order of the releases.
   NSMutableArray<FBKeyAction *> *result = [NSMutableArray array];
-  NSCountedSet<NSString *> *heldKeys = [NSCountedSet set];
+  NSMutableSet<NSString *> *pressedKeys = [NSMutableSet set];
   NSMutableString *pendingText = [NSMutableString string];
   for (FBW3CKeyItem *item in chain.items) {
     if ([item isKindOfClass:FBKeyPauseItem.class]) {
@@ -1104,18 +1110,28 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
 
     BOOL isKeyDown = [item isKindOfClass:FBKeyDownItem.class];
     NSString *value = isKeyDown ? ((FBKeyDownItem *)item).value : ((FBKeyUpItem *)item).value;
+    if (isKeyDown == [pressedKeys containsObject:value]) {
+      // A repeated key down or a key up of a released key
+      continue;
+    }
+    NSUInteger oldFlags = FBHeldModifierFlags(pressedKeys);
+    if (isKeyDown) {
+      [pressedKeys addObject:value];
+    } else {
+      [pressedKeys removeObject:value];
+    }
+
     NSNumber *modifier = FBToMetaModifier(value);
     if (nil != modifier) {
-      NSUInteger oldFlags = FBHeldModifierFlags(heldKeys);
-      if (0 == modifier.unsignedIntegerValue) {
-        // The NULL key releases everything
-        [heldKeys removeAllObjects];
-      } else if (isKeyDown) {
-        [heldKeys addObject:value];
-      } else {
-        [heldKeys removeObject:value];
+      if (isKeyDown && 0 == modifier.unsignedIntegerValue) {
+        // The NULL key releases all the modifiers
+        for (NSString *pressedKey in pressedKeys.copy) {
+          if ([FBToMetaModifier(pressedKey) unsignedIntegerValue] > 0) {
+            [pressedKeys removeObject:pressedKey];
+          }
+        }
       }
-      NSUInteger newFlags = FBHeldModifierFlags(heldKeys);
+      NSUInteger newFlags = FBHeldModifierFlags(pressedKeys);
       if (newFlags == oldFlags) {
         continue;
       }
@@ -1126,12 +1142,10 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
       [result addObject:modifiers];
       continue;
     }
-    if (isKeyDown) {
-      // Regular keys are typed on key up
+    if (!isKeyDown) {
       continue;
     }
 
-    NSUInteger flags = FBHeldModifierFlags(heldKeys);
     NSString *key = FBMapToXCUIKeyboardKey(value);
     NSString *text = FBMapIfSpecialCharacter(value);
     if (nil == key && 0 == text.length) {
@@ -1140,13 +1154,19 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
       return nil;
     }
     BOOL isDeletion = 0xE003 == [value characterAtIndex:0] || 0xE017 == [value characterAtIndex:0];
-    if (nil == key && flags > 0 && isDeletion) {
+    if (nil == key && oldFlags > 0 && isDeletion) {
       // Delete keys are only delivered as text, which cannot carry modifiers
       NSString *description = [NSString stringWithFormat:@"The key '%@' in '%@' is not supported while modifier keys are pressed", value, actionId];
       [[FBErrorBuilder.builder withDescription:description] buildError:error];
       return nil;
     }
-    if (nil == key && 0 == flags) {
+    NSString *shifted = text.uppercaseString;
+    if (nil == key && FBKeyModifierShift == oldFlags && shifted.length == text.length && ![shifted isEqualToString:text]) {
+      // Shifted letters are typed as text: physical devices ignore them when sent as modified keys
+      [pendingText appendString:shifted];
+      continue;
+    }
+    if (nil == key && 0 == oldFlags) {
       [pendingText appendString:text];
       continue;
     }
@@ -1154,7 +1174,7 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
     FBKeyAction *keyAction = [FBKeyAction new];
     keyAction.kind = FBKeyActionKindKey;
     keyAction.value = key ?: text;
-    keyAction.modifierFlags = flags;
+    keyAction.modifierFlags = oldFlags;
     [result addObject:keyAction];
   }
   FBFlushText(pendingText, result);

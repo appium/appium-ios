@@ -216,7 +216,7 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
 {
   NSString *shift = K(0xE008);
   [self assertPlan:@[Down(shift), Press(@"a"), Pause(@100), Press(@"b"), Up(shift), Press(@"c")]
-            equals:@[@"mod:2", @"key:a@2", @"delay:0.1", @"key:b@2", @"mod:0", @"text:c"]];
+            equals:@[@"mod:2", @"text:A", @"delay:0.1", @"text:B", @"mod:0", @"text:c"]];
 }
 
 - (void)testModifierCombination
@@ -237,14 +237,36 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   NSString *left = K(0xE008);
   NSString *right = K(0xE050);
   [self assertPlan:@[Down(left), Down(right), Up(left), Press(@"a"), Up(right), Press(@"b")]
-            equals:@[@"mod:2", @"key:a@2", @"mod:0", @"text:b"]];
+            equals:@[@"mod:2", @"text:A", @"mod:0", @"text:b"]];
 }
 
-- (void)testRepeatedModifierPressIsCounted
+- (void)testRepeatedModifierPressIsARepeat
 {
   NSString *shift = K(0xE008);
-  [self assertPlan:@[Down(shift), Down(shift), Up(shift), Press(@"a"), Up(shift), Press(@"b")]
-            equals:@[@"mod:2", @"key:a@2", @"mod:0", @"text:b"]];
+  [self assertPlan:@[Down(shift), Down(shift), Up(shift), Press(@"a")]
+            equals:@[@"mod:2", @"mod:0", @"text:a"]];
+}
+
+- (void)testKeyIsTypedWithModifiersPressedAtKeyDown
+{
+  NSString *command = K(0xE03D);
+  NSArray *expected = @[@"mod:16", @"key:a@16", @"mod:0"];
+  // The order of the releases must not matter
+  [self assertPlan:@[Down(command), Down(@"a"), Up(command), Up(@"a")] equals:expected];
+  [self assertPlan:@[Down(command), Down(@"a"), Up(@"a"), Up(command)] equals:expected];
+  // The modifier pressed after the key does not apply to it
+  [self assertPlan:@[Down(@"a"), Down(command), Up(@"a"), Up(command)]
+            equals:@[@"text:a", @"mod:16", @"mod:0"]];
+}
+
+- (void)testShiftedLettersAreTypedAsText
+{
+  NSString *shift = K(0xE008);
+  [self assertPlan:@[Down(shift), Press(@"a"), Press(@"1"), Up(shift)]
+            equals:@[@"mod:2", @"text:A", @"key:1@2", @"mod:0"]];
+  // Other modifiers keep the letter as a key
+  [self assertPlan:@[Down(K(0xE009)), Down(shift), Press(@"a"), Up(shift), Up(K(0xE009))]
+            equals:@[@"mod:4", @"mod:6", @"key:a@6", @"mod:4", @"mod:0"]];
 }
 
 - (void)testNullKeyReleasesAllModifiers
