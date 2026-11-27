@@ -11,14 +11,16 @@ const OTHER = '956233E5-1A74-48C9-92C1-818E511CEF26';
 interface Setup {
   XCTestAttachment: typeof XCTestAttachmentType;
   removed: string[];
-  state: {fileServiceError?: Error; closed: boolean};
+  state: State;
 }
 
-async function setup(
-  t: any,
-  files: Record<string, string[]>,
-  state: {fileServiceError?: Error; closed: boolean} = {closed: false},
-): Promise<Setup> {
+interface State {
+  fileServiceError?: Error;
+  rmError?: Error;
+  closed: boolean;
+}
+
+async function setup(t: any, files: Record<string, string[]>, state: State = {closed: false}): Promise<Setup> {
   const removed: string[] = [];
   const testmanagerd = {
     makeChannel: async () => ({getCode: () => 1}),
@@ -34,6 +36,9 @@ async function setup(
       return files[dir];
     },
     rm: async (p: string) => {
+      if (state.rmError) {
+        throw state.rmError;
+      }
       removed.push(p);
     },
     close: async () => {
@@ -86,5 +91,27 @@ describe('XCTestAttachment.delete', function () {
     const {XCTestAttachment, removed} = await setup(t, {}, {closed: false, fileServiceError: new Error('no tunnel')});
     await new XCTestAttachment(UDID).delete([UUID]);
     assert.deepEqual(removed, []);
+  });
+
+  it('removes the file from both directories', async function (t) {
+    const {XCTestAttachment, removed} = await setup(t, {'tmp/Attachments': [UUID], Attachments: [UUID]});
+    await new XCTestAttachment(UDID).delete([UUID]);
+    assert.deepEqual(removed, [`tmp/Attachments/${UUID}`, `Attachments/${UUID}`]);
+  });
+
+  it('fails and closes the file service if the removal fails', async function (t) {
+    const {XCTestAttachment, state} = await setup(
+      t,
+      {'tmp/Attachments': [UUID]},
+      {closed: false, rmError: new Error('permission denied')},
+    );
+    await assert.rejects(new XCTestAttachment(UDID).delete([UUID]), /permission denied/);
+    assert.ok(state.closed);
+  });
+
+  it('fails before opening the file service for an invalid UUID', async function (t) {
+    const {XCTestAttachment, state} = await setup(t, {'tmp/Attachments': [UUID]});
+    await assert.rejects(new XCTestAttachment(UDID).delete(['not-a-uuid']));
+    assert.ok(!state.closed);
   });
 });

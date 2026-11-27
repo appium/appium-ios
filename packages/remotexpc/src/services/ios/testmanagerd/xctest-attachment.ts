@@ -105,7 +105,6 @@ export class XCTestAttachment {
           continue;
         }
         for (const name of present.filter((n) => names.has(n.toUpperCase()))) {
-          log.debug(`testmanagerd kept '${directory}/${name}', removing it`);
           await fileService.rm(`${directory}/${name}`);
         }
       }
