@@ -72,7 +72,7 @@
     "@appium/coresim": "^2.2.0",
     "@appium/oxc-config": "^2.0.0-beta.3",
     "@appium/tsconfig": "^2.0.0-beta.2",
-    "@appium/types": "^2.0.0-beta.6",
+    "@appium/types": "^3.0.0",
     "@types/node": "^26.0.0",
     "@types/sinon": "^22.0.2",
     "appium-xcode": "^8.0.4",
