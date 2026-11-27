@@ -16,8 +16,8 @@ import {
   startTunnelRegistryServer,
   watchTunnelRegistryOnDead,
 } from 'appium-ios-remotexpc';
-import {Command} from 'commander';
 
+import {parseCliArgs} from './lib/cli.mjs';
 import {DEFAULT_TUNNEL_REGISTRY_PORT, DEFAULT_WIRELESS_APPLETV_DISCOVERY_TIMEOUT_MS} from './lib/constants.mjs';
 import {formatError} from './lib/format-error.mjs';
 import {parseNonNegativeIntegerOption, parsePortOption, parsePositiveIntegerOption} from './lib/options.mjs';
@@ -409,35 +409,40 @@ function createAppleTvReconnectTunnelByUdid({reconnectRetries, tunnelService, di
   };
 }
 
+const USAGE = `Usage: start-appletv-tunnel [options] [deviceIdentifier]
+
+Open Wi-Fi Remote XPC tunnel(s) and serve the tunnel registry API.
+With [deviceIdentifier], only that Apple TV is used. Without it, one tunnel per discovered device.
+
+Arguments:
+  deviceIdentifier                 Apple TV device identifier from discovery. Omit to tunnel every discovered device.
+
+Options:
+  --tunnel-registry-port <port>    Port for tunnel registry API (default: ${DEFAULT_TUNNEL_REGISTRY_PORT})
+  --reconnect-retries <count>      Reconnect retries after unexpected tunnel drop (0 = unlimited)
+  --discovery-timeout <ms>         Apple TV discovery timeout in milliseconds
+  -h, --help                       Show this help`;
+
 async function main() {
   setupCleanupHandlers();
 
-  const program = new Command();
-  program
-    .name('start-appletv-tunnel')
-    .description(
-      'Open Wi-Fi Remote XPC tunnel(s) and serve the tunnel registry API. ' +
-        'With [deviceIdentifier], only that Apple TV is used. Without it, one tunnel per discovered device.',
-    )
-    .argument(
-      '[deviceIdentifier]',
-      'Apple TV device identifier from discovery. Omit to tunnel every discovered device.',
-    )
-    .option(
-      '--tunnel-registry-port <port>',
-      `Port for tunnel registry API (default: ${DEFAULT_TUNNEL_REGISTRY_PORT})`,
-      (value) => parsePortOption(value, 'tunnel registry port'),
-    )
-    .option('--reconnect-retries <count>', 'Reconnect retries after unexpected tunnel drop (0 = unlimited)', (value) =>
-      parseNonNegativeIntegerOption(value, 'retry count'),
-    )
-    .option('--discovery-timeout <ms>', 'Apple TV discovery timeout in milliseconds', (value) =>
-      parsePositiveIntegerOption(value, 'discovery timeout'),
-    );
-
-  program.parse(process.argv);
-  const options = program.opts();
-  const deviceIdentifier = program.args[0];
+  const {values: options, positionals} = parseCliArgs(
+    USAGE,
+    {
+      'tunnel-registry-port': {type: 'string'},
+      'reconnect-retries': {type: 'string'},
+      'discovery-timeout': {type: 'string'},
+    },
+    {
+      maxPositionals: 1,
+      converters: {
+        'tunnel-registry-port': (value) => parsePortOption(value, 'tunnel registry port'),
+        'reconnect-retries': (value) => parseNonNegativeIntegerOption(value, 'retry count'),
+        'discovery-timeout': (value) => parsePositiveIntegerOption(value, 'discovery timeout'),
+      },
+    },
+  );
+  const deviceIdentifier = positionals[0];
   const registryPort =
     options.tunnelRegistryPort ?? (await resolveAvailableRegistryPort(DEFAULT_TUNNEL_REGISTRY_PORT, log));
 

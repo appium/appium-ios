@@ -38,18 +38,6 @@ id FBExtractElement(NSDictionary *src)
   return nil;
 }
 
-NSDictionary *FBCleanupElements(NSDictionary *src)
-{
-  NSMutableDictionary *result = src.mutableCopy;
-  for (NSString* key in src) {
-    if ([key.lowercaseString isEqualToString:W3C_ELEMENT_KEY.lowercaseString]
-        || [key.lowercaseString isEqualToString:JSONWP_ELEMENT_KEY.lowercaseString]) {
-      [result removeObjectForKey:key];
-    }
-  }
-  return result.copy;
-}
-
 NSArray<NSString *> *standardCapabilities(void)
 {
   static NSArray<NSString *> *standardCaps;
@@ -141,4 +129,24 @@ NSDictionary<NSString *, id> *FBParseCapabilities(NSDictionary<NSString *, id> *
     withDescriptionFormat:@"Could not find matching capabilities from %@", caps]
    buildError:error];
   return nil;
+}
+
+// The characters Apple allows in a bundle identifier (https://developer.apple.com/help/glossary/bundle-id), plus '_'
+static NSString *const FBBundleIdCharacters = @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._";
+NSString *const FBBundleIdRule = @"a non-empty string of A-Z, a-z, 0-9, '-', '_' and '.'";
+
+BOOL FBIsValidBundleId(id bundleId, BOOL isRequired)
+{
+  if (nil == bundleId) {
+    return !isRequired;
+  }
+  if (![bundleId isKindOfClass:NSString.class] || 0 == [(NSString *)bundleId length]) {
+    return NO;
+  }
+  static NSCharacterSet *disallowedCharacters;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    disallowedCharacters = [NSCharacterSet characterSetWithCharactersInString:FBBundleIdCharacters].invertedSet;
+  });
+  return NSNotFound == [(NSString *)bundleId rangeOfCharacterFromSet:disallowedCharacters].location;
 }

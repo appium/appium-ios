@@ -14,6 +14,8 @@ export const BINARY_PLIST_HEADER_LENGTH = 9;
 
 // XML plist constants
 export const XML_DECLARATION = '<?xml';
+// Leading bytes of a message the decoder scans for an XML declaration to trim up to
+export const XML_DECLARATION_SCAN_LENGTH = 100;
 export const PLIST_CLOSING_TAG = '</plist>';
 
 // Length field constants

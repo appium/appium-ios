@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.3.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.2.0...appium-ios-simulator@11.3.0) (2026-11-26)
+
+### Features
+
+* **simulator:** add getDisplays ([#253](https://github.com/appium/appium-ios/issues/253)) ([20dae1c](https://github.com/appium/appium-ios/commit/20dae1c33b2ea1b0187b7dd69508754a10235eff))
+
+
 ## [11.2.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.1.2...appium-ios-simulator@11.2.0) (2026-11-25)
 
 ### Features

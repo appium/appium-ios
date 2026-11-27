@@ -43,6 +43,11 @@ XCUIElement *maybeStable(XCUIElement *element)
     return element;
   }
 
+  // Elements bound to their AX element are already stable, no snapshot or app query needed
+  if (nil != element.fb_boundAccessibilityElement) {
+    return element;
+  }
+
   XCUIElement *result = element;
   id<FBXCElementSnapshot> snapshot = element.lastSnapshot
     ?: element.fb_cachedSnapshot
@@ -151,6 +156,15 @@ id<FBResponsePayload> FBResponseWithStatus(FBCommandStatus *status)
   }
   return [[FBResponseJSONPayload alloc] initWithDictionary:response.copy
                                             httpStatusCode:status.statusCode];
+}
+
+id<FBResponsePayload> FBInvalidBundleIdResponse(id bundleId, BOOL isRequired)
+{
+  if (FBIsValidBundleId(bundleId, isRequired)) {
+    return nil;
+  }
+  NSString *message = [NSString stringWithFormat:@"'bundleId' must be %@", FBBundleIdRule];
+  return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:message traceback:nil]);
 }
 
 inline NSDictionary *FBDictionaryResponseWithElement(XCUIElement *element, BOOL compact)

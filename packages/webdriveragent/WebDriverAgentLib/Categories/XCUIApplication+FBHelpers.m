@@ -128,25 +128,6 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 
 @implementation XCUIApplication (FBHelpers)
 
-- (BOOL)fb_waitForAppElement:(NSTimeInterval)timeout
-{
-  __block BOOL canDetectAxElement = YES;
-  int currentProcessIdentifier = [self.accessibilityElement processIdentifier];
-  BOOL result = [[[FBRunLoopSpinner new]
-           timeout:timeout]
-          spinUntilTrue:^BOOL{
-    id<FBXCAccessibilityElement> currentAppElement = FBActiveAppDetectionPoint.sharedInstance.axElement;
-    canDetectAxElement = nil != currentAppElement;
-    if (!canDetectAxElement) {
-      return YES;
-    }
-    return currentAppElement.processIdentifier == currentProcessIdentifier;
-  }];
-  return canDetectAxElement
-    ? result
-    : [self waitForExistenceWithTimeout:timeout];
-}
-
 + (NSArray<NSDictionary<NSString *, id> *> *)fb_appsInfoWithAxElements:(NSArray<id<FBXCAccessibilityElement>> *)axElements
 {
   NSMutableArray<NSDictionary<NSString *, id> *> *result = [NSMutableArray array];

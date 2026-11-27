@@ -7,6 +7,7 @@ import type {XcodeVersion} from 'appium-xcode';
 import {BaseSimulator} from './base-simulator.js';
 import * as appExtensions from './extensions/applications.js';
 import * as biometricExtensions from './extensions/biometric.js';
+import * as displayExtensions from './extensions/display.js';
 import * as geolocationExtensions from './extensions/geolocation.js';
 import * as hidExtensions from './extensions/hid.js';
 import * as jpegStreamExtensions from './extensions/jpeg-stream.js';
@@ -206,6 +207,9 @@ Object.assign(SimulatorXcode15.prototype, {
 
   // screenshot
   getScreenshot: screenshotExtensions.getScreenshot,
+
+  // displays
+  getDisplays: displayExtensions.getDisplays,
 
   // video recording
   startVideoRecording: videoRecordingExtensions.startVideoRecording,

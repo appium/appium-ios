@@ -77,6 +77,11 @@ export class PlistService {
   private _encoder: PlistServiceEncoder;
   private _messageQueue: PlistMessage[];
   private _waiters: PlistWaiter[];
+  /** Set by close(): later receives reject, even while the peer keeps its side of the socket open */
+  private _closed = false;
+  private readonly _onSocketClose = (): void => {
+    this.rejectWaiters(() => this.createConnectionClosedError());
+  };
 
   /**
    * Creates a new PlistService instance
@@ -141,13 +146,19 @@ export class PlistService {
    * Receive a plist message with timeout
    * @param timeout Timeout in ms
    * @returns Promise resolving to the received message
-   * @throws Error if the timeout is reached, or if close() is called before a message arrives
+   * @throws Error if the timeout is reached, or if close() is called or the socket closes before a
+   * message arrives
    */
   public async receivePlist(timeout = DEFAULT_RECEIVE_TIMEOUT_MS): Promise<PlistMessage> {
     return new Promise<PlistMessage>((resolve, reject) => {
       const message = this._messageQueue.shift();
       if (message) {
         return resolve(message);
+      }
+      // No message can arrive any more. This also covers a socket that was destroyed before
+      // this service was created, which never emits 'close' for it.
+      if (this._closed || this._socket.destroyed) {
+        return reject(this.createConnectionClosedError());
       }
 
       const waiter: PlistWaiter = {
@@ -187,14 +198,12 @@ export class PlistService {
     this._socket.unpipe(this._splitter);
     this._splitter.unpipe(this._decoder);
     this._encoder.unpipe(this._socket);
+    this._socket.off('close', this._onSocketClose);
     this._splitter.removeAllListeners();
     this._decoder.removeAllListeners();
 
     this._messageQueue = [];
-    for (const waiter of this._waiters.splice(0)) {
-      clearTimeout(waiter.timeoutId);
-      waiter.reject(new Error('The socket was detached while waiting for a plist response'));
-    }
+    this.rejectWaiters(() => new Error('The socket was detached while waiting for a plist response'));
 
     const bufferedData = this._splitter.takeBufferedData();
     if (bufferedData.length > 0) {
@@ -207,6 +216,7 @@ export class PlistService {
    * Close the connection and clean up resources
    */
   public close(): void {
+    this._closed = true;
     try {
       // Remove all data listeners to prevent parsing during close
       this._splitter.removeAllListeners();
@@ -215,10 +225,7 @@ export class PlistService {
       // Clear the message queue to prevent processing during close
       this._messageQueue = [];
 
-      for (const waiter of this._waiters.splice(0)) {
-        clearTimeout(waiter.timeoutId);
-        waiter.reject(new Error('Connection closed while waiting for plist response'));
-      }
+      this.rejectWaiters(() => new Error('Connection closed while waiting for plist response'));
 
       // Unpipe the transformers to prevent data flow during close
       try {
@@ -255,9 +262,31 @@ export class PlistService {
    */
   private setupErrorHandlers(): void {
     this._socket.on('error', this.handleError.bind(this));
+    this._socket.once('close', this._onSocketClose);
     this._encoder.on('error', this.handleError.bind(this));
     this._decoder.on('error', this.handleError.bind(this));
     this._splitter.on('error', this.handleError.bind(this));
+  }
+
+  /**
+   * Rejects every receive that is still waiting for a message, each with its own error
+   */
+  private rejectWaiters(createError: () => Error): void {
+    for (const waiter of this._waiters.splice(0)) {
+      clearTimeout(waiter.timeoutId);
+      waiter.reject(createError());
+    }
+  }
+
+  /**
+   * The error of a receive that the closed connection can no longer answer, with the socket's
+   * own error as its cause when it failed
+   */
+  private createConnectionClosedError(): Error {
+    const cause = this._socket.errored;
+    return cause
+      ? new Error(`Connection failed while waiting for plist response: ${cause.message}`, {cause})
+      : new Error('Connection closed while waiting for plist response');
   }
 
   /**

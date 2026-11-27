@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.11](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.10...appium-ios-remotexpc@6.1.11) (2026-11-26)
+
+### Miscellaneous Chores
+
+* replace commander with util.parseArgs ([#252](https://github.com/appium/appium-ios/issues/252)) ([73ecec5](https://github.com/appium/appium-ios/commit/73ecec507d62547c5220686c920accd1cfdcbc36))
+
+
+## [6.1.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.9...appium-ios-remotexpc@6.1.10) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t run XML cleanup on binary plists ([#251](https://github.com/appium/appium-ios/issues/251)) ([ebe3b84](https://github.com/appium/appium-ios/commit/ebe3b841c375df3925dc469f08a282e4b140700d))
+
+
+## [6.1.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.8...appium-ios-remotexpc@6.1.9) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** reject pending plist receives when the socket closes ([#248](https://github.com/appium/appium-ios/issues/248)) ([43f295e](https://github.com/appium/appium-ios/commit/43f295e8a4f40caf3adba6b1d1f0765135951617))
+
+
 ## [6.1.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.7...appium-ios-remotexpc@6.1.8) (2026-11-24)
 
 ### Code Refactoring
