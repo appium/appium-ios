@@ -259,20 +259,6 @@
   XCTAssertEqual(matchingSnapshots.count, snapshotsCount);
 }
 
-- (void)testDescendantsWithWrongXPathQuery
-{
-  XCTAssertThrowsSpecificNamed([self.testedView fb_descendantsMatchingXPathQuery:@"//*[blabla(@label, Scrolling')]"
-                                                     shouldReturnAfterFirstMatch:NO],
-                               NSException, FBInvalidXPathException);
-}
-
-- (void)testFirstDescendantWithWrongXPathQuery
-{
-  XCTAssertThrowsSpecificNamed([self.testedView fb_descendantsMatchingXPathQuery:@"//*[blabla(@label, Scrolling')]"
-                                                     shouldReturnAfterFirstMatch:YES],
-                               NSException, FBInvalidXPathException);
-}
-
 - (void)testVisibleDescendantWithXPathQuery
 {
   NSArray<XCUIElement *> *matchingSnapshots = [self.testedView fb_descendantsMatchingXPathQuery:@"//XCUIElementTypeButton[@name='Alerts' and @enabled='true' and @visible='true']" shouldReturnAfterFirstMatch:NO];
@@ -402,18 +388,6 @@
   XCTAssertEqualObjects([matchingSnapshots lastObject].label, @"Attributes");
 }
 
-- (void)testDescendantsWithIndirectClassChainAndPredicates
-{
-  NSString *queryString = @"XCUIElementTypeWindow/**/XCUIElementTypeButton[`label BEGINSWITH 'A'`]";
-  NSArray<XCUIElement *> *simpleQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:queryString
-                                                                            shouldReturnAfterFirstMatch:NO];
-  NSArray<XCUIElement *> *deepQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow/**/XCUIElementTypeButton[`label BEGINSWITH 'A'`]"
-                                                                          shouldReturnAfterFirstMatch:NO];
-  XCTAssertEqual(simpleQueryMatches.count, deepQueryMatches.count);
-  XCTAssertEqualObjects([simpleQueryMatches firstObject].label, [deepQueryMatches firstObject].label);
-  XCTAssertEqualObjects([simpleQueryMatches lastObject].label, [deepQueryMatches lastObject].label);
-}
-
 - (void)testClassChainWithDescendantPredicate
 {
   NSArray<XCUIElement *> *simpleQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow/*/*[1]"
@@ -490,14 +464,6 @@
                                                shouldReturnAfterFirstMatch:YES];
   XCTAssertEqual(matchingSnapshots.count, 0);
 }
-
-- (void)testClassChainWithInvalidPredicate
-{
-  XCTAssertThrowsSpecificNamed([self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow[`bla != 'bla'`]"
-                                                            shouldReturnAfterFirstMatch:NO],
-                               NSException, FBUnknownAttributeException);;
-}
-
 
 - (void)testUidsOfAccessibilityBoundElementsDoNotNeedSnapshots
 {

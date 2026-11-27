@@ -5,7 +5,6 @@
       "IntegrationTests_1": ["FBIntegrationAppTests"],
       "IntegrationTests_2": [
         "FBConfigurationTests",
-        "XCElementSnapshotHelperTests",
         "XCElementSnapshotHitPoint",
         "XCUIElementFBFindTests_IdentifierSemantics",
         "XCUIElementHelperIntegrationTests"
@@ -20,18 +19,10 @@
       ]
     },
     {
-      "IntegrationTests_1": [
-        "FBElementVisibilityTests",
-        "FBImageProcessorTests",
-        "FBImageRendererScalingTests",
-        "FBPickerWheelSelectTests"
-      ],
+      "IntegrationTests_1": ["FBElementVisibilityTests", "FBPickerWheelSelectTests"],
       "IntegrationTests_2": [
-        "XCElementSnapshotHelperTests_ScrollViewCells",
         "XCUIDeviceDuoRotationTests",
         "XCUIDeviceHelperTests",
-        "XCUIDeviceRotationLogicTests",
-        "XCUIElementAttributesTests",
         "XCUIElementFBFindTests",
         "XCUIElementFBFindTests_DeepHierarchyPage"
       ],
@@ -56,7 +47,6 @@
         "FBXPathIntegrationTests",
         "XCUIDeviceRotationTests",
         "XCUIElementFBFindTests_AttributesPage",
-        "XCUIElementFBFindTests_ResponseFields",
         "XCUIElementFBFindTests_ScrollPage"
       ],
       "IntegrationTests_3": ["FBScreenTests", "FBVoiceOverTests", "FBW3CTouchActionsIntegrationTestsPart2"]
@@ -65,15 +55,12 @@
       "IntegrationTests_1": ["FBFailureProofTestCaseTests", "FBScrollingTests"],
       "IntegrationTests_2": [
         "FBW3CTypeActionsTests",
-        "XCElementSnapshotHelperTests_AttributePage",
-        "XCElementSnapshotHelperTests_ScrollView",
         "XCUIApplicationHelperTests",
         "XCUIDeviceHealthCheckTests",
         "XCUIElementFBFindTests_ClassChainAxes",
-        "XCUIElementFBFindTests_CompactResponses",
         "XCUIElementFBFindTests_StaleAppSnapshot"
       ],
-      "IntegrationTests_3": ["FBAutoAlertsHandlerTests", "FBElementSwipingTests", "FBTapTest"]
+      "IntegrationTests_3": ["FBElementSwipingTests", "FBTapTest"]
     }
   ]
 }

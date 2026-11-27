@@ -69,4 +69,11 @@
   XCTAssertEqual(FBConfiguration.sharedInstance.httpRequestBodySizeLimit, 1024ull);
 }
 
+- (void)testSessionResetClearsCurrentDisplay
+{
+  FBConfiguration.sharedInstance.currentDisplayId = @1;
+  [FBConfiguration.sharedInstance resetSessionSettings];
+  XCTAssertNil(FBConfiguration.sharedInstance.currentDisplayId);
+}
+
 @end
