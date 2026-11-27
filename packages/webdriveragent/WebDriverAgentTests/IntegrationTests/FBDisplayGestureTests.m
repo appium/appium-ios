@@ -50,6 +50,7 @@
 @property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 @end
 
+static NSString *const FBPortraitAppBundleID = @"io.appium.test.DuoPortraitApp";
 static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
 
 @interface FBDisplayGestureTests : FBIntegrationTestCase
@@ -75,6 +76,12 @@ static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
                   @"Requires a Duo simulator");
     XCTSkipUnless([[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] applicationIsInstalled:FBHostedAppBundleID],
                   @"Install the DuoHostedApp test fixture");
+  }
+  if (self.invocation.selector == @selector(testPortraitWindowViewportTapsInLandscape)) {
+    XCTSkipUnless(TARGET_OS_SIMULATOR && XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
+                  @"Requires a Duo simulator");
+    XCTSkipUnless([[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] applicationIsInstalled:FBPortraitAppBundleID],
+                  @"Install the DuoPortraitApp test fixture");
   }
   if ([name containsString:@"FoldStates"]) {
     XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
@@ -387,6 +394,74 @@ static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
     [payload dispatchWithResponse:response];
     id value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
     checkResponse(value);
+  }
+}
+
+- (void)testPortraitWindowViewportTapsInLandscape
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  UIDeviceOrientation originalOrientation = device.orientation;
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{
+    [device fb_setDeviceInterfaceOrientation:originalOrientation];
+    [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+  }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
+  XCUIScreen *selected = nil;
+  for (NSDictionary *info in [FBScreen screensWithError:nil]) {
+    XCUIScreen *screen = [FBScreen screenWithDisplayID:[info[@"displayId"] longLongValue] error:nil];
+    if ([FBHIDOperations isInnerDuoDisplay:screen].boolValue) {
+      selected = screen;
+      break;
+    }
+  }
+  XCTAssertNotNil(selected);
+  FBConfiguration.sharedInstance.currentDisplayId = @(selected.displayID);
+  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:FBPortraitAppBundleID];
+  [app launch];
+  FBSession *session = [FBSession initWithApplication:app];
+  session.defaultActiveApplication = app.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+
+  for (NSNumber *orientation in @[@(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
+    [device fb_setDeviceInterfaceOrientation:orientation.integerValue];
+    XCUIElement *window = app.windows.firstMatch;
+    XCTAssertTrue([window waitForExistenceWithTimeout:5]);
+    CGRect appFrame = window.wdFrame;
+    XCTAssertLessThan(appFrame.size.width, appFrame.size.height, @"The fixture must remain portrait");
+    CGFloat width = MAX(selected.bounds.size.width, selected.bounds.size.height) / selected.scale;
+    CGFloat height = MIN(selected.bounds.size.width, selected.bounds.size.height) / selected.scale;
+    for (NSInteger index = 1; index <= 3; index++) {
+      XCUIElement *button = app.buttons[[NSString stringWithFormat:@"portrait-counter-%ld", (long)index]];
+      XCTAssertTrue(button.exists);
+      NSInteger count = button.label.integerValue;
+      // The portrait app is centered and scaled to the landscape viewport height.
+      // These targets come from the fixture layout, not the AX window frame.
+      CGPoint point = CGPointMake(width / 2, height * index / 4.0);
+      NSArray *actions = @[@{
+        @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+        @"actions": @[
+          [self moveFrom:@"viewport" x:point.x y:point.y duration:0],
+          @{@"type": @"pointerDown", @"button": @0},
+          @{@"type": @"pause", @"duration": @100},
+          @{@"type": @"pointerUp", @"button": @0},
+        ],
+      }];
+      NSError *error = nil;
+      XCTAssertTrue([app fb_performW3CActions:actions elementCache:session.elementCache error:&error], @"%@", error);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count, @"W3C viewport tap: %@", NSStringFromCGPoint(point));
+      FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/tap"]
+                                                        parameters:@{} arguments:@{@"x": @(point.x), @"y": @(point.y)}];
+      request.session = session;
+      RouteResponse *response = [RouteResponse new];
+      [[FBElementCommands handleTap:request] dispatchWithResponse:response];
+      id value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+      XCTAssertEqualObjects(value, NSNull.null);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count, @"Native viewport tap: %@", NSStringFromCGPoint(point));
+    }
   }
 }
 
