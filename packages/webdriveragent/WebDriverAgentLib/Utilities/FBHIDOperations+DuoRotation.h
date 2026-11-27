@@ -16,6 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface FBHIDOperations (DuoRotation)
 /** Physical panel identity, or nil if Core Animation metadata does not identify it. */
 + (nullable NSNumber *)isInnerDuoDisplay:(XCUIScreen *)screen;
+/** Whether Core Animation reports the Duo cover is off for this display ID. */
++ (BOOL)isInactiveDuoCover:(long long)displayID;
+
 /** Resolve the selected panel and map the requested orientation to its vendor HID value. */
 + (nullable NSString *)duoOrientationValue:(UIDeviceOrientation)orientation;
 @end

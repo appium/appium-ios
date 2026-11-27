@@ -11,6 +11,7 @@
 #if TARGET_OS_IOS
 #import "FBConfiguration.h"
 #import "FBErrorBuilder.h"
+#import "FBHIDOperations+DuoRotation.h"
 #import "FBMathUtils.h"
 #import "FBScreen.h"
 #import "XCUIElement.h"
@@ -81,17 +82,27 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   if (nil == selectedDisplay || !XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
     return nil;
   }
+  if ([FBHIDOperations isInactiveDuoCover:selectedDisplay.longLongValue]) {
+    [[[FBErrorBuilder builder] withDescription:@"The selected Duo cover display is inactive"] buildError:error];
+    return @NO;
+  }
   // Resolve affinity before testing it. Regular windows retain XCTest's native
   // scrolling, hit testing, and tap behavior.
   (void)element.frame;
   long long elementDisplayID = element.screen.displayID;
-  if (elementDisplayID == selectedDisplay.longLongValue || elementDisplayID != XCUIScreen.mainScreen.displayID) {
+  if (elementDisplayID == selectedDisplay.longLongValue) {
     return nil;
   }
   XCUIApplication *application = element.application;
   CGRect windowFrame;
-  if (nil != FBWindowOnDisplay(application, selectedDisplay.longLongValue, &windowFrame)) {
-    return nil;
+  BOOL isViewportTap = element.elementType == XCUIElementTypeApplication && nil != offset;
+  if (elementDisplayID != XCUIScreen.mainScreen.displayID
+      || nil != FBWindowOnDisplay(application, selectedDisplay.longLongValue, &windowFrame)) {
+    if (isViewportTap) {
+      return nil; // The viewport path resolves the app's window on the selected display.
+    }
+    [[[FBErrorBuilder builder] withDescription:@"The element belongs to a different display"] buildError:error];
+    return @NO;
   }
   Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
   Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
@@ -111,7 +122,6 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
     [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
     return @NO;
   }
-  BOOL isViewportTap = element.elementType == XCUIElementTypeApplication && nil != offset;
   CGPoint point;
   if (isViewportTap) {
     // These offsets are already viewport points. Normalize against XCTest's

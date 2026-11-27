@@ -85,8 +85,10 @@ Select the app's `currentDisplayId` explicitly. For element clicks and mobile ta
 WDA can correct the case where XCTest assigns the hosted app to the main display
 and reports no application window on the selected display. Before sending the
 corrected tap, WDA checks that the app owns the tap point on the selected display.
-A SpringBoard window alone is insufficient. The ordinary application-window
-requirement above still applies to other coordinate gestures.
+A SpringBoard window alone is insufficient. If Core Animation reports the selected
+Duo cover is off, WDA rejects clicks and taps even when XCTest still assigns the
+app to the cover. Other coordinate gestures still require an application window
+on the selected display.
 
 ## XCTest recording on the Duo simulator
 

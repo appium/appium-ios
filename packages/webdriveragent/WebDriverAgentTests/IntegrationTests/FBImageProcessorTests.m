@@ -95,7 +95,6 @@
   FBConfiguration *configuration = FBConfiguration.sharedInstance;
   NSString *previous = configuration.humanReadableScreenshotOrientation;
   [self addTeardownBlock:^{ [configuration setScreenshotOrientation:previous error:nil]; }];
-  XCTAssertTrue([configuration setScreenshotOrientation:@"landscapeRight" error:nil]);
 
   UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat new];
   format.scale = 1;
@@ -103,10 +102,35 @@
   NSData *input = [renderer PNGDataWithActions:^(UIGraphicsImageRendererContext *context) {
     [context fillRect:CGRectMake(0, 0, 20, 30)];
   }];
-  NSData *output = [[FBImageProcessor new] scaledImageWithData:input uti:UTTypePNG scalingFactor:1
-                                            compressionQuality:1 error:nil];
-  UIImage *image = [UIImage imageWithData:output];
-  XCTAssertTrue(CGSizeEqualToSize(image.size, CGSizeMake(60, 40)));
+  // Only the top-left quadrant is opaque. Its destination distinguishes the
+  // two landscape rotations and also detects a skipped upside-down rotation.
+  NSDictionary<NSString *, NSValue *> *expectedCenters = @{
+    @"landscapeRight": [NSValue valueWithCGPoint:CGPointMake(15, 30)],
+    @"landscapeLeft": [NSValue valueWithCGPoint:CGPointMake(45, 10)],
+    @"portraitUpsideDown": [NSValue valueWithCGPoint:CGPointMake(30, 45)],
+  };
+  for (NSString *orientation in expectedCenters) {
+    XCTAssertTrue([configuration setScreenshotOrientation:orientation error:nil]);
+    NSData *output = [[FBImageProcessor new] scaledImageWithData:input uti:UTTypePNG scalingFactor:1
+                                              compressionQuality:1 error:nil];
+    UIImage *image = [UIImage imageWithData:output];
+    CGSize expectedSize = [orientation isEqualToString:@"portraitUpsideDown"] ? CGSizeMake(40, 60) : CGSizeMake(60, 40);
+    XCTAssertTrue(CGSizeEqualToSize(image.size, expectedSize), @"%@", orientation);
+    for (NSUInteger row = 0; row < 2; row++) {
+      for (NSUInteger column = 0; column < 2; column++) {
+        CGPoint point = CGPointMake(expectedSize.width * (0.25 + 0.5 * column),
+                                    expectedSize.height * (0.25 + 0.5 * row));
+        CGImageRef pixel = CGImageCreateWithImageInRect(image.CGImage, (CGRect){point, {1, 1}});
+        uint8_t alpha = 0;
+        CGContextRef context = CGBitmapContextCreate(&alpha, 1, 1, 8, 1, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
+        CGContextDrawImage(context, CGRectMake(0, 0, 1, 1), pixel);
+        CGContextRelease(context);
+        CGImageRelease(pixel);
+        BOOL isMarker = CGPointEqualToPoint(point, expectedCenters[orientation].CGPointValue);
+        XCTAssertEqual(alpha, isMarker ? 255 : 0, @"%@ at %@", orientation, NSStringFromCGPoint(point));
+      }
+    }
+  }
 }
 
 - (void)testOrientationFixDoesNotApplyScalingTwice

@@ -13,6 +13,7 @@
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "FBGestureCoordinateContext.h"
+#import "FBHIDOperations+DuoRotation.h"
 #import "FBRunLoopSpinner.h"
 #import "FBExceptions.h"
 #import "FBElementCommands.h"
@@ -27,6 +28,7 @@
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBElementCommands (CoordinateTests)
++ (id<FBResponsePayload>)handleClick:(FBRouteRequest *)request;
 + (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request;
 + (nullable XCUICoordinate *)gestureCoordinateWithOffset:(CGVector)offset element:(XCUIElement *)element error:(NSError **)error;
 + (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets element:(XCUIElement *)element error:(NSError **)error;
@@ -324,6 +326,49 @@
     return;
   }
   XCTFail(@"Expected an inner display in the folded Duo's screen list");
+}
+
+- (void)testTapsRejectInactiveCoverDisplay
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  XCTSkipIf(!device.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
+  [self.testedApplication terminate];
+  [self launchApplication];
+
+  FBSession *session = [FBSession initWithApplication:self.testedApplication];
+  session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+  NSNumber *cover = nil;
+  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+    NSNumber *displayID = screen[@"displayId"];
+    XCUIScreen *candidate = [FBScreen screenWithDisplayID:displayID.longLongValue error:nil];
+    if ([[FBHIDOperations isInnerDuoDisplay:candidate] isEqual:@NO]) {
+      cover = displayID;
+      break;
+    }
+  }
+  XCTAssertNotNil(cover);
+  FBConfiguration.sharedInstance.currentDisplayId = cover;
+  XCUIElement *button = self.testedApplication.buttons[@"coordinate-probe"];
+  NSString *uuid = [session.elementCache storeElement:button];
+  NSDictionary *offset = @{@"x": @10, @"y": @10};
+  for (NSString *path in @[@"/element/:uuid/click", @"/wda/element/:uuid/tap", @"/wda/tap"]) {
+    BOOL click = [path hasSuffix:@"/click"];
+    FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:path]
+                                                       parameters:[path containsString:@":uuid"] ? @{@"uuid": uuid} : @{}
+                                                        arguments:click ? @{} : offset];
+    request.session = session;
+    RouteResponse *response = [RouteResponse new];
+    id<FBResponsePayload> payload = click ? [FBElementCommands handleClick:request] : [FBElementCommands handleTap:request];
+    [payload dispatchWithResponse:response];
+    NSDictionary *value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(value[@"error"], @"invalid element state", @"%@", path);
+    XCTAssertTrue(button.exists, @"%@ unexpectedly opened the probe", path);
+  }
 }
 
 - (void)testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp
