@@ -93,6 +93,37 @@
 }
 @end
 
+// Synthetic source trees let us exercise display IDs that XCTest can omit.
+@interface FBGeometrySnapshotDouble : NSObject
+@property (nonatomic) CGRect frame;
+@property (nonatomic) XCUIElementType elementType;
+@property (nonatomic) long long displayID;
+@property (nonatomic, weak) FBGeometrySnapshotDouble *parent;
+@property (nonatomic) NSArray<FBGeometrySnapshotDouble *> *children;
+@property (nonatomic) id accessibilityElement;
+@property (nonatomic) NSString *identifier;
+@property (nonatomic) NSString *label;
+@end
+@implementation FBGeometrySnapshotDouble
+- (NSArray *)_allDescendants
+{
+  NSMutableArray *result = [NSMutableArray new];
+  for (FBGeometrySnapshotDouble *child in self.children) {
+    [result addObject:child];
+    [result addObjectsFromArray:child._allDescendants];
+  }
+  return result;
+}
+@end
+
+@interface FBGeometryScreenDouble : NSObject
+@property (nonatomic) CGRect bounds;
+@property (nonatomic) CGFloat scale;
+@property (nonatomic) long long displayID;
+@end
+@implementation FBGeometryScreenDouble
+@end
+
 /** Shared helpers; does not launch the app. */
 @interface FBScreenTestCase : FBIntegrationTestCase
 @end
@@ -377,6 +408,77 @@
 @end
 
 @implementation FBScreenLookupTests
+
+- (void)testLandscapeGeometryInheritsNearestDisplay
+{
+  FBConfiguration.sharedInstance.currentDisplayId = @3;
+  FBGeometryScreenDouble *screen = [FBGeometryScreenDouble new];
+  screen.bounds = CGRectMake(0, 0, 669, 951);
+  screen.scale = 1;
+  screen.displayID = 3;
+  FBGeometrySnapshotDouble *window = [FBGeometrySnapshotDouble new];
+  window.elementType = XCUIElementTypeWindow;
+  window.displayID = 3;
+  window.frame = screen.bounds;
+  window.accessibilityElement = [XCUIApplication.fb_systemApplication fb_standardSnapshot].accessibilityElement;
+  FBGeometrySnapshotDouble *(^node)(FBGeometrySnapshotDouble *, long long) = ^(FBGeometrySnapshotDouble *parent, long long display) {
+    FBGeometrySnapshotDouble *result = [FBGeometrySnapshotDouble new];
+    result.elementType = XCUIElementTypeOther;
+    result.displayID = display;
+    result.frame = CGRectMake(10, 20, 30, 40);
+    result.parent = parent;
+    result.accessibilityElement = window.accessibilityElement;
+    parent.children = [(parent.children ?: @[]) arrayByAddingObject:result];
+    return result;
+  };
+  FBGeometrySnapshotDouble *unknown = node(window, 0);
+  FBGeometrySnapshotDouble *nestedUnknown = node(unknown, 0);
+  // Child traversal still supplies ancestry when XCTest omits a parent link.
+  nestedUnknown.parent = nil;
+  FBGeometrySnapshotDouble *other = node(window, 1);
+  FBGeometrySnapshotDouble *otherUnknown = node(other, 0);
+  FBGeometrySnapshotDouble *selected = node(other, 3);
+  FBGeometrySnapshotDouble *selectedUnknown = node(selected, 0);
+  Method screenMethod = class_getClassMethod(FBScreen.class, @selector(currentScreenWithError:));
+  IMP originalScreen = method_getImplementation(screenMethod);
+  IMP replacementScreen = imp_implementationWithBlock(^id(id receiver, NSError **error) { return screen; });
+  Method orientationMethod = class_getInstanceMethod(XCUIApplication.class, @selector(interfaceOrientation));
+  IMP originalOrientation = method_getImplementation(orientationMethod);
+  __block UIInterfaceOrientation orientation;
+  IMP replacementOrientation = imp_implementationWithBlock(^UIInterfaceOrientation(id receiver) { return orientation; });
+  method_setImplementation(screenMethod, replacementScreen);
+  method_setImplementation(orientationMethod, replacementOrientation);
+  @try {
+    for (NSNumber *value in @[@(UIInterfaceOrientationLandscapeLeft), @(UIInterfaceOrientationLandscapeRight)]) {
+      orientation = value.integerValue;
+      CGRect expected = orientation == UIInterfaceOrientationLandscapeLeft
+        ? CGRectMake(891, 10, 40, 30) : CGRectMake(20, 629, 40, 30);
+      // Check a whole window and a scoped XPath subtree with unresolved IDs.
+      for (FBGeometrySnapshotDouble *root in @[window, unknown, other]) {
+        FBDisplaySnapshotMap *map = FBDisplaySnapshotsForTree((id)root, NO);
+        XCTAssertNotNil(map);
+        for (FBGeometrySnapshotDouble *item in [@[root] arrayByAddingObjectsFromArray:root._allDescendants]) {
+          if (item == window) { continue; }
+          id<FBXCElementSnapshot> resolved = [map objectForKey:(id)item] ?: (id)item;
+          CGRect actual = [FBXCElementSnapshotWrapper ensureWrapped:resolved].wdFrame;
+          BOOL shouldRotate = item != other && item != otherUnknown;
+          XCTAssertTrue(CGRectEqualToRect(actual, shouldRotate ? expected : item.frame),
+                        @"display %lld, orientation %@: %@", item.displayID, value, NSStringFromCGRect(actual));
+          XCTAssertTrue(CGRectEqualToRect(item.frame, CGRectMake(10, 20, 30, 40)), @"Do not mutate XCTest snapshots");
+        }
+      }
+      XCTAssertEqual(nestedUnknown.displayID, 0);
+      XCTAssertEqual(selectedUnknown.displayID, 0);
+    }
+  } @finally {
+    method_setImplementation(screenMethod, originalScreen);
+    method_setImplementation(orientationMethod, originalOrientation);
+    imp_removeBlock(replacementScreen);
+    imp_removeBlock(replacementOrientation);
+  }
+}
+
+
 
 - (void)testDisplayID
 {

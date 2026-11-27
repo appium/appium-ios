@@ -133,15 +133,21 @@
   CGRect frame;
   XCUIElement *window = FBWindowOnDisplay(application, screen.displayID, &frame);
   if (window != nil) {
-    FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
-    anchor.window = window;
-    anchor.frame = frame;
-    // XCUICoordinate normalizes against XCTest's native frame, which includes
-    // the hosting scale and offset of a portrait-only app in landscape. The
-    // snapshot frame above remains in app coordinates and is still used for
-    // window geometry. Using it here transforms viewport points as app points.
-    anchor.coordinateFrame = window.frame;
-    return anchor;
+    // This live read can differ from the validated snapshot during transitions.
+    CGRect coordinateFrame = window.frame;
+    if (!CGRectIsEmpty(coordinateFrame) && !CGRectIsInfinite(coordinateFrame)
+        && isfinite(coordinateFrame.origin.x) && isfinite(coordinateFrame.origin.y)
+        && isfinite(coordinateFrame.size.width) && isfinite(coordinateFrame.size.height)) {
+      FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
+      anchor.window = window;
+      anchor.frame = frame;
+      // XCUICoordinate normalizes against XCTest's native frame, which includes
+      // the hosting scale and offset of a portrait-only app in landscape. The
+      // snapshot frame above remains in app coordinates and is still used for
+      // window geometry. Using it here transforms viewport points as app points.
+      anchor.coordinateFrame = coordinateFrame;
+      return anchor;
+    }
   }
   [[[FBErrorBuilder builder] withDescriptionFormat:@"No non-empty application window on display %lld is available as a coordinate anchor", screen.displayID]
     buildError:error];

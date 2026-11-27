@@ -568,6 +568,50 @@ static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
   }
 }
 
+- (void)testViewportCoordinatesRejectInvalidNativeWindowFrame
+{
+  XCTSkipUnless([FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
+  Method method = class_getInstanceMethod(XCUIElement.class, @selector(frame));
+  IMP original = method_getImplementation(method);
+  __block CGRect nativeFrame = CGRectZero;
+  IMP replacement = imp_implementationWithBlock(^CGRect(XCUIElement *element) {
+    CGRect frame = ((CGRect (*)(id, SEL))original)(element, @selector(frame));
+    return element.elementType == XCUIElementTypeWindow ? nativeFrame : frame;
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    for (NSValue *value in @[
+      [NSValue valueWithCGRect:CGRectZero], [NSValue valueWithCGRect:CGRectNull],
+      [NSValue valueWithCGRect:CGRectInfinite],
+      [NSValue valueWithCGRect:CGRectMake(NAN, 0, 100, 100)],
+      [NSValue valueWithCGRect:CGRectMake(0, 0, INFINITY, 100)],
+      [NSValue valueWithCGRect:CGRectMake(0, 0, 100, NAN)],
+    ]) {
+      nativeFrame = value.CGRectValue;
+      NSError *error = nil;
+      FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:&error];
+      XCTAssertNotNil(context);
+      XCTAssertNil([context coordinateWithApplication:self.testedApplication offset:CGVectorMake(100, 100) error:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+      error = nil;
+      NSArray *actions = @[@{@"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+                            @"actions": @[[self moveFrom:@"viewport" x:100 y:100 duration:0]]}];
+      FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+        initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
+      XCTAssertNil([synthesizer synthesizeWithError:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+      error = nil;
+      NSArray *offsets = @[[NSValue valueWithCGVector:CGVectorMake(100, 100)],
+                           [NSValue valueWithCGVector:CGVectorMake(120, 120)]];
+      XCTAssertNil([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.testedApplication error:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
+  }
+}
+
 - (void)testDisplayAndWindowResolutionRunsOncePerCommand
 {
   BOOL hasMultipleScreens = [FBScreen hasMultipleScreensWithError:nil].boolValue;

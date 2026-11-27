@@ -229,16 +229,45 @@ static CGSize FBPortraitWindowSize(id<FBXCElementSnapshot> window, long long dis
   return size.height > size.width && CGRectEqualToRect(frame, (CGRect){CGPointZero, size}) ? size : CGSizeZero;
 }
 
-static id<FBXCElementSnapshot> FBOrientedSnapshotForDisplay(id<FBXCElementSnapshot> snapshot, long long displayID,
-                                                             CGSize size, UIInterfaceOrientation orientation)
+// Unresolved descendants inherit the closest resolved ancestor, including
+// geometry counterparts found on the selected display. An explicit different
+// display wins; never inherit the application root's display across windows.
+static long long FBInheritedGeometryDisplayID(id<FBXCElementSnapshot> snapshot, FBDisplaySnapshotMap *matches)
 {
-  if (CGSizeEqualToSize(size, CGSizeZero) || !FBIsOnDisplay(snapshot, displayID)
+  for (id<FBXCElementSnapshot> node = snapshot; node != nil && node.elementType != XCUIElementTypeApplication; node = node.parent) {
+    id<FBXCElementSnapshot> geometry = [FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:node] ?: node].snapshot;
+    if ([geometry respondsToSelector:@selector(displayID)] && geometry.displayID != 0) {
+      return geometry.displayID;
+    }
+  }
+  return 0;
+}
+
+static id<FBXCElementSnapshot> FBOrientedSnapshotForDisplay(id<FBXCElementSnapshot> snapshot, long long displayID,
+                                                             long long effectiveDisplayID, CGSize size, UIInterfaceOrientation orientation)
+{
+  if (CGSizeEqualToSize(size, CGSizeZero) || effectiveDisplayID != displayID
       || CGRectIsEmpty(snapshot.frame) || CGRectIsInfinite(snapshot.frame)) {
     return snapshot;
   }
   FBOrientedSnapshot *result = [FBOrientedSnapshot ensureWrapped:snapshot];
   result.wdFrame = CGRectIntegral(FBRectFromPortraitCoordinates(snapshot.frame, size, orientation));
   return result;
+}
+
+static void FBCollectOrientedSnapshots(id<FBXCElementSnapshot> node, long long displayID, long long parentDisplayID,
+                                       CGSize size, UIInterfaceOrientation orientation, FBDisplaySnapshotMap *matches)
+{
+  id<FBXCElementSnapshot> geometry = [matches objectForKey:node] ?: node;
+  long long effectiveDisplayID = geometry.displayID ?: parentDisplayID;
+  id<FBXCElementSnapshot> oriented = FBOrientedSnapshotForDisplay(geometry, displayID, effectiveDisplayID, size, orientation);
+  if (oriented != geometry) {
+    [matches setObject:oriented forKey:node];
+  }
+  for (id<FBXCElementSnapshot> child in node.children) {
+    FBCollectOrientedSnapshots(child, displayID, node.elementType == XCUIElementTypeApplication ? 0 : effectiveDisplayID,
+                               size, orientation, matches);
+  }
 }
 
 static NSDictionary<NSString *, NSArray<id<FBAXDisplayElement>> *> *FBAccessibilityElementsByIdentifier(id<FBXCElementSnapshot> window)
@@ -290,13 +319,8 @@ static void FBCollectDisplaySnapshots(id<FBXCElementSnapshot> scope, long long d
   if (CGSizeEqualToSize(size, CGSizeZero)) {
     return;
   }
-  for (id<FBXCElementSnapshot> node in nodes) {
-    id<FBXCElementSnapshot> geometry = [matches objectForKey:node] ?: node;
-    id<FBXCElementSnapshot> oriented = FBOrientedSnapshotForDisplay(geometry, displayID, size, orientation);
-    if (oriented != geometry) {
-      [matches setObject:oriented forKey:node];
-    }
-  }
+  FBCollectOrientedSnapshots(scope, displayID, FBInheritedGeometryDisplayID(scope.parent, matches),
+                             size, orientation, matches);
 }
 
 static NSArray<id<FBXCElementSnapshot>> *FBWindowsOnDisplay(id<FBXCElementSnapshot> tree, long long displayID)
@@ -444,7 +468,8 @@ static id<FBXCElementSnapshot> FBOrientedFallback(XCUIElement *element, id<FBXCE
     FBMemberOnDisplay(tree, snapshot, displayID, &window);
   }
   CGSize size = FBPortraitWindowSize(window, displayID);
-  return FBOrientedSnapshotForDisplay(snapshot, displayID, size, orientation);
+  return FBOrientedSnapshotForDisplay(snapshot, displayID,
+    FBInheritedGeometryDisplayID(snapshot, nil), size, orientation);
 }
 #endif
 
