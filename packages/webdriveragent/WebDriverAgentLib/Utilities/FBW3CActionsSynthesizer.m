@@ -950,11 +950,19 @@ static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
 
 - (nullable NSDictionary<NSString *, id> *)singleKeyAction
 {
-  if (1 != self.actions.count) {
+  // Sources without actions do not affect the routing
+  NSMutableArray<NSDictionary<NSString *, id> *> *nonEmpty = [NSMutableArray array];
+  for (NSDictionary<NSString *, id> *source in self.actions) {
+    id items = [source isKindOfClass:NSDictionary.class] ? [source objectForKey:FB_KEY_ACTIONS] : nil;
+    if (![items isKindOfClass:NSArray.class] || [(NSArray *)items count] > 0) {
+      [nonEmpty addObject:source];
+    }
+  }
+  if (1 != nonEmpty.count) {
     return nil;
   }
-  NSDictionary<NSString *, id> *action = self.actions.firstObject;
-  id actionType = [action objectForKey:FB_KEY_TYPE];
+  NSDictionary<NSString *, id> *action = nonEmpty.firstObject;
+  id actionType = [action isKindOfClass:NSDictionary.class] ? [action objectForKey:FB_KEY_TYPE] : nil;
   return [actionType isKindOfClass:NSString.class] && [actionType isEqualToString:FB_ACTION_TYPE_KEY]
     ? action
     : nil;
@@ -985,6 +993,8 @@ static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
   // A repeated key down of a pressed key does not press it again
   NSMutableOrderedSet<FBKeyDownItem *> *pressedItems = [NSMutableOrderedSet orderedSet];
   NSMutableDictionary<NSString *, FBKeyDownItem *> *pressedByValue = [NSMutableDictionary dictionary];
+  // Modifiers released by the NULL key may still get their own key up
+  NSMutableSet<NSString *> *releasedByNull = [NSMutableSet set];
   double totalPausesMs = 0;
   for (FBW3CKeyItem *item in chain.items) {
     if ([item isKindOfClass:FBKeyPauseItem.class]) {
@@ -996,13 +1006,29 @@ static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
       }
     } else if ([item isKindOfClass:FBKeyDownItem.class]) {
       FBKeyDownItem *downItem = (FBKeyDownItem *)item;
+      [releasedByNull removeObject:downItem.value];
       if (nil == pressedByValue[downItem.value]) {
         pressedByValue[downItem.value] = downItem;
         [pressedItems addObject:downItem];
       }
+      NSNumber *downModifier = FBToMetaModifier(downItem.value);
+      if (nil != downModifier && 0 == downModifier.unsignedIntegerValue) {
+        // The NULL key releases all the pressed modifiers
+        for (NSString *value in pressedByValue.allKeys) {
+          if ([FBToMetaModifier(value) unsignedIntegerValue] > 0) {
+            [pressedItems removeObject:pressedByValue[value]];
+            [pressedByValue removeObjectForKey:value];
+            [releasedByNull addObject:value];
+          }
+        }
+      }
     } else if ([item isKindOfClass:FBKeyUpItem.class]) {
       FBKeyUpItem *upItem = (FBKeyUpItem *)item;
       FBKeyDownItem *downItem = pressedByValue[upItem.value];
+      if (nil == downItem && [releasedByNull containsObject:upItem.value]) {
+        [releasedByNull removeObject:upItem.value];
+        continue;
+      }
       if (nil == downItem) {
         NSString *description = [NSString stringWithFormat:@"Key Up action '%@' is not balanced with a preceding Key Down one in '%@'", upItem.value, upItem.actionItem];
         return [[FBErrorBuilder.builder withDescription:description] buildError:error];

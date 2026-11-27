@@ -188,8 +188,30 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
 
   NSArray *pointer = @[@{@"type": @"pointer", @"id": @"mouse", @"actions": @[]}];
   XCTAssertFalse([self synthesizerWithActions:pointer].requiresKeyRecords);
-  NSArray *mixed = @[KeyActions(Flat(@[Press(K(0xE012))])).firstObject, pointer.firstObject];
+  NSDictionary *activePointer = @{@"type": @"pointer", @"id": @"mouse", @"actions": @[@{@"type": @"pause", @"duration": @0}]};
+  NSArray *mixed = @[KeyActions(Flat(@[Press(K(0xE012))])).firstObject, activePointer];
   XCTAssertFalse([self synthesizerWithActions:mixed].requiresKeyRecords);
+}
+
+- (void)testEmptySourcesDoNotAffectRouting
+{
+  if (![XCPointerEvent.class fb_areKeyEventsSupported]) {
+    XCTSkip(@"Key events are not supported on this platform");
+  }
+
+  NSDictionary *keyboard = KeyActions(Flat(@[Down(K(0xE008)), Press(@"a"), Up(K(0xE008))])).firstObject;
+  NSDictionary *emptyKeyboard = @{@"type": @"key", @"id": @"keyboard2", @"actions": @[]};
+  NSDictionary *emptyPointer = @{@"type": @"pointer", @"id": @"mouse", @"actions": @[]};
+  NSArray *withEmptyKeyboard = @[keyboard, emptyKeyboard];
+  NSArray *withEmptySources = @[emptyPointer, keyboard, emptyKeyboard];
+  XCTAssertTrue([self synthesizerWithActions:withEmptyKeyboard].requiresKeyRecords);
+  XCTAssertTrue([self synthesizerWithActions:withEmptySources].requiresKeyRecords);
+
+  NSError *error;
+  NSArray<FBKeyAction *> *plan = [[self synthesizerWithActions:withEmptyKeyboard] keyActionsWithError:&error];
+  XCTAssertNotNil(plan, @"%@", error);
+  XCTAssertEqual(plan.count, 3u);
+  XCTAssertEqualObjects(plan[1].value, @"A");
 }
 
 #pragma mark - Planning
@@ -275,6 +297,15 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   NSString *shift = K(0xE008);
   [self assertPlan:@[Down(control), Down(shift), Press(K(0xE000)), Press(@"a"), Up(shift), Up(control)]
             equals:@[@"mod:4", @"mod:6", @"mod:0", @"text:a"]];
+}
+
+- (void)testNullKeyReleasesModifiersWithoutKeyUp
+{
+  NSString *shift = K(0xE008);
+  NSArray *expected = @[@"mod:2", @"mod:0", @"text:a"];
+  [self assertPlan:@[Down(shift), Down(K(0xE000)), Up(K(0xE000)), Down(@"a"), Up(@"a")] equals:expected];
+  // The key up of the released modifier is still accepted
+  [self assertPlan:@[Down(shift), Down(K(0xE000)), Up(K(0xE000)), Down(@"a"), Up(@"a"), Up(shift)] equals:expected];
 }
 
 - (void)testNavigationKeysSeparateText
