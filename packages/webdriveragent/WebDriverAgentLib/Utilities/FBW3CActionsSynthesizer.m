@@ -950,19 +950,14 @@ static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
 
 - (nullable NSDictionary<NSString *, id> *)singleKeyAction
 {
-  // Sources without actions do not affect the routing
-  NSMutableArray<NSDictionary<NSString *, id> *> *nonEmpty = [NSMutableArray array];
-  for (NSDictionary<NSString *, id> *source in self.actions) {
-    id items = [source isKindOfClass:NSDictionary.class] ? [source objectForKey:FB_KEY_ACTIONS] : nil;
-    if (![items isKindOfClass:NSArray.class] || [(NSArray *)items count] > 0) {
-      [nonEmpty addObject:source];
-    }
-  }
-  if (1 != nonEmpty.count) {
+  // Invalid sources (ids, duplicates) fall back to the regular path, which reports them.
+  // Sources without actions are dropped there and do not affect the routing
+  NSArray<NSDictionary<NSString *, id> *> *validated = [self validatedActionsWithError:nil];
+  if (1 != validated.count) {
     return nil;
   }
-  NSDictionary<NSString *, id> *action = nonEmpty.firstObject;
-  id actionType = [action isKindOfClass:NSDictionary.class] ? [action objectForKey:FB_KEY_TYPE] : nil;
+  NSDictionary<NSString *, id> *action = validated.firstObject;
+  id actionType = [action objectForKey:FB_KEY_TYPE];
   return [actionType isKindOfClass:NSString.class] && [actionType isEqualToString:FB_ACTION_TYPE_KEY]
     ? action
     : nil;
@@ -1136,10 +1131,11 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
 
     BOOL isKeyDown = [item isKindOfClass:FBKeyDownItem.class];
     NSString *value = isKeyDown ? ((FBKeyDownItem *)item).value : ((FBKeyUpItem *)item).value;
-    if (isKeyDown == [pressedKeys containsObject:value]) {
-      // A repeated key down or a key up of a released key
+    if (!isKeyDown && ![pressedKeys containsObject:value]) {
+      // A key up of a released key
       continue;
     }
+    // A repeated key down is dispatched again, while the key stays pressed once
     NSUInteger oldFlags = FBHeldModifierFlags(pressedKeys);
     if (isKeyDown) {
       [pressedKeys addObject:value];

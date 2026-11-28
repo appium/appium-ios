@@ -207,6 +207,14 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   XCTAssertTrue([self synthesizerWithActions:withEmptyKeyboard].requiresKeyRecords);
   XCTAssertTrue([self synthesizerWithActions:withEmptySources].requiresKeyRecords);
 
+  // Invalid empty sources are left to the regular path, which reports them
+  NSDictionary *noId = @{@"type": @"key", @"actions": @[]};
+  NSDictionary *duplicateId = @{@"type": @"key", @"id": @"keyboard", @"actions": @[]};
+  NSArray *withNoId = @[keyboard, noId];
+  NSArray *withDuplicateId = @[keyboard, duplicateId];
+  XCTAssertFalse([self synthesizerWithActions:withNoId].requiresKeyRecords);
+  XCTAssertFalse([self synthesizerWithActions:withDuplicateId].requiresKeyRecords);
+
   NSError *error;
   NSArray<FBKeyAction *> *plan = [[self synthesizerWithActions:withEmptyKeyboard] keyActionsWithError:&error];
   XCTAssertNotNil(plan, @"%@", error);
@@ -269,6 +277,14 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
             equals:@[@"mod:2", @"mod:0", @"text:a"]];
 }
 
+- (void)testRepeatedKeyDownIsDispatchedEachTime
+{
+  NSString *shift = K(0xE008);
+  [self assertPlan:@[Down(shift), Down(@"a"), Down(@"a"), Up(@"a"), Up(shift)]
+            equals:@[@"mod:2", @"text:AA", @"mod:0"]];
+  [self assertPlan:@[Down(@"a"), Down(@"a"), Up(@"a")] equals:@[@"text:aa"]];
+}
+
 - (void)testKeyIsTypedWithModifiersPressedAtKeyDown
 {
   NSString *command = K(0xE03D);
@@ -306,6 +322,14 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   [self assertPlan:@[Down(shift), Down(K(0xE000)), Up(K(0xE000)), Down(@"a"), Up(@"a")] equals:expected];
   // The key up of the released modifier is still accepted
   [self assertPlan:@[Down(shift), Down(K(0xE000)), Up(K(0xE000)), Down(@"a"), Up(@"a"), Up(shift)] equals:expected];
+}
+
+- (void)testRepeatedNullKeyReleasesModifiersEachTime
+{
+  NSString *shift = K(0xE008);
+  NSString *null = K(0xE000);
+  [self assertPlan:@[Down(null), Down(shift), Down(null), Up(null), Down(@"a"), Up(@"a")]
+            equals:@[@"mod:2", @"mod:0", @"text:a"]];
 }
 
 - (void)testNavigationKeysSeparateText
