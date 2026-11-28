@@ -12,8 +12,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 #if TARGET_OS_IOS
 typedef NS_ENUM(NSInteger, FBHostedTapResult) {
+  /// Continue with the standard XCTest tap path.
   FBHostedTapUseNative,
+  /// The hosted tap was synthesized successfully. Return success to the caller.
   FBHostedTapDelivered,
+  /// The hosted tap was rejected or failed. Return the error to the caller.
   FBHostedTapFailed,
 };
 
