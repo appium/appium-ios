@@ -227,6 +227,11 @@ describe(`Simulator ${DEVICE_NAME} / iOS ${OS_VERSION} (shared instance)`, funct
       assert.strictEqual(await sim.setGeolocation(37.7749, -122.4194), true);
       assert.strictEqual(await sim.setGeolocation('37.7749', '-122.4194'), true);
     });
+
+    it('sets the simulated location with an altitude', async function () {
+      assert.strictEqual(await sim.setGeolocation(46.5584, 8.561, 2106.5), true);
+      assert.strictEqual(await sim.setGeolocation('46.5584', '8.561', '-12.5'), true);
+    });
   });
 
   describe('keychain', function () {

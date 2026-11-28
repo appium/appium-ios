@@ -3,6 +3,72 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [17.1.10](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.9...appium-webdriveragent@17.1.10) (2026-11-28)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.9](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.8...appium-webdriveragent@17.1.9) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
+## [17.1.8](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.7...appium-webdriveragent@17.1.8) (2026-11-27)
+
+### Bug Fixes
+
+* **webdriveragent:** re-resolve stale AX-bound cached elements by uid ([#256](https://github.com/appium/appium-ios/issues/256)) ([a68102a](https://github.com/appium/appium-ios/commit/a68102a33b69d902e6ea7990711d56a78b5c0be8))
+
+
+## [17.1.7](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.6...appium-webdriveragent@17.1.7) (2026-11-26)
+
+### Bug Fixes
+
+* **webdriveragent:** reject an invalid bundleId before it reaches XCTest ([#146](https://github.com/appium/appium-ios/issues/146)) ([332cce1](https://github.com/appium/appium-ios/commit/332cce150008515768af7f1e5d0ac88460226b83))
+
+
+## [17.1.6](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.5...appium-webdriveragent@17.1.6) (2026-11-26)
+
+### Bug Fixes
+
+* **webdriveragent:** preserve XPath match order when resolving elements by query ([#250](https://github.com/appium/appium-ios/issues/250)) ([97ad200](https://github.com/appium/appium-ios/commit/97ad200e85dc175c5b7daf502f1941aad47a610e))
+
+### Performance Improvements
+
+* **webdriveragent:** skip re-resolving AX-bound matches when native caching is off ([#246](https://github.com/appium/appium-ios/issues/246)) ([620e233](https://github.com/appium/appium-ios/commit/620e23360aed8e043f6a4dea85f44daa45d59960))
+
+
+## [17.1.5](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.4...appium-webdriveragent@17.1.5) (2026-11-26)
+
+### Bug Fixes
+
+* **webdriveragent:** resolve compiler and plist warnings in the Xcode build ([#249](https://github.com/appium/appium-ios/issues/249)) ([910581e](https://github.com/appium/appium-ios/commit/910581e13abd641a83a5ca893417ef53c7ca74aa))
+
+### Code Refactoring
+
+* **webdriveragent:** remove unused helpers ([#247](https://github.com/appium/appium-ios/issues/247)) ([e4e1a09](https://github.com/appium/appium-ios/commit/e4e1a09956f892fad7b17fc21edf01b9bec38f5c))
+
+
+## [17.1.4](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.3...appium-webdriveragent@17.1.4) (2026-11-25)
+
+**Note:** Version bump only for package appium-webdriveragent
+
+
+
+
+
+## [17.1.3](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.2...appium-webdriveragent@17.1.3) (2026-11-24)
+
+### Bug Fixes
+
+* **webdriveragent:** resolve window and SpringBoard element geometry on the selected display ([#239](https://github.com/appium/appium-ios/issues/239)) ([d839210](https://github.com/appium/appium-ios/commit/d839210986b78214afccd4cd26a12358b6b68b16))
+
+
 ## [17.1.2](https://github.com/appium/appium-ios/compare/appium-webdriveragent@17.1.1...appium-webdriveragent@17.1.2) (2026-11-23)
 
 **Note:** Version bump only for package appium-webdriveragent

@@ -96,32 +96,3 @@ void *FBRetrieveXCTestSymbol(const char *name)
   NSCAssert(binaryPath != nil, @"XCTest binary path should not be nil", binaryPath);
   return FBRetrieveSymbolFromBinary(binaryPath, name);
 }
-
-NSArray<NSString*> *FBStandardAttributeNames(void)
-{
-  static NSArray<NSString *> *attributeNames;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    Class xcElementSnapshotClass = NSClassFromString(@"XCElementSnapshot");
-    NSCAssert(nil != xcElementSnapshotClass, @"XCElementSnapshot class must be resolvable", xcElementSnapshotClass);
-    attributeNames = [xcElementSnapshotClass sanitizedElementSnapshotHierarchyAttributesForAttributes:nil
-                                                                                              isMacOS:NO];
-  });
-  return attributeNames;
-}
-
-NSArray<NSString*> *FBCustomAttributeNames(void)
-{
-  static NSArray<NSString *> *customNames;
-  static dispatch_once_t onceCustomAttributeNamesToken;
-  dispatch_once(&onceCustomAttributeNamesToken, ^{
-    customNames = @[
-      FB_XCAXAIsVisibleAttributeName,
-      FB_XCAXAIsElementAttributeName,
-      FB_XCAXACustomMinValueAttributeName,
-      FB_XCAXACustomMaxValueAttributeName,
-      FB_XCAXACustomActionsAttributeName
-    ];
-  });
-  return customNames;
-}

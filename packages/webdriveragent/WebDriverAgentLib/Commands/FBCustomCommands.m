@@ -419,7 +419,11 @@
 
 + (id <FBResponsePayload>)handleLaunchUnattachedApp:(FBRouteRequest *)request
 {
-  NSString *bundle = (NSString *)request.arguments[@"bundleId"];
+  id bundle = request.arguments[@"bundleId"];
+  id<FBResponsePayload> errorResponse = FBInvalidBundleIdResponse(bundle, YES);
+  if (nil != errorResponse) {
+    return errorResponse;
+  }
   if ([FBUnattachedAppLauncher launchAppWithBundleId:bundle]) {
     return FBResponseWithOK();
   }

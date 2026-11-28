@@ -125,17 +125,6 @@ inline static BOOL isNilOrEmpty(id value);
   return cellSnapshots;
 }
 
-- (NSArray<id<FBXCElementSnapshot>> *)fb_ancestors
-{
-  NSMutableArray<id<FBXCElementSnapshot>> *ancestors = [NSMutableArray array];
-  id<FBXCElementSnapshot> parent = self.parent;
-  while (parent) {
-    [ancestors addObject:parent];
-    parent = parent.parent;
-  }
-  return ancestors.copy;
-}
-
 - (id<FBXCElementSnapshot>)fb_parentCellSnapshot
 {
   id<FBXCElementSnapshot> targetCellSnapshot = self.snapshot;

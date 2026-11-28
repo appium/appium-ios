@@ -112,7 +112,7 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
 // Bumped when the last client leaves. Guarded by @synchronized (self.listeningClients).
 @property (nonatomic, assign) NSUInteger listenersEpoch;
 // Overridable in tests. The default sends the request to testmanagerd.
-@property (atomic, copy) BOOL (^frameRequest)(void (^completion)(NSData * _Nullable, NSError * _Nullable), NSError **error);
+@property (atomic, copy) BOOL (^frameRequest)(void (^onResult)(NSData * _Nullable, NSError * _Nullable), NSError **error);
 @property (atomic, assign) NSTimeInterval frameTimeout;
 @property (atomic, assign) NSTimeInterval lateFrameLimit;
 @property (atomic, assign) NSTimeInterval failureBackoffMin;
@@ -141,8 +141,8 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
     dispatch_queue_attr_t queueAttributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0);
     _backgroundQueue = dispatch_queue_create(QUEUE_NAME, queueAttributes);
     __weak typeof(self) weakSelf = self;
-    _frameRequest = ^BOOL(void (^completion)(NSData *, NSError *), NSError **error) {
-      return [weakSelf requestScreenshotWithCompletion:completion error:error];
+    _frameRequest = ^BOOL(void (^onResult)(NSData *, NSError *), NSError **error) {
+      return [weakSelf requestScreenshotOnResult:onResult error:error];
     };
     dispatch_async(_backgroundQueue, ^{
       [weakSelf streamScreenshot];
@@ -190,8 +190,8 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return self.cachedScreen;
 }
 
-- (BOOL)requestScreenshotWithCompletion:(void (^)(NSData * _Nullable, NSError * _Nullable))completion
-                                  error:(NSError **)error
+- (BOOL)requestScreenshotOnResult:(void (^)(NSData * _Nullable, NSError * _Nullable))onResult
+                            error:(NSError **)error
 {
   XCUIScreen *screen = [self currentScreenWithError:error];
   if (nil == screen) {
@@ -202,7 +202,7 @@ static NSUInteger FBNormalizedMjpegFramerate(NSUInteger framerate)
   return [FBScreenshot requestInOriginalResolutionWithScreenID:screen.displayID
                                             compressionQuality:compressionQuality
                                                            uti:UTTypeJPEG
-                                                    completion:completion
+                                                      onResult:onResult
                                                          error:error];
 }
 

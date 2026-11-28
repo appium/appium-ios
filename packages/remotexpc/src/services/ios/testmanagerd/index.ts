@@ -2,7 +2,7 @@ import type net from 'node:net';
 
 import {getLogger} from '../../../lib/logger.js';
 import {createBinaryPlist, parseBinaryPlist} from '../../../lib/plist/index.js';
-import type {PlistDictionary, SendMessageOptions} from '../../../lib/types.js';
+import type {PlistDictionary, PlistValue, SendMessageOptions} from '../../../lib/types.js';
 import {type ServiceConnection} from '../../../service-connection.js';
 import {BaseService, stripSSL} from '../base-service.js';
 import {ChannelFragmenter, type MessageFilter, isReplyTo} from '../dvt/channel-fragmenter.js';
@@ -294,10 +294,10 @@ export class DvtTestmanagedProxyService extends BaseService {
     channel: number,
     signal?: AbortSignal,
     filter?: MessageFilter,
-  ): Promise<[any, any[]]> {
+  ): Promise<[unknown, PlistValue[]]> {
     const [data, aux] = await this.recvMessage(channel, signal, filter);
 
-    let decodedData = null;
+    let decodedData: unknown = null;
     if (data?.length) {
       try {
         decodedData = parseBinaryPlist(data);
@@ -325,7 +325,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await this.recvPlist(channel, controller.signal);
-    } catch (err: any) {
+    } catch (err) {
       if (controller.signal.aborted) {
         return null;
       }
@@ -345,7 +345,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     channel: number = DvtTestmanagedProxyService.BROADCAST_CHANNEL,
     signal?: AbortSignal,
     filter?: MessageFilter,
-  ): Promise<[Buffer | null, any[]]> {
+  ): Promise<[Buffer | null, PlistValue[]]> {
     const packetData = await this.recvPacketFragments(channel, signal, filter);
 
     const payloadHeader = DTXMessage.parsePayloadHeader(packetData);
@@ -360,7 +360,7 @@ export class DvtTestmanagedProxyService extends BaseService {
 
     let offset = DTX_CONSTANTS.PAYLOAD_HEADER_SIZE;
 
-    let aux: any[] = [];
+    let aux: PlistValue[] = [];
     if (payloadHeader.auxiliaryLength > 0) {
       const auxBuffer = packetData.subarray(offset, offset + payloadHeader.auxiliaryLength);
       aux = this.parseAuxiliaryData(auxBuffer);
@@ -451,22 +451,23 @@ export class DvtTestmanagedProxyService extends BaseService {
     this.drainBufferedMessages();
   }
 
-  private extractSelectorFromResponse(ret: any): string {
+  private extractSelectorFromResponse(ret: PlistValue): string {
     if (typeof ret === 'string') {
       return ret;
     }
     const objects = extractNSKeyedArchiverObjects(ret);
     if (objects) {
-      return objects[1];
+      // performHandshake rejects a selector that is not the expected string
+      return objects[1] as string;
     }
 
     throw new Error('Invalid handshake response');
   }
 
-  private extractCapabilitiesFromAuxData(capabilitiesData: any): PlistDictionary {
+  private extractCapabilitiesFromAuxData(capabilitiesData: PlistValue): PlistDictionary {
     const objects = extractNSKeyedArchiverObjects(capabilitiesData);
     if (!objects) {
-      return capabilitiesData || {};
+      return (capabilitiesData || {}) as PlistDictionary;
     }
 
     const dictObj = objects[1];
@@ -553,8 +554,8 @@ export class DvtTestmanagedProxyService extends BaseService {
       ) {
         try {
           await this.sendReply(receivedChannel);
-        } catch (err: any) {
-          log.debug(`Auto-reply failed on channel ${receivedChannel}: ${err.message}`);
+        } catch (err) {
+          log.debug(`Auto-reply failed on channel ${receivedChannel}: ${(err as Error).message}`);
         }
       }
     }
@@ -631,7 +632,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     return result;
   }
 
-  private checkForNSError(response: any, context: string): void {
+  private checkForNSError(response: unknown, context: string): void {
     if (!response || typeof response !== 'object') {
       return;
     }
@@ -642,7 +643,8 @@ export class DvtTestmanagedProxyService extends BaseService {
 
       if (hasNSError) {
         const errorMsg =
-          objects.find((o: any) => typeof o === 'string' && o.length > MIN_ERROR_DESCRIPTION_LENGTH) || 'Unknown error';
+          objects.find((o): o is string => typeof o === 'string' && o.length > MIN_ERROR_DESCRIPTION_LENGTH) ||
+          'Unknown error';
         throw new Error(`${context}: ${errorMsg}`);
       }
     }
@@ -656,7 +658,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     return isExpectedCloseError(error);
   }
 
-  private archiveValue(value: any): Buffer {
+  private archiveValue(value: unknown): Buffer {
     const encoder = new TestmanagerdEncoder();
     const archived = encoder.encode(value);
     return createBinaryPlist(archived);
@@ -708,8 +710,10 @@ export class DvtTestmanagedProxyService extends BaseService {
           break;
         }
 
-        default:
-          throw new Error(`Unsupported auxiliary type: ${auxValue.type}`);
+        default: {
+          const unsupported: never = auxValue;
+          throw new Error(`Unsupported auxiliary type: ${(unsupported as {type: number}).type}`);
+        }
       }
     }
 
@@ -722,7 +726,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     return Buffer.concat([header, itemsData]);
   }
 
-  private parseAuxiliaryData(buffer: Buffer): any[] {
+  private parseAuxiliaryData(buffer: Buffer): PlistValue[] {
     if (buffer.length < 16) {
       return [];
     }
@@ -749,8 +753,8 @@ export class DvtTestmanagedProxyService extends BaseService {
    * Each entry is: [type:4][value...] where type determines the value format.
    * Keys are always null (type 0x0A), values follow immediately after.
    */
-  private parseAuxiliaryPrimitiveDictionary(buffer: Buffer): any[] {
-    const values: any[] = [];
+  private parseAuxiliaryPrimitiveDictionary(buffer: Buffer): PlistValue[] {
+    const values: PlistValue[] = [];
     let offset = 0;
 
     while (offset + 4 <= buffer.length) {
@@ -782,12 +786,12 @@ export class DvtTestmanagedProxyService extends BaseService {
     return values;
   }
 
-  private readPrimitiveDictEntry(buffer: Buffer, offset: number): {data: any; newOffset: number} {
+  private readPrimitiveDictEntry(buffer: Buffer, offset: number): {data: PlistValue; newOffset: number} {
     return readPrimitiveDictEntry(buffer, offset);
   }
 
-  private parseAuxiliaryStandard(buffer: Buffer): any[] {
-    const values: any[] = [];
+  private parseAuxiliaryStandard(buffer: Buffer): PlistValue[] {
+    const values: PlistValue[] = [];
     let offset = 16;
 
     const totalSize = buffer.readBigUInt64LE(8);
@@ -817,7 +821,7 @@ export class DvtTestmanagedProxyService extends BaseService {
     return values;
   }
 
-  private parseAuxiliaryValue(buffer: Buffer, type: number, offset: number): {data: any; newOffset: number} {
+  private parseAuxiliaryValue(buffer: Buffer, type: number, offset: number): {data: PlistValue; newOffset: number} {
     switch (type) {
       case DTX_CONSTANTS.AUX_TYPE_INT32:
         return {
@@ -835,7 +839,7 @@ export class DvtTestmanagedProxyService extends BaseService {
         const length = buffer.readUInt32LE(offset);
         const plistData = buffer.subarray(offset + 4, offset + 4 + length);
 
-        let parsed: any;
+        let parsed: PlistValue;
         try {
           parsed = parseBinaryPlist(plistData);
         } catch (error) {
@@ -874,7 +878,7 @@ export function isExpectedCloseError(error: unknown): boolean {
 /**
  * Read a single PrimitiveDictionary entry from a buffer.
  */
-export function readPrimitiveDictEntry(buffer: Buffer, offset: number): {data: any; newOffset: number} {
+export function readPrimitiveDictEntry(buffer: Buffer, offset: number): {data: PlistValue; newOffset: number} {
   const type = buffer.readUInt32LE(offset);
   offset += 4;
 
@@ -905,7 +909,7 @@ export function readPrimitiveDictEntry(buffer: Buffer, offset: number): {data: a
       }
 
       // For bytearrays, try to decode as NSKeyedArchiver plist
-      let parsed: any = data;
+      let parsed: PlistValue = data;
       try {
         const plistData = parseBinaryPlist(data);
         parsed = decodeNSKeyedArchiver(plistData);

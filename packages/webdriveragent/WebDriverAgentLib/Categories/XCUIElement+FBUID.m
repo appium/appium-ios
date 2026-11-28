@@ -18,13 +18,6 @@
 
 @implementation XCUIElement (FBUID)
 
-- (unsigned long long)fb_accessibiltyId
-{
-  return [FBElementUtils idWithAccessibilityElement:([self isKindOfClass:XCUIApplication.class]
-                                                     ? [(XCUIApplication *)self accessibilityElement]
-                                                     : [self fb_standardSnapshot].accessibilityElement)];
-}
-
 - (id<FBXCAccessibilityElement>)fb_boundAccessibilityElement
 {
   // Elements from -allElementsBoundByAccessibilityElement carry `accessibilityElement == <AX element>`
@@ -85,11 +78,6 @@ static void swizzled_validatePredicateWithExpressionsAllowed(id self, SEL _cmd, 
   method_setImplementation(validatePredicateMethod, swizzledImp);  
 }
 #pragma diagnostic pop
-
-- (unsigned long long)fb_accessibiltyId
-{
-  return [FBElementUtils idWithAccessibilityElement:self.accessibilityElement];
-}
 
 + (nullable NSString *)wdUIDWithSnapshot:(id<FBXCElementSnapshot>)snapshot
 {

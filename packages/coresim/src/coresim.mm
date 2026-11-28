@@ -35,6 +35,7 @@
 #include "native/sim_duo.h"
 #include "native/sim_hid.h"
 #include "native/sim_jpeg_stream.h"
+#include "native/sim_location.h"
 #include "native/sim_orientation.h"
 #include "native/sim_pasteboard.h"
 #include "native/sim_process.h"
@@ -76,6 +77,27 @@ double HIDNumberArg(const Napi::CallbackInfo& info, size_t index, const char* na
   double value = info[index].As<Napi::Number>().DoubleValue();
   if (!std::isfinite(value) || value < min || value > max || (integer && std::trunc(value) != value)) {
     throw Napi::TypeError::New(info.Env(), std::string(name) + " is outside the supported range");
+  }
+  return value;
+}
+
+// A NaN or infinite coordinate is not rejected by CoreSimulator: it becomes the device's simulated
+// position, which apps then receive as an invalid location.
+double FiniteNumberArg(const Napi::CallbackInfo& info, size_t index, const char* name) {
+  if (index >= info.Length() || !info[index].IsNumber() ||
+      !std::isfinite(info[index].As<Napi::Number>().DoubleValue())) {
+    throw Napi::TypeError::New(info.Env(), std::string(name) + " must be a finite number");
+  }
+  return info[index].As<Napi::Number>().DoubleValue();
+}
+
+// An out-of-range coordinate is not rejected by CoreSimulator either, but locationd then silently
+// drops it, so apps keep receiving the previous location.
+double CoordinateArg(const Napi::CallbackInfo& info, size_t index, const char* name, int limit) {
+  double value = FiniteNumberArg(info, index, name);
+  if (value < -limit || value > limit) {
+    throw Napi::TypeError::New(
+        info.Env(), std::string(name) + " must be between -" + std::to_string(limit) + " and " + std::to_string(limit));
   }
   return value;
 }
@@ -825,11 +847,17 @@ class NativeDevice : public Napi::ObjectWrap<NativeDevice> {
 
   Napi::Value SetLocation(const Napi::CallbackInfo& info) {
     id device = device_;
-    double latitude = info[0].As<Napi::Number>().DoubleValue();
-    double longitude = info[1].As<Napi::Number>().DoubleValue();
-    return RunAsyncVoid(info.Env(), [device, latitude, longitude]() {
+    double latitude = CoordinateArg(info, 0, "latitude", 90);
+    double longitude = CoordinateArg(info, 1, "longitude", 180);
+    // The altitude is optional: without it the plain latitude/longitude API is used, which reports
+    // an altitude of 0 with an invalid vertical accuracy.
+    bool hasAltitude = info.Length() > 2 && !info[2].IsUndefined() && !info[2].IsNull();
+    double altitude = hasAltitude ? FiniteNumberArg(info, 2, "altitude") : 0;
+    return RunAsyncVoid(info.Env(), [device, latitude, longitude, hasAltitude, altitude]() {
       NSError* error = nil;
-      ThrowIfFailed(coresim::SetLocation(device, latitude, longitude, &error), error);
+      BOOL ok = hasAltitude ? coresim::SetLocationWithAltitude(device, latitude, longitude, altitude, &error)
+                            : coresim::SetLocation(device, latitude, longitude, &error);
+      ThrowIfFailed(ok, error);
     });
   }
 

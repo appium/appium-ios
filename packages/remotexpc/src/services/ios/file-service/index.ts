@@ -26,6 +26,8 @@ import {
   DEFAULT_FILE_SERVICE_USERNAME,
   DEFAULT_PUSHED_FILE_PERMISSIONS,
   DEFAULT_TRANSFER_IDLE_TIMEOUT_MS,
+  DEVICE_ENOENT,
+  FILE_SERVICE_ACCESS_RESTRICTED,
   DEVICE_ENOTEMPTY,
   DOMAINS_REQUIRING_IDENTIFIER,
   END_SESSION_TIMEOUT_MS,
@@ -1111,11 +1113,33 @@ function truncateUtf8(value: string, maxBytes: number): string {
  * Whether the device failed to remove a directory because it is not empty.
  */
 function isDirectoryNotEmptyError(err: unknown): boolean {
+  return hasDevicePosixError(err, DEVICE_ENOTEMPTY);
+}
+
+/**
+ * Whether the device failed an operation because the file or directory does not exist.
+ */
+export function isFileNotFoundError(err: unknown): boolean {
+  return hasDevicePosixError(err, DEVICE_ENOENT);
+}
+
+/**
+ * Whether the device refused a path that is outside the directories the container access
+ * policy allows (for an app container: `Library`, `Documents` and `tmp`).
+ */
+export function isAccessRestrictedError(err: unknown): boolean {
+  return (
+    err instanceof CoreDeviceError &&
+    asNumber(asDictionary(err.response?.EncodedError)?.ErrorCode) === FILE_SERVICE_ACCESS_RESTRICTED
+  );
+}
+
+function hasDevicePosixError(err: unknown, code: number): boolean {
   const underlying = asDictionary(asDictionary((err as CoreDeviceError)?.response?.EncodedError)?.NSUnderlyingError);
   return (
     err instanceof CoreDeviceError &&
     asString(underlying?.ErrorDomain) === POSIX_ERROR_DOMAIN &&
-    asNumber(underlying?.ErrorCode) === DEVICE_ENOTEMPTY
+    asNumber(underlying?.ErrorCode) === code
   );
 }
 

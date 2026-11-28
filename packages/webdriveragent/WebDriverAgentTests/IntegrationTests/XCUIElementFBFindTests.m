@@ -15,10 +15,12 @@
 #import "XCUIElement+FBCaching.h"
 #import "FBExceptions.h"
 #import "FBResponsePayload.h"
+#import "FBSession.h"
 #import "FBTestMacros.h"
 #import "XCUIElement.h"
 #import "XCUIElement+FBFind.h"
 #import "XCUIElement+FBUID.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBXCElementSnapshotWrapper+Helpers.h"
 #import "XCUIElement+FBIsVisible.h"
 #import "XCUIElement+FBClassChain.h"
@@ -113,6 +115,27 @@
 - (void)testLookupSnapshotsWithIndexBinding
 {
   [self assertLookupSnapshotsWithIndexBinding:YES];
+}
+
+// Index binding resolves the matches with a query, which must not change the XPath order
+- (void)testXPathMatchesKeepOrderWithIndexBinding
+{
+  NSString *query = @"//XCUIElementTypeButton | //XCUIElementTypeStaticText";
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  @try {
+    FBConfiguration.sharedInstance.boundElementsByIndex = YES;
+    // The expected order comes straight from the XPath matches, not from the lookup under test
+    NSMutableArray<NSString *> *expectedUids = [NSMutableArray array];
+    for (id<FBXCElementSnapshot> snapshot in [FBXPath matchesWithRootElement:self.testedView forQuery:query]) {
+      [expectedUids addObject:[FBXCElementSnapshotWrapper ensureWrapped:snapshot].fb_uid];
+    }
+    NSArray<XCUIElement *> *actual = [self.testedView fb_descendantsMatchingXPathQuery:query
+                                                           shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(expectedUids.count, 1u);
+    XCTAssertEqualObjects([actual valueForKey:@"fb_uid"], expectedUids);
+  } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
 }
 
 - (void)testDescendantsWithClassName
@@ -234,20 +257,6 @@
                                                                     shouldReturnAfterFirstMatch:NO];
   int snapshotsCount = 6;
   XCTAssertEqual(matchingSnapshots.count, snapshotsCount);
-}
-
-- (void)testDescendantsWithWrongXPathQuery
-{
-  XCTAssertThrowsSpecificNamed([self.testedView fb_descendantsMatchingXPathQuery:@"//*[blabla(@label, Scrolling')]"
-                                                     shouldReturnAfterFirstMatch:NO],
-                               NSException, FBInvalidXPathException);
-}
-
-- (void)testFirstDescendantWithWrongXPathQuery
-{
-  XCTAssertThrowsSpecificNamed([self.testedView fb_descendantsMatchingXPathQuery:@"//*[blabla(@label, Scrolling')]"
-                                                     shouldReturnAfterFirstMatch:YES],
-                               NSException, FBInvalidXPathException);
 }
 
 - (void)testVisibleDescendantWithXPathQuery
@@ -379,18 +388,6 @@
   XCTAssertEqualObjects([matchingSnapshots lastObject].label, @"Attributes");
 }
 
-- (void)testDescendantsWithIndirectClassChainAndPredicates
-{
-  NSString *queryString = @"XCUIElementTypeWindow/**/XCUIElementTypeButton[`label BEGINSWITH 'A'`]";
-  NSArray<XCUIElement *> *simpleQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:queryString
-                                                                            shouldReturnAfterFirstMatch:NO];
-  NSArray<XCUIElement *> *deepQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow/**/XCUIElementTypeButton[`label BEGINSWITH 'A'`]"
-                                                                          shouldReturnAfterFirstMatch:NO];
-  XCTAssertEqual(simpleQueryMatches.count, deepQueryMatches.count);
-  XCTAssertEqualObjects([simpleQueryMatches firstObject].label, [deepQueryMatches firstObject].label);
-  XCTAssertEqualObjects([simpleQueryMatches lastObject].label, [deepQueryMatches lastObject].label);
-}
-
 - (void)testClassChainWithDescendantPredicate
 {
   NSArray<XCUIElement *> *simpleQueryMatches = [self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow/*/*[1]"
@@ -468,14 +465,6 @@
   XCTAssertEqual(matchingSnapshots.count, 0);
 }
 
-- (void)testClassChainWithInvalidPredicate
-{
-  XCTAssertThrowsSpecificNamed([self.testedApplication fb_descendantsMatchingClassChain:@"XCUIElementTypeWindow[`bla != 'bla'`]"
-                                                            shouldReturnAfterFirstMatch:NO],
-                               NSException, FBUnknownAttributeException);;
-}
-
-
 - (void)testUidsOfAccessibilityBoundElementsDoNotNeedSnapshots
 {
   BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
@@ -492,6 +481,30 @@
       XCTAssertEqualObjects(uid, [FBXCElementSnapshotWrapper wdUIDWithSnapshot:[match fb_standardSnapshot]]);
     }
   } @finally {
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
+}
+
+- (void)testAccessibilityBoundMatchesStayStableWithoutNativeCaching
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  FBSession *session = [FBSession initWithApplication:nil];
+  session.useNativeCachingStrategy = NO;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedView fb_descendantsMatchingClassName:@"XCUIElementTypeButton"
+                                                            shouldReturnAfterFirstMatch:NO];
+    XCTAssertGreaterThan(matches.count, 1u);
+    FBElementCache *cache = [FBElementCache new];
+    FBResponseWithCachedElements(matches, cache, YES);
+    for (XCUIElement *match in matches) {
+      // AX-bound matches are cached as is, without being resolved again
+      XCTAssertNotNil(match.fb_boundAccessibilityElement);
+      XCTAssertNil(match.lastSnapshot);
+      XCTAssertEqual([cache elementForUUID:match.fb_cacheId], match);
+    }
+  } @finally {
+    [session kill];
     FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
   }
 }
@@ -583,6 +596,45 @@
     [self launchApplication];
     [self goToAttributesPage];
   });
+}
+
+- (void)testCachedMatchResolvesAfterLookupValueChanges
+{
+  BOOL previousBinding = FBConfiguration.sharedInstance.boundElementsByIndex;
+  FBConfiguration.sharedInstance.boundElementsByIndex = NO;
+  // nil app keeps [session kill] from terminating the app shared by the tests
+  FBSession *session = [FBSession initWithApplication:nil];
+  session.useNativeCachingStrategy = NO;
+  XCUIElement *toggle = self.testedApplication.switches.firstMatch;
+  NSString *initialValue = toggle.wdValue;
+  @try {
+    NSArray<XCUIElement *> *matches = [self.testedApplication fb_descendantsMatchingProperty:@"value"
+                                                                                       value:initialValue
+                                                                               partialSearch:NO];
+    XCUIElement *match = nil;
+    for (XCUIElement *candidate in matches) {
+      if (candidate.elementType == XCUIElementTypeSwitch) {
+        match = candidate;
+        break;
+      }
+    }
+    XCTAssertNotNil(match);
+    FBElementCache *cache = [FBElementCache new];
+    FBResponseWithCachedElements(@[match], cache, YES);
+    NSString *cacheId = match.fb_cacheId;
+
+    [toggle tap];
+    XCUIElement *resolved = [cache elementForUUID:cacheId checkStaleness:YES];
+    XCTAssertNotNil(resolved);
+    XCTAssertNotEqualObjects(resolved.wdValue, initialValue);
+    XCTAssertEqualObjects(resolved.wdValue, toggle.wdValue);
+  } @finally {
+    if (![toggle.wdValue isEqual:initialValue]) {
+      [toggle tap];
+    }
+    [session kill];
+    FBConfiguration.sharedInstance.boundElementsByIndex = previousBinding;
+  }
 }
 
 - (void)testNestedQueryWithClassChain

@@ -3,6 +3,69 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [19.1.34](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.33...appium-remote-debugger@19.1.34) (2026-11-27)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.33](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.32...appium-remote-debugger@19.1.33) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
+## [19.1.32](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.31...appium-remote-debugger@19.1.32) (2026-11-26)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.31](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.30...appium-remote-debugger@19.1.31) (2026-11-25)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.30](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.29...appium-remote-debugger@19.1.30) (2026-11-25)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.29](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.28...appium-remote-debugger@19.1.29) (2026-11-25)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.28](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.27...appium-remote-debugger@19.1.28) (2026-11-24)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
+## [19.1.27](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.26...appium-remote-debugger@19.1.27) (2026-11-24)
+
+**Note:** Version bump only for package appium-remote-debugger
+
+
+
+
+
 ## [19.1.26](https://github.com/appium/appium-ios/compare/appium-remote-debugger@19.1.25...appium-remote-debugger@19.1.26) (2026-11-23)
 
 **Note:** Version bump only for package appium-remote-debugger

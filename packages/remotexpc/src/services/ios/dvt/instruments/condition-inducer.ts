@@ -1,6 +1,7 @@
 import {getLogger} from '../../../../lib/logger.js';
 import type {ConditionGroup} from '../../../../lib/types.js';
 import {MessageAux} from '../dtx-message.js';
+import {isPlainObject} from '../utils.js';
 import {BaseInstrument} from './base-instrument.js';
 
 const log = getLogger('ConditionInducer');
@@ -103,7 +104,7 @@ export class ConditionInducer extends BaseInstrument {
     }
   }
 
-  private isNSError(obj: any): boolean {
-    return ['NSCode', 'NSUserInfo', 'NSDomain'].some((prop) => obj?.[prop] !== undefined);
+  private isNSError(obj: unknown): boolean {
+    return isPlainObject(obj) && ['NSCode', 'NSUserInfo', 'NSDomain'].some((prop) => obj[prop] !== undefined);
   }
 }

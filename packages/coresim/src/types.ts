@@ -449,7 +449,7 @@ export interface NativeDeviceHandle {
   propertiesOfApplication(bundleId: string): Promise<Record<string, unknown>>;
   installedApps(): Promise<Record<string, unknown>>;
   openUrl(url: string): Promise<void>;
-  setLocation(latitude: number, longitude: number): Promise<void>;
+  setLocation(latitude: number, longitude: number, altitude?: number): Promise<void>;
   clearLocation(): Promise<void>;
   isDuo(): Promise<boolean>;
   pressHidButton(page: number, usage: number, duration: number): Promise<void>;

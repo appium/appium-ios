@@ -3,6 +3,56 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [6.1.13](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.12...appium-ios-remotexpc@6.1.13) (2026-11-27)
+
+### Bug Fixes
+
+* **remotexpc:** remove XCTest attachments via the file service ([#259](https://github.com/appium/appium-ios/issues/259)) ([ef17126](https://github.com/appium/appium-ios/commit/ef17126696a21bbbc6309df002eee1c1b403e6ff))
+
+
+## [6.1.12](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.11...appium-ios-remotexpc@6.1.12) (2026-11-27)
+
+**Note:** Version bump only for package appium-ios-remotexpc
+
+
+
+
+
+## [6.1.11](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.10...appium-ios-remotexpc@6.1.11) (2026-11-26)
+
+### Miscellaneous Chores
+
+* replace commander with util.parseArgs ([#252](https://github.com/appium/appium-ios/issues/252)) ([73ecec5](https://github.com/appium/appium-ios/commit/73ecec507d62547c5220686c920accd1cfdcbc36))
+
+
+## [6.1.10](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.9...appium-ios-remotexpc@6.1.10) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** don&#x27;t run XML cleanup on binary plists ([#251](https://github.com/appium/appium-ios/issues/251)) ([ebe3b84](https://github.com/appium/appium-ios/commit/ebe3b841c375df3925dc469f08a282e4b140700d))
+
+
+## [6.1.9](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.8...appium-ios-remotexpc@6.1.9) (2026-11-25)
+
+### Bug Fixes
+
+* **remotexpc:** reject pending plist receives when the socket closes ([#248](https://github.com/appium/appium-ios/issues/248)) ([43f295e](https://github.com/appium/appium-ios/commit/43f295e8a4f40caf3adba6b1d1f0765135951617))
+
+
+## [6.1.8](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.7...appium-ios-remotexpc@6.1.8) (2026-11-24)
+
+### Code Refactoring
+
+* **remotexpc:** name repeated timeout defaults ([#240](https://github.com/appium/appium-ios/issues/240)) ([8906681](https://github.com/appium/appium-ios/commit/890668180b8e87ba801c56035997a98582a793dc))
+
+
+## [6.1.7](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.6...appium-ios-remotexpc@6.1.7) (2026-11-24)
+
+### Code Refactoring
+
+* **remotexpc:** replace internal any types in DVT and testmanagerd ([#241](https://github.com/appium/appium-ios/issues/241)) ([bfba251](https://github.com/appium/appium-ios/commit/bfba251edb51af1e89f34d8ac6982b9f57f52635))
+
+
 ## [6.1.6](https://github.com/appium/appium-ios/compare/appium-ios-remotexpc@6.1.5...appium-ios-remotexpc@6.1.6) (2026-11-23)
 
 ### Code Refactoring

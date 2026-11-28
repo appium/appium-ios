@@ -11,6 +11,7 @@
 #import "FBSession.h"
 #import "FBSession-Private.h"
 #import "FBExceptions.h"
+#import "FBAlert.h"
 #import "FBConfiguration.h"
 #import "FBScreenRecordingContainer.h"
 #import "FBScreenRecordingPromise.h"
@@ -18,6 +19,10 @@
 
 @interface FBSession (SystemApplicationTests)
 - (BOOL)fb_isApplicationSameAsSystemApp:(XCUIApplication *)application timeout:(NSTimeInterval)timeout;
+@end
+
+@interface FBSession (AlertTests)
+- (void)didDetectAlert:(FBAlert *)alert;
 @end
 
 static id (^FBSystemApplicationLookup)(void);
@@ -72,6 +77,45 @@ static id (^FBSystemApplicationLookup)(void);
 }
 @end
 
+// Records the alert actions instead of touching a real alert.
+@interface FBRecordingAlertDouble : FBAlert
+@property (nonatomic) NSUInteger acceptCalls;
+@property (nonatomic) NSUInteger dismissCalls;
+@property (nonatomic) NSMutableArray<NSString *> *classChains;
+@property (nonatomic) BOOL shouldThrow;
+@end
+
+@implementation FBRecordingAlertDouble
+- (NSMutableArray<NSString *> *)classChains
+{
+  if (nil == _classChains) {
+    _classChains = [NSMutableArray array];
+  }
+  return _classChains;
+}
+- (void)accept
+{
+  self.acceptCalls++;
+  if (self.shouldThrow) {
+    @throw [NSException exceptionWithName:@"AlertFailure" reason:nil userInfo:nil];
+  }
+}
+- (void)dismiss
+{
+  self.dismissCalls++;
+  if (self.shouldThrow) {
+    @throw [NSException exceptionWithName:@"AlertFailure" reason:nil userInfo:nil];
+  }
+}
+- (void)clickElementMatchingClassChain:(NSString *)classChain
+{
+  [self.classChains addObject:classChain];
+  if (self.shouldThrow) {
+    @throw [NSException exceptionWithName:@"AlertFailure" reason:nil userInfo:nil];
+  }
+}
+@end
+
 @interface FBTestScreenRecordingPromise : FBScreenRecordingPromise
 @property (nonatomic, strong) NSUUID *testIdentifier;
 @property (nonatomic, copy, nullable) id (^onNativePromiseAccess)(void);
@@ -109,6 +153,8 @@ static id (^FBSystemApplicationLookup)(void);
 @property (nonatomic, strong) FBSession *session;
 @property (nonatomic, strong) XCUIApplication *testedApplication;
 @property (nonatomic) BOOL shouldTerminateAppValue;
+@property (nonatomic) BOOL shouldRespectSystemAlertsValue;
+@property (nonatomic, copy) NSString *autoClickAlertSelectorValue;
 @end
 
 @implementation FBSessionTests
@@ -119,6 +165,11 @@ static id (^FBSystemApplicationLookup)(void);
   self.testedApplication = (id)XCUIApplicationDouble.new;
   self.shouldTerminateAppValue = FBConfiguration.sharedInstance.shouldTerminateApp;
   FBConfiguration.sharedInstance.shouldTerminateApp = NO;
+  self.shouldRespectSystemAlertsValue = FBConfiguration.sharedInstance.shouldRespectSystemAlerts;
+  self.autoClickAlertSelectorValue = FBConfiguration.sharedInstance.autoClickAlertSelector;
+  // Keeps -activeApplication from querying the real system application
+  FBConfiguration.sharedInstance.shouldRespectSystemAlerts = NO;
+  FBConfiguration.sharedInstance.autoClickAlertSelector = nil;
   self.session = [FBSession initWithApplication:self.testedApplication];
 }
 
@@ -131,6 +182,8 @@ static id (^FBSystemApplicationLookup)(void);
   [FBScreenRecordingContainer.sharedInstance reset];
   [self.session kill];
   FBConfiguration.sharedInstance.shouldTerminateApp = self.shouldTerminateAppValue;
+  FBConfiguration.sharedInstance.shouldRespectSystemAlerts = self.shouldRespectSystemAlertsValue;
+  FBConfiguration.sharedInstance.autoClickAlertSelector = self.autoClickAlertSelectorValue;
   [super tearDown];
 }
 
@@ -259,6 +312,132 @@ static id (^FBSystemApplicationLookup)(void);
   XCTAssertThrowsSpecificNamed([self launchAsAUT], NSException,
                               FBSessionDoesNotExistException);
   XCTAssertFalse(app.didLaunch);
+}
+
+- (FBAUTLaunchApplicationDouble *)launchAsAUTWithQuiescence:(NSNumber *)shouldWaitForQuiescence
+{
+  return (id)[self.session launchApplicationWithBundleId:@"com.facebook.awesome"
+                                 shouldWaitForQuiescence:shouldWaitForQuiescence
+                                               arguments:nil
+                                             environment:nil
+                                  asApplicationUnderTest:YES];
+}
+
+- (void)testApplicationCanBeLaunchedAsApplicationUnderTest
+{
+  FBAUTLaunchApplicationDouble *app = [self prepareAUTLaunch];
+  app.state = XCUIApplicationStateRunningForeground;
+  XCTAssertEqual([self launchAsAUTWithQuiescence:nil], app);
+  XCTAssertEqual(self.session.activeApplication, (id)app);
+  // The first app under test waits for quiescence by default
+  XCTAssertTrue(app.fb_shouldWaitForQuiescence);
+
+  // Later apps inherit the setting from the app under test
+  FBAUTLaunchApplicationDouble *settingsApp = [FBAUTLaunchApplicationDouble new];
+  ((FBAUTLaunchSession *)self.session).launchApplication = settingsApp;
+  XCUIApplication *launched = [self.session launchApplicationWithBundleId:@"com.apple.Preferences"
+                                                  shouldWaitForQuiescence:nil
+                                                                arguments:nil
+                                                              environment:nil];
+  XCTAssertEqual(launched, (id)settingsApp);
+  XCTAssertTrue(settingsApp.fb_shouldWaitForQuiescence);
+  XCTAssertEqual([self.session valueForKey:@"testedApplication"], app);
+}
+
+- (void)testApplicationLaunchedAsApplicationUnderTestRespectsQuiescenceArgument
+{
+  FBAUTLaunchApplicationDouble *app = [self prepareAUTLaunch];
+  app.state = XCUIApplicationStateRunningForeground;
+  app.fb_shouldWaitForQuiescence = YES;
+  XCTAssertEqual([self launchAsAUTWithQuiescence:@NO], app);
+  XCTAssertEqual(self.session.activeApplication, (id)app);
+  XCTAssertFalse(app.fb_shouldWaitForQuiescence);
+}
+
+- (void)testCrashOfApplicationLaunchedAsApplicationUnderTestIsDetected
+{
+  FBAUTLaunchApplicationDouble *app = [self prepareAUTLaunch];
+  app.state = XCUIApplicationStateRunningForeground;
+  [self launchAsAUTWithQuiescence:nil];
+  XCTAssertEqual(self.session.activeApplication, (id)app);
+  app.state = XCUIApplicationStateNotRunning;
+  XCTAssertThrowsSpecificNamed(self.session.activeApplication, NSException, FBApplicationCrashedException);
+}
+
+- (void)testApplicationIsNotLaunchedAsApplicationUnderTestByDefault
+{
+  FBAUTLaunchApplicationDouble *app = [self prepareAUTLaunch];
+  // Non-default value proves the launch resets it
+  app.fb_shouldWaitForQuiescence = YES;
+  [self.session launchApplicationWithBundleId:@"com.facebook.awesome"
+                      shouldWaitForQuiescence:nil
+                                    arguments:nil
+                                  environment:nil];
+  XCTAssertTrue(app.didLaunch);
+  XCTAssertFalse(app.fb_shouldWaitForQuiescence);
+  // No tested application means a stopped app is never reported as crashed
+  XCTAssertNil([self.session valueForKey:@"testedApplication"]);
+  XCTAssertFalse([[self.session valueForKey:@"isTestedApplicationExpectedToRun"] boolValue]);
+}
+
+- (void)testAutoAcceptsAlert
+{
+  FBRecordingAlertDouble *alert = [FBRecordingAlertDouble new];
+  self.session.defaultAlertAction = @"accept";
+  [self.session didDetectAlert:alert];
+  XCTAssertEqual(alert.acceptCalls, 1u);
+  XCTAssertEqual(alert.dismissCalls, 0u);
+  XCTAssertEqual(alert.classChains.count, 0u);
+}
+
+- (void)testAutoDismissesAlert
+{
+  FBRecordingAlertDouble *alert = [FBRecordingAlertDouble new];
+  self.session.defaultAlertAction = @"dismiss";
+  [self.session didDetectAlert:alert];
+  XCTAssertEqual(alert.acceptCalls, 0u);
+  XCTAssertEqual(alert.dismissCalls, 1u);
+  XCTAssertEqual(alert.classChains.count, 0u);
+}
+
+- (void)testAutoClickSelectorTakesPriorityOverDefaultAlertAction
+{
+  FBRecordingAlertDouble *alert = [FBRecordingAlertDouble new];
+  self.session.defaultAlertAction = @"accept";
+  FBConfiguration.sharedInstance.autoClickAlertSelector = @"**/XCUIElementTypeButton[`label == \"OK\"`]";
+  [self.session didDetectAlert:alert];
+  XCTAssertEqualObjects(alert.classChains, @[@"**/XCUIElementTypeButton[`label == \"OK\"`]"]);
+  XCTAssertEqual(alert.acceptCalls, 0u);
+  XCTAssertEqual(alert.dismissCalls, 0u);
+}
+
+- (void)testUnsupportedOrMissingDefaultAlertActionDoesNothing
+{
+  FBRecordingAlertDouble *alert = [FBRecordingAlertDouble new];
+  for (NSString *action in @[@"unsupported", @""]) {
+    self.session.defaultAlertAction = action;
+    XCTAssertNoThrow([self.session didDetectAlert:alert]);
+  }
+  self.session.defaultAlertAction = nil;
+  XCTAssertNoThrow([self.session didDetectAlert:alert]);
+  XCTAssertEqual(alert.acceptCalls, 0u);
+  XCTAssertEqual(alert.dismissCalls, 0u);
+  XCTAssertEqual(alert.classChains.count, 0u);
+}
+
+- (void)testAlertActionFailuresAreNotPropagated
+{
+  FBRecordingAlertDouble *alert = [FBRecordingAlertDouble new];
+  alert.shouldThrow = YES;
+  self.session.defaultAlertAction = @"accept";
+  XCTAssertNoThrow([self.session didDetectAlert:alert]);
+  self.session.defaultAlertAction = @"dismiss";
+  XCTAssertNoThrow([self.session didDetectAlert:alert]);
+  FBConfiguration.sharedInstance.autoClickAlertSelector = @"**/XCUIElementTypeButton";
+  XCTAssertNoThrow([self.session didDetectAlert:alert]);
+  XCTAssertEqual(alert.acceptCalls, 1u);
+  XCTAssertEqual(alert.dismissCalls, 1u);
+  XCTAssertEqual(alert.classChains.count, 1u);
 }
 
 - (void)testSystemApplicationCheckUsesSuppliedApplication

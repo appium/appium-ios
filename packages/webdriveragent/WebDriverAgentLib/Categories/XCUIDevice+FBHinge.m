@@ -293,7 +293,7 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
         || attempt == FBHingeMaxCorrections) {
       return;
     }
-    double nudged = angle + direction * FBHingeCorrectionNudge * (attempt + 1);
+    double nudged = angle + direction * FBHingeCorrectionNudge * (double)(attempt + 1);
     if (![self.class fb_dispatchHingeAngle:nudged error:nil]) {
       return;
     }

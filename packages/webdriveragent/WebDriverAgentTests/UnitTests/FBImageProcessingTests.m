@@ -7,88 +7,48 @@
  */
 
 #import <XCTest/XCTest.h>
+@import UniformTypeIdentifiers;
+#import <UIKit/UIKit.h>
 
 #import "FBImageProcessor.h"
 #import "FBConfiguration.h"
-@import UniformTypeIdentifiers;
-#import "FBIntegrationTestCase.h"
 
-
-@interface FBImageProcessorTests : FBIntegrationTestCase
-
+@interface FBImageProcessingTests : XCTestCase
 @property (nonatomic) NSData *originalImage;
 @property (nonatomic) CGSize originalSize;
-
 @end
 
-@implementation FBImageProcessorTests
+@implementation FBImageProcessingTests
 
-- (void)setUp {
-  XCUIApplication *app = [[XCUIApplication alloc] init];
-  [app launch];
-  XCUIScreenshot *screenshot = app.screenshot;
-  self.originalImage = UIImageJPEGRepresentation(screenshot.image, 1.0);
-  self.originalSize = [FBImageProcessorTests scaledSizeFromImage:screenshot.image];
-}
-
-- (void)testScaling {
-  CGFloat halfScale = 0.5;
-  CGSize expectedHalfScaleSize = [FBImageProcessorTests sizeFromSize:self.originalSize scalingFactor:0.5];
-  [self scaleImageWithFactor:halfScale
-                expectedSize:expectedHalfScaleSize];
-
-  // 0 is the smalles scaling factor we accept
-  CGFloat minScale = 0.0;
-  CGSize expectedMinScaleSize = [FBImageProcessorTests sizeFromSize:self.originalSize scalingFactor:0.01];
-  [self scaleImageWithFactor:minScale
-                expectedSize:expectedMinScaleSize];
-
-  // For scaling factors above 100 we don't perform any scaling and just return the unmodified image
-  [self scaleImageWithFactor:1.0
-                expectedSize:self.originalSize];
-  [self scaleImageWithFactor:2.0
-                expectedSize:self.originalSize];
-}
-
-- (void)scaleImageWithFactor:(CGFloat)scalingFactor expectedSize:(CGSize)excpectedSize {
-  FBImageProcessor *scaler = [[FBImageProcessor alloc] init];
-
-  id expScaled = [self expectationWithDescription:@"Receive scaled image"];
-
-  [scaler submitImageData:self.originalImage
-            scalingFactor:scalingFactor
-        completionHandler:^(NSData *scaled) {
-    UIImage *scaledImage = [UIImage imageWithData:scaled];
-    CGSize scaledSize = [FBImageProcessorTests scaledSizeFromImage:scaledImage];
-    
-    XCTAssertEqualWithAccuracy(scaledSize.width, excpectedSize.width, 1.0);
-    XCTAssertEqualWithAccuracy(scaledSize.height, excpectedSize.height, 1.0);
-    
-    [expScaled fulfill];
+- (void)setUp
+{
+  [super setUp];
+  // Synthetic JPEG keeps the scaling checks independent of a live screenshot
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat new];
+  format.scale = 1.0;
+  UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(300, 600)
+                                                                             format:format];
+  self.originalImage = [renderer JPEGDataWithCompressionQuality:1.0
+                                                        actions:^(UIGraphicsImageRendererContext *context) {
+    [UIColor.redColor setFill];
+    [context fillRect:CGRectMake(0, 0, 300, 600)];
   }];
-
-  [self waitForExpectations:@[expScaled]
-                    timeout:0.5];
-
+  self.originalSize = [FBImageProcessingTests scaledSizeFromImage:[UIImage imageWithData:self.originalImage]];
+  XCTAssertEqualWithAccuracy(self.originalSize.width, 300, 0.01);
+  XCTAssertEqualWithAccuracy(self.originalSize.height, 600, 0.01);
 }
 
-+ (CGSize)scaledSizeFromImage:(UIImage *)image {
-  return CGSizeMake(image.size.width * image.scale, image.size.height * image.scale);
+- (void)testScaling
+{
+  [self scaleImageWithFactor:0.5
+                expectedSize:[FBImageProcessingTests sizeFromSize:self.originalSize scalingFactor:0.5]];
+  // 0 is the smallest scaling factor we accept
+  [self scaleImageWithFactor:0.0
+                expectedSize:[FBImageProcessingTests sizeFromSize:self.originalSize scalingFactor:0.01]];
+  // For scaling factors above 100 we don't perform any scaling and just return the unmodified image
+  [self scaleImageWithFactor:1.0 expectedSize:self.originalSize];
+  [self scaleImageWithFactor:2.0 expectedSize:self.originalSize];
 }
-
-+ (CGSize)sizeFromSize:(CGSize)size scalingFactor:(CGFloat)scalingFactor {
-  return CGSizeMake(round(size.width * scalingFactor), round(size.height * scalingFactor));
-}
-
-@end
-
-
-
-// Synthetic images keep these renderer regressions independent of the app's screen.
-@interface FBImageRendererScalingTests : XCTestCase
-@end
-
-@implementation FBImageRendererScalingTests
 
 - (void)testExplicitOrientationOverridesUprightImageMetadataAtFullSize
 {
@@ -149,6 +109,33 @@
     XCTAssertEqual(CGImageGetWidth(image.CGImage), (size_t)(60 * sourceScale.integerValue));
     XCTAssertEqual(CGImageGetHeight(image.CGImage), (size_t)(40 * sourceScale.integerValue));
   }
+}
+
+- (void)scaleImageWithFactor:(CGFloat)scalingFactor expectedSize:(CGSize)expectedSize
+{
+  FBImageProcessor *scaler = [[FBImageProcessor alloc] init];
+  XCTestExpectation *expScaled = [self expectationWithDescription:@"Receive scaled image"];
+  [scaler submitImageData:self.originalImage
+            scalingFactor:scalingFactor
+        completionHandler:^(NSData *scaled) {
+    UIImage *scaledImage = [UIImage imageWithData:scaled];
+    CGSize scaledSize = [FBImageProcessingTests scaledSizeFromImage:scaledImage];
+    XCTAssertEqualWithAccuracy(scaledSize.width, expectedSize.width, 1.0);
+    XCTAssertEqualWithAccuracy(scaledSize.height, expectedSize.height, 1.0);
+    [expScaled fulfill];
+  }];
+  // Only a ceiling: cold image codecs on a loaded CI runner can take seconds
+  [self waitForExpectations:@[expScaled] timeout:30];
+}
+
++ (CGSize)scaledSizeFromImage:(UIImage *)image
+{
+  return CGSizeMake(image.size.width * image.scale, image.size.height * image.scale);
+}
+
++ (CGSize)sizeFromSize:(CGSize)size scalingFactor:(CGFloat)scalingFactor
+{
+  return CGSizeMake(round(size.width * scalingFactor), round(size.height * scalingFactor));
 }
 
 @end
