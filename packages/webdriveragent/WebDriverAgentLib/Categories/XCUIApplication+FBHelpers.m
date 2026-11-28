@@ -202,8 +202,9 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
 - (NSDictionary *)fb_tree:(nullable NSSet<NSString *> *)excludedAttributes
 {
   id<FBXCElementSnapshot> snapshot = [self fb_standardSnapshot];
+  BOOL includeVisibility = ![excludedAttributes containsObject:FBExclusionAttributeVisible];
   return [self.class dictionaryForElement:snapshot
-                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot)
+                         displaySnapshots:FBDisplaySnapshotsForTree(snapshot, includeVisibility)
                                 recursive:YES
                        excludedAttributes:excludedAttributes];
 }
@@ -233,6 +234,10 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
     info[FBExclusionAttributeFrame] = NSStringFromCGRect(geometry.wdFrame);
   }
   
+  if (![excludedAttributes containsObject:FBExclusionAttributeVisible]) {
+    info[FBJsonPrefixedAttributeKey(FBExclusionAttributeVisible)] = @(geometry.wdVisible).stringValue;
+  }
+
   NSDictionary<NSString *, NSString *(^)(void)> *attributeBlocks = [self fb_attributeBlockMapForWrappedSnapshot:wrappedSnapshot];
 
   NSSet *nonPrefixedKeys = [NSSet setWithObjects:
@@ -286,9 +291,6 @@ NSDictionary<NSString *, NSString *> *customExclusionAttributesMap(void) {
   },
     FBExclusionAttributeEnabled: ^{
     return [@([wrappedSnapshot isWDEnabled]) stringValue];
-  },
-    FBExclusionAttributeVisible: ^{
-    return [@([wrappedSnapshot isWDVisible]) stringValue];
   },
     FBExclusionAttributeAccessible: ^{
     return [@([wrappedSnapshot isWDAccessible]) stringValue];

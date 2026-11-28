@@ -7,10 +7,15 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
+
+#import "XCUIDevice+FBHinge.h"
 
 #import "FBConfiguration.h"
 #import "FBExceptions.h"
 #import "FBMacros.h"
+#import "FBControlCenterVisibility.h"
+#import "XCUIElement+FBWebDriverAttributes.h"
 #import "FBSnapshotTreeDouble.h"
 #import "FBXMLGenerationOptions.h"
 #import "FBXPath.h"
@@ -52,6 +57,7 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
 @property (nonatomic, weak) FBTraversalSnapshot *parentSnapshot;
 @property (nonatomic) NSUInteger childrenReads;
 @property (nonatomic) NSUInteger frameReads;
+@property (nonatomic) long long displayID;
 @end
 @implementation FBTraversalSnapshot
 - (NSArray *)children { self.childrenReads++; return self.childSnapshots ?: @[]; }
@@ -110,6 +116,14 @@ static NSArray<NSString *> *FBXPathButtonLabels(void)
 - (void)setUp
 {
   [super setUp];
+  // These synthetic XPath trees have no SpringBoard session, including on Duo.
+  Method supportsHinge = class_getInstanceMethod(XCUIDevice.class, @selector(fb_supportsHingeAngleReading));
+  IMP replacement = imp_implementationWithBlock(^BOOL(XCUIDevice *device) { return NO; });
+  IMP original = method_setImplementation(supportsHinge, replacement);
+  [self addTeardownBlock:^{
+    method_setImplementation(supportsHinge, original);
+    imp_removeBlock(replacement);
+  }];
   NSMutableArray *buttons = [NSMutableArray array];
   CGFloat y = 0;
   for (NSString *label in FBXPathButtonLabels()) {
@@ -121,6 +135,28 @@ static NSArray<NSString *> *FBXPathButtonLabels(void)
   self.buttons = buttons;
   self.mainView = [FBXPathNodeDouble type:XCUIElementTypeOther label:@"MainView" children:buttons];
   self.window = [FBXPathNodeDouble type:XCUIElementTypeWindow label:nil children:@[self.mainView]];
+}
+
+- (void)testControlCenterVisibilityInheritsOnlyUnresolvedDisplayIDs
+{
+  FBTraversalSnapshot *innerWindow = [FBTraversalSnapshot new];
+  innerWindow.displayID = 3;
+  FBTraversalSnapshot *visible = [FBTraversalSnapshot new];
+  FBTraversalSnapshot *hidden = [FBTraversalSnapshot new];
+  FBTraversalSnapshot *coverWindow = [FBTraversalSnapshot new];
+  coverWindow.displayID = 1;
+  FBTraversalSnapshot *offscreen = [FBTraversalSnapshot new];
+  innerWindow.childSnapshots = @[visible, hidden, coverWindow];
+  coverWindow.childSnapshots = @[offscreen];
+  visible.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @YES;
+  hidden.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @NO;
+  offscreen.additionalAttributes[FB_XCAXAIsVisibleAttribute] = @YES;
+
+  FBDisplaySnapshotMap *matches = [NSMapTable strongToStrongObjectsMapTable];
+  FBCollectSourceVisibility((id)innerWindow, 3, 0, matches);
+  XCTAssertTrue([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)visible]].wdVisible);
+  XCTAssertFalse([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)hidden]].wdVisible);
+  XCTAssertFalse([FBXCElementSnapshotWrapper ensureWrapped:[matches objectForKey:(id)offscreen]].wdVisible);
 }
 
 - (void)testSerializationVisitsSiblingListAndFrameOnce

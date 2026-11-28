@@ -46,7 +46,14 @@
         && ([name isEqualToString:FBStringify(XCUIElement, isWDAccessible)]
             || [name isEqualToString:FBStringify(XCUIElement, isWDAccessibilityContainer)]
             || [name isEqualToString:FBStringify(XCUIElement, wdIndex)]));
-  if ([name isEqualToString:FBStringify(XCUIElement, wdRect)] || [name isEqualToString:FBStringify(XCUIElement, wdFrame)]) {
+  BOOL needsDisplaySnapshot = [name isEqualToString:FBStringify(XCUIElement, wdRect)]
+    || [name isEqualToString:FBStringify(XCUIElement, wdFrame)];
+#if TARGET_OS_SIMULATOR
+  // All simulators can use this lookup for /displayed. It returns the original
+  // snapshot when no display correction is needed. Hardware keeps using XCTest.
+  needsDisplaySnapshot |= [name isEqualToString:FBStringify(XCUIElement, isWDVisible)];
+#endif
+  if (needsDisplaySnapshot) {
     return FBSnapshotForDisplayGeometry(self, isCustomSnapshot);
   }
   return isCustomSnapshot ? [self fb_customSnapshot] : [self fb_standardSnapshot];

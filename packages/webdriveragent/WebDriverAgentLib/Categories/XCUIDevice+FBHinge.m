@@ -110,10 +110,16 @@ static const FBHingeInjectionAPI *FBHingeInjectionFunctions(void)
 - (BOOL)fb_supportsHingeAngleReading
 {
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
-  Class<FBAngleManager> managerClass = FBAngleManagerClass();
-  return FBHasAvailableHinge()
-    && [managerClass instancesRespondToSelector:@selector(startAngleUpdatesToQueue:handler:)]
-    && [managerClass instancesRespondToSelector:@selector(stopAngleUpdates)];
+  static BOOL supportsReading;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    // The runner's device and Core Motion APIs stay the same across fold states.
+    Class<FBAngleManager> managerClass = FBAngleManagerClass();
+    supportsReading = FBHasAvailableHinge()
+      && [managerClass instancesRespondToSelector:@selector(startAngleUpdatesToQueue:handler:)]
+      && [managerClass instancesRespondToSelector:@selector(stopAngleUpdates)];
+  });
+  return supportsReading;
 #else
   return NO;
 #endif

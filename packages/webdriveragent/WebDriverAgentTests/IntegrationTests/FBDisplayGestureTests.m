@@ -7,19 +7,30 @@
  */
 
 #import <XCTest/XCTest.h>
+#import <objc/runtime.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "XCUIScreen.h"
+#import "LSApplicationWorkspace.h"
 #import "FBGestureCoordinateContext.h"
+#import "FBHIDOperations+DuoRotation.h"
 #import "FBRunLoopSpinner.h"
 #import "FBElementCommands.h"
+#import "FBRouteRequest-Private.h"
+#import "FBSession.h"
+#import "FBResponsePayload.h"
+#import "RouteResponse.h"
 #import "FBElementCache.h"
 #import "FBBaseActionsSynthesizer.h"
+#import "FBW3CActionsSynthesizer.h"
 #import "FBMathUtils.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBElementCommands (CoordinateTests)
++ (id<FBResponsePayload>)handleClick:(FBRouteRequest *)request;
++ (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request;
 + (nullable XCUICoordinate *)gestureCoordinateWithOffset:(CGVector)offset element:(XCUIElement *)element error:(NSError **)error;
 + (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets element:(XCUIElement *)element error:(NSError **)error;
 @end
@@ -33,6 +44,9 @@
 @interface FBW3CGestureItem : FBBaseGestureItem
 @property (nonatomic) FBGestureCoordinateContext *coordinateContext;
 @end
+
+static NSString *const FBPortraitAppBundleID = @"io.appium.test.DuoPortraitApp";
+static NSString *const FBHostedAppBundleID = @"io.appium.test.DuoHostedApp";
 
 @interface FBDisplayGestureTests : FBIntegrationTestCase
 @property (nonatomic) NSNumber *previousDisplayId;
@@ -52,6 +66,18 @@
 - (void)skipIfUnsupported
 {
   NSString *name = NSStringFromSelector(self.invocation.selector);
+  if (self.invocation.selector == @selector(testHostedCompatibilityTapsAcrossFoldStates)) {
+    XCTSkipUnless(TARGET_OS_SIMULATOR && XCUIDevice.sharedDevice.fb_supportsHingeAngleReading,
+                  @"Requires a Duo simulator");
+    XCTSkipUnless([[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] applicationIsInstalled:FBHostedAppBundleID],
+                  @"Install the DuoHostedApp test fixture");
+  }
+  if (self.invocation.selector == @selector(testPortraitWindowViewportTapsInLandscape)) {
+    XCTSkipUnless(TARGET_OS_SIMULATOR && XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection,
+                  @"Requires a Duo simulator");
+    XCTSkipUnless([[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] applicationIsInstalled:FBPortraitAppBundleID],
+                  @"Install the DuoPortraitApp test fixture");
+  }
   if ([name containsString:@"FoldStates"]) {
     XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
   }
@@ -281,6 +307,209 @@
   XCTSkipIf(!checkedSecondaryDisplay, @"Requires an available secondary display without the fixture");
 }
 
+- (FBSession *)launchSessionAtHingeAngle:(CGFloat)angle
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:angle error:nil]);
+  [self.testedApplication terminate];
+  [self launchApplication];
+
+  FBSession *session = [FBSession initWithApplication:self.testedApplication];
+  session.defaultActiveApplication = self.testedApplication.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+  return session;
+}
+
+- (void)testViewportTapRejectsInactiveInnerDisplay
+{
+  XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  FBSession *session = [self launchSessionAtHingeAngle:0];
+  FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"http://localhost:8100/wda/tap"]
+                                                     parameters:@{} arguments:@{@"x": @40, @"y": @100}];
+  request.session = session;
+  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+    if ([screen[@"isMain"] boolValue]) {
+      continue;
+    }
+    FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
+    RouteResponse *response = [RouteResponse new];
+    [[FBElementCommands handleTap:request] dispatchWithResponse:response];
+    NSDictionary *value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+    XCTAssertEqualObjects(value[@"error"], @"invalid argument");
+    XCTAssertTrue([value[@"message"] containsString:@"No non-empty application window"]);
+    return;
+  }
+  XCTFail(@"Expected an inner display in the folded Duo's screen list");
+}
+
+- (void)testTapsRejectInactiveCoverDisplay
+{
+  XCTSkipIf(!XCUIDevice.sharedDevice.fb_canAttemptSimulatedHingeAngleInjection, @"Requires a foldable simulator");
+  FBSession *session = [self launchSessionAtHingeAngle:180];
+  NSNumber *cover = nil;
+  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
+    NSNumber *displayID = screen[@"displayId"];
+    XCUIScreen *candidate = [FBScreen screenWithDisplayID:displayID.longLongValue error:nil];
+    if ([[FBHIDOperations isInnerDuoDisplay:candidate] isEqual:@NO]) {
+      cover = displayID;
+      break;
+    }
+  }
+  XCTAssertNotNil(cover);
+  FBConfiguration.sharedInstance.currentDisplayId = cover;
+  XCUIElement *button = self.testedApplication.buttons[@"coordinate-probe"];
+  [self performTapsInSession:session button:button viewportCenter:CGPointMake(10, 10) checkResponse:^(id value) {
+    XCTAssertEqualObjects(value[@"error"], @"invalid element state");
+    XCTAssertTrue(button.exists, @"A rejected tap unexpectedly opened the probe");
+  }];
+}
+
+- (void)performTapsInSession:(FBSession *)session
+                      button:(XCUIElement *)button
+              viewportCenter:(CGPoint)center
+               checkResponse:(void (^)(id value))checkResponse
+{
+  NSDictionary *element = @{@"uuid": [session.elementCache storeElement:button]};
+  FBRouteRequest *click = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/element/:uuid/click"]
+                                                   parameters:element arguments:@{}];
+  FBRouteRequest *relative = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/element/:uuid/tap"]
+                                                      parameters:element arguments:@{@"x": @20, @"y": @20}];
+  FBRouteRequest *viewport = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/tap"]
+                                                      parameters:@{} arguments:@{@"x": @(center.x), @"y": @(center.y)}];
+  for (FBRouteRequest *request in @[click, relative, viewport]) {
+    request.session = session;
+    RouteResponse *response = [RouteResponse new];
+    id<FBResponsePayload> payload = request == click ? [FBElementCommands handleClick:request]
+                                                    : [FBElementCommands handleTap:request];
+    [payload dispatchWithResponse:response];
+    id value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+    checkResponse(value);
+  }
+}
+
+- (void)testPortraitWindowViewportTapsInLandscape
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  UIDeviceOrientation originalOrientation = device.orientation;
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{
+    [device fb_setDeviceInterfaceOrientation:originalOrientation];
+    [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil];
+  }];
+  XCTAssertTrue([device fb_setSimulatedHingeAngle:180 error:nil]);
+  XCUIScreen *selected = nil;
+  for (NSDictionary *info in [FBScreen screensWithError:nil]) {
+    XCUIScreen *screen = [FBScreen screenWithDisplayID:[info[@"displayId"] longLongValue] error:nil];
+    if ([FBHIDOperations isInnerDuoDisplay:screen].boolValue) {
+      selected = screen;
+      break;
+    }
+  }
+  XCTAssertNotNil(selected);
+  FBConfiguration.sharedInstance.currentDisplayId = @(selected.displayID);
+  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:FBPortraitAppBundleID];
+  [app launch];
+  FBSession *session = [FBSession initWithApplication:app];
+  session.defaultActiveApplication = app.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+
+  for (NSNumber *orientation in @[@(UIDeviceOrientationLandscapeLeft), @(UIDeviceOrientationLandscapeRight)]) {
+    [device fb_setDeviceInterfaceOrientation:orientation.integerValue];
+    XCUIElement *window = app.windows.firstMatch;
+    XCTAssertTrue([window waitForExistenceWithTimeout:5]);
+    CGRect appFrame = window.wdFrame;
+    XCTAssertLessThan(appFrame.size.width, appFrame.size.height, @"The fixture must remain portrait");
+    CGFloat width = MAX(selected.bounds.size.width, selected.bounds.size.height) / selected.scale;
+    CGFloat height = MIN(selected.bounds.size.width, selected.bounds.size.height) / selected.scale;
+    for (NSInteger index = 1; index <= 3; index++) {
+      XCUIElement *button = app.buttons[[NSString stringWithFormat:@"portrait-counter-%ld", (long)index]];
+      XCTAssertTrue(button.exists);
+      NSInteger count = button.label.integerValue;
+      // The portrait app is centered and scaled to the landscape viewport height.
+      // These targets come from the fixture layout, not the AX window frame.
+      CGPoint point = CGPointMake(width / 2, height * index / 4.0);
+      NSArray *actions = @[@{
+        @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+        @"actions": @[
+          [self moveFrom:@"viewport" x:point.x y:point.y duration:0],
+          @{@"type": @"pointerDown", @"button": @0},
+          @{@"type": @"pause", @"duration": @100},
+          @{@"type": @"pointerUp", @"button": @0},
+        ],
+      }];
+      NSError *error = nil;
+      XCTAssertTrue([app fb_performW3CActions:actions elementCache:session.elementCache error:&error], @"%@", error);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count, @"W3C viewport tap: %@", NSStringFromCGPoint(point));
+      FBRouteRequest *request = [FBRouteRequest routeRequestWithURL:[NSURL URLWithString:@"/wda/tap"]
+                                                        parameters:@{} arguments:@{@"x": @(point.x), @"y": @(point.y)}];
+      request.session = session;
+      RouteResponse *response = [RouteResponse new];
+      [[FBElementCommands handleTap:request] dispatchWithResponse:response];
+      id value = [NSJSONSerialization JSONObjectWithData:response.responseData options:0 error:nil][@"value"];
+      XCTAssertEqualObjects(value, NSNull.null);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count, @"Native viewport tap: %@", NSStringFromCGPoint(point));
+    }
+  }
+}
+
+- (void)testHostedCompatibilityTapsAcrossFoldStates
+{
+  XCUIDevice *device = XCUIDevice.sharedDevice;
+  NSNumber *originalAngle = [device fb_getSimulatedHingeAngle:nil];
+  XCTAssertNotNil(originalAngle);
+  [self addTeardownBlock:^{ [device fb_setSimulatedHingeAngle:originalAngle.doubleValue error:nil]; }];
+
+  XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:FBHostedAppBundleID];
+  [app launch];
+  FBSession *session = [FBSession initWithApplication:app];
+  session.defaultActiveApplication = app.bundleID;
+  [self addTeardownBlock:^{ [session kill]; }];
+
+  for (NSNumber *angle in @[@180, @0, @180]) {
+    XCTAssertTrue([device fb_setSimulatedHingeAngle:angle.doubleValue error:nil]);
+    [app activate];
+    NSNumber *inner = @(angle.integerValue != 0);
+    XCUIScreen *selected = nil;
+    for (NSDictionary *info in [FBScreen screensWithError:nil]) {
+      XCUIScreen *screen = [FBScreen screenWithDisplayID:[info[@"displayId"] longLongValue] error:nil];
+      if ([[FBHIDOperations isInnerDuoDisplay:screen] isEqual:inner]) {
+        selected = screen;
+        break;
+      }
+    }
+    XCTAssertNotNil(selected);
+    FBConfiguration.sharedInstance.currentDisplayId = @(selected.displayID);
+    XCUIElement *button = app.buttons[@"touch-counter"];
+    XCTAssertTrue([button waitForExistenceWithTimeout:5]);
+    (void)button.frame;
+    // The folded case uses native XCTest. Unfolded, the same button reports
+    // the cover while its compatibility window is hosted on the inner display.
+    XCTAssertEqual(button.screen.displayID == selected.displayID, !inner.boolValue);
+    CGSize size = CGSizeMake(selected.bounds.size.width / selected.scale, selected.bounds.size.height / selected.scale);
+    size = FBAdjustDimensionsForApplication(size, app.interfaceOrientation);
+    CGPoint center = CGPointMake(size.width / 2, size.height / 2);
+    __block NSInteger count = button.label.integerValue;
+    [self performTapsInSession:session button:button viewportCenter:center checkResponse:^(id value) {
+      XCTAssertEqualObjects(value, NSNull.null);
+      count++;
+      XCTAssertEqual(button.label.integerValue, count);
+    }];
+    if (inner.boolValue) {
+      FBConfiguration.sharedInstance.currentDisplayId = @(button.screen.displayID);
+      [self performTapsInSession:session button:button viewportCenter:center checkResponse:^(id value) {
+        XCTAssertEqualObjects(value[@"error"], @"invalid element state");
+        XCTAssertEqual(button.label.integerValue, count);
+      }];
+    }
+  }
+}
+
 - (void)testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp
 {
   XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
@@ -329,6 +558,50 @@
     XCTAssertNotNil(appOffset);
     XCTAssertTrue(CGPointEqualToPoint(appOffset.screenPoint, expectedAppOffset.screenPoint));
     XCTAssertNil(error);
+  }
+}
+
+- (void)testViewportCoordinatesRejectInvalidNativeWindowFrame
+{
+  XCTSkipUnless([FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
+  Method method = class_getInstanceMethod(XCUIElement.class, @selector(frame));
+  IMP original = method_getImplementation(method);
+  __block CGRect nativeFrame = CGRectZero;
+  IMP replacement = imp_implementationWithBlock(^CGRect(XCUIElement *element) {
+    CGRect frame = ((CGRect (*)(id, SEL))original)(element, @selector(frame));
+    return element.elementType == XCUIElementTypeWindow ? nativeFrame : frame;
+  });
+  method_setImplementation(method, replacement);
+  @try {
+    for (NSValue *value in @[
+      [NSValue valueWithCGRect:CGRectZero], [NSValue valueWithCGRect:CGRectNull],
+      [NSValue valueWithCGRect:CGRectInfinite],
+      [NSValue valueWithCGRect:CGRectMake(NAN, 0, 100, 100)],
+      [NSValue valueWithCGRect:CGRectMake(0, 0, INFINITY, 100)],
+      [NSValue valueWithCGRect:CGRectMake(0, 0, 100, NAN)],
+    ]) {
+      nativeFrame = value.CGRectValue;
+      NSError *error = nil;
+      FBGestureCoordinateContext *context = [FBGestureCoordinateContext contextWithDisplayRequired:YES error:&error];
+      XCTAssertNotNil(context);
+      XCTAssertNil([context coordinateWithApplication:self.testedApplication offset:CGVectorMake(100, 100) error:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+      error = nil;
+      NSArray *actions = @[@{@"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
+                            @"actions": @[[self moveFrom:@"viewport" x:100 y:100 duration:0]]}];
+      FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
+        initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
+      XCTAssertNil([synthesizer synthesizeWithError:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+      error = nil;
+      NSArray *offsets = @[[NSValue valueWithCGVector:CGVectorMake(100, 100)],
+                           [NSValue valueWithCGVector:CGVectorMake(120, 120)]];
+      XCTAssertNil([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.testedApplication error:&error]);
+      XCTAssertTrue([error.localizedDescription containsString:@"No non-empty application window"], @"%@", error);
+    }
+  } @finally {
+    method_setImplementation(method, original);
+    imp_removeBlock(replacement);
   }
 }
 

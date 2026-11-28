@@ -16,19 +16,16 @@
 #import "XCUIElement.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 #import "XCUIScreen.h"
-
 @interface FBWindowCoordinateAnchor : NSObject
 @property (nonatomic) XCUIElement *window;
 @property (nonatomic) CGRect frame;
+@property (nonatomic) CGRect coordinateFrame;
 @end
 
 @implementation FBWindowCoordinateAnchor
 - (XCUICoordinate *)coordinateWithOffset:(CGVector)offset
 {
-  // Use the captured frame; FBCoordinateWithAnchorOffset would query it again.
-  return [self.window coordinateWithNormalizedOffset:CGVectorMake(
-    (offset.dx - self.frame.origin.x) / self.frame.size.width,
-    (offset.dy - self.frame.origin.y) / self.frame.size.height)];
+  return FBCoordinateInWindow(self.window, self.coordinateFrame, CGPointMake(offset.dx, offset.dy));
 }
 @end
 
@@ -136,10 +133,21 @@
   CGRect frame;
   XCUIElement *window = FBWindowOnDisplay(application, screen.displayID, &frame);
   if (window != nil) {
-    FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
-    anchor.window = window;
-    anchor.frame = frame;
-    return anchor;
+    // This live read can differ from the validated snapshot during transitions.
+    CGRect coordinateFrame = window.frame;
+    if (!CGRectIsEmpty(coordinateFrame) && !CGRectIsInfinite(coordinateFrame)
+        && isfinite(coordinateFrame.origin.x) && isfinite(coordinateFrame.origin.y)
+        && isfinite(coordinateFrame.size.width) && isfinite(coordinateFrame.size.height)) {
+      FBWindowCoordinateAnchor *anchor = [FBWindowCoordinateAnchor new];
+      anchor.window = window;
+      anchor.frame = frame;
+      // XCUICoordinate normalizes against XCTest's native frame, which includes
+      // the hosting scale and offset of a portrait-only app in landscape. The
+      // snapshot frame above remains in app coordinates and is still used for
+      // window geometry. Using it here transforms viewport points as app points.
+      anchor.coordinateFrame = coordinateFrame;
+      return anchor;
+    }
   }
   [[[FBErrorBuilder builder] withDescriptionFormat:@"No non-empty application window on display %lld is available as a coordinate anchor", screen.displayID]
     buildError:error];

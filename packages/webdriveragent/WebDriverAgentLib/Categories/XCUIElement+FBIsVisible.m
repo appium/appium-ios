@@ -9,6 +9,7 @@
 #import "XCUIElement+FBIsVisible.h"
 
 #import "FBElementUtils.h"
+#import "FBDisplayGeometry.h"
 #import "FBXCodeCompatibility.h"
 #import "FBXCElementSnapshotWrapper+Helpers.h"
 #import "XCUIElement+FBUtilities.h"
@@ -58,6 +59,10 @@ NSNumber* _Nullable fetchSnapshotVisibility(id<FBXCElementSnapshot> snapshot)
     return YES;
   }
 
+  NSNumber *displayVisibility = FBSpringBoardDisplayVisibility(self.snapshot);
+  if (displayVisibility != nil) {
+    return displayVisibility.boolValue;
+  }
   NSError *error;
   NSNumber *attributeValue = [self fb_attributeValue:FB_XCAXAIsVisibleAttributeName
                                                error:&error];

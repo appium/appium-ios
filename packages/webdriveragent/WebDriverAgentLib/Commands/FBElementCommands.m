@@ -10,6 +10,7 @@
 
 #import "FBConfiguration.h"
 #import "FBScreen.h"
+#import "FBDuoElementTap.h"
 #import "FBGestureCoordinateContext.h"
 #import "XCUIScreen.h"
 #import "FBRoute.h"
@@ -247,15 +248,15 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 {
   FBElementCache *elementCache = request.session.elementCache;
   XCUIElement *element = [elementCache elementForUUID:(NSString *)request.parameters[@"uuid"] checkStaleness:YES];
-#if TARGET_OS_IOS || TARGET_OS_WATCH
-  [element tap];
-#elif TARGET_OS_TV
+#if !TARGET_OS_TV
+  return [self tapElement:element offset:nil];
+#else
   NSError *error = nil;
   if (![element fb_selectWithError:&error]) {
     return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.description traceback:nil]);
   }
-#endif
   return FBResponseWithOK();
+#endif
 }
 
 + (id<FBResponsePayload>)handleClear:(FBRouteRequest *)request
@@ -500,8 +501,29 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 
 + (id<FBResponsePayload>)handleTap:(FBRouteRequest *)request
 {
-  NSError *error;
-  id target = [self targetWithXyCoordinatesFromRequest:request error:&error];
+  NSError *error = nil;
+  NSValue *offset;
+  if (![self getOffset:&offset fromRequest:request error:&error]) {
+    return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription traceback:nil]);
+  }
+  return [self tapElement:[self targetFromRequest:request] offset:offset];
+}
+
++ (id<FBResponsePayload>)tapElement:(XCUIElement *)element offset:(nullable NSValue *)offset
+{
+  NSError *error = nil;
+#if !TARGET_OS_WATCH
+  switch ([FBDuoElementTap tapHostedElement:element offset:offset error:&error]) {
+    case FBHostedTapDelivered:
+      return FBResponseWithOK();
+    case FBHostedTapFailed:
+    default:
+      return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
+    case FBHostedTapUseNative:
+      break;
+  }
+#endif
+  id target = [self gestureTargetForElement:element offset:offset error:&error];
   if (nil == target) {
     return FBResponseWithStatus([FBCommandStatus invalidArgumentErrorWithMessage:error.localizedDescription
                                                                        traceback:nil]);
@@ -764,20 +786,32 @@ static const NSInteger DEFAULT_MAX_PICKER_ATTEMPTS = 25;
  */
 + (nullable id)targetWithXyCoordinatesFromRequest:(FBRouteRequest *)request error:(NSError **)error
 {
-  NSNumber *x = request.arguments[@"x"];
-  NSNumber *y = request.arguments[@"y"];
-  if (nil == x && nil == y) {
-    return [self targetFromRequest:request];
-  }
-  if ((nil == x && nil != y) || (nil != x && nil == y)) {
-    [[[FBErrorBuilder alloc]
-      withDescription:@"Both x and y coordinates must be provided"]
-     buildError:error];
+  NSValue *offset;
+  if (![self getOffset:&offset fromRequest:request error:error]) {
     return nil;
   }
-  return [self gestureCoordinateWithOffset:CGVectorMake(x.doubleValue, y.doubleValue)
-                                   element:[self targetFromRequest:request]
-                                     error:error];
+  return [self gestureTargetForElement:[self targetFromRequest:request] offset:offset error:error];
+}
+
++ (BOOL)getOffset:(NSValue **)offset fromRequest:(FBRouteRequest *)request error:(NSError **)error
+{
+  NSNumber *x = request.arguments[@"x"];
+  NSNumber *y = request.arguments[@"y"];
+  if ((x == nil) != (y == nil)) {
+    [[[FBErrorBuilder builder] withDescription:@"Both x and y coordinates must be provided"] buildError:error];
+    return NO;
+  }
+  *offset = x == nil ? nil : [NSValue valueWithCGPoint:CGPointMake(x.doubleValue, y.doubleValue)];
+  return YES;
+}
+
++ (nullable id)gestureTargetForElement:(XCUIElement *)element offset:(nullable NSValue *)offset error:(NSError **)error
+{
+  if (offset == nil) {
+    return element;
+  }
+  CGPoint point = offset.CGPointValue;
+  return [self gestureCoordinateWithOffset:CGVectorMake(point.x, point.y) element:element error:error];
 }
 
 /**

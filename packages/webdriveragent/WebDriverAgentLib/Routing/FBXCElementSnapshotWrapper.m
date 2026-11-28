@@ -29,7 +29,7 @@
   }
   return [(NSObject *)snapshot isKindOfClass:self.class]
     ? (FBXCElementSnapshotWrapper *)snapshot
-    : [[FBXCElementSnapshotWrapper alloc] initWithSnapshot:snapshot];
+    : [[self alloc] initWithSnapshot:snapshot];
 }
 
 // Attributes are queried most often,

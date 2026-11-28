@@ -466,8 +466,8 @@ static NSString *const topNodeIndexPath = @"top";
 
   FBDisplaySnapshotMap *displaySnapshots = nil;
   for (Class attribute in includedAttributes) {
-    if ([attribute isSubclassOfClass:FBDimensionAttribute.class]) {
-      displaySnapshots = FBDisplaySnapshotsForTree(root);
+    if ([attribute isSubclassOfClass:FBDimensionAttribute.class] || attribute == FBVisibleAttribute.class) {
+      displaySnapshots = FBDisplaySnapshotsForTree(root, [includedAttributes containsObject:FBVisibleAttribute.class]);
       break;
     }
   }
@@ -548,6 +548,7 @@ static NSString *const topNodeIndexPath = @"top";
               geometrySnapshot:(nullable id<FBXCElementSnapshot>)geometrySnapshot
 {
   FBXCElementSnapshotWrapper *wrapped = [FBXCElementSnapshotWrapper ensureWrapped:element];
+  FBXCElementSnapshotWrapper *geometry = [FBXCElementSnapshotWrapper ensureWrapped:geometrySnapshot] ?: wrapped;
   NSDictionary *rect = nil;
   for (Class attributeCls in FBElementAttribute.supportedAttributes) {
     // include all supported attributes by default unless enumerated explicitly
@@ -569,11 +570,11 @@ static NSString *const topNodeIndexPath = @"top";
       rc = [attributeCls recordWithWriter:writer forValue:siblingIndex.stringValue];
     } else if ([attributeCls isSubclassOfClass:FBDimensionAttribute.class]) {
       if (rect == nil) {
-        rect = geometrySnapshot == nil ? wrapped.wdRect : [FBXCElementSnapshotWrapper ensureWrapped:geometrySnapshot].wdRect;
+        rect = geometry.wdRect;
       }
       rc = [attributeCls recordWithWriter:writer forValue:[rect[[attributeCls name]] description]];
     } else {
-      rc = [attributeCls recordWithWriter:writer forElement:wrapped];
+      rc = [attributeCls recordWithWriter:writer forElement:attributeCls == FBVisibleAttribute.class ? geometry : wrapped];
     }
     if (rc < 0) {
       return rc;
