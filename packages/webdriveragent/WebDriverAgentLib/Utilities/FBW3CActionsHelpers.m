@@ -117,3 +117,77 @@ NSString *FBMapIfSpecialCharacter(NSString *value)
       return charCode >= 0xE000 && charCode <= 0xE05D ? @"" : value;
   }
 }
+
+NSNumber *FBToMetaModifier(NSString *value)
+{
+  if (1 != [value length]) {
+    return nil;
+  }
+
+  // XCUIKeyModifierFlags values, declared here to not depend on the SDK version
+  static const NSUInteger shift = 1 << 1;
+  static const NSUInteger control = 1 << 2;
+  static const NSUInteger option = 1 << 3;
+  static const NSUInteger command = 1 << 4;
+  switch ([value characterAtIndex:0]) {
+    case 0xE000:
+      return @0;
+    case 0xE008:
+    case 0xE050:
+      return @(shift);
+    case 0xE009:
+    case 0xE051:
+      return @(control);
+    case 0xE00A:
+    case 0xE052:
+      return @(option);
+    case 0xE03D:
+    case 0xE053:
+      return @(command);
+    default:
+      return nil;
+  }
+}
+
+NSString *FBMapToXCUIKeyboardKey(NSString *value)
+{
+  if (1 != [value length]) {
+    return nil;
+  }
+
+  // The values of the XCUIKeyboardKey constants. F1-F12 and the navigation keys are NSEvent function keys
+  unichar code = [value characterAtIndex:0];
+  if (code >= 0xE031 && code <= 0xE03C) {
+    return [NSString stringWithFormat:@"%C", (unichar)(0xF704 + (code - 0xE031))];
+  }
+  switch (code) {
+    case 0xE00E:
+      return @"\uF72C";
+    case 0xE00F:
+      return @"\uF72D";
+    case 0xE010:
+      return @"\uF72B";
+    case 0xE011:
+      return @"\uF729";
+    case 0xE012:
+      return @"\u2190";
+    case 0xE013:
+      return @"\u2191";
+    case 0xE014:
+      return @"\u2192";
+    case 0xE015:
+      return @"\u2193";
+    default:
+      return nil;
+  }
+}
+
+BOOL FBRequiresKeyRecord(NSString *value)
+{
+  if (1 != [value length]) {
+    return NO;
+  }
+
+  unichar code = [value characterAtIndex:0];
+  return code >= 0xE001 && code <= 0xE05D && 0 == FBMapIfSpecialCharacter(value).length;
+}

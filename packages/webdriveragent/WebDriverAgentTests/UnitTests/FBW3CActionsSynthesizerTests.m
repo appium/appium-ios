@@ -177,7 +177,7 @@ static NSDictionary<NSString *, id> *FBMove(NSInteger x, NSInteger y)
   [self verifyRejectedGestures:@[
     // Missing balance 1
     @{@"gesture": @[FBKeySequence(@[@{@"type": @"keyDown", @"value": @"h"}, @{@"type": @"keyUp", @"value": @"k"}])],
-      @"error": @"must have a closing Key Up"},
+      @"error": @"is not balanced with a preceding Key Down"},
     // Missing balance 2
     @{@"gesture": @[FBKeySequence(@[@{@"type": @"keyDown", @"value": @"h"}])],
       @"error": @"must have a closing Key Up"},
@@ -190,9 +190,6 @@ static NSDictionary<NSString *, id> *FBMove(NSInteger x, NSInteger y)
     // Wrong key value
     @{@"gesture": @[FBKeySequence(@[@{@"type": @"keyUp", @"value": @500}])],
       @"error": @"Key value must be present"},
-    // Missing duration value
-    @{@"gesture": @[FBKeySequence(@[@{@"type": @"pause"}])],
-      @"error": @"Duration must be present"},
     // Wrong action item type
     @{@"gesture": @[FBKeySequence(@[@{@"type": @"duration", @"duration": @"bla"}])],
       @"error": @"is not supported"},

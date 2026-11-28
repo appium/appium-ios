@@ -39,4 +39,24 @@ NSNumber *_Nullable FBOptDuration(NSDictionary<NSString *, id> *actionItem, NSNu
  */
 NSString * FBMapIfSpecialCharacter(NSString *value);
 
+/**
+ * Maps a W3C modifier key (left or right) to XCUIKeyModifierFlags. The NULL key maps to zero.
+ *
+ * @returns the modifier flags or nil if the value is not a modifier key
+ */
+NSNumber *_Nullable FBToMetaModifier(NSString *value);
+
+/**
+ * Maps W3C arrow, navigation and function keys to XCUIKeyboardKey values.
+ *
+ * @returns the mapped key or nil if the value has no such mapping
+ */
+NSString *_Nullable FBMapToXCUIKeyboardKey(NSString *value);
+
+/**
+ * Checks if the key has no text representation, i.e. it is a modifier, a navigation/function key
+ * or a key that cannot be typed at all, and thus needs its own key event record.
+ */
+BOOL FBRequiresKeyRecord(NSString *value);
+
 NS_ASSUME_NONNULL_END
