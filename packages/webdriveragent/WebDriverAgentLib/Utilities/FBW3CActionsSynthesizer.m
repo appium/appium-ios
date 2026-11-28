@@ -972,10 +972,24 @@ static NSUInteger FBHeldModifierFlags(NSSet<NSString *> *pressedKeys)
   if (![items isKindOfClass:NSArray.class]) {
     return NO;
   }
+  NSMutableSet<NSString *> *pressed = [NSMutableSet set];
   for (id item in items) {
     id value = [item isKindOfClass:NSDictionary.class] ? [item objectForKey:@"value"] : nil;
-    if ([value isKindOfClass:NSString.class] && FBRequiresKeyRecord(value)) {
+    if (![value isKindOfClass:NSString.class]) {
+      continue;
+    }
+    if (FBRequiresKeyRecord(value)) {
       return YES;
+    }
+    // Repeated key downs are only supported by the planner
+    id type = [item objectForKey:@"type"];
+    if ([type isEqual:FB_ACTION_ITEM_TYPE_KEY_UP]) {
+      [pressed removeObject:value];
+    } else if ([type isEqual:FB_ACTION_ITEM_TYPE_KEY_DOWN]) {
+      if ([pressed containsObject:value]) {
+        return YES;
+      }
+      [pressed addObject:value];
     }
   }
   return NO;
@@ -1309,7 +1323,9 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
         *error = [[FBErrorBuilder.builder withDescription:description] build];
       }
       return nil;
-    }    
+    }
+    // Empty sources reserve their ids too
+    [actionsMapping setObject:action forKey:actionId];
     NSArray<NSDictionary<NSString *, id> *> *actionItems = [action objectForKey:FB_KEY_ACTIONS];
     if (nil == actionItems) {
      NSString *description = [NSString stringWithFormat:@"It is mandatory to have at least one item defined for each action. Action with id '%@' contains none", actionId];
@@ -1324,7 +1340,6 @@ static void FBFlushText(NSMutableString *text, NSMutableArray<FBKeyAction *> *ac
     }
 
     [validatedActions addObject:action];
-    [actionsMapping setObject:action forKey:actionId];
   }
   return validatedActions.copy;
 }

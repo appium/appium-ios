@@ -19,6 +19,7 @@
 - (nullable NSArray<XCPointerEventPath *> *)eventPathsWithKeyAction:(NSDictionary<NSString *, id> *)actionDescription
                                                         forActionId:(NSString *)actionId
                                                               error:(NSError **)error;
+- (nullable NSArray<NSDictionary<NSString *, id> *> *)validatedActionsWithError:(NSError **)error;
 
 @end
 
@@ -185,6 +186,9 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   XCTAssertFalse([self synthesizerWithActions:KeyActions(Flat(@[Press(K(0xE000))]))].requiresKeyRecords);
   XCTAssertTrue([self synthesizerWithActions:KeyActions(Flat(@[Down(K(0xE009)), Press(@"a"), Up(K(0xE009))]))].requiresKeyRecords);
   XCTAssertTrue([self synthesizerWithActions:KeyActions(Flat(@[Press(K(0xE012))]))].requiresKeyRecords);
+  // Repeated key downs are only supported by the planner
+  XCTAssertTrue([self synthesizerWithActions:KeyActions(Flat(@[Down(@"a"), Down(@"a"), Up(@"a")]))].requiresKeyRecords);
+  XCTAssertFalse([self synthesizerWithActions:KeyActions(Flat(@[Press(@"a"), Press(@"a")]))].requiresKeyRecords);
 
   NSArray *pointer = @[@{@"type": @"pointer", @"id": @"mouse", @"actions": @[]}];
   XCTAssertFalse([self synthesizerWithActions:pointer].requiresKeyRecords);
@@ -214,6 +218,14 @@ static NSArray<NSDictionary<NSString *, id> *> *KeyActions(NSArray<NSDictionary<
   NSArray *withDuplicateId = @[keyboard, duplicateId];
   XCTAssertFalse([self synthesizerWithActions:withNoId].requiresKeyRecords);
   XCTAssertFalse([self synthesizerWithActions:withDuplicateId].requiresKeyRecords);
+
+  // The ids of empty sources are reserved regardless of the order
+  NSArray *duplicateFirst = @[duplicateId, keyboard];
+  for (NSArray *sources in @[withDuplicateId, duplicateFirst]) {
+    NSError *validationError;
+    XCTAssertNil([[self synthesizerWithActions:sources] validatedActionsWithError:&validationError]);
+    XCTAssertTrue([validationError.localizedDescription containsString:@"is not unique"]);
+  }
 
   NSError *error;
   NSArray<FBKeyAction *> *plan = [[self synthesizerWithActions:withEmptyKeyboard] keyActionsWithError:&error];
