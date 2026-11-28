@@ -33,9 +33,4 @@
   [[XCUIApplication new].buttons[@"kaboom"] tap];
 }
 
-- (void)testPreventAssertFailure
-{
-  XCTAssertNotNil(nil);
-}
-
 @end

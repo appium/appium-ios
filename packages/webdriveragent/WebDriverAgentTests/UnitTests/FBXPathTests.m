@@ -8,7 +8,11 @@
 
 #import <XCTest/XCTest.h>
 
+#import "FBConfiguration.h"
+#import "FBExceptions.h"
 #import "FBMacros.h"
+#import "FBSnapshotTreeDouble.h"
+#import "FBXMLGenerationOptions.h"
 #import "FBXPath.h"
 #import "FBXPath-Private.h"
 #import "XCUIElementDouble.h"
@@ -55,10 +59,69 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
 - (CGRect)frame { self.frameReads++; return CGRectMake(1, 2, 3, 4); }
 @end
 
+// Minimal accessibility element exposing a unique uid so XPath can resolve the context node.
+@interface FBXPathAXElementDouble : NSObject {
+  long long _elementID;
+}
+@property (nonatomic, readonly) NSDictionary *payload;
+@property (nonatomic, readonly) int processIdentifier;
+- (instancetype)initWithID:(long long)elementID;
+@end
+@implementation FBXPathAXElementDouble
+- (instancetype)initWithID:(long long)elementID
+{
+  self = [super init];
+  if (self) { _elementID = elementID; }
+  return self;
+}
+- (NSDictionary *)payload { return @{@"uid.elementID": @(_elementID)}; }
+- (int)processIdentifier { return 42; }
+@end
+
+@interface FBXPathNodeDouble : FBSnapshotTreeDouble
+@end
+@implementation FBXPathNodeDouble {
+  FBXPathAXElementDouble *_axElement;
+}
+- (instancetype)init
+{
+  static long long nextID = 1;
+  self = [super init];
+  if (self) { _axElement = [[FBXPathAXElementDouble alloc] initWithID:nextID++]; }
+  return self;
+}
+- (id)accessibilityElement { return (id)_axElement; }
+@end
+
+static NSArray<NSString *> *FBXPathButtonLabels(void)
+{
+  return @[@"Alerts", @"Deadlock app", @"Attributes", @"Scrolling", @"Touch", @"DeepHierarchy", @"Coordinate Probe"];
+}
+
 @interface FBXPathTests : XCTestCase
+// Window > MainView(Other) > one Button per label
+@property (nonatomic, strong) FBXPathNodeDouble *window;
+@property (nonatomic, strong) FBXPathNodeDouble *mainView;
+@property (nonatomic, copy) NSArray<FBXPathNodeDouble *> *buttons;
 @end
 
 @implementation FBXPathTests
+
+- (void)setUp
+{
+  [super setUp];
+  NSMutableArray *buttons = [NSMutableArray array];
+  CGFloat y = 0;
+  for (NSString *label in FBXPathButtonLabels()) {
+    FBXPathNodeDouble *button = [FBXPathNodeDouble type:XCUIElementTypeButton label:label children:nil];
+    button.frame = CGRectMake(10, y, 100, 20);
+    y += 30;
+    [buttons addObject:button];
+  }
+  self.buttons = buttons;
+  self.mainView = [FBXPathNodeDouble type:XCUIElementTypeOther label:@"MainView" children:buttons];
+  self.window = [FBXPathNodeDouble type:XCUIElementTypeWindow label:nil children:@[self.mainView]];
+}
 
 - (void)testSerializationVisitsSiblingListAndFrameOnce
 {
@@ -176,7 +239,7 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
   id<FBElement> element = (id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:(id)snapshot];
   NSString *resultXml = [self xmlStringWithElement:(id<FBXCElementSnapshot>)element
                                         xpathQuery:nil
-                               excludingAttributes:@[@"type", @"visible", @"value", @"index", @"traits", @"nativeFrame"]];
+                               excludingAttributes:@[@"type", @"visible", @"value", @"index", @"traits", @"nativeFrame", @"blabla"]];
   NSString *expectedXml = [NSString stringWithFormat:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<%@ name=\"%@\" label=\"%@\" enabled=\"%@\" accessible=\"%@\" x=\"%@\" y=\"%@\" width=\"%@\" height=\"%@\" private_indexPath=\"top\"/>\n",
                            element.wdType, element.wdName, element.wdLabel, FBBoolToString(element.wdEnabled), FBBoolToString(element.wdAccessible), element.wdRect[@"x"], element.wdRect[@"y"], element.wdRect[@"width"], element.wdRect[@"height"]];
   XCTAssertEqualObjects(resultXml, expectedXml);
@@ -376,6 +439,136 @@ static void FBReviewDeregisterNode(xmlNodePtr node)
   } @finally {
     xmlFreeDoc(doc);
   }
+}
+
+#pragma mark - Snapshot-double tree lookups
+
+// Without an accessibility element: serializing visible/hittable would otherwise query AX
+- (FBSnapshotTreeDouble *)standaloneButton
+{
+  FBSnapshotTreeDouble *button = [FBSnapshotTreeDouble type:XCUIElementTypeButton label:FBXPathButtonLabels().firstObject children:nil];
+  button.frame = CGRectMake(10, 0, 100, 20);
+  button.value = nil;
+  return button;
+}
+
+- (NSString *)xmlStringForSingleButtonWithOptions:(FBXMLGenerationOptions *)options
+{
+  return [FBXPath xmlStringWithRootElement:(id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:(id)[self standaloneButton]]
+                                   options:options];
+}
+
+- (void)testSingleDescendantXMLRepresentationWithScope
+{
+  NSString *scope = @"AppiumAUT";
+  id<FBElement> wrapped = (id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:(id)[self standaloneButton]];
+  NSString *xmlStr = [self xmlStringForSingleButtonWithOptions:[[FBXMLGenerationOptions new] withScope:scope]];
+  XCTAssertNotNil(xmlStr);
+  NSString *expectedXml = [NSString stringWithFormat:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<%@>\n  <%@ type=\"%@\" name=\"%@\" label=\"%@\" enabled=\"%@\" visible=\"%@\" accessible=\"%@\" x=\"%@\" y=\"%@\" width=\"%@\" height=\"%@\" index=\"%lu\" traits=\"%@\"/>\n</%@>\n", scope, wrapped.wdType, wrapped.wdType, wrapped.wdName, wrapped.wdLabel, FBBoolToString(wrapped.wdEnabled), FBBoolToString(wrapped.wdVisible), FBBoolToString(wrapped.wdAccessible), [wrapped.wdRect[@"x"] stringValue], [wrapped.wdRect[@"y"] stringValue], [wrapped.wdRect[@"width"] stringValue], [wrapped.wdRect[@"height"] stringValue], wrapped.wdIndex, wrapped.wdTraits, scope];
+  XCTAssertEqualObjects(xmlStr, expectedXml);
+}
+
+- (void)testSingleDescendantXMLRepresentationWithExcludedAttributesOption
+{
+  FBXMLGenerationOptions *options = [[FBXMLGenerationOptions new]
+                                     withExcludedAttributes:@[@"visible", @"enabled", @"index", @"blabla"]];
+  id<FBElement> wrapped = (id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:(id)[self standaloneButton]];
+  NSString *xmlStr = [self xmlStringForSingleButtonWithOptions:options];
+  XCTAssertNotNil(xmlStr);
+  NSString *expectedXml = [NSString stringWithFormat:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<%@ type=\"%@\" name=\"%@\" label=\"%@\" accessible=\"%@\" x=\"%@\" y=\"%@\" width=\"%@\" height=\"%@\" traits=\"%@\"/>\n", wrapped.wdType, wrapped.wdType, wrapped.wdName, wrapped.wdLabel, FBBoolToString(wrapped.wdAccessible), [wrapped.wdRect[@"x"] stringValue], [wrapped.wdRect[@"y"] stringValue], [wrapped.wdRect[@"width"] stringValue], [wrapped.wdRect[@"height"] stringValue], wrapped.wdTraits];
+  XCTAssertEqualObjects(xmlStr, expectedXml);
+}
+
+- (void)assertAllButtonsInSnapshots:(NSArray<id<FBXCElementSnapshot>> *)snapshots
+{
+  XCTAssertEqual(snapshots.count, FBXPathButtonLabels().count);
+  for (id<FBXCElementSnapshot> snapshot in snapshots) {
+    XCTAssertEqualObjects(((id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:snapshot]).wdType, @"XCUIElementTypeButton");
+  }
+}
+
+- (void)testFindMatchesInElement
+{
+  [self assertAllButtonsInSnapshots:[FBXPath matchesWithRootElement:(id)self.window
+                                                           forQuery:@"//XCUIElementTypeButton"]];
+}
+
+- (void)testFindMatchesInElementWithDotNotation
+{
+  [self assertAllButtonsInSnapshots:[FBXPath matchesWithRootElement:(id)self.window
+                                                           forQuery:@".//XCUIElementTypeButton"]];
+}
+
+- (void)testFindMatchesWithoutContextScopeLimit
+{
+  id<FBElement> button = (id)self.buttons.firstObject;
+  BOOL previousValue = FBConfiguration.sharedInstance.limitXpathContextScope;
+  FBConfiguration.sharedInstance.limitXpathContextScope = NO;
+  @try {
+    NSArray *parentSnapshots = [FBXPath matchesWithRootElement:button forQuery:@".."];
+    XCTAssertEqual(parentSnapshots.count, 1);
+    XCTAssertEqualObjects(((id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:parentSnapshots.firstObject]).wdLabel, @"MainView");
+    NSArray *currentSnapshots = [FBXPath matchesWithRootElement:button forQuery:@"."];
+    XCTAssertEqual(currentSnapshots.count, 1);
+    id<FBElement> current = (id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:currentSnapshots.firstObject];
+    XCTAssertEqualObjects(current.wdType, @"XCUIElementTypeButton");
+    XCTAssertEqualObjects(current.wdLabel, FBXPathButtonLabels().firstObject);
+  } @finally {
+    FBConfiguration.sharedInstance.limitXpathContextScope = previousValue;
+  }
+}
+
+- (void)testFindMatchesWithExtensionFunctions
+{
+  NSArray<NSArray *> *cases = @[
+    @[@"//XCUIElementTypeButton[matches(@label, '^Alerts$')]", @[@"Alerts"]],
+    @[@"//XCUIElementTypeButton[matches(@label, '^alerts$', 'i')]", @[@"Alerts"]],
+    @[@"//XCUIElementTypeButton[ends-with(@label, 'ing')]", @[@"Scrolling"]],
+    @[@"//XCUIElementTypeButton[lower-case(@label)='alerts']", @[@"Alerts"]],
+    @[@"//XCUIElementTypeButton[upper-case(@label)='TOUCH']", @[@"Touch"]],
+    @[@"//XCUIElementTypeButton[replace(@label, ' ', '')='Deadlockapp']", @[@"Deadlock app"]],
+    @[@"//XCUIElementTypeButton[string-join(tokenize(@label, ' '), '-')='Deadlock-app']", @[@"Deadlock app"]],
+    @[@"//XCUIElementTypeButton[matches(@label, '^NoSuchButton$')]", @[]],
+    @[@"//XCUIElementTypeButton[matches(@label, '.*')]", FBXPathButtonLabels()],
+  ];
+  for (NSArray *testCase in cases) {
+    NSString *query = testCase[0];
+    NSArray<NSString *> *expectedLabels = testCase[1];
+    NSArray<id<FBXCElementSnapshot>> *snapshots = [FBXPath matchesWithRootElement:(id)self.window forQuery:query];
+    NSMutableArray<NSString *> *foundLabels = [NSMutableArray array];
+    for (id<FBXCElementSnapshot> snapshot in snapshots) {
+      id<FBElement> wrapped = (id<FBElement>)[FBXCElementSnapshotWrapper ensureWrapped:snapshot];
+      XCTAssertEqualObjects(wrapped.wdType, @"XCUIElementTypeButton", @"%@", query);
+      [foundLabels addObject:wrapped.wdLabel ?: @""];
+    }
+    XCTAssertEqual(foundLabels.count, expectedLabels.count, @"%@", query);
+    XCTAssertEqualObjects([NSSet setWithArray:foundLabels], [NSSet setWithArray:expectedLabels], @"%@", query);
+  }
+}
+
+- (void)testInvalidXPathQueriesThrowInvalidXPathException
+{
+  NSArray<NSString *> *queries = @[
+    @"//XCUIElementTypeButton[matches(@label)]",
+    @"//*[blabla(@label, Scrolling')]",
+  ];
+  for (NSString *query in queries) {
+    XCTAssertThrowsSpecificNamed([FBXPath matchesWithRootElement:(id)self.window forQuery:query],
+                                 NSException, FBInvalidXPathException, @"%@", query);
+  }
+}
+
+- (void)testInvalidXPathExtensionRegexpThrowsWithDetails
+{
+  NSException *exception = nil;
+  @try {
+    [FBXPath matchesWithRootElement:(id)self.window forQuery:@"//XCUIElementTypeButton[matches(@label, '[')]"];
+  } @catch (NSException *caughtException) {
+    exception = caughtException;
+  }
+  XCTAssertEqualObjects(exception.name, FBInvalidXPathException);
+  XCTAssertTrue([exception.reason containsString:@"Cannot evaluate results for XPath expression"]);
+  XCTAssertTrue([exception.reason rangeOfString:@"invalid" options:NSCaseInsensitiveSearch].location != NSNotFound);
 }
 
 @end

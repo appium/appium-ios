@@ -48,19 +48,4 @@
   return nil;
 }
 
-- (BOOL)fb_shouldWaitForQuiescence
-{
-  return NO;
-}
-
--(void)setFb_shouldWaitForQuiescence:(BOOL)value
-{
-
-}
-
-- (BOOL)running
-{
-  return NO;
-}
-
 @end

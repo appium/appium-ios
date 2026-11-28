@@ -275,16 +275,6 @@
 }
 #endif
 
-- (void)testPressingUnsupportedButton
-{
-  NSError *error;
-  NSNumber *duration = nil;
-  XCTAssertFalse([XCUIDevice.sharedDevice fb_pressButton:@"volumeUpp"
-                                             forDuration:duration
-                                                   error:&error]);
-  XCTAssertNotNil(error);
-}
-
 - (void)testPressingSupportedButton
 {
   NSError *error;

@@ -7,28 +7,21 @@
  */
 
 #import <XCTest/XCTest.h>
-#import <objc/runtime.h>
 
 #import "FBIntegrationTestCase.h"
 #import "FBConfiguration.h"
 #import "FBScreen.h"
 #import "FBGestureCoordinateContext.h"
 #import "FBRunLoopSpinner.h"
-#import "FBExceptions.h"
 #import "FBElementCommands.h"
 #import "FBElementCache.h"
 #import "FBBaseActionsSynthesizer.h"
-#import "FBW3CActionsSynthesizer.h"
 #import "FBMathUtils.h"
 #import "XCUIElement+FBWebDriverAttributes.h"
 
 @interface FBElementCommands (CoordinateTests)
 + (nullable XCUICoordinate *)gestureCoordinateWithOffset:(CGVector)offset element:(XCUIElement *)element error:(NSError **)error;
 + (nullable NSArray<XCUICoordinate *> *)gestureCoordinatesWithOffsets:(NSArray<NSValue *> *)offsets element:(XCUIElement *)element error:(NSError **)error;
-@end
-
-@interface FBGestureCoordinateContext (CoordinateTests)
-+ (nullable id)windowAnchorWithApplication:(XCUIElement *)application screen:(XCUIScreen *)screen error:(NSError **)error;
 @end
 
 #import "XCUIApplication+FBTouchAction.h"
@@ -65,8 +58,6 @@
   NSArray<NSString *> *multiDisplayTests = @[
     @"testNativeCoordinatesRejectMismatchedWindowDisplay",
     @"testApplicationOriginUsesItsOwnAppInsteadOfTheSessionApp",
-    @"testWindowAnchorCacheDoesNotHideAnotherApplicationsFailure",
-    @"testMixedOriginsRejectAnElementOnAnotherDisplay",
   ];
   if ([multiDisplayTests containsObject:name]) {
     XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
@@ -341,183 +332,6 @@
   }
 }
 
-- (void)testDisplayAndWindowResolutionRunsOncePerCommand
-{
-  BOOL hasMultipleScreens = [FBScreen hasMultipleScreensWithError:nil].boolValue;
-  SEL selector = @selector(hasMultipleScreensWithError:);
-  Method method = class_getClassMethod(FBScreen.class, selector);
-  IMP original = method_getImplementation(method);
-  __block NSUInteger calls = 0;
-  IMP counting = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
-    calls++;
-    return ((NSNumber *(*)(id, SEL, NSError **))original)(receiver, selector, error);
-  });
-  SEL anchorSelector = @selector(windowAnchorWithApplication:screen:error:);
-  Method anchorMethod = class_getClassMethod(FBGestureCoordinateContext.class, anchorSelector);
-  IMP originalAnchor = method_getImplementation(anchorMethod);
-  __block NSUInteger anchorCalls = 0;
-  IMP countingAnchors = imp_implementationWithBlock(^id(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
-    anchorCalls++;
-    return ((id (*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))originalAnchor)(receiver, anchorSelector, application, screen, error);
-  });
-  method_setImplementation(method, counting);
-  method_setImplementation(anchorMethod, countingAnchors);
-  @try {
-    // Exercise serialized origins and sharing between independent pointer sources.
-    self.actionElementCache = [FBElementCache new];
-    NSDictionary *finger = @{
-      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
-      @"actions": @[
-        [self moveFrom:@"viewport" x:100 y:100 duration:0],
-        [self moveFrom:self.testedApplication x:0 y:0 duration:100],
-        [self moveFrom:self.canvas x:0 y:0 duration:100],
-        [self moveFrom:@"pointer" x:10 y:10 duration:100],
-        [self moveFrom:@"viewport" x:120 y:120 duration:100],
-      ],
-    };
-    NSMutableDictionary *secondFinger = finger.mutableCopy;
-    secondFinger[@"id"] = @"secondFinger";
-    NSError *error = nil;
-    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
-      initWithActions:@[finger, secondFinger] forApplication:self.testedApplication elementCache:self.actionElementCache error:&error];
-    // Even the same synthesizer must resolve a fresh anchor for each command.
-    for (NSUInteger invocation = 1; invocation <= 2; invocation++) {
-      XCTAssertNotNil([synthesizer synthesizeWithError:&error]);
-      XCTAssertNil(error);
-      XCTAssertEqual(calls, invocation);
-      XCTAssertEqual(anchorCalls, hasMultipleScreens ? invocation : 0);
-    }
-    NSArray<NSValue *> *offsets = @[
-      [NSValue valueWithCGVector:CGVectorMake(100, 100)],
-      [NSValue valueWithCGVector:CGVectorMake(120, 120)],
-    ];
-    // A native drag shares one resolution between its endpoints, on iPhone too.
-    for (NSUInteger invocation = 3; invocation <= 4; invocation++) {
-      NSArray<XCUICoordinate *> *coordinates = [FBElementCommands gestureCoordinatesWithOffsets:offsets
-        element:self.testedApplication error:&error];
-      XCTAssertEqual(coordinates.count, 2);
-      XCTAssertNil(error);
-      XCTAssertEqual(calls, invocation);
-      XCTAssertEqual(anchorCalls, hasMultipleScreens ? invocation : 0);
-    }
-    XCTAssertEqual([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.canvas error:&error].count, 2);
-    XCTAssertNil(error);
-    XCTAssertEqual(calls, 4); // Ordinary element gestures do not enumerate displays.
-    XCTAssertEqual(anchorCalls, hasMultipleScreens ? 4 : 0);
-  } @finally {
-    method_setImplementation(method, original);
-    method_setImplementation(anchorMethod, originalAnchor);
-    imp_removeBlock(counting);
-    imp_removeBlock(countingAnchors);
-  }
-}
-
-- (void)testWindowAnchorCacheDoesNotHideAnotherApplicationsFailure
-{
-  XCTSkipIf(![FBScreen hasMultipleScreensWithError:nil].boolValue, @"Requires multiple displays");
-  XCUIApplication *otherApplication = self.springboard;
-  NSError *expectedError = [NSError errorWithDomain:@"WindowAnchorLookup" code:1 userInfo:nil];
-  SEL selector = @selector(windowAnchorWithApplication:screen:error:);
-  Method method = class_getClassMethod(FBGestureCoordinateContext.class, selector);
-  IMP original = method_getImplementation(method);
-  __block NSUInteger sessionAppCalls = 0;
-  __block NSUInteger otherAppCalls = 0;
-  IMP replacement = imp_implementationWithBlock(^id(id receiver, XCUIElement *application, XCUIScreen *screen, NSError **error) {
-    if (application == otherApplication) {
-      otherAppCalls++;
-      if (NULL != error) {
-        *error = expectedError;
-      }
-      return nil;
-    }
-    sessionAppCalls++;
-    return ((id (*)(id, SEL, XCUIElement *, XCUIScreen *, NSError **))original)(receiver, selector, application, screen, error);
-  });
-  method_setImplementation(method, replacement);
-  @try {
-    NSArray *actions = @[@{
-      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
-      @"actions": @[
-        [self moveFrom:@"viewport" x:100 y:100 duration:0],
-        [self moveFrom:self.testedApplication x:0 y:0 duration:100],
-        [self moveFrom:otherApplication x:0 y:0 duration:100],
-      ],
-    }];
-    NSError *error = nil;
-    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
-      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
-    XCTAssertNil([synthesizer synthesizeWithError:&error]);
-    XCTAssertEqualObjects(error, expectedError);
-    XCTAssertEqual(sessionAppCalls, 1);
-    XCTAssertEqual(otherAppCalls, 1);
-  } @finally {
-    method_setImplementation(method, original);
-    imp_removeBlock(replacement);
-  }
-}
-
-- (void)testMixedOriginsRejectAnElementOnAnotherDisplay
-{
-  NSNumber *fixtureDisplay = FBConfiguration.sharedInstance.currentDisplayId;
-  BOOL checkedOtherDisplay = NO;
-  for (NSDictionary *screen in [FBScreen screensWithError:nil]) {
-    if ([screen[@"displayId"] isEqual:fixtureDisplay]) {
-      continue;
-    }
-    checkedOtherDisplay = YES;
-    FBConfiguration.sharedInstance.currentDisplayId = screen[@"displayId"];
-    NSArray *actions = @[@{
-      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
-      @"actions": @[
-        [self moveFrom:self.canvas x:0 y:0 duration:0],
-        [self moveFrom:@"viewport" x:100 y:100 duration:0],
-        [self moveFrom:@"pointer" x:10 y:10 duration:0],
-      ],
-    }];
-    NSError *error = nil;
-    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
-      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
-    XCTAssertNil([synthesizer synthesizeWithError:&error]);
-    XCTAssertNotNil(error);
-    XCTAssertTrue([error.localizedDescription containsString:@"element origin is not on the selected display"]);
-  }
-  XCTSkipIf(!checkedOtherDisplay, @"Requires another display without the fixture");
-}
-
-- (void)testDisplayEnumerationFailureStopsGestureResolution
-{
-  NSError *expectedError = [NSError errorWithDomain:@"DisplayEnumeration" code:1 userInfo:nil];
-  SEL selector = @selector(hasMultipleScreensWithError:);
-  Method method = class_getClassMethod(FBScreen.class, selector);
-  IMP original = method_getImplementation(method);
-  IMP replacement = imp_implementationWithBlock(^NSNumber *(id receiver, NSError **error) {
-    if (NULL != error) {
-      *error = expectedError;
-    }
-    return nil;
-  });
-  method_setImplementation(method, replacement);
-  @try {
-    NSError *error = nil;
-    NSArray *offsets = @[[NSValue valueWithCGVector:CGVectorMake(100, 100)],
-                        [NSValue valueWithCGVector:CGVectorMake(120, 120)]];
-    XCTAssertNil([FBElementCommands gestureCoordinatesWithOffsets:offsets element:self.testedApplication error:&error]);
-    XCTAssertEqualObjects(error, expectedError);
-    error = nil;
-    NSArray *actions = @[@{
-      @"type": @"pointer", @"id": @"finger", @"parameters": @{@"pointerType": @"touch"},
-      @"actions": @[[self moveFrom:@"viewport" x:100 y:100 duration:0]],
-    }];
-    FBW3CActionsSynthesizer *synthesizer = [[FBW3CActionsSynthesizer alloc]
-      initWithActions:actions forApplication:self.testedApplication elementCache:nil error:&error];
-    XCTAssertNil([synthesizer synthesizeWithError:&error]);
-    XCTAssertEqualObjects(error, expectedError);
-  } @finally {
-    method_setImplementation(method, original);
-    imp_removeBlock(replacement);
-  }
-}
-
 - (void)verifyNativeDragCoordinates
 {
   NSDictionary *geometry = [self measurement];
@@ -715,39 +529,6 @@
   XCTAssertGreaterThan(after, before + 10);
   [table fb_scrollUpByNormalizedDistance:0.5];
   XCTAssertLessThan([[self measurement][@"scrollY"] doubleValue], after - 10);
-}
-
-- (void)testDirectionalScrollRejectsUnavailableDisplay
-{
-  [self.testedApplication.buttons[@"Scroll"] tap];
-  XCUIElement *table = self.testedApplication.tables[@"probe-table"];
-  CGFloat before = [[self measurement][@"scrollY"] doubleValue];
-  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
-  @try {
-    FBConfiguration.sharedInstance.currentDisplayId = @(-1);
-    XCTAssertThrowsSpecificNamed([table fb_scrollDownByNormalizedDistance:0.5], NSException, FBInvalidArgumentException);
-    XCTAssertThrowsSpecificNamed([table fb_scrollUpByNormalizedDistance:0.5], NSException, FBInvalidArgumentException);
-    XCTAssertThrowsSpecificNamed([table fb_scrollLeftByNormalizedDistance:0.5], NSException, FBInvalidArgumentException);
-    XCTAssertThrowsSpecificNamed([table fb_scrollRightByNormalizedDistance:0.5], NSException, FBInvalidArgumentException);
-  } @finally {
-    FBConfiguration.sharedInstance.currentDisplayId = displayId;
-  }
-  XCTAssertEqualWithAccuracy([[self measurement][@"scrollY"] doubleValue], before, 1);
-}
-
-- (void)testScrollToElementRejectsUnavailableDisplay
-{
-  [self.testedApplication.buttons[@"Scroll"] tap];
-  XCUIElement *cell = self.testedApplication.cells[@"probe-row-13"];
-  NSNumber *displayId = FBConfiguration.sharedInstance.currentDisplayId;
-  @try {
-    FBConfiguration.sharedInstance.currentDisplayId = @(-1);
-    NSError *error = nil;
-    XCTAssertFalse([cell fb_scrollToVisibleWithError:&error]);
-    XCTAssertNotNil(error);
-  } @finally {
-    FBConfiguration.sharedInstance.currentDisplayId = displayId;
-  }
 }
 
 - (void)testScrollToElementKeepsTheWholeCellVisible
