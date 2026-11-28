@@ -12,6 +12,6 @@
 @property (nonatomic, assign, readonly) BOOL didTerminate;
 @property (nonatomic, strong) NSString* bundleID;
 @property (nonatomic) BOOL fb_shouldWaitForQuiescence;
-
-- (BOOL)running;
+@property (nonatomic) BOOL running;
+@property (nonatomic) NSUInteger state;
 @end

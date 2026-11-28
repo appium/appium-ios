@@ -29,85 +29,6 @@
   [self goToAttributesPage];
 }
 
-- (void)testErroneousGestures
-{
-  if (![XCPointerEvent.class fb_areKeyEventsSupported]) {
-    XCTSkip(@"Key events are not supported on this platform");
-  }
-
-  NSArray<NSArray<NSDictionary<NSString *, id> *> *> *invalidGestures =
-  @[
-
-    // missing balance 1
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"keyDown", @"value": @"h"},
-            @{@"type": @"keyUp", @"value": @"k"},
-        ],
-        },
-      ],
-
-    // missing balance 2
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"keyDown", @"value": @"h"},
-        ],
-        },
-      ],
-
-    // missing balance 3
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"keyUp", @"value": @"h"},
-        ],
-        },
-      ],
-
-    // missing key value
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"keyUp"},
-        ],
-        },
-      ],
-
-    // wrong key value
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"keyUp", @"value": @500},
-        ],
-        },
-      ],
-
-    // wrong duration value
-    @[@{
-        @"type": @"key",
-        @"id": @"keyboard",
-        @"actions": @[
-            @{@"type": @"duration", @"duration": @"bla"},
-        ],
-        },
-      ],
-
-    ];
-
-  for (NSArray<NSDictionary<NSString *, id> *> *invalidGesture in invalidGestures) {
-    NSError *error;
-    XCTAssertFalse([self.testedApplication fb_performW3CActions:invalidGesture elementCache:nil error:&error]);
-    XCTAssertNotNil(error);
-  }
-}
-
 - (void)testTextTyping
 {
   if (![XCPointerEvent.class fb_areKeyEventsSupported]) {
@@ -147,29 +68,6 @@
   XCTAssertEqualObjects(textField.wdValue, @"🏀NBA");
 }
 
-- (void)testTextTypingWithEmptyActions
-{
-  if (![XCPointerEvent.class fb_areKeyEventsSupported]) {
-    XCTSkip(@"Key events are not supported on this platform");
-  }
-
-  XCUIElement *textField = self.testedApplication.textFields[@"aIdentifier"];
-  [textField tap];
-  NSArray<NSDictionary<NSString *, id> *> *typeAction =
-    @[
-      @{
-      @"type": @"pointer",
-      @"id": @"touch",
-      @"actions": @[],
-      },
-    ];
-  NSError *error;
-  XCTAssertTrue([self.testedApplication fb_performW3CActions:typeAction
-                                                elementCache:nil
-                                                       error:&error]);
-  XCTAssertNil(error);
-  XCTAssertEqualObjects(textField.value, @"");
-}
 
 static NSDictionary<NSString *, id> *FBKeyDown(NSString *value) { return @{@"type": @"keyDown", @"value": value}; }
 static NSDictionary<NSString *, id> *FBKeyUp(NSString *value) { return @{@"type": @"keyUp", @"value": value}; }

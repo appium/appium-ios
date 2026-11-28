@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.0.4](https://github.com/appium/appium-ios/compare/node-devicectl@3.0.3...node-devicectl@3.0.4) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
 ## [3.0.3](https://github.com/appium/appium-ios/compare/node-devicectl@3.0.2...node-devicectl@3.0.3) (2026-11-13)
 
 ### Miscellaneous Chores

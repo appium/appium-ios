@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [11.3.1](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.3.0...appium-ios-simulator@11.3.1) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
 ## [11.3.0](https://github.com/appium/appium-ios/compare/appium-ios-simulator@11.2.0...appium-ios-simulator@11.3.0) (2026-11-26)
 
 ### Features

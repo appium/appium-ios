@@ -16,7 +16,6 @@
 #import "FBTestMacros.h"
 #import "FBUnattachedAppLauncher.h"
 #import "XCUIApplication+FBHelpers.h"
-#import "XCUIApplication+FBQuiescence.h"
 #import "XCUIApplication.h"
 
 @interface FBSession (Tests)
@@ -89,82 +88,13 @@ static NSString *const SETTINGS_BUNDLE_ID = @"com.apple.Preferences";
   FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:testedApp.bundleID]);
 }
 
-- (NSString *)startSessionWithoutApplicationUnderTest
+// DELETE /session racing a launch as the application under test on another queue: the app
+// must not outlive the session. Needs a real launch, which takes long enough to overlap.
+- (void)testApplicationLaunchedAsApplicationUnderTestDoesNotOutliveConcurrentSessionDeletion
 {
-  NSString *bundleId = (NSString *)self.testedApplication.bundleID;
   [self.testedApplication terminate];
   FBAssertWaitTillBecomesTrue(self.testedApplication.state == XCUIApplicationStateNotRunning);
   self.session = [FBSession initWithApplication:nil];
-  return bundleId;
-}
-
-- (void)testApplicationCanBeLaunchedAsApplicationUnderTest
-{
-  NSString *bundleId = [self startSessionWithoutApplicationUnderTest];
-  XCUIApplication *app = [self.session launchApplicationWithBundleId:bundleId
-                                             shouldWaitForQuiescence:nil
-                                                           arguments:nil
-                                                         environment:nil
-                                              asApplicationUnderTest:YES];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:bundleId]);
-  XCTAssertEqual(app, self.session.activeApplication);
-  XCTAssertTrue(app.fb_shouldWaitForQuiescence);
-
-  XCUIApplication *settingsApp = [self.session launchApplicationWithBundleId:SETTINGS_BUNDLE_ID
-                                                     shouldWaitForQuiescence:nil
-                                                                   arguments:nil
-                                                                 environment:nil];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:SETTINGS_BUNDLE_ID]);
-  XCTAssertTrue(settingsApp.fb_shouldWaitForQuiescence);
-}
-
-- (void)testApplicationLaunchedAsApplicationUnderTestRespectsQuiescenceArgument
-{
-  NSString *bundleId = [self startSessionWithoutApplicationUnderTest];
-  XCUIApplication *app = [self.session launchApplicationWithBundleId:bundleId
-                                             shouldWaitForQuiescence:@NO
-                                                           arguments:nil
-                                                         environment:nil
-                                              asApplicationUnderTest:YES];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:bundleId]);
-  XCTAssertEqual(app, self.session.activeApplication);
-  XCTAssertFalse(app.fb_shouldWaitForQuiescence);
-}
-
-- (void)testCrashOfApplicationLaunchedAsApplicationUnderTestIsDetected
-{
-  NSString *bundleId = [self startSessionWithoutApplicationUnderTest];
-  XCUIApplication *app = [self.session launchApplicationWithBundleId:bundleId
-                                             shouldWaitForQuiescence:nil
-                                                           arguments:nil
-                                                         environment:nil
-                                              asApplicationUnderTest:YES];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:bundleId]);
-  [app terminate];
-  FBAssertWaitTillBecomesTrue(app.state == XCUIApplicationStateNotRunning);
-  XCTAssertThrowsSpecificNamed(self.session.activeApplication, NSException, FBApplicationCrashedException);
-}
-
-- (void)testApplicationIsNotLaunchedAsApplicationUnderTestByDefault
-{
-  NSString *bundleId = [self startSessionWithoutApplicationUnderTest];
-  XCUIApplication *app = [self.session launchApplicationWithBundleId:bundleId
-                                             shouldWaitForQuiescence:nil
-                                                           arguments:nil
-                                                         environment:nil];
-  FBAssertWaitTillBecomesTrue([self.session.activeApplication.bundleID isEqualToString:bundleId]);
-  XCTAssertFalse(app.fb_shouldWaitForQuiescence);
-  [app terminate];
-  FBAssertWaitTillBecomesTrue(app.state == XCUIApplicationStateNotRunning);
-  XCTAssertNoThrow(self.session.activeApplication);
-}
-
-// DELETE /session while /wda/apps/launch is still launching the app as the application under
-// test: whichever of them finishes first, the app must not outlive the session. Settings takes
-// long enough to launch for the deletion to usually land in the middle.
-- (void)testApplicationLaunchedAsApplicationUnderTestDoesNotOutliveConcurrentSessionDeletion
-{
-  [self startSessionWithoutApplicationUnderTest];
   XCUIApplication *settingsApp = [[XCUIApplication alloc] initWithBundleIdentifier:SETTINGS_BUNDLE_ID];
   [settingsApp terminate];
   FBAssertWaitTillBecomesTrue(settingsApp.state == XCUIApplicationStateNotRunning);

@@ -49,45 +49,6 @@
   [super tearDown];
 }
 
-- (void)testErroneousGestures
-{
-  NSArray<NSArray<NSDictionary<NSString *, id> *> *> *invalidGestures =
-  @[
-    // One of the chains has duplicated id
-    @[
-      @{
-        @"type": @"pointer",
-        @"id": @"finger1",
-        @"parameters": @{@"pointerType": @"touch"},
-        @"actions": @[
-            @{@"type": @"pointerMove", @"duration": @0, @"x": @1, @"y": @1},
-            @{@"type": @"pointerDown"},
-            @{@"type": @"pause", @"duration": @100},
-            @{@"type": @"pointerUp"},
-            ],
-        },
-      @{
-        @"type": @"pointer",
-        @"id": @"finger1",
-        @"parameters": @{@"pointerType": @"touch"},
-        @"actions": @[
-            @{@"type": @"pointerMove", @"duration": @0, @"x": @1, @"y": @1},
-            @{@"type": @"pointerDown"},
-            @{@"type": @"pause", @"duration": @100},
-            @{@"type": @"pointerUp"},
-            ],
-        },
-      ],
-    
-    ];
-  
-  for (NSArray<NSDictionary<NSString *, id> *> *invalidGesture in invalidGestures) {
-    NSError *error;
-    XCTAssertFalse([self.testedApplication fb_performW3CActions:invalidGesture elementCache:nil  error:&error]);
-    XCTAssertNotNil(error);
-  }
-}
-
 - (void)testSymmetricTwoFingersTap
 {
   XCUIElement *element = self.testedApplication.buttons[FBShowAlertButtonName];

@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [10.0.7](https://github.com/appium/appium-ios/compare/node-simctl@10.0.6...node-simctl@10.0.7) (2026-11-27)
+
+### Miscellaneous Chores
+
+* bump @appium/types to v3 ([#257](https://github.com/appium/appium-ios/issues/257)) ([d17fb00](https://github.com/appium/appium-ios/commit/d17fb00fbc57cce2c4ca9ce10263298181845e4e))
+
+
 ## [10.0.6](https://github.com/appium/appium-ios/compare/node-simctl@10.0.5...node-simctl@10.0.6) (2026-11-18)
 
 ### Miscellaneous Chores
