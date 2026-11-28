@@ -80,6 +80,4 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-typedef NSMapTable<id<FBXCElementSnapshot>, id<FBXCElementSnapshot>> FBDisplaySnapshotMap;
-
 NS_ASSUME_NONNULL_END

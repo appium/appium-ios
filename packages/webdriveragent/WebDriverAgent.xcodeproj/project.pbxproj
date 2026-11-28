@@ -363,6 +363,7 @@
 		641EE6312240C5CA00173FCB /* XCUIElement+FBWebDriverAttributes.h in Headers */ = {isa = PBXBuildFile; fileRef = EEE376471D59FAE900ED88DD /* XCUIElement+FBWebDriverAttributes.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		641EE6322240C5CA00173FCB /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		66EB6EDB3C8E4A3F9E8179DC /* FBDisplayGeometry.h in Headers */ = {isa = PBXBuildFile; fileRef = 2860B7110EDA428D9389ED6A /* FBDisplayGeometry.h */; };
+		1BEE599220834B2496CB6DBE /* FBDisplaySnapshotMap.h in Headers */ = {isa = PBXBuildFile; fileRef = 197B178AD0584C388E5D159D /* FBDisplaySnapshotMap.h */; };
 		6294499917DB444A817818C5 /* FBControlCenterVisibility.h in Headers */ = {isa = PBXBuildFile; fileRef = B4D055E5B0FD4B14A289F5B2 /* FBControlCenterVisibility.h */; };
 		ACF532F31E714D8F89FC1F14 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
 		673ED7D1418240D885032DB0 /* FBDuoElementTap.h in Headers */ = {isa = PBXBuildFile; fileRef = EE638D347906409697DFAA4B /* FBDuoElementTap.h */; };
@@ -601,6 +602,7 @@
 		715A84D22DD92AD3007134CC /* FBElementHelpers.h in Headers */ = {isa = PBXBuildFile; fileRef = 715A84CD2DD92AD3007134CC /* FBElementHelpers.h */; };
 		715AFAC11FFA29180053896D /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		8442F808E7874D47850E8253 /* FBDisplayGeometry.h in Headers */ = {isa = PBXBuildFile; fileRef = 2860B7110EDA428D9389ED6A /* FBDisplayGeometry.h */; };
+		79A8C774A09F45448D997318 /* FBDisplaySnapshotMap.h in Headers */ = {isa = PBXBuildFile; fileRef = 197B178AD0584C388E5D159D /* FBDisplaySnapshotMap.h */; };
 		DA36127E657441409D6C9CB0 /* FBControlCenterVisibility.h in Headers */ = {isa = PBXBuildFile; fileRef = B4D055E5B0FD4B14A289F5B2 /* FBControlCenterVisibility.h */; };
 		6D35951C8DB84801B157C5A4 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
 		916A248520954ABE8E5855E2 /* FBDuoElementTap.h in Headers */ = {isa = PBXBuildFile; fileRef = EE638D347906409697DFAA4B /* FBDuoElementTap.h */; };
@@ -835,6 +837,7 @@
 		932D338E506BD3EDDABBDEA9 /* XCTNSPredicateExpectationObject-Protocol.h in Headers */ = {isa = PBXBuildFile; fileRef = EE35ACEC1E3B77D600A02D78 /* XCTNSPredicateExpectationObject-Protocol.h */; };
 		93D5C4C8442EFE91D70780CC /* FBScreen.h in Headers */ = {isa = PBXBuildFile; fileRef = 715AFABF1FFA29180053896D /* FBScreen.h */; };
 		1D4653F6F0454A9DA621FC35 /* FBDisplayGeometry.h in Headers */ = {isa = PBXBuildFile; fileRef = 2860B7110EDA428D9389ED6A /* FBDisplayGeometry.h */; };
+		A3BAD2A7BC9B4EC18906DCEF /* FBDisplaySnapshotMap.h in Headers */ = {isa = PBXBuildFile; fileRef = 197B178AD0584C388E5D159D /* FBDisplaySnapshotMap.h */; };
 		DF466C6F9F4D460A8D1BCFEE /* FBControlCenterVisibility.h in Headers */ = {isa = PBXBuildFile; fileRef = B4D055E5B0FD4B14A289F5B2 /* FBControlCenterVisibility.h */; };
 		00E5348C6BD947E88C6B12A8 /* FBGestureCoordinateContext.h in Headers */ = {isa = PBXBuildFile; fileRef = F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */; };
 		6FB228909E0649E388518CBC /* FBDuoElementTap.h in Headers */ = {isa = PBXBuildFile; fileRef = EE638D347906409697DFAA4B /* FBDuoElementTap.h */; };
@@ -1663,6 +1666,7 @@
 		715A84CE2DD92AD3007134CC /* FBElementHelpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FBElementHelpers.m; sourceTree = "<group>"; };
 		715AFABF1FFA29180053896D /* FBScreen.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBScreen.h; sourceTree = "<group>"; };
 		2860B7110EDA428D9389ED6A /* FBDisplayGeometry.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBDisplayGeometry.h; sourceTree = "<group>"; };
+		197B178AD0584C388E5D159D /* FBDisplaySnapshotMap.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBDisplaySnapshotMap.h; sourceTree = "<group>"; };
 		B4D055E5B0FD4B14A289F5B2 /* FBControlCenterVisibility.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBControlCenterVisibility.h; sourceTree = "<group>"; };
 		F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBGestureCoordinateContext.h; sourceTree = "<group>"; };
 		EE638D347906409697DFAA4B /* FBDuoElementTap.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FBDuoElementTap.h; sourceTree = "<group>"; };
@@ -2682,6 +2686,7 @@
 				71F3E7D725417FF400E0C22C /* FBSettingsHandler.m */,
 				715AFABF1FFA29180053896D /* FBScreen.h */,
 				2860B7110EDA428D9389ED6A /* FBDisplayGeometry.h */,
+				197B178AD0584C388E5D159D /* FBDisplaySnapshotMap.h */,
 				B4D055E5B0FD4B14A289F5B2 /* FBControlCenterVisibility.h */,
 				F719A8616C5A4FBFB5D71020 /* FBGestureCoordinateContext.h */,
 				EE638D347906409697DFAA4B /* FBDuoElementTap.h */,
@@ -3138,6 +3143,7 @@
 				641EE6312240C5CA00173FCB /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				641EE6322240C5CA00173FCB /* FBScreen.h in Headers */,
 				66EB6EDB3C8E4A3F9E8179DC /* FBDisplayGeometry.h in Headers */,
+				1BEE599220834B2496CB6DBE /* FBDisplaySnapshotMap.h in Headers */,
 				6294499917DB444A817818C5 /* FBControlCenterVisibility.h in Headers */,
 				ACF532F31E714D8F89FC1F14 /* FBGestureCoordinateContext.h in Headers */,
 				673ED7D1418240D885032DB0 /* FBDuoElementTap.h in Headers */,
@@ -3456,6 +3462,7 @@
 				43EBA0D0D54EB99815CE63B6 /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				93D5C4C8442EFE91D70780CC /* FBScreen.h in Headers */,
 				1D4653F6F0454A9DA621FC35 /* FBDisplayGeometry.h in Headers */,
+				A3BAD2A7BC9B4EC18906DCEF /* FBDisplaySnapshotMap.h in Headers */,
 				DF466C6F9F4D460A8D1BCFEE /* FBControlCenterVisibility.h in Headers */,
 				00E5348C6BD947E88C6B12A8 /* FBGestureCoordinateContext.h in Headers */,
 				6FB228909E0649E388518CBC /* FBDuoElementTap.h in Headers */,
@@ -3729,6 +3736,7 @@
 				EEE376491D59FAE900ED88DD /* XCUIElement+FBWebDriverAttributes.h in Headers */,
 				715AFAC11FFA29180053896D /* FBScreen.h in Headers */,
 				8442F808E7874D47850E8253 /* FBDisplayGeometry.h in Headers */,
+				79A8C774A09F45448D997318 /* FBDisplaySnapshotMap.h in Headers */,
 				DA36127E657441409D6C9CB0 /* FBControlCenterVisibility.h in Headers */,
 				6D35951C8DB84801B157C5A4 /* FBGestureCoordinateContext.h in Headers */,
 				916A248520954ABE8E5855E2 /* FBDuoElementTap.h in Headers */,

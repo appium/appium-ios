@@ -7,7 +7,7 @@
  */
 
 #import <XCTest/XCTest.h>
-#import "FBXCElementSnapshot.h"
+#import "FBDisplaySnapshotMap.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

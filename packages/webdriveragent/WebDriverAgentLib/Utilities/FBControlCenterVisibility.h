@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import "FBXCElementSnapshot.h"
+#import "FBDisplaySnapshotMap.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_WATCH
 BOOL FBControlCenterNeedsSnapshotVisibility(id<FBXCElementSnapshot> window, long long displayID);
