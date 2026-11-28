@@ -11,18 +11,23 @@
 NS_ASSUME_NONNULL_BEGIN
 
 #if TARGET_OS_IOS
+typedef NS_ENUM(NSInteger, FBHostedTapResult) {
+  FBHostedTapUseNative,
+  FBHostedTapDelivered,
+  FBHostedTapFailed,
+};
+
 /** Tap correction for compatibility apps hosted on the iPhone Duo's selected display. */
 @interface FBDuoElementTap : NSObject
 
 /**
  Taps a hosted window whose XCTest display affinity differs from the selected display.
- Returns nil if the native tap path should be used, otherwise the synthesis result.
  offset is relative to an element, or in selected-screen coordinates for an application.
  A nil offset requests the element's hit point.
  */
-+ (nullable NSNumber *)tapHostedElement:(XCUIElement *)element
-                                 offset:(nullable NSValue *)offset
-                                  error:(NSError **)error;
++ (FBHostedTapResult)tapHostedElement:(XCUIElement *)element
+                               offset:(nullable NSValue *)offset
+                                error:(NSError **)error;
 @end
 #endif
 

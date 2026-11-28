@@ -513,10 +513,14 @@ typedef XCUICoordinate * _Nullable (^FBGestureCoordinateResolver)(CGVector offse
 {
   NSError *error = nil;
 #if !TARGET_OS_WATCH
-  NSNumber *hostedTap = [FBDuoElementTap tapHostedElement:element offset:offset error:&error];
-  if (hostedTap != nil) {
-    return hostedTap.boolValue ? FBResponseWithOK()
-      : FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
+  switch ([FBDuoElementTap tapHostedElement:element offset:offset error:&error]) {
+    case FBHostedTapDelivered:
+      return FBResponseWithOK();
+    case FBHostedTapFailed:
+    default:
+      return FBResponseWithStatus([FBCommandStatus invalidElementStateErrorWithMessage:error.localizedDescription traceback:nil]);
+    case FBHostedTapUseNative:
+      break;
   }
 #endif
   id target = [self gestureTargetForElement:element offset:offset error:&error];

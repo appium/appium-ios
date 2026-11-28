@@ -14,8 +14,6 @@ NS_ASSUME_NONNULL_BEGIN
 /** Resolve a single element for a WebDriver frame or rect request. */
 id<FBXCElementSnapshot> FBSnapshotForDisplayGeometry(XCUIElement *element, BOOL useCustomSnapshot);
 
-typedef NSMapTable<id<FBXCElementSnapshot>, id<FBXCElementSnapshot>> FBDisplaySnapshotMap;
-
 /** Geometry counterparts for one source traversal, keyed by original snapshot identity. */
 FBDisplaySnapshotMap *_Nullable FBDisplaySnapshotsForTree(id<FBXCElementSnapshot> root, BOOL includeVisibility);
 

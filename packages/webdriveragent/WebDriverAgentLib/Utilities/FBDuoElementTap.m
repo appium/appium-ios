@@ -72,69 +72,63 @@ static NSValue *FBHostedElementPoint(XCUIElement *element, NSValue *offset, NSEr
   return [NSValue valueWithCGPoint:hitPoint.hitPoint];
 }
 
-static NSValue *FBHostedTapPoint(XCUIElement *element, NSValue *offset, BOOL isViewportTap,
-                                 long long displayID, NSError **error)
+static XCUIElement *FBSelectedSystemWindow(XCUIScreen *screen, NSError **error)
 {
   CGRect windowFrame;
-  XCUIScreen *screen = [FBScreen screenWithDisplayID:displayID error:error];
-  if (nil == screen) {
-    return nil;
-  }
   // Require a system window on the destination before overriding the app
   // window's reported display. It also supplies the viewport coordinate anchor.
   XCUIElement *systemWindow = FBWindowOnDisplay(XCUIApplication.fb_systemApplication,
                                                screen.displayID, &windowFrame);
   if (nil == systemWindow) {
     [[[FBErrorBuilder builder] withDescription:@"No system window is available on the selected display"] buildError:error];
+  }
+  return systemWindow;
+}
+
+static NSValue *FBViewportTapPoint(XCUIElement *systemWindow, CGPoint offset, NSError **error)
+{
+  // These offsets are already viewport points. Normalize against XCTest's
+  // native frame (not the app-space accessibility frame) so it applies only
+  // the selected window's event-synthesis orientation transform.
+  CGRect nativeFrame = systemWindow.frame;
+  if (CGRectIsEmpty(nativeFrame)) {
+    [[[FBErrorBuilder builder] withDescription:@"The selected system window has an empty frame"] buildError:error];
     return nil;
   }
-  CGPoint point;
-  if (isViewportTap) {
-    // These offsets are already viewport points. Normalize against XCTest's
-    // native frame (not the app-space accessibility frame) so it applies only
-    // the selected window's event-synthesis orientation transform.
-    CGRect nativeFrame = systemWindow.frame;
-    if (CGRectIsEmpty(nativeFrame)) {
-      [[[FBErrorBuilder builder] withDescription:@"The selected system window has an empty frame"] buildError:error];
-      return nil;
-    }
-    point = FBCoordinateInWindow(systemWindow, nativeFrame, offset.CGPointValue).screenPoint;
-  } else {
-    Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
-    Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
-    if (![parametersClass respondsToSelector:@selector(transformParametersWithWindowID:displayID:)]
-        || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
-      [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
-      return nil;
-    }
-    NSValue *rawPoint = FBHostedElementPoint(element, offset, error);
-    if (rawPoint == nil) {
-      return nil;
-    }
-    id<FBHostedViewTransform> snapshot = (id)element.fb_nativeSnapshot;
-    if (![snapshot respondsToSelector:@selector(_transformParametersOrError:)]
-        || ![snapshot respondsToSelector:@selector(_transformPointWithRequest:error:)]) {
-      [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
-      return nil;
-    }
-    id<FBHostedViewTransform> originalParameters = [snapshot _transformParametersOrError:error];
-    if (nil == originalParameters) {
-      return nil;
-    }
-    id parameters = [parametersClass transformParametersWithWindowID:originalParameters.windowID
-                                                                displayID:screen.displayID];
-    id request = [requestClass pointTransformationRequestWithPoint:rawPoint.CGPointValue parameters:parameters];
-    id<FBHostedViewTransform> transformed = [snapshot _transformPointWithRequest:request error:error];
-    if (nil == transformed) {
-      return nil;
-    }
-    point = transformed.point;
-  }
-  if (!isfinite(point.x) || !isfinite(point.y)) {
-    [[[FBErrorBuilder builder] withDescription:@"The hosted tap coordinate is not finite"] buildError:error];
+  return [NSValue valueWithCGPoint:FBCoordinateInWindow(systemWindow, nativeFrame, offset).screenPoint];
+}
+
+static NSValue *FBTransformedElementTapPoint(XCUIElement *element, NSValue *offset, long long displayID, NSError **error)
+{
+  Class<FBHostedViewTransform> parametersClass = NSClassFromString(@"XCUITransformParameters");
+  Class<FBHostedViewTransform> requestClass = NSClassFromString(@"XCUIPointTransformationRequest");
+  if (![parametersClass respondsToSelector:@selector(transformParametersWithWindowID:displayID:)]
+      || ![requestClass respondsToSelector:@selector(pointTransformationRequestWithPoint:parameters:)]) {
+    [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
     return nil;
   }
-  return [NSValue valueWithCGPoint:point];
+  NSValue *rawPoint = FBHostedElementPoint(element, offset, error);
+  if (rawPoint == nil) {
+    return nil;
+  }
+  id<FBHostedViewTransform> snapshot = (id)element.fb_nativeSnapshot;
+  if (![snapshot respondsToSelector:@selector(_transformParametersOrError:)]
+      || ![snapshot respondsToSelector:@selector(_transformPointWithRequest:error:)]) {
+    [[[FBErrorBuilder builder] withDescription:@"XCTest cannot transform the tap to the selected display"] buildError:error];
+    return nil;
+  }
+  id<FBHostedViewTransform> originalParameters = [snapshot _transformParametersOrError:error];
+  if (nil == originalParameters) {
+    return nil;
+  }
+  id parameters = [parametersClass transformParametersWithWindowID:originalParameters.windowID
+                                                              displayID:displayID];
+  id request = [requestClass pointTransformationRequestWithPoint:rawPoint.CGPointValue parameters:parameters];
+  id<FBHostedViewTransform> transformed = [snapshot _transformPointWithRequest:request error:error];
+  if (nil == transformed) {
+    return nil;
+  }
+  return [NSValue valueWithCGPoint:transformed.point];
 }
 
 static BOOL FBApplicationOwnsPoint(XCUIApplication *application, CGPoint point, long long displayID)
@@ -149,25 +143,25 @@ static BOOL FBApplicationOwnsPoint(XCUIApplication *application, CGPoint point, 
 
 @implementation FBDuoElementTap
 
-+ (nullable NSNumber *)tapHostedElement:(XCUIElement *)element
-                                 offset:(nullable NSValue *)offset
-                                  error:(NSError **)error
++ (FBHostedTapResult)tapHostedElement:(XCUIElement *)element
+                               offset:(nullable NSValue *)offset
+                                error:(NSError **)error
 {
   NSNumber *selectedDisplay = FBConfiguration.sharedInstance.currentDisplayId;
   if (nil == selectedDisplay || !XCUIDevice.sharedDevice.fb_supportsHingeAngleReading) {
-    return nil;
+    return FBHostedTapUseNative;
   }
   long long displayID = selectedDisplay.longLongValue;
   if ([FBHIDOperations isInactiveDuoCover:displayID]) {
     [[[FBErrorBuilder builder] withDescription:@"The selected Duo cover display is inactive"] buildError:error];
-    return @NO;
+    return FBHostedTapFailed;
   }
   // Resolve affinity before testing it. Regular windows retain XCTest's native
   // scrolling, hit testing, and tap behavior.
   (void)element.frame;
   long long elementDisplayID = element.screen.displayID;
   if (elementDisplayID == displayID) {
-    return nil;
+    return FBHostedTapUseNative;
   }
   XCUIApplication *application = element.application;
   CGRect windowFrame;
@@ -175,24 +169,38 @@ static BOOL FBApplicationOwnsPoint(XCUIApplication *application, CGPoint point, 
   if (elementDisplayID != XCUIScreen.mainScreen.displayID
       || nil != FBWindowOnDisplay(application, displayID, &windowFrame)) {
     if (isViewportTap) {
-      return nil; // The viewport path resolves the app's window on the selected display.
+      return FBHostedTapUseNative; // The viewport path resolves the app's window on the selected display.
     }
     // A native element tap would follow XCTest onto the wrong panel.
     [[[FBErrorBuilder builder] withDescription:@"The element belongs to a different display"] buildError:error];
-    return @NO;
+    return FBHostedTapFailed;
   }
-  NSValue *tapPoint = FBHostedTapPoint(element, offset, isViewportTap, displayID, error);
+  XCUIScreen *screen = [FBScreen screenWithDisplayID:displayID error:error];
+  if (screen == nil) {
+    return FBHostedTapFailed;
+  }
+  XCUIElement *systemWindow = FBSelectedSystemWindow(screen, error);
+  if (systemWindow == nil) {
+    return FBHostedTapFailed;
+  }
+  NSValue *tapPoint = isViewportTap
+    ? FBViewportTapPoint(systemWindow, offset.CGPointValue, error)
+    : FBTransformedElementTapPoint(element, offset, screen.displayID, error);
   if (tapPoint == nil) {
-    return @NO;
+    return FBHostedTapFailed;
   }
   CGPoint point = tapPoint.CGPointValue;
+  if (!isfinite(point.x) || !isfinite(point.y)) {
+    [[[FBErrorBuilder builder] withDescription:@"The hosted tap coordinate is not finite"] buildError:error];
+    return FBHostedTapFailed;
+  }
   if (!FBApplicationOwnsPoint(application, point, displayID)) {
     if (isViewportTap) {
-      return nil; // Let the normal viewport path report the missing application window.
+      return FBHostedTapUseNative; // Let the normal viewport path report the missing application window.
     }
     [[[FBErrorBuilder builder] withDescription:@"Cannot verify the target application at the tap point on the selected display"]
       buildError:error];
-    return @NO;
+    return FBHostedTapFailed;
   }
   XCPointerEventPath *path = [[XCPointerEventPath alloc] initForTouchAtPoint:point offset:0];
   [path liftUpAtOffset:0.05];
@@ -201,10 +209,10 @@ static BOOL FBApplicationOwnsPoint(XCUIApplication *application, CGPoint point, 
                                                               interfaceOrientation:application.interfaceOrientation];
   [event addPointerEventPath:path];
   if (![FBXCTestDaemonsProxy synthesizeEventWithRecord:event error:error]) {
-    return @NO;
+    return FBHostedTapFailed;
   }
   [application fb_waitUntilStableWithTimeout:FBConfiguration.sharedInstance.animationCoolOffTimeout];
-  return @YES;
+  return FBHostedTapDelivered;
 }
 
 @end
